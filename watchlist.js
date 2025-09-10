@@ -11,6 +11,16 @@
     const ERR = (...args) => console.error('[Watchlist]', ...args);
     
     LOG('Script loaded - JS Injector mode');
+    
+    // Add custom CSS for watchlist icon
+    const style = document.createElement('style');
+    style.textContent = `
+        .material-icons.watchlist:before {
+            content: "\\e866";
+        }
+    `;
+    document.head.appendChild(style);
+    LOG('Custom watchlist icon CSS added');
 
 /************ Helpers ************/
 
@@ -354,6 +364,13 @@ function addWatchlistButton(overlayContainer) {
 		return;
 	}
 	
+	// Check if card has data-type attribute - if not, don't add watchlist button
+	const itemType = card.getAttribute('data-type');
+	if (!itemType) {
+		LOG('Card has no data-type, skipping watchlist button');
+		return;
+	}
+	
 	// Find the .cardOverlayButton-br container
 	const buttonContainer = overlayContainer.querySelector('.cardOverlayButton-br');
 	if (!buttonContainer) {
@@ -372,8 +389,7 @@ function addWatchlistButton(overlayContainer) {
 	
 	// Create the bookmark icon
 	const watchlistIcon = document.createElement('span');
-	watchlistIcon.className = 'material-icons cardOverlayButtonIcon cardOverlayButtonIcon-hover';
-	watchlistIcon.textContent = 'bookmark_border';
+	watchlistIcon.className = 'material-icons cardOverlayButtonIcon cardOverlayButtonIcon-hover watchlist';
 	watchlistIcon.setAttribute('aria-hidden', 'true');
 	
 	watchlistButton.appendChild(watchlistIcon);
@@ -390,15 +406,21 @@ function addWatchlistButton(overlayContainer) {
 		
 		// Update icon and title based on state
 		const isActive = watchlistButton.dataset.active === 'true';
-		watchlistIcon.textContent = isActive ? 'bookmark' : 'bookmark_border';
+		// Icon state is handled by CSS class, no need to change textContent
 		watchlistButton.title = isActive ? 'Remove from Watchlist' : 'Add to Watchlist';
 	});
+	
+	// Check if item type is supported for watchlist
+	if (itemType !== "Movie" && itemType !== "Series" && itemType !== "Season" && itemType !== "Episode") {
+		LOG('Item type not supported for watchlist:', itemType);
+		return;
+	}
 	
 	// Check item's current watchlist status and set initial state
 	ApiClient.getItem(ApiClient.getCurrentUserId(), itemId).then((item) => {
 		if (item.UserData && item.UserData.Likes) {
 			watchlistButton.dataset.active = 'true';
-			watchlistIcon.textContent = 'bookmark';
+			// Icon state is handled by CSS class, no need to change textContent
 			watchlistButton.title = 'Remove from Watchlist';
 		}
 	}).catch(err => {
@@ -488,6 +510,17 @@ function addDetailPageWatchlistButton() {
 	watchlistIcon.title = "Add to Watchlist";
 	watchlistIcon.dataset.active = 'false';
 	
+	// Add the content wrapper and icon span inside the button
+	const contentWrapper = document.createElement('div');
+	contentWrapper.className = 'detailButton-content';
+	
+	const iconSpan = document.createElement('span');
+	iconSpan.className = 'material-icons detailButton-icon watchlist';
+	iconSpan.setAttribute('aria-hidden', 'true');
+	
+	contentWrapper.appendChild(iconSpan);
+	watchlistIcon.appendChild(contentWrapper);
+	
 	// Get item ID from URL
 	const itemId = window.location.href.substring(window.location.href.indexOf("id=") + 3, window.location.href.indexOf("id=") + 35);
 	
@@ -562,7 +595,20 @@ function monitorItemDetailPage() {
 			return;
 		}
 		
-		addDetailPageWatchlistButton();
+		// Get item ID from URL to check type before adding button
+		const itemId = window.location.href.substring(window.location.href.indexOf("id=") + 3, window.location.href.indexOf("id=") + 35);
+		if (!itemId) {
+			return;
+		}
+		
+		// Check if item type is supported for watchlist
+		ApiClient.getItem(ApiClient.getCurrentUserId(), itemId).then((item) => {
+			if (item.Type === "Movie" || item.Type === "Series" || item.Type === "Season" || item.Type === "Episode") {
+				addDetailPageWatchlistButton();
+			}
+		}).catch(err => {
+			ERR('Error fetching item data for detail page type check:', err);
+		});
 	});
 
 	// Start observing the entire document body
