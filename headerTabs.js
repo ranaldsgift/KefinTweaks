@@ -30,6 +30,26 @@
         return null;
     }
     
+    // Get current tab index from URL parameter
+    function getCurrentTabFromUrl() {
+        const hash = window.location.hash;
+        if (!hash.includes('?')) return 0;
+        
+        const [hashPath, hashSearch] = hash.split('?');
+        const params = new URLSearchParams(hashSearch);
+        const tabParam = params.get('tab');
+        
+        if (tabParam) {
+            const tabIndex = parseInt(tabParam, 10);
+            if (!isNaN(tabIndex) && tabIndex >= 0) {
+                LOG('Current tab from URL:', tabIndex);
+                return tabIndex;
+            }
+        }
+        
+        return 0;
+    }
+    
     // Update URL with tab parameter
     function updateUrlWithTab(tabIndex) {
         const currentHash = window.location.hash;
@@ -99,6 +119,43 @@
         }
     }
     
+    // Synchronize active tab state with URL parameter
+    function syncActiveTabState() {
+        const headerTabs = document.querySelector('.headerTabs');
+        if (!headerTabs) return;
+        
+        const currentTabFromUrl = getCurrentTabFromUrl();
+        const buttons = headerTabs.querySelectorAll('.emby-tab-button');
+        const activeButton = headerTabs.querySelector('.emby-tab-button-active');
+
+        if (activeButton && activeButton.getAttribute('data-index') === currentTabFromUrl.toString()) {
+            return;
+        }
+        
+        // Remove active class from all buttons
+        buttons.forEach(button => {
+            button.classList.remove('emby-tab-button-active');
+        });
+        
+        // Find the button with the correct data-index
+        const correctButton = Array.from(buttons).find(button => {
+            const buttonIndex = parseInt(button.getAttribute('data-index') || '0', 10);
+            return buttonIndex === currentTabFromUrl;
+        });
+        
+        if (correctButton) {
+            correctButton.classList.add('emby-tab-button-active');
+            LOG('Set active tab button to index:', currentTabFromUrl);
+        } else {
+            // If no correct button found, set the first one (index 0) as active
+            /* const firstButton = buttons[0];
+            if (firstButton) {
+                firstButton.classList.add('emby-tab-button-active');
+                LOG('No matching tab found, set first button as active');
+            } */
+        }
+    }
+    
     // Add click listeners to tab buttons
     function addClickListeners() {
         const headerTabs = document.querySelector('.headerTabs');
@@ -109,6 +166,9 @@
                 button.addEventListener('click', handleTabClick);
             });
             LOG('Added click listeners to', buttons.length, 'buttons');
+            
+            // Synchronize active tab state with URL parameter
+            syncActiveTabState();
         }
     }
     
@@ -224,6 +284,8 @@
                     // Setup observers when page changes
                     setupHeaderTabsObserver();
                     setupObserver();
+                    // Sync active tab state after page change
+                    setTimeout(syncActiveTabState, 100);
                 }
             }
         }
