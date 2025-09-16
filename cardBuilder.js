@@ -328,18 +328,6 @@
         
         card.appendChild(cardBox);
 
-        // Add click handler
-        card.addEventListener('click', (e) => {
-            if (!e.target.closest('button')) {
-                console.log('[CardBuilder] item click', { id: item.Id, name: item.Name });
-                try { 
-                    Dashboard.navigate(`#!/details?id=${item.Id}&serverId=${serverId}`); 
-                } catch(e) { 
-                    console.error('[CardBuilder]', e); 
-                }
-            }
-        });
-
         return card;
     }
 
