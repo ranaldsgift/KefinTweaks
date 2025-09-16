@@ -1,6 +1,17 @@
 // Jellyfin Watchlist Script
 // Adds watchlist functionality throughout Jellyfin interface
 // Requires: cardBuilder.js module to be loaded before this script
+// Requirement #2: Custom Tabs plugin
+/* 
+In the Custom Tabs plugin, add a new tab with the following HTML content:
+
+<div class="sections watchlist">
+<div class="watchlist-movies"></div>
+<div class="watchlist-series"></div>
+<div class="watchlist-seasons"></div>
+<div class="watchlist-episodes"></div>
+</div>
+*/
 
 (function() {
     'use strict';
@@ -59,162 +70,27 @@ async function renderCards(containerSelector, type) {
 	// Show section and use cardBuilder to create scrollable container
 	container.style.display = '';
 	
-	// Check if cardBuilder is available
+	// Use cardBuilder to create scrollable container
 	if (typeof window.cardBuilder !== 'undefined' && window.cardBuilder.renderCards) {
 		const scrollableContainer = window.cardBuilder.renderCards(items, getTypeDisplayName(type));
 		container.innerHTML = '';
 		container.appendChild(scrollableContainer);
 		LOG(`Rendered ${items.length} ${type} items using cardBuilder`);
 	} else {
-		WARN("cardBuilder not available, using fallback");
-		// Fallback to old method if cardBuilder not available
-		const sectionHtml = createWatchlistSection(type, items);
-		container.innerHTML = sectionHtml;
+		ERR("cardBuilder not available - this should not happen with proper dependency management");
+		container.style.display = 'none';
+		return { type, itemCount: 0 };
 	}
 	
 	return { type, itemCount: items.length };
 }
 
-// Fallback function for when cardBuilder is not available
-function createWatchlistSection(type, items) {
-	// This function assumes items array is not empty (checked at higher level)
-	
-	// Create the main vertical section container
-	const verticalSection = document.createElement('div');
-	verticalSection.className = 'verticalSection emby-scroller-container';
-
-	// Create section title
-	const sectionTitle = document.createElement('h2');
-	sectionTitle.className = 'sectionTitle sectionTitle-cards focuscontainer-x padded-left padded-right';
-	sectionTitle.textContent = getTypeDisplayName(type);
-
-	// Create scroll buttons container
-	const scrollButtons = document.createElement('div');
-	scrollButtons.setAttribute('is', 'emby-scrollbuttons');
-	scrollButtons.className = 'emby-scrollbuttons padded-right';
-
-	// Previous button
-	const prevButton = document.createElement('button');
-	prevButton.type = 'button';
-	prevButton.setAttribute('is', 'paper-icon-button-light');
-	prevButton.setAttribute('data-ripple', 'false');
-	prevButton.setAttribute('data-direction', 'left');
-	prevButton.title = 'Previous';
-	prevButton.className = 'emby-scrollbuttons-button paper-icon-button-light';
-	prevButton.disabled = true;
-
-	const prevIcon = document.createElement('span');
-	prevIcon.className = 'material-icons chevron_left';
-	prevIcon.setAttribute('aria-hidden', 'true');
-	prevButton.appendChild(prevIcon);
-
-	// Next button
-	const nextButton = document.createElement('button');
-	nextButton.type = 'button';
-	nextButton.setAttribute('is', 'paper-icon-button-light');
-	nextButton.setAttribute('data-ripple', 'false');
-	nextButton.setAttribute('data-direction', 'right');
-	nextButton.title = 'Next';
-	nextButton.className = 'emby-scrollbuttons-button paper-icon-button-light';
-
-	const nextIcon = document.createElement('span');
-	nextIcon.className = 'material-icons chevron_right';
-	nextIcon.setAttribute('aria-hidden', 'true');
-	nextButton.appendChild(nextIcon);
-
-	scrollButtons.appendChild(prevButton);
-	scrollButtons.appendChild(nextButton);
-
-	// Create scroller container
-	const scroller = document.createElement('div');
-	scroller.setAttribute('is', 'emby-scroller');
-	scroller.setAttribute('data-horizontal', 'true');
-	scroller.setAttribute('data-centerfocus', 'card');
-	scroller.className = 'padded-top-focusscale padded-bottom-focusscale emby-scroller';
-	scroller.setAttribute('data-scroll-mode-x', 'custom');
-	scroller.style.overflow = 'hidden';
-
-	// Create items container
-	const itemsContainer = document.createElement('div');
-	itemsContainer.setAttribute('is', 'emby-itemscontainer');
-	itemsContainer.className = 'focuscontainer-x itemsContainer scrollSlider animatedScrollX';
-	itemsContainer.style.whiteSpace = 'nowrap';
-	itemsContainer.style.willChange = 'transform';
-	itemsContainer.style.transition = 'transform 270ms ease-out';
-	itemsContainer.style.transform = 'translateX(0px)';
-
-	// Add items to container using cardBuilder
-	items.forEach((item, index) => {
-		if (typeof window.cardBuilder !== 'undefined' && window.cardBuilder.buildCard) {
-			const card = window.cardBuilder.buildCard(item);
-			itemsContainer.appendChild(card);
-		} else {
-			// Fallback to HTML string
-			const cardHtml = buildFallbackCard(index, item, window.ApiClient, {});
-			const tempDiv = document.createElement('div');
-			tempDiv.innerHTML = cardHtml;
-			itemsContainer.appendChild(tempDiv.firstElementChild);
-		}
-	});
-
-	scroller.appendChild(itemsContainer);
-
-	// Add scroll functionality
-	let scrollPosition = 0;
-	const cardWidth = 212; // 200px card + 12px gap
-	const visibleCards = Math.floor(scroller.offsetWidth / cardWidth);
-	const scrollStep = Math.max(1, Math.floor(visibleCards * 0.9));
-	const maxScroll = Math.max(0, items.length - visibleCards);
-
-	const updateScrollButtons = () => {
-		prevButton.disabled = scrollPosition <= 0;
-		nextButton.disabled = scrollPosition >= maxScroll;
-	};
-
-	const scrollTo = (position, smooth = true) => {
-		scrollPosition = Math.max(0, Math.min(position, maxScroll));
-		
-		if (smooth) {
-			itemsContainer.style.transition = 'transform 500ms cubic-bezier(0.25, 0.46, 0.45, 0.94)';
-		} else {
-			itemsContainer.style.transition = 'none';
-		}
-		
-		itemsContainer.style.transform = `translateX(-${scrollPosition * cardWidth}px)`;
-		updateScrollButtons();
-		
-		if (smooth) {
-			setTimeout(() => {
-				itemsContainer.style.transition = 'transform 270ms ease-out';
-			}, 500);
-		}
-	};
-
-	prevButton.addEventListener('click', () => {
-		const newPosition = Math.max(0, scrollPosition - scrollStep);
-		scrollTo(newPosition, true);
-	});
-	
-	nextButton.addEventListener('click', () => {
-		const newPosition = Math.min(maxScroll, scrollPosition + scrollStep);
-		scrollTo(newPosition, true);
-	});
-
-	// Initial state
-	updateScrollButtons();
-
-	// Assemble the section
-	verticalSection.appendChild(sectionTitle);
-	verticalSection.appendChild(scrollButtons);
-	verticalSection.appendChild(scroller);
-
-	return verticalSection.outerHTML;
-}
 
 function getTypeDisplayName(itemType) {
 	const typeMap = {
 		'Movie': 'Movies',
-		'Series': 'TV Shows',
+		'Series': 'Shows',
+		'Season': 'Seasons',
 		'Episode': 'Episodes',
 		'Person': 'People',
 		'MusicAlbum': 'Albums',
@@ -240,6 +116,7 @@ async function renderWatchlistContent() {
         const results = await Promise.all([
             renderCards("#indexPage:not(.hide) .sections.watchlist > .watchlist-movies", "Movie"),
             renderCards("#indexPage:not(.hide) .sections.watchlist > .watchlist-series", "Series"),
+            renderCards("#indexPage:not(.hide) .sections.watchlist > .watchlist-seasons", "Season"),
             renderCards("#indexPage:not(.hide) .sections.watchlist > .watchlist-episodes", "Episode")
         ]);
         
