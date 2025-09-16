@@ -1,0 +1,13 @@
+// This will put the Continue Watching and Next Up sections at the top of the home screen
+// You can order your custom sections between those and the rest of the sections by using 3-99 for the section order
+// If you want your custom section to appear after the normal sections, use 101+ for the section order
+
+.sections.homeSectionsContainer>div {
+    order: 100;
+}
+.sections.homeSectionsContainer>div:has(div[data-positionticks]) {
+    order: 1;
+}
+.sections.homeSectionsContainer>div:has(a[href*="type=nextup"]) {
+    order: 2;
+}

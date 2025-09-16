@@ -1,0 +1,31 @@
+.searchFields {
+    position: relative;
+}
+
+.padded-left.padded-right.searchFields {
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: center;
+}
+
+.layout-desktop .searchFieldsInner {
+    width: 100%;
+}
+
+div#smart-search-wrapper:not([style*="display: none"]) ~ #jellyseerr-search-icon {
+    display: none;
+}
+
+.smart-search-mode .searchFieldsInner {
+    position: relative;
+}
+
+div#searchPage {
+    padding-top: 3rem !important;
+}
+
+@media (min-width: 600px) {
+div#searchPage {
+        padding-top: 5rem !important;
+    }
+}

@@ -56,13 +56,26 @@ async function renderCards(containerSelector, type) {
 		return { type, itemCount: 0 };
 	}
 	
-	// Show section and create proper Jellyfin section structure
+	// Show section and use cardBuilder to create scrollable container
 	container.style.display = '';
-	const sectionHtml = createWatchlistSection(type, items);
-	container.innerHTML = sectionHtml;
+	
+	// Check if cardBuilder is available
+	if (typeof window.cardBuilder !== 'undefined' && window.cardBuilder.renderCards) {
+		const scrollableContainer = window.cardBuilder.renderCards(items, getTypeDisplayName(type));
+		container.innerHTML = '';
+		container.appendChild(scrollableContainer);
+		LOG(`Rendered ${items.length} ${type} items using cardBuilder`);
+	} else {
+		WARN("cardBuilder not available, using fallback");
+		// Fallback to old method if cardBuilder not available
+		const sectionHtml = createWatchlistSection(type, items);
+		container.innerHTML = sectionHtml;
+	}
+	
 	return { type, itemCount: items.length };
 }
 
+// Fallback function for when cardBuilder is not available
 function createWatchlistSection(type, items) {
 	// This function assumes items array is not empty (checked at higher level)
 	
@@ -134,8 +147,6 @@ function createWatchlistSection(type, items) {
 	items.forEach((item, index) => {
 		if (typeof window.cardBuilder !== 'undefined' && window.cardBuilder.buildCard) {
 			const card = window.cardBuilder.buildCard(item);
-			card.setAttribute('data-index', index);
-			card.classList.add('discover-card');
 			itemsContainer.appendChild(card);
 		} else {
 			// Fallback to HTML string
@@ -227,9 +238,9 @@ function getTypeDisplayName(itemType) {
 async function renderWatchlistContent() {
     try {
         const results = await Promise.all([
-            renderCards(".sections.watchlist > .watchlist-movies", "Movie"),
-            renderCards(".sections.watchlist > .watchlist-series", "Series"),
-            renderCards(".sections.watchlist > .watchlist-episodes", "Episode")
+            renderCards("#indexPage:not(.hide) .sections.watchlist > .watchlist-movies", "Movie"),
+            renderCards("#indexPage:not(.hide) .sections.watchlist > .watchlist-series", "Series"),
+            renderCards("#indexPage:not(.hide) .sections.watchlist > .watchlist-episodes", "Episode")
         ]);
         
         // Check if all sections are empty
@@ -249,7 +260,7 @@ async function renderWatchlistContent() {
 
 // Function to check if watchlist section exists and render content
 function checkAndRenderWatchlist() {
-    const watchlistSection = document.querySelector('.sections.watchlist');
+    const watchlistSection = document.querySelector('#indexPage:not(.hide) .sections.watchlist');
     if (watchlistSection && !watchlistSection.dataset.watchlistRendered) {
         watchlistSection.dataset.watchlistRendered = 'true';
         renderWatchlistContent();
