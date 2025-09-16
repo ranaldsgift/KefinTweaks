@@ -9,19 +9,23 @@
     // Set to true to enable, false to disable
     const ENABLED_SCRIPTS = {
         // Core functionality (required for other scripts)
-        cardBuilder: true,        // Required by watchlist and homeScreen
+        cardBuilder: true,        // Required by watchlist, homeScreen and search
         
-        // UI Enhancements
+        // UI and functional enhancements
         watchlist: true,          // Watchlist functionality
         homeScreen: true,         // Custom home screen sections
         search: true,             // Enhanced search functionality
+
         headerTabs: true,         // Header tab enhancements
         customMenu: true,         // Custom menu functionality
         exclusiveElsewhere: true, // Exclusive elsewhere branding
-        updoot: true,              // Upvote functionality
+
+        // Scripts with additional backend requirements
+        updoot: false,              // Upvote functionality from https://github.com/BobHasNoSoul/jellyfin-updoot
         
         // Utility scripts
         backdropLeakFix: true,    // Memory leak fixes
+        dashboardButtonFix: true, // Dashboard button fix
     };
     
     // Script definitions with dependencies and metadata
@@ -31,8 +35,7 @@
             script: 'cardBuilder.js',
             css: null,
             dependencies: [],
-            description: 'Core card building functionality (required by other scripts)',
-            required: true
+            description: 'Core card building functionality (required by other scripts)'
         },
         {
             name: 'watchlist',
@@ -88,7 +91,14 @@
             script: 'updoot.js',
             css: null,
             dependencies: [],
-            description: 'Upvote functionality'
+            description: 'Upvote functionality provided by https://github.com/BobHasNoSoul/jellyfin-updoot'
+        },
+        {
+            name: 'dashboardButtonFix',
+            script: 'dashboardButtonFix.js',
+            css: null,
+            dependencies: [],
+            description: 'Fixes the dashboard button to redirect to the home page when the back button is clicked and there is no history to go back to'
         }
     ];
     
@@ -96,14 +106,7 @@
     function validateConfiguration() {
         const errors = [];
         
-        // Check if required scripts are enabled
-        SCRIPT_DEFINITIONS.forEach(script => {
-            if (script.required && !ENABLED_SCRIPTS[script.name]) {
-                errors.push(`Required script '${script.name}' is disabled`);
-            }
-        });
-        
-        // Check dependencies
+        // Check dependencies - only validate if the script is enabled
         SCRIPT_DEFINITIONS.forEach(script => {
             if (ENABLED_SCRIPTS[script.name]) {
                 script.dependencies.forEach(dep => {
@@ -124,7 +127,6 @@
     
     // Get the root path for scripts (adjust this based on your setup)
     function getScriptRoot() {        
-        // Fallback: assume scripts are in the same directory
         return 'https://cdn.jsdelivr.net/gh/ranaldsgift/KefinTweaks/';
     }
     
@@ -190,11 +192,13 @@
     // Load a script and its dependencies
     async function loadScriptWithDependencies(scriptDef) {
         try {
-            // Load dependencies first
+            // Load dependencies first - only if they are enabled
             for (const depName of scriptDef.dependencies) {
                 const depScript = SCRIPT_DEFINITIONS.find(s => s.name === depName);
                 if (depScript && ENABLED_SCRIPTS[depName]) {
                     await loadScriptWithDependencies(depScript);
+                } else if (depScript && !ENABLED_SCRIPTS[depName]) {
+                    console.warn(`[KefinTweaks Injector] Dependency '${depName}' is disabled, skipping for '${scriptDef.name}'`);
                 }
             }
             
