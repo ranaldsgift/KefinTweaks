@@ -60,21 +60,21 @@ KefinTweaks is a comprehensive collection of enhancements and customizations for
 
 KefinTweaks provides a modular system of enhancements that can be individually enabled or disabled based on your needs. Each script is designed to work independently while sharing common utilities and dependencies.
 
-### **Feature Requests Completed**
+### ✅ **Feature Requests Completed**
 
-[Remove items from Continue Watching](https://features.jellyfin.org/posts/517/add-an-option-to-remove-an-item-from-continue-watching)
-[Watchlist like Netflix](https://features.jellyfin.org/posts/576/watchlist-like-netflix)
-[Remove pagination in favor of infinite scroll for library pages](https://features.jellyfin.org/posts/216/remove-pagination-use-lazy-loading-for-library-view)
-[Watched History](https://features.jellyfin.org/posts/633/watched-history)
-[On-Demand Subtitle Search in Video OSD](https://features.jellyfin.org/posts/3385/on-demand-subtitle-search)
-[Add genres and recommendations to home screen](https://features.jellyfin.org/posts/3501/add-genres-and-recommendations-to-home-screen)
-[Improved Playlist UX](https://features.jellyfin.org/posts/2823/playlist-moviesummary)
+- ✅ [Remove items from Continue Watching](https://features.jellyfin.org/posts/517/add-an-option-to-remove-an-item-from-continue-watching)
+- ✅ [Watchlist like Netflix](https://features.jellyfin.org/posts/576/watchlist-like-netflix)
+- ✅ [Remove pagination in favor of infinite scroll for library pages](https://features.jellyfin.org/posts/216/remove-pagination-use-lazy-loading-for-library-view)
+- ✅ [Watched History](https://features.jellyfin.org/posts/633/watched-history)
+- ✅ [On-Demand Subtitle Search in Video OSD](https://features.jellyfin.org/posts/3385/on-demand-subtitle-search)
+- ✅ [Add genres and recommendations to home screen](https://features.jellyfin.org/posts/3501/add-genres-and-recommendations-to-home-screen)
+- ✅ [Improved Playlist UX](https://features.jellyfin.org/posts/2823/playlist-moviesummary)
 
+### 🚧 **Feature Requests Planned**
 
-### **Feature Requests Planned**
-[Flattening TV Shows with 1 season](https://features.jellyfin.org/posts/8/flattening-tv-shows)
-[List all collections that an item belongs to on the details page](https://features.jellyfin.org/posts/540/list-all-collections-that-a-movie-belong-to-in-movie-details)
-[Add end time to detail page for entire shows and seasons](https://features.jellyfin.org/posts/3470/add-info-ends-at-hh-mm-for-each-season-and-whole-show)
+- 🚧 [Flattening TV Shows with 1 season](https://features.jellyfin.org/posts/8/flattening-tv-shows)
+- 🚧 [List all collections that an item belongs to on the details page](https://features.jellyfin.org/posts/540/list-all-collections-that-a-movie-belong-to-in-movie-details)
+- 🚧 [Add end time to detail page for entire shows and seasons](https://features.jellyfin.org/posts/3470/add-info-ends-at-hh-mm-for-each-season-and-whole-show)  
 
 ### 📋 Core Features
 
