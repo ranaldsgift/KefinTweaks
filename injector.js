@@ -1,35 +1,40 @@
 // KefinTweaks Script Injector
 // Dynamically loads scripts and CSS files based on user configuration
-// Usage: Modify the ENABLED_SCRIPTS array below to enable/disable features
+// Usage: Configuration is now managed in kefinTweaks.js - this script reads from window.KefinTweaksConfig
 
 (function() {
     'use strict';
     
-    // Configuration: Set which scripts to load
-    // Set to true to enable, false to disable
-    const ENABLED_SCRIPTS = {
-        // Core functionality (required for other scripts)
-        cardBuilder: true,        // Required by watchlist, homeScreen and search
-        
+    // Configuration: Read from centralized config or use defaults
+    const ENABLED_SCRIPTS = window.KefinTweaksConfig?.scripts || {
         // UI and functional enhancements
         watchlist: true,          // Watchlist functionality
         homeScreen: true,         // Custom home screen sections
         search: true,             // Enhanced search functionality
-
         headerTabs: true,         // Header tab enhancements
-        customMenu: true,         // Custom menu functionality
+        customMenuLinks: true,    // Custom menu links functionality
         exclusiveElsewhere: true, // Exclusive elsewhere branding
-
-        // Scripts with additional backend requirements
-        updoot: false,              // Upvote functionality from https://github.com/BobHasNoSoul/jellyfin-updoot
-        
-        // Utility scripts
+        updoot: true,             // Upvote functionality
         backdropLeakFix: true,    // Memory leak fixes
         dashboardButtonFix: true, // Dashboard button fix
+        infiniteScroll: true,     // Infinite scroll functionality
+        removeContinue: true,     // Remove from continue watching functionality
+        subtitleSearch: true,     // Subtitle search functionality
+        playlist: true            // Playlist view page modifications
+        
+        // Note: Core functionality scripts (utils, cardBuilder, localStorageCache, modal) 
+        // are automatically enabled when needed by other scripts
     };
     
     // Script definitions with dependencies and metadata
     const SCRIPT_DEFINITIONS = [
+        {
+            name: 'utils',
+            script: 'utils.js',
+            css: null,
+            dependencies: [],
+            description: 'Common utilities for page view management and MutationObserver conversion'
+        },
         {
             name: 'cardBuilder',
             script: 'cardBuilder.js',
@@ -38,24 +43,38 @@
             description: 'Core card building functionality (required by other scripts)'
         },
         {
+            name: 'localStorageCache',
+            script: 'localStorageCache.js',
+            css: null,
+            dependencies: [],
+            description: 'localStorage-based caching layer with 24-hour TTL and manual refresh'
+        },
+        {
+            name: 'modal',
+            script: 'modal.js',
+            css: null,
+            dependencies: [],
+            description: 'Generic modal system for Jellyfin-style dialogs'
+        },
+        {
             name: 'watchlist',
             script: 'watchlist.js',
             css: 'watchlist.css',
-            dependencies: ['cardBuilder'],
+            dependencies: ['cardBuilder', 'localStorageCache', 'modal'],
             description: 'Adds watchlist functionality throughout Jellyfin interface'
         },
         {
             name: 'homeScreen',
             script: 'homeScreen.js',
             css: 'homeScreen.css',
-            dependencies: ['cardBuilder'],
+            dependencies: ['cardBuilder', 'localStorageCache', 'utils'],
             description: 'Adds custom home screen sections'
         },
         {
             name: 'search',
             script: 'search.js',
             css: 'search.css',
-            dependencies: [],
+            dependencies: ['cardBuilder', 'utils'],
             description: 'Enhanced search functionality'
         },
         {
@@ -66,11 +85,11 @@
             description: 'Header tab improvements'
         },
         {
-            name: 'customMenu',
-            script: 'custom-menu.js',
+            name: 'customMenuLinks',
+            script: 'customMenuLinks.js',
             css: null,
-            dependencies: [],
-            description: 'Remove target="_blank" from custom menu links'
+            dependencies: ['utils'],
+            description: 'Load and add custom menu links from configuration'
         },
         {
             name: 'exclusiveElsewhere',
@@ -99,12 +118,72 @@
             css: null,
             dependencies: [],
             description: 'Fixes the dashboard button to redirect to the home page when the back button is clicked and there is no history to go back to'
+        },
+        {
+            name: 'infiniteScroll',
+            script: 'infiniteScroll.js',
+            css: null,
+            dependencies: ['cardBuilder'],
+            description: 'Adds infinite scroll functionality to media library pages'
+        },
+        {
+            name: 'removeContinue',
+            script: 'removeContinue.js',
+            css: null,
+            dependencies: [],
+            description: 'Adds remove from continue watching functionality to cards with data-position-ticks'
+        },
+        {
+            name: 'subtitleSearch',
+            script: 'subtitleSearch.js',
+            css: 'subtitleSearch.css',
+            dependencies: [],
+            description: 'Adds subtitle search functionality to the video OSD, allowing users to search and download subtitles from remote sources'
+        },
+        {
+            name: 'breadcrumbs',
+            script: 'breadcrumbs.js',
+            css: 'breadcrumbNav.css',
+            dependencies: ['utils'],
+            description: 'Adds breadcrumb navigation to item detail pages for Movies, Series, Seasons, Episodes, Music Artists, and Music Albums'
+        },
+        {
+            name: 'playlist',
+            script: 'playlist.js',
+            css: null,
+            dependencies: ['cardBuilder', 'utils'],
+            description: 'Modifies playlist view page behavior to navigate to item details instead of playing, and adds play button to playlist items'
         }
     ];
+    
+    // Auto-enable dependencies for enabled scripts
+    function autoEnableDependencies() {
+        let hasChanges = false;
+        
+        SCRIPT_DEFINITIONS.forEach(script => {
+            if (ENABLED_SCRIPTS[script.name]) {
+                script.dependencies.forEach(dep => {
+                    if (!ENABLED_SCRIPTS[dep]) {
+                        ENABLED_SCRIPTS[dep] = true;
+                        hasChanges = true;
+                        console.log(`[KefinTweaks Injector] Auto-enabled dependency '${dep}' for '${script.name}'`);
+                    }
+                });
+            }
+        });
+        
+        return hasChanges;
+    }
     
     // Configuration validation
     function validateConfiguration() {
         const errors = [];
+        
+        // Auto-enable dependencies first
+        const dependenciesEnabled = autoEnableDependencies();
+        if (dependenciesEnabled) {
+            console.log('[KefinTweaks Injector] Auto-enabled required dependencies');
+        }
         
         // Check dependencies - only validate if the script is enabled
         SCRIPT_DEFINITIONS.forEach(script => {
@@ -125,9 +204,9 @@
         return true;
     }
     
-    // Get the root path for scripts (adjust this based on your setup)
+    // Get the root path for scripts from configuration
     function getScriptRoot() {        
-        return 'https://cdn.jsdelivr.net/gh/ranaldsgift/KefinTweaks/';
+        return window.KefinTweaksConfig?.scriptRoot || 'https://cdn.jsdelivr.net/gh/ranaldsgift/KefinTweaks/';
     }
     
     // Load a CSS file

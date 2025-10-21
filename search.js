@@ -5,28 +5,18 @@
     const WARN = (...args) => console.warn('[SmartSearch]', ...args);
     const ERR = (...args) => console.error('[SmartSearch]', ...args);
 
-    // Configuration
-    const CONFIG = {
-        enableJellyseerr: false, // Toggle for Jellyseerr integration
-    };
-
     LOG('script load start');
 
-    // Monitor network requests to see what's happening
-    const originalFetch = window.fetch;
-    const originalXHR = window.XMLHttpRequest;
-    
-    // Track if we should block XHR requests (only for the initial URL query)
+    // Configuration
+    const CONFIG = window.KefinTweaksConfig?.search || {
+        enableJellyseerr: false  // Toggle for Jellyseerr integration
+    };
+
+    // Track if we should block XHR requests (only for direct URL navigation with query params)
     let shouldBlockXHR = false;
     let hasBlockedInitialSearch = false;
     
-    // Override fetch to log our requests
-    window.fetch = function(...args) {
-        LOG('FETCH request:', args[0]);
-        return originalFetch.apply(this, args);
-    };
-    
-    // Override XHR to log and potentially block default search requests
+    // Override XHR to block automatic search requests from direct URL navigation
     const OriginalXHR = window.XMLHttpRequest;
     window.XMLHttpRequest = function() {
         const xhr = new OriginalXHR();
@@ -37,12 +27,12 @@
             LOG('XHR request:', method, url);
             
             // Check if this is a search request we want to block
-            // Our smart search uses fetch(), so any XHR search request should be blocked
+            // Only block if we're in smart search mode and haven't blocked yet
             const isSearchRequest = url.includes('/Items?') && 
                                   (url.includes('searchTerm=') || url.includes('query='));
             
             if (isSearchRequest && shouldBlockXHR && !hasBlockedInitialSearch) {
-                LOG('Blocking initial default search XHR request:', url);
+                LOG('Blocking initial automatic search XHR request:', url);
                 hasBlockedInitialSearch = true;
                 // Disable blocking after this first request
                 shouldBlockXHR = false;
@@ -50,7 +40,7 @@
                 
                 // Override send to do nothing
                 xhr.send = function() {
-                    LOG('Initial default search XHR blocked');
+                    LOG('Initial automatic search XHR blocked');
                     // Simulate a successful response
                     setTimeout(() => {
                         xhr.readyState = 4;
@@ -61,14 +51,14 @@
                         }
                     }, 100);
                 };
+            } else {
+                // Use original send for non-blocked requests
+                xhr.send = function(...args) {
+                    return originalSend.apply(this, args);
+                };
             }
             
             return originalOpen.apply(this, [method, url, ...args]);
-        };
-        
-        xhr.send = function(...args) {
-            LOG('XHR sending:', args);
-            return originalSend.apply(this, args);
         };
         
         return xhr;
@@ -90,13 +80,12 @@
         LOG('Current hash:', window.location.hash);
         
         if (queryFromUrl && (window.location.pathname.includes('search.html') || window.location.hash.includes('search'))) {
-            LOG('URL query detected, setting up protection');
+            LOG('URL query detected, enabling XHR blocking for automatic search prevention');
             shouldBlockXHR = true; // Enable XHR blocking for initial URL query
-            
-            // Just enable XHR blocking - don't touch the input
-            LOG('XHR blocking enabled for initial search');
         }
     })();
+
+
 
     // config
     const CORE_TYPES = ['Movie', 'Series', 'Episode', 'Person'];
@@ -127,6 +116,30 @@
         LOG('Cached results:', { searchTerm, searchType, cacheKey, resultCount: results.total });
     }
 
+    // Function to clear search results except jellyseerr-section
+    function clearSearchResultsExceptJellyseerr() {
+        LOG('Clearing search results except jellyseerr-section');
+        
+        // Clear the smart search results container
+        const resultsContainer = document.getElementById('smart-search-results');
+        if (resultsContainer) {
+            resultsContainer.innerHTML = '';
+        }
+    }
+
+    // Function to wait for jellyseerrAPI to be available
+    async function waitForJellyseerrAPI(maxAttempts = 50, interval = 200) {
+        for (let i = 0; i < maxAttempts; i++) {
+            if (window.JellyfinEnhanced?.jellyseerrAPI) {
+                LOG('jellyseerrAPI found after', i * interval, 'ms');
+                return true;
+            }
+            await new Promise(resolve => setTimeout(resolve, interval));
+        }
+        WARN('jellyseerrAPI not found after', maxAttempts * interval, 'ms');
+        return false;
+    }
+
     // styles (dedupe by id)
     function addCustomStyles() {
         if (document.getElementById('smart-search-styles')) return;
@@ -137,9 +150,8 @@
             .smart-search-wrapper { margin: 12px 0 20px 0; }
             .smart-search-input { width:100%; padding:8px; border-radius:4px; box-sizing:border-box; }
             .smart-search-buttons { display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; justify-content: center; }
-            .smart-search-primary, .smart-search-secondary { padding:8px 12px; border:none; border-radius:4px; cursor:pointer; }
-            .smart-search-primary { background:#00a4dc; color:#fff; }
-            .smart-search-secondary { background:#444; color:#fff; }
+            .smart-search-btn { padding:8px 12px; border:none; border-radius:4px; cursor:pointer; background:#444; color:#fff; }
+            .smart-search-btn.active { background:var(--btnSubmitColor); }
             .smart-search-results { margin-top:12px; }
             .smart-search-stats { color:#999; font-size:12px; margin-top:6px; display: none; }
             #persistent-toggle-btn { display:none; position:relative; padding:8px 12px; background:#00a4dc; color:#fff; border:none; border-radius:4px; cursor:pointer; }
@@ -150,6 +162,7 @@
                 position: absolute;
                 z-index: 1;
                 right: 0;
+                cursor: pointer;
             }
         `;
         document.head.appendChild(style);
@@ -214,57 +227,38 @@
         }
     }
 
-    // Fetch Jellyseerr results
-    async function fetchJellyseerrResults(searchTerm) {
-        try {
-            const jellyseerrUrl = `${ApiClient.serverAddress()}/JellyfinEnhanced/jellyseerr/search?query=${encodeURIComponent(searchTerm)}`;
-            LOG('Fetching Jellyseerr results:', jellyseerrUrl);
-            
-            const response = await ApiClient.fetch({ 
-                url: jellyseerrUrl, 
-                method: 'GET',
-                headers: {
-                    'Accept': 'application/json',
-                    'X-Jellyfin-User-Id': ApiClient.getCurrentUserId()
-                }
-            });
-            const data = await response.json();
-            
-            LOG('Jellyseerr response:', data);
-            return data;
-        } catch (err) {
-            WARN('Jellyseerr fetch failed', err);
-            return { movies: [], tv: [] };
-        }
-    }
-
-    // Convert Jellyseerr item to our format
-    function convertJellyseerrItem(item, type) {
-        return {
-            Id: `jellyseerr_${item.id}`,
-            Name: item.title || item.name,
-            Type: type === 'movie' ? 'Movie' : 'Series',
-            MediaType: 'Video',
-            ImageTags: item.posterPath ? { Primary: item.posterPath } : null,
-            ProductionYear: item.releaseDate ? new Date(item.releaseDate).getFullYear() : null,
-            Overview: item.overview,
-            // Jellyseerr specific data
-            JellyseerrId: item.id,
-            JellyseerrType: type,
-            ExternalId: item.tmdbId || item.tvdbId,
-            IsJellyseerr: true
-        };
-    }
-
     // perform smart search
     async function performSmartSearch(searchTerm, searchType = 'core') {
         LOG('performSmartSearch()', { searchTerm, searchType });
-        const results = { groupedItems: {}, total: 0 };
+        let results = { groupedItems: {}, total: 0 };
+
+        const searchPage = document.getElementById('searchPage');
+        if (!searchPage) {
+            ERR('searchPage not found');
+            return results;
+        }
         
         // Hide search suggestions
-        const searchSuggestions = document.querySelector('.searchSuggestions');
+        const searchSuggestions = searchPage.querySelector('.searchSuggestions');
         if (searchSuggestions) {
-            searchSuggestions.style.display = 'none';
+            searchSuggestions.remove();
+        }
+
+        const noItemsMessage = searchPage.querySelector('.noItemsMessage.dummy-section');
+        if (!noItemsMessage) {
+            const noItemsMessage = document.createElement('div');
+            noItemsMessage.className = 'noItemsMessage dummy-section';
+            noItemsMessage.style.display = 'none';
+            searchPage.appendChild(noItemsMessage);
+        }
+            
+        // Update URL with search query and type
+        const urlType = searchType === 'core' ? 'videos' : searchType;
+        updateSearchUrl(searchTerm, urlType);
+        
+        // Handle Jellyseerr-only search
+        if (searchType === 'request') {
+            return results;
         }
         
         // Show loading spinner
@@ -296,19 +290,12 @@
                     });
             });
 
-            // Add Jellyseerr search for core types (if enabled)
-            if (CONFIG.enableJellyseerr && (searchType === 'core' || searchType === 'all')) {
-                promises.push(fetchJellyseerrResults(searchTerm));
-            } else {
-                promises.push(Promise.resolve({ movies: [], tv: [] }));
-            }
-
             const start = performance.now();
             const responses = await Promise.all(promises);
             const end = performance.now();
 
             // Group results by type
-            responses.forEach((r, idx) => {
+            responses.forEach(async (r, idx) => {
                 if (idx < typeGroups.length) {
                     // Regular Jellyfin results
                     const type = typeGroups[idx];
@@ -320,37 +307,16 @@
                             // Artists: show all items, they often don't have primary images
                             filteredItems = r.Items;
                         } else {
-                            // Other types: filter to show only those with images
-                            filteredItems = r.Items.filter(item => item.ImageTags?.Primary);
+                            // Other types: sort so items with images appear first
+                            filteredItems = r.Items.sort((a, b) => {
+                                const aHasImage = a.ImageTags?.Primary ? 1 : 0;
+                                const bHasImage = b.ImageTags?.Primary ? 1 : 0;
+                                return bHasImage - aHasImage; // Items with images first
+                            });
                         }
                         
                         results.groupedItems[type] = filteredItems;
                         results.total += filteredItems.length;
-                    }
-                } else {
-                    // Jellyseerr results
-                    if (r && (r.movies || r.tv)) {
-                        // Process Jellyseerr movies
-                        if (r.movies && r.movies.length > 0) {
-                            const jellyseerrMovies = r.movies.map(item => convertJellyseerrItem(item, 'movie'));
-                            if (results.groupedItems['Movie']) {
-                                results.groupedItems['Movie'] = [...results.groupedItems['Movie'], ...jellyseerrMovies];
-                            } else {
-                                results.groupedItems['Movie'] = jellyseerrMovies;
-                            }
-                            results.total += jellyseerrMovies.length;
-                        }
-                        
-                        // Process Jellyseerr TV shows
-                        if (r.tv && r.tv.length > 0) {
-                            const jellyseerrTv = r.tv.map(item => convertJellyseerrItem(item, 'tv'));
-                            if (results.groupedItems['Series']) {
-                                results.groupedItems['Series'] = [...results.groupedItems['Series'], ...jellyseerrTv];
-                            } else {
-                                results.groupedItems['Series'] = jellyseerrTv;
-                            }
-                            results.total += jellyseerrTv.length;
-                        }
                     }
                 }
             });
@@ -359,10 +325,6 @@
             
             // Cache the results
             cacheResults(searchTerm, searchType, results);
-            
-            // Update URL with search query and type
-            const urlType = searchType === 'core' ? 'videos' : searchType;
-            updateSearchUrl(searchTerm, urlType);
             
             // Hide loading spinner
             setLoadingSpinner(false);
@@ -375,40 +337,6 @@
             return results;
         }
     }
-
-
-    function createSmartItemElement(item) {
-        const serverId = ApiClient.serverId();
-        const div = document.createElement('div');
-        div.className = 'smart-search-item';
-
-        const img = document.createElement('img');
-        img.src = item.ImageTags?.Primary
-            ? `${ApiClient.serverAddress()}/Items/${item.Id}/Images/Primary?tag=${item.ImageTags.Primary}&maxWidth=300`
-            : '/web/assets/img/icon-transparent.png';
-        img.alt = item.Name || 'Unknown';
-        img.onerror = () => { img.src = '/web/assets/img/icon-transparent.png'; };
-
-        const h = document.createElement('h3');
-        h.textContent = item.Name || 'Unknown';
-        h.title = h.textContent;
-
-        const p = document.createElement('p');
-        p.textContent = `${item.Type}${item.ProductionYear ? ` (${item.ProductionYear})` : ''}`;
-        p.title = p.textContent;
-
-        div.appendChild(img);
-        div.appendChild(h);
-        div.appendChild(p);
-
-        div.addEventListener('click', () => {
-            LOG('item click', { id: item.Id, name: item.Name });
-            try { Dashboard.navigate(`#!/details?id=${item.Id}&serverId=${serverId}`); } catch(e){ ERR(e); }
-        });
-
-        return div;
-    }
-
 
     function getTypeDisplayName(itemType) {
         const typeMap = {
@@ -438,7 +366,7 @@
             LOG('Creating smart-search-results container');
             smartResults = document.createElement('div');
             smartResults.id = 'smart-search-results';
-            smartResults.className = 'smart-search-results emby-scroller';
+            smartResults.className = 'smart-search-results emby-scroller searchResults, padded-top, padded-bottom-page';
             const searchPage = document.getElementById('searchPage');
             if (searchPage) {
                 searchPage.appendChild(smartResults);
@@ -489,7 +417,7 @@
             if (results.groupedItems[itemType] && results.groupedItems[itemType].length > 0) {
                 const items = results.groupedItems[itemType];
                 const title = getTypeDisplayName(itemType);
-                const section = window.cardBuilder.renderCards(items, title, index);
+                const section = window.cardBuilder.renderCards(items, title, null, index);
                 frag.appendChild(section);
                 totalShown += items.length;
             }
@@ -500,11 +428,11 @@
     }
 
     // main init
-    function initDualSearch() {
-        if (typeof ApiClient === 'undefined') { setTimeout(initDualSearch, 500); return; }
+    function initSmartSearch() {
+        if (typeof ApiClient === 'undefined') { setTimeout(initSmartSearch, 500); return; }
 
         const originalInput = document.getElementById('searchTextInput');
-        if (!originalInput) { setTimeout(initDualSearch, 500); return; }
+        if (!originalInput) { setTimeout(initSmartSearch, 500); return; }
 
         addCustomStyles();
 
@@ -517,53 +445,65 @@
                 queryFromUrl = hashQuery.split('&')[0]; // Get query before any other params
             }
         }
-        LOG('initDualSearch - URL query:', queryFromUrl);
-        LOG('initDualSearch - originalInput exists:', !!originalInput);
+        LOG('initSmartSearch - URL query:', queryFromUrl);
+        LOG('initSmartSearch - originalInput exists:', !!originalInput);
         if (originalInput) {
-            LOG('initDualSearch - originalInput value:', originalInput.value);
+            LOG('initSmartSearch - originalInput value:', originalInput.value);
         }
         
         if (queryFromUrl) {
-            LOG('initDualSearch - URL query detected, leaving input alone');
+            LOG('initSmartSearch - URL query detected, leaving input alone');
         }
 
-        // create Smart search UI if not exist
+        // Replace original search input with our smart search input
         let wrapper = document.getElementById('smart-search-wrapper');
         if (!wrapper) {
             wrapper = document.createElement('div');
             wrapper.id = 'smart-search-wrapper';
             wrapper.className = 'smart-search-wrapper';
 
-            const input = document.createElement('input');
-            input.id = 'smart-search-input';
+            // Replace the original input with our smart search input
+            const input = originalInput.cloneNode(true);
+            input.id = 'searchTextInput'; // Use the same ID as original
             input.className = 'smart-search-input emby-input searchfields-txtSearch';
             input.type = 'text';
-            input.placeholder = 'Smart Search...';
+            input.placeholder = 'Search...';
+            input.value = ''; // Clear any existing value
+            input.removeAttribute('data-jellyseerr-listener');
 
             const btnRow = document.createElement('div');
             btnRow.className = 'smart-search-buttons';
 
             const btnAll = document.createElement('button');
             btnAll.id = 'smart-search-all';
-            btnAll.className = 'smart-search-secondary emby-button';
+            btnAll.className = 'smart-search-btn emby-button';
             btnAll.textContent = 'All';
             const btnCore = document.createElement('button');
             btnCore.id = 'smart-search-core';
-            btnCore.className = 'smart-search-primary emby-button';
+            btnCore.className = 'smart-search-btn emby-button active';
             btnCore.textContent = 'Movies/TV';
             const btnMusic = document.createElement('button');
             btnMusic.id = 'smart-search-music';
-            btnMusic.className = 'smart-search-secondary emby-button';
+            btnMusic.className = 'smart-search-btn emby-button';
             btnMusic.textContent = 'Music';
             const btnBooks = document.createElement('button');
             btnBooks.id = 'smart-search-books';
-            btnBooks.className = 'smart-search-secondary emby-button';
+            btnBooks.className = 'smart-search-btn emby-button';
             btnBooks.textContent = 'Books';
 
             btnRow.appendChild(btnAll);
             btnRow.appendChild(btnCore);
             btnRow.appendChild(btnMusic);
             btnRow.appendChild(btnBooks);
+            
+            if (CONFIG.enableJellyseerr) {
+                const btnRequest = document.createElement('button');
+                btnRequest.id = 'smart-search-request';
+                btnRequest.className = 'smart-search-btn emby-button';
+                btnRequest.textContent = 'Request';
+    
+                btnRow.appendChild(btnRequest);
+            }
 
             const stats = document.createElement('div');
             stats.id = 'smart-search-stats';
@@ -573,16 +513,20 @@
             wrapper.appendChild(btnRow);
             wrapper.appendChild(stats);
 
+            // Replace the original input with our wrapper
             originalInput.parentElement.insertBefore(wrapper, originalInput);
+            originalInput.remove(); // Remove the original input
+            input.focus();
         }
 
         // Smart results container will be created lazily when needed
 
-        const smartInput = document.getElementById('smart-search-input');
+        const smartInput = document.getElementById('searchTextInput');
         const smartCoreBtn = document.getElementById('smart-search-core');
         const smartMusicBtn = document.getElementById('smart-search-music');
         const smartBooksBtn = document.getElementById('smart-search-books');
         const smartAllBtn = document.getElementById('smart-search-all');
+        const smartRequestBtn = document.getElementById('smart-search-request');
         
         // Track current search type
         let currentSearchType = 'videos';
@@ -590,30 +534,26 @@
         // Function to update button states
         function updateButtonStates(activeType) {
             // Remove active class from all buttons
-            smartAllBtn.classList.remove('smart-search-primary');
-            smartAllBtn.classList.add('smart-search-secondary');
-            smartCoreBtn.classList.remove('smart-search-primary');
-            smartCoreBtn.classList.add('smart-search-secondary');
-            smartMusicBtn.classList.remove('smart-search-primary');
-            smartMusicBtn.classList.add('smart-search-secondary');
-            smartBooksBtn.classList.remove('smart-search-primary');
-            smartBooksBtn.classList.add('smart-search-secondary');
+            smartAllBtn.classList.remove('active');
+            smartCoreBtn.classList.remove('active');
+            smartMusicBtn.classList.remove('active');
+            smartBooksBtn.classList.remove('active');
+            smartRequestBtn.classList.remove('active');
             
             // Add active class to the selected button
             if (activeType === 'all') {
-                smartAllBtn.classList.remove('smart-search-secondary');
-                smartAllBtn.classList.add('smart-search-primary');
+                smartAllBtn.classList.add('active');
             } else if (activeType === 'videos') {
-                smartCoreBtn.classList.remove('smart-search-secondary');
-                smartCoreBtn.classList.add('smart-search-primary');
+                smartCoreBtn.classList.add('active');
             } else if (activeType === 'music') {
-                smartMusicBtn.classList.remove('smart-search-secondary');
-                smartMusicBtn.classList.add('smart-search-primary');
+                smartMusicBtn.classList.add('active');
             } else if (activeType === 'books') {
-                smartBooksBtn.classList.remove('smart-search-secondary');
-                smartBooksBtn.classList.add('smart-search-primary');
+                smartBooksBtn.classList.add('active');
+            } else if (activeType === 'request') {
+                smartRequestBtn.classList.add('active');
             }
         }
+
 
         // Function to handle search type toggle
         function setSearchType(type) {
@@ -628,6 +568,15 @@
                 // Map URL type to internal type
                 const internalType = type === 'videos' ? 'core' : type;
                 LOG('Internal type mapping:', { type, internalType });
+                
+                // For request type, don't use cache and always perform fresh search
+                if (type === 'request') {
+                    LOG('Request type - clearing results and performing fresh Jellyseerr search');
+                    // Clear existing search results except jellyseerr-section
+                    clearSearchResultsExceptJellyseerr();
+                    performSmartSearch(searchTerm, 'request');
+                    return;
+                }
                 
                 // Check if we have cached results for this search term and type
                 const cachedResults = getCachedResults(searchTerm, internalType);
@@ -664,11 +613,18 @@
             };
 
             smartInput.addEventListener('input', doSmartSearchDebounced);
-            smartInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); const internalType = currentSearchType === 'videos' ? 'core' : currentSearchType; performSmartSearch((smartInput.value||'').trim(), internalType); }});
+            smartInput.addEventListener('keydown', (e)=>{ 
+                if(e.key==='Enter'){ 
+                    e.preventDefault(); 
+                    const internalType = currentSearchType === 'videos' ? 'core' : currentSearchType;
+                    performSmartSearch((smartInput.value||'').trim(), internalType); 
+                }
+            });
             smartCoreBtn.addEventListener('click', ()=>setSearchType('videos'));
             smartMusicBtn.addEventListener('click', ()=>setSearchType('music'));
             smartBooksBtn.addEventListener('click', ()=>setSearchType('books'));
             smartAllBtn.addEventListener('click', ()=>setSearchType('all'));
+            smartRequestBtn.addEventListener('click', ()=>setSearchType('request'));
 
             // Parse type parameter from URL
             let typeFromUrl = 'videos'; // default
@@ -713,33 +669,26 @@
             LOG('setMode', smartMode);
             if (smartMode) {
                 wrapper.style.display = '';
-                originalInput.style.display = 'none';
-                // Hide all search results containers
-                const searchResults = document.querySelectorAll('.searchResults,.padded-top,.padded-bottom-page');
+                // Hide search results containers (be more specific to avoid affecting other pages)
+                const searchResults = document.querySelectorAll('#searchPage .searchResults, #searchPage .padded-top, #searchPage .padded-bottom-page');
                 searchResults.forEach(sr => sr.style.display = 'none');
                 const resultsContainer = ensureSmartResultsContainer();
                 resultsContainer.style.display = '';
                 toggleBtn.textContent='Switch to Default Search';
-                // Keep XHR blocking enabled for smart mode
-                shouldBlockXHR = true;
                 // Add smart-search-mode class to body for CSS targeting
                 document.body.classList.add('smart-search-mode');
             } else {
                 wrapper.style.display = 'none';
-                originalInput.style.display = '';
-                // Show all search results containers
-                const searchResults = document.querySelectorAll('.searchResults,.padded-top,.padded-bottom-page');
+                // Show search results containers (be more specific to avoid affecting other pages)
+                const searchResults = document.querySelectorAll('#searchPage .searchResults, #searchPage .padded-top, #searchPage .padded-bottom-page');
                 searchResults.forEach(sr => sr.style.display = '');
                 const resultsContainer = ensureSmartResultsContainer();
                 resultsContainer.style.display = 'none';
                 toggleBtn.textContent='Switch to Smart Search';
-                // Disable XHR blocking for default search mode
-                shouldBlockXHR = false;
-                LOG('Disabled XHR blocking for default search mode');
                 // Remove smart-search-mode class from body
                 document.body.classList.remove('smart-search-mode');
                 
-                // Input is left alone - let it keep its value
+                // Note: We don't restore the original input since we replaced it entirely
             }
         };
 
@@ -768,86 +717,50 @@
             }
             LOG('URL query in init:', queryFromUrl);
             
-        if (queryFromUrl) {
-            LOG('Query detected in init, enabling XHR blocking');
-            shouldBlockXHR = true;
             
-            // Also try to prevent search form submission
-            const searchForm = document.querySelector('form[action*="search"]');
-            LOG('Search form found:', !!searchForm);
-            if (searchForm) {
-                searchForm.addEventListener('submit', (e) => {
-                    LOG('Search form submission prevented');
-                    e.preventDefault();
-                    e.stopPropagation();
-                    return false;
-                });
-            }
-            
-            // Try to hide search results containers immediately
-            const hideSearchResults = () => {
-                const searchResults = document.querySelectorAll('.searchResults,.padded-top,.padded-bottom-page');
-                LOG('Found search results containers:', searchResults.length);
-                searchResults.forEach(sr => {
-                    sr.style.display = 'none';
-                    LOG('Hidden search result container');
-                });
-            };
-            
-            // Hide immediately and on DOM changes
-            hideSearchResults();
-            document.addEventListener('DOMContentLoaded', hideSearchResults);
-            
-            // Use mutation observer to hide any new search results
-            const hideObserver = new MutationObserver(() => {
-                hideSearchResults();
-            });
-            hideObserver.observe(document.body, { childList: true, subtree: true });
-            
-            // Stop observing after 10 seconds
+            LOG('Calling initSmartSearch');
+            initSmartSearch();
+        }
+    }
+
+    // Initialize search hook using utils
+    function initializeSearchHook() {
+        if (!window.KefinTweaksUtils) {
+            WARN('KefinTweaksUtils not available, retrying in 1 second');
+            setTimeout(initializeSearchHook, 1000);
+            return;
+        }
+        
+        LOG('Registering search page handler with KefinTweaksUtils');
+        
+        // Register handler for search page
+        window.KefinTweaksUtils.onViewPage((view, element) => {
+            LOG('Search page detected via utils');
+            // Small delay to ensure DOM is ready
             setTimeout(() => {
-                LOG('Stopping hide observer after 10 seconds');
-                hideObserver.disconnect();
-            }, 10000);
-        }
-            
-            LOG('Calling initDualSearch');
-            initDualSearch();
-        }
-    }
-
-    // Mutation observer to detect when search page content is loaded dynamically
-    function setupMutationObserver() {
-        const observer = new MutationObserver((mutations) => {
-            mutations.forEach((mutation) => {
-                if (mutation.type === 'childList') {
-                    // Check if search input appears in the DOM
-                    const searchInput = document.getElementById('searchTextInput');
-                    if (searchInput && !document.getElementById('smart-search-wrapper')) {
-                        LOG('Search input detected via mutation observer');
-                        initDualSearch();
-                    }
+                const searchInput = document.getElementById('searchTextInput');
+                if (searchInput && !document.getElementById('smart-search-wrapper')) {
+                    LOG('Search input found, initializing smart search');
+                    initSmartSearch();
                 }
-            });
+            }, 100);
+        }, {
+            immediate: true,
+            pages: ['search']
         });
-
-        // Observe the entire document for changes
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
-
-        LOG('Mutation observer setup complete');
+        
+        LOG('Search hook initialized successfully');
     }
 
+    // Initialize the hook when the script loads
+    initializeSearchHook();
+    
     if (document.readyState==='loading') { 
         document.addEventListener('DOMContentLoaded', () => {
             init();
-            setupMutationObserver();
         }); 
     } else { 
         init(); 
-        setupMutationObserver();
     }
     LOG('script load end');
 })();

@@ -1,0 +1,19 @@
+div#subtitleSearchResults {
+    overflow-y: scroll;
+    height: auto !important;
+    max-height: unset;
+    display: grid;
+    grid-auto-rows: min-content;
+}
+
+div#subtitleSearchResults button.btnDownload {
+    margin-right: 20px;
+}
+
+#videoOsdPage:not(.hide) button.btnSubtitles.hide {
+    display: block !important;
+}
+
+.dialogContainer [data-id="secondarysubtitle"] {
+    display: none;
+}

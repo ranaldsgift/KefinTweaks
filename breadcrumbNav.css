@@ -1,0 +1,104 @@
+/* KefinTweaks Breadcrumbs Styles */
+
+.kefinTweaks-breadcrumbs-wrapper {
+   margin-left: -.5em;
+   transition: background 0.2s ease;
+}
+
+.kefinTweaks-breadcrumbs-wrapper:hover {
+    background: rgba(0, 0, 0, 0.5);
+    border-radius: 0.5em;
+}
+
+.kefinTweaks-breadcrumbs {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 1.17em;
+    font-family: inherit;
+    pointer-events: auto;
+    position: relative;
+    padding: 8px 12px;
+    border-radius: 4px;
+    word-wrap: break-word;
+    display: inline-block;
+}
+
+.kefinTweaks-popover-container {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 1001;
+}
+
+.kefinTweaks-breadcrumbs span {
+    display: inline;
+}
+
+.kefinTweaks-breadcrumbs span:hover {
+    color: rgba(255, 255, 255, 1);
+}
+
+/* Hover effects for clickable breadcrumbs only */
+.kefinTweaks-breadcrumbs span[style*="cursor: pointer"]:hover {
+    text-decoration: underline !important;
+}
+
+/* Responsive behavior */
+@media (max-width: 768px) {
+    .kefinTweaks-breadcrumbs-wrapper {
+        display: none !important;
+    }
+}
+
+/* Popover styles for seasons and albums */
+.kefinTweaks-popover {
+    position: relative;
+    background-color: rgba(29, 38, 53, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    padding: 0;
+    min-width: 200px;
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 1001;
+    display: block;
+    margin-top: 8px;
+}
+
+.kefinTweaks-popover-item {
+    padding: 8px 16px 8px 24px;
+    cursor: pointer;
+    color: rgba(255, 255, 255, 0.8);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    position: relative;
+}
+
+.kefinTweaks-popover-item:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 1);
+}
+
+.kefinTweaks-popover-item:last-child {
+    border-bottom: none;
+}
+
+.kefinTweaks-popover-item.selected {
+    color: rgba(255, 255, 255, 1);
+    font-weight: bold;
+}
+
+.kefinTweaks-popover-item.selected::before {
+    content: '>';
+    position: absolute;
+    left: 8px;
+    top: calc(50% - 1px);
+    transform: translateY(-50%);
+    font-weight: bold;
+}
+
+.skinHeader {
+    contain: none;
+}
+
+.headerLeft {
+    overflow: visible;
+}

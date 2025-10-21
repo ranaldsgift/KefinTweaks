@@ -26,18 +26,25 @@
     
     LOG('Script loaded - JS Injector mode');
     
+    // Get configuration from global config
+    const config = window.KefinTweaksConfig?.exclusiveElsewhere || {
+        hideServerName: false // Default fallback
+    };
+    
     const observer = new MutationObserver(() => {
         const elsewhereContainer = document.querySelector('.itemDetailPage:not(.hide) .streaming-lookup-container>div');
         if (elsewhereContainer && elsewhereContainer.children && elsewhereContainer.children.length > 2) {
             return;
         }
 
+        const serverName = config.hideServerName ? '' : ApiClient.serverName();
+
         const link = document.querySelector('.itemDetailPage:not(.hide) .streaming-lookup-container>div>div:first-child a');
         if (link && !link.classList.contains('exclusive')) {
             LOG('Modifying elsewhere link to show exclusive branding');
-            link.innerHTML = "Only available on Jellyfin";
+            link.innerHTML = `Only available on ${serverName}`;
             link.classList.add("exclusive");
-            link.title = "Jellyfin Exclusive";
+            link.title = "Exclusive";
             link.disable = true;
         }
     });

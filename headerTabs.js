@@ -23,7 +23,6 @@
         for (const match of hashMatches) {
             const pageFromHash = match.replace('#/', '');
             if (SUPPORTED_PAGES.includes(pageFromHash)) {
-                LOG('Current page detected:', pageFromHash);
                 return pageFromHash;
             }
         }
@@ -60,9 +59,17 @@
         let newHash = currentHash;
         
         if (currentHash.includes('?')) {
-            // Replace existing tab parameter
+            // Replace existing tab parameter and clear watchlist-specific params
             const [hashPath, hashSearch] = currentHash.split('?');
             const params = new URLSearchParams(hashSearch);
+            
+            // Clear watchlist-specific parameters when switching header tabs
+            params.delete('pageTab');
+            params.delete('page');
+            params.delete('sort');
+            params.delete('sortDirection');
+            params.delete('movieSort');
+            params.delete('movieSortDirection');
             
             if (tabIndex === 0) {
                 params.delete('tab');
@@ -76,6 +83,8 @@
             // Add tab parameter
             if (tabIndex !== 0) {
                 newHash = `${currentHash}?tab=${tabIndex}`;
+            } else {
+                newHash = `${currentHash}`;
             }
         }
         
@@ -115,6 +124,7 @@
                 }
             }
             
+            window.scrollTo(0, 0);
             LOG('Tab clicked:', currentPage, tabIndex);
         }
     }
@@ -125,6 +135,17 @@
         if (!headerTabs) return;
         
         const currentTabFromUrl = getCurrentTabFromUrl();
+
+        // Patch for media bar because it usually reacts slowly and hides later
+        // Hide media bar slideshow if we aren't specifically on the home page first tab
+        const currentPage = getCurrentPage();
+        if (currentPage !== 'home.html' || currentTabFromUrl !== 0) {
+            const mediaBarSlideshow = document.getElementById('slides-container');
+            if (mediaBarSlideshow) {
+                mediaBarSlideshow.style.display = 'none';
+            }
+        }
+
         const buttons = headerTabs.querySelectorAll('.emby-tab-button');
         const activeButton = headerTabs.querySelector('.emby-tab-button-active');
 
@@ -146,13 +167,23 @@
         if (correctButton) {
             correctButton.classList.add('emby-tab-button-active');
             LOG('Set active tab button to index:', currentTabFromUrl);
-        } else {
-            // If no correct button found, set the first one (index 0) as active
-            /* const firstButton = buttons[0];
-            if (firstButton) {
-                firstButton.classList.add('emby-tab-button-active');
-                LOG('No matching tab found, set first button as active');
-            } */
+        }
+
+        const activeTabContent = document.querySelector('.libraryPage:not(.hide) .pageTabContent.is-active');
+        const activeTabContentIndex = activeTabContent ? activeTabContent.getAttribute('data-index') : null;
+
+        // Remove is-active class from the active tab content if it's not the current tab
+        if (activeTabContentIndex && activeTabContentIndex !== currentTabFromUrl) {
+            activeTabContent.classList.remove('is-active');
+        }
+
+        // Add is-active class to the current tab content if it's not already active
+        if (!activeTabContentIndex || activeTabContentIndex !== currentTabFromUrl) {
+            const targetContent = document.querySelector(`.libraryPage:not(.hide) .pageTabContent[data-index="${currentTabFromUrl}"]`);
+            if (targetContent) {
+                targetContent.classList.add('is-active');
+                LOG('Set active tab content:', currentTabFromUrl);
+            }
         }
     }
     
@@ -274,11 +305,16 @@
     // Monitor for page changes
     function setupPageMonitor() {
         let lastPage = null;
+        let lastUrl = window.location.href;
         
         function checkPageChange() {
             const newPage = getCurrentPage();
-            if (newPage !== lastPage) {
+            const currentUrl = window.location.href;
+            
+            // Check if page changed OR if URL changed (including query params)
+            if (newPage !== lastPage || currentUrl !== lastUrl) {
                 lastPage = newPage;
+                lastUrl = currentUrl;
                 if (newPage) {
                     LOG('Page change detected:', newPage);
                     // Setup observers when page changes
@@ -296,12 +332,80 @@
         // Check on hash changes
         window.addEventListener('hashchange', checkPageChange);
         
+        // Fallback: check URL periodically but less frequently
+/*         urlCheckInterval = setInterval(() => {
+            if (window.location.href !== lastUrl) {
+                checkPageChange();
+            }
+        }, 500); */
+        
         // Check periodically in case we miss something
-        setInterval(checkPageChange, 1000);
+        //setInterval(checkPageChange, 1000);
+    }
+    
+    // Setup home navigation click handler with retry logic
+/*     function setupHomeNavClickHandler() {
+        const homeNavOption = document.querySelector('.mainDrawer .navMenuOption[href="#/home.html"]');
+        if (homeNavOption) {
+            homeNavOption.addEventListener('click', function(event) {
+                const headerTabs = document.querySelector('.headerTabs');
+                if (headerTabs) {
+                    const firstTab = headerTabs.querySelector('.emby-tab-button[data-index="0"]');
+                    if (firstTab) {
+                        LOG('Triggering click on first homepage tab');
+                        firstTab.click();
+                    } else {
+                        WARN('First homepage tab not found');
+                    }
+                } else {
+                    WARN('Header tabs not found');
+                }
+            });
+            LOG('Added click listener to home navigation option');
+            return true; // Success
+        } else {
+            WARN('Home navigation option not found, will retry...');
+            return false; // Failed, needs retry
+        }
+    }
+    
+    // Retry setup until successful
+    function retryHomeNavSetup() {
+        const maxRetries = 50; // Try for up to 25 seconds (50 * 500ms)
+        let retryCount = 0;
+        
+        const retryInterval = setInterval(() => {
+            if (setupHomeNavClickHandler()) {
+                clearInterval(retryInterval);
+                LOG('Home navigation click handler successfully attached');
+            } else {
+                retryCount++;
+                if (retryCount >= maxRetries) {
+                    clearInterval(retryInterval);
+                    ERR('Failed to attach home navigation click handler after maximum retries');
+                }
+            }
+        }, 500);
+    } */
+    
+    // Register onViewPage handler to sync active tab state
+    if (window.KefinTweaksUtils && window.KefinTweaksUtils.onViewPage) {
+        window.KefinTweaksUtils.onViewPage((view, element) => {
+            LOG('onViewPage handler triggered for view:', view);
+            // Sync active tab state when page view changes
+            syncActiveTabState();
+        }, {
+            pages: SUPPORTED_PAGES, // Only trigger for supported pages
+            immediate: false
+        });
+        LOG('Registered onViewPage handler for syncActiveTabState');
+    } else {
+        WARN('KefinTweaksUtils.onViewPage not available');
     }
     
     // Initialize
     setupPageMonitor();
+    //retryHomeNavSetup();
     
     LOG('Header tabs functionality initialized');
     

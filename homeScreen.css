@@ -1,13 +1,33 @@
 /* This will put the Continue Watching and Next Up sections at the top of the home screen
    You can order your custom sections between those and the rest of the sections by using 3-99 for the section order
-   If you want your custom section to appear after the normal sections, use 101+ for the section order */
-
+   Discovery sections are 101-110 if they are enabled
+   If you want your custom section to appear after all other sections, use 111+ for the section order */
+.sections.homeSectionsContainer {
+    display: flex;
+    flex-direction: column;
+}
 .sections.homeSectionsContainer>div {
     order: 100;
 }
 .sections.homeSectionsContainer>div:has(div[data-positionticks]) {
-    order: 1;
+    order: 2;
 }
 .sections.homeSectionsContainer>div:has(a[href*="type=nextup"]) {
-    order: 2;
+    order: 3;
+}
+
+
+
+/* Halloween theme */
+
+.home-screen.halloween-theme #reactRoot:has(.libraryPage:not(.hide) .pageTabContent.is-active[data-index="0"])>.backgroundContainer::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: -25%;
+    background-image: url('/files/KefinTweaks/pages/images/halloween.jpg');
+    background-position: 0px -250px;
+    background-size: auto 102%;
 }

@@ -20,7 +20,7 @@
          * Renders a scrollable container with cards
          * @param {Array} items - Array of Jellyfin item objects
          * @param {string} title - Title for the scrollable container
-         * @param {string} viewMoreUrl - Optional URL to make title clickable
+         * @param {string|Function} viewMoreUrl - Optional URL to make title clickable, or function to call on click
          * @param {number} sectionIndex - Index for debugging
          * @returns {HTMLElement} - The constructed scrollable container
          */
@@ -158,6 +158,21 @@
                 imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.ImageTags.Primary}`;
             }
             cardImageContainer.style.backgroundImage = `url("${imageUrl}")`;
+        } else if (item.ImageTags?.Thumb) {
+            const imageUrl = `${serverAddress}/Items/${item.Id}/Images/Thumb?${imageParams}&quality=96&tag=${item.ImageTags.Thumb}`;
+            cardImageContainer.style.backgroundImage = `url("${imageUrl}")`;
+        } else if ((item.Type === 'Season') && item.SeriesPrimaryImageTag) {
+            const imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.SeriesPrimaryImageTag}`;
+            cardImageContainer.style.backgroundImage = `url("${imageUrl}")`;
+        } else if ((item.Type === 'Episode') && item.ParentThumbImageTag) {
+            const imageUrl = `${serverAddress}/Items/${item.ParentThumbItemId}/Images/Thumb?${imageParams}&quality=96&tag=${item.ParentThumbImageTag}`;
+            cardImageContainer.style.backgroundImage = `url("${imageUrl}")`;
+        } else if (item.BackdropImageTags && item.BackdropImageTags.length > 0) {
+            const imageUrl = `${serverAddress}/Items/${item.Id}/Images/Backdrop?${imageParams}&quality=96&tag=${item.BackdropImageTags[0]}`;
+            cardImageContainer.style.backgroundImage = `url("${imageUrl}")`;
+        } else if (item.ParentBackdropImageTags && item.ParentBackdropImageTags.length > 0) {
+            const imageUrl = `${serverAddress}/Items/${item.ParentBackdropItemId}/Images/Backdrop?${imageParams}&quality=96&tag=${item.ParentBackdropImageTags[0]}`;
+            cardImageContainer.style.backgroundImage = `url("${imageUrl}")`;
         } else {
             // No image - add icon as inner element
             const iconSpan = document.createElement('span');
@@ -210,12 +225,47 @@
         // Button container for additional overlay buttons (watchlist, etc.)
         const buttonContainer = document.createElement('div');
         buttonContainer.className = 'cardOverlayButton-br flex';
+
+        // Watched button
+        const watchedButton = document.createElement('button');
+        watchedButton.setAttribute('is', 'emby-playstatebutton');
+        watchedButton.type = 'button';
+        watchedButton.setAttribute('data-action', 'none');
+        watchedButton.className = 'cardOverlayButton cardOverlayButton-hover itemAction paper-icon-button-light emby-button';
+        watchedButton.setAttribute('data-id', item.Id);
+        watchedButton.setAttribute('data-serverid', serverId);
+        watchedButton.setAttribute('data-itemtype', item.Type);
+        watchedButton.setAttribute('data-played', item.UserData?.Played || 'false');
+        watchedButton.title = 'Mark played';
         
-        // Add play button to button container
-        buttonContainer.appendChild(playButton);
+        const watchedIcon = document.createElement('span');
+        watchedIcon.className = 'material-icons cardOverlayButtonIcon cardOverlayButtonIcon-hover check playstatebutton-icon-unplayed';
+        watchedIcon.setAttribute('aria-hidden', 'true');
+        watchedButton.appendChild(watchedIcon);
+        buttonContainer.appendChild(watchedButton);
+
+        // Favorite button
+        const favoriteButton = document.createElement('button');
+        favoriteButton.setAttribute('is', 'emby-ratingbutton');
+        favoriteButton.type = 'button';
+        favoriteButton.setAttribute('data-action', 'none');
+        favoriteButton.className = 'cardOverlayButton cardOverlayButton-hover itemAction paper-icon-button-light emby-button';
+        favoriteButton.setAttribute('data-id', item.Id);
+        favoriteButton.setAttribute('data-serverid', serverId);
+        favoriteButton.setAttribute('data-itemtype', item.Type);
+        favoriteButton.setAttribute('data-likes', '');
+        favoriteButton.setAttribute('data-isfavorite', item.UserData?.IsFavorite || 'false');
+        favoriteButton.title = 'Add to favorites';
+        
+        const favoriteIcon = document.createElement('span');
+        favoriteIcon.className = 'material-icons cardOverlayButtonIcon cardOverlayButtonIcon-hover favorite';
+        favoriteIcon.setAttribute('aria-hidden', 'true');
+        favoriteButton.appendChild(favoriteIcon);
+        buttonContainer.appendChild(favoriteButton);
 
         // Assemble overlay
         cardOverlayContainer.appendChild(overlayLink);
+        cardOverlayContainer.appendChild(playButton);
         cardOverlayContainer.appendChild(buttonContainer);
 
         // Card text container - different structure for episodes
@@ -301,6 +351,7 @@
             const secondaryText = document.createElement('div');
             secondaryText.className = 'cardText cardTextCentered cardText-secondary';
             const episodeLink = document.createElement('a');
+            const episodeName = item.IndexNumber && item.ParentIndexNumber ? `S${item.ParentIndexNumber}:E${item.IndexNumber} - ${item.Name}` : item.Name;
             episodeLink.href = `#/details?id=${item.Id}&serverId=${serverId}`;
             episodeLink.className = 'itemAction textActionButton';
             episodeLink.setAttribute('data-id', item.Id);
@@ -310,8 +361,8 @@
             episodeLink.setAttribute('data-channelid', 'undefined');
             episodeLink.setAttribute('data-isfolder', 'false');
             episodeLink.setAttribute('data-action', 'link');
-            episodeLink.title = item.Name || 'Unknown Episode';
-            episodeLink.textContent = item.Name || 'Unknown Episode';
+            episodeLink.title = episodeName;
+            episodeLink.textContent = episodeName;
 
             const episodeBdi = document.createElement('bdi');
             episodeBdi.appendChild(episodeLink);
@@ -344,7 +395,7 @@
         
         // Create the main vertical section container
         const verticalSection = document.createElement('div');
-        verticalSection.className = 'verticalSection emby-scroller-container';
+        verticalSection.className = 'verticalSection emby-scroller-container custom-scroller-container';
 
         // Create section title
         const sectionTitle = document.createElement('h2');
@@ -353,9 +404,18 @@
         if (viewMoreUrl) {
             // Create clickable title with chevron icon
             const titleLink = document.createElement('a');
-            titleLink.href = viewMoreUrl;
             titleLink.className = 'sectionTitle-link sectionTitleTextButton';
             titleLink.style.cssText = 'text-decoration: none; cursor: pointer; display: flex; align-items: center;';
+            
+            // Handle both URL and function
+            if (typeof viewMoreUrl === 'function') {
+                titleLink.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    viewMoreUrl();
+                });
+            } else {
+                titleLink.href = viewMoreUrl;
+            }
             
             const titleText = document.createElement('span');
             titleText.textContent = title;
@@ -371,6 +431,14 @@
             // Regular non-clickable title
             sectionTitle.textContent = title;
         }
+
+        // Create "Show All" button (will be added after items are created)
+        const showAllButton = document.createElement('button');
+        showAllButton.type = 'button';
+        showAllButton.className = 'show-all-button';
+        showAllButton.style.cssText = 'margin-left: 10px; font-size: 12px; padding: 4px 8px; min-width: auto; background: transparent; border: 1px solid rgba(255, 255, 255, 0.3) !important; border-radius: 4px; cursor: pointer;';
+        showAllButton.textContent = 'Show All';
+        showAllButton.title = 'Show all items in a grid layout';
 
         // Create scroll buttons container
         const scrollButtons = document.createElement('div');
@@ -435,6 +503,33 @@
         });
 
         scroller.appendChild(itemsContainer);
+
+        // Add "Show All" button to title if there are more than 20 items
+        if (items.length > 20) {
+            sectionTitle.appendChild(showAllButton);
+        }
+
+        // Toggle between scroll and grid view
+        let isShowingAll = false;
+        const originalItemsContainerStyle = itemsContainer.style.cssText;
+        
+        showAllButton.addEventListener('click', () => {
+            if (isShowingAll) {
+                // Switch back to scroll view
+                itemsContainer.style.cssText = originalItemsContainerStyle;
+                scrollButtons.style.display = '';
+                showAllButton.textContent = 'Show All';
+                showAllButton.title = 'Show all items in a grid layout';
+                isShowingAll = false;
+            } else {
+                // Switch to grid view
+                itemsContainer.style.cssText = 'display: flex; flex-wrap: wrap; gap: 12px; white-space: normal; transform: none !important; transition: none !important;';
+                scrollButtons.style.display = 'none';
+                showAllButton.textContent = 'Show Less';
+                showAllButton.title = 'Show items in scrollable layout';
+                isShowingAll = true;
+            }
+        });
 
         // Scroll functionality - calculate dynamically when needed
         let scrollPosition = 0;
@@ -638,32 +733,17 @@
 
     // Add CSS to hide emby-scrollbuttons that aren't custom-scrollbuttons and improve touch experience
     const style = document.createElement('style');
-    style.textContent = `
-        .smart-search-results .emby-scrollbuttons {
-            display: none;
-        }
-        .layout-desktop .smart-search-results .emby-scrollbuttons:not(.custom-scrollbuttons) {
-            display: block !important;
-        }
-        
+    style.textContent = `        
         /* Native horizontal scrolling experience - ONLY for our custom scrollers */
-        .emby-scroller.custom-scroller {
-            -webkit-overflow-scrolling: touch !important;
-            touch-action: pan-x !important;
-            overscroll-behavior-x: contain !important;
-        }
-        
-        /* Improve touch responsiveness */
-        .emby-scroller.custom-scroller .scrollSlider {
-            touch-action: pan-x !important;
-            -webkit-user-select: none !important;
-            user-select: none !important;
-        }
+
         
         /* Ensure smooth scrolling on mobile */
         @media (max-width: 768px) {
             .emby-scroller.custom-scroller {
                 scroll-behavior: smooth !important;
+            }
+            .custom-scroller-container .emby-scrollbuttons {
+                display: none;
             }
         }
     `;

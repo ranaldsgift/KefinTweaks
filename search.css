@@ -29,3 +29,22 @@ div#searchPage {
         padding-top: 5rem !important;
     }
 }
+
+div#searchPage {
+    display: flex;
+    flex-direction: column;
+}
+
+div#searchPage>* {
+    order: 1;
+}
+
+div#searchPage>.jellyseerr-section {
+    order: 2;
+    padding-left: max(env(safe-area-inset-left), 3.3%);
+}
+
+div#smart-search-results {
+    padding-bottom: 0 !important;
+    padding-right: 0 !important;
+}
