@@ -16,10 +16,7 @@
     order: 3;
 }
 
-
-
 /* Halloween theme */
-
 .home-screen.halloween-theme #reactRoot:has(.libraryPage:not(.hide) .pageTabContent.is-active[data-index="0"])>.backgroundContainer::after {
     content: '';
     position: absolute;

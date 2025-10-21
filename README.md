@@ -2,9 +2,79 @@
 
 KefinTweaks is a comprehensive collection of enhancements and customizations for Jellyfin, focused on, but not limited to, filling gaps in functionality based on the community's most desired [Feature Requests](https://features.jellyfin.org/?view=most-wanted). While working on these scripts to meet my personal needs, I noticed that there was a lot of overlap between the functionality I desire and many of the requested features by the community so I thought it would be a good idea to share this for anyone who may be interested. There is no configuration required, but if you wish to customize some of the features, there are options to do so.
 
+## Table of Contents
+
+- [📦 Installation](#-installation)
+  - [Prerequisites](#prerequisites)
+  - [Setup Instructions](#setup-instructions)
+- [Features Overview](#features-overview)
+  - [📋 Core Features](#-core-features)
+    - [Watchlist Page](#watchlist-page)
+    - [Enhanced Home Screen](#enhanced-home-screen)
+    - [Enhanced Search](#enhanced-search)
+  - [🎨 UI Enhancements](#-ui-enhancements)
+    - [Watchlist Support](#watchlist-support)
+    - [Navigation Improvements](#navigation-improvements)
+  - [🔧 System Improvements](#-system-improvements)
+    - [Performance & Stability](#performance--stability)
+    - [Branding & Customization](#branding--customization)
+- [🛠️ Script Details](#️-script-details)
+  - [Core Scripts](#core-scripts)
+  - [Feature Scripts](#feature-scripts)
+- [Auto-Inject Dependencies](#auto-inject-dependencies)
+- [📄 License](#-license)
+- [🙏 Acknowledgments](#-acknowledgments)
+- [📞 Support](#-support)
+- [🔮 Roadmap](#-roadmap)
+  - [Planned Features](#planned-features)
+  - [Version History](#version-history)
+
+## 📦 Installation
+
+### Prerequisites
+- Jellyfin 10.10.7 or later
+- [JS Injector](https://github.com/n00bcodr/Jellyfin-JavaScript-Injector) plugin installed and configured
+- [Custom Tabs](https://github.com/IAmParadox27/jellyfin-plugin-custom-tabs) plugin for watchlist functionality
+- [JellyfinEnhanced](https://github.com/n00bcodr/Jellyfin-Enhanced) plugin for Jellyseerr search functionality and ExclusiveElsewhere
+
+### Setup Instructions
+
+0. **Install Prerequisites listed above**
+1. **Add a new script to your JS Injector Plugin**
+2. **Copy this entire contents of kefinTweaks.js into the new script**
+
+**Optionally update the "scriptRoot" in the KefinTweaks script if you wish to customize and host these scripts yourself.**
+
+3. **Ensure the script is enabled**
+4. **Save your changes**
+
+<img src="pages/images/injector.png" alt="injector" style="max-width: 600px; margin: 0 auto; display: block;"/><br>
+
+5. **Required for Watchlist: Add a new tab to your Custom Tabs plugin with the following content**
+   ```html
+   <div class="sections watchlist"></div>
+   ```
+<img src="pages/images/customtab.png" alt="customtab" style="max-width: 600px; margin: 0 auto; display: block;"/><br>
+
 ## Features Overview
 
 KefinTweaks provides a modular system of enhancements that can be individually enabled or disabled based on your needs. Each script is designed to work independently while sharing common utilities and dependencies.
+
+### **Feature Requests Completed**
+
+[Remove items from Continue Watching](https://features.jellyfin.org/posts/517/add-an-option-to-remove-an-item-from-continue-watching)
+[Watchlist like Netflix](https://features.jellyfin.org/posts/576/watchlist-like-netflix)
+[Remove pagination in favor of infinite scroll for library pages](https://features.jellyfin.org/posts/216/remove-pagination-use-lazy-loading-for-library-view)
+[Watched History](https://features.jellyfin.org/posts/633/watched-history)
+[On-Demand Subtitle Search in Video OSD](https://features.jellyfin.org/posts/3385/on-demand-subtitle-search)
+[Add genres and recommendations to home screen](https://features.jellyfin.org/posts/3501/add-genres-and-recommendations-to-home-screen)
+[Improved Playlist UX](https://features.jellyfin.org/posts/2823/playlist-moviesummary)
+
+
+### **Feature Requests Planned**
+[Flattening TV Shows with 1 season](https://features.jellyfin.org/posts/8/flattening-tv-shows)
+[List all collections that an item belongs to on the details page](https://features.jellyfin.org/posts/540/list-all-collections-that-a-movie-belong-to-in-movie-details)
+[Add end time to detail page for entire shows and seasons](https://features.jellyfin.org/posts/3470/add-info-ends-at-hh-mm-for-each-season-and-whole-show)
 
 ### 📋 Core Features
 
@@ -71,33 +141,6 @@ KefinTweaks provides a modular system of enhancements that can be individually e
 #### **Branding & Customization**
 - **Exclusive Elsewhere**: Custom branding for items which aren't available on any external streaming providers. Requires [JellyfinEnhanced](https://github.com/n00bcodr/Jellyfin-Enhanced).
 - **Ratings and Comments**: Coming soon...requires the [Updoot](https://github.com/BobHasNoSoul/jellyfin-updoot) backend script
-
-## 📦 Installation
-
-### Prerequisites
-- Jellyfin 10.10.7 or later
-- [JS Injector](https://github.com/n00bcodr/Jellyfin-JavaScript-Injector) plugin installed and configured
-- [Custom Tabs](https://github.com/IAmParadox27/jellyfin-plugin-custom-tabs) plugin for watchlist functionality
-- [JellyfinEnhanced](https://github.com/n00bcodr/Jellyfin-Enhanced) plugin for Jellyseerr search functionality and ExclusiveElsewhere
-
-### Setup Instructions
-
-0. **Install Prerequisites listed above**
-1. **Add a new script to your JS Injector Plugin**
-2. **Copy this entire contents of kefinTweaks.js into the new script**
-
-**Optionally update the "scriptRoot" in the KefinTweaks script if you wish to customize and host these scripts yourself.**
-
-3. **Ensure the script is enabled**
-4. **Save your changes**
-
-<img src="pages/images/injector.png" alt="injector" style="max-width: 600px; margin: 0 auto; display: block;"/><br>
-
-5. **Required for Watchlist: Add a new tab to your Custom Tabs plugin with the following content**
-   ```html
-   <div class="sections watchlist"></div>
-   ```
-<img src="pages/images/customtab.png" alt="customtab" style="max-width: 600px; margin: 0 auto; display: block;"/><br>
 
 ## 🛠️ Script Details
 
