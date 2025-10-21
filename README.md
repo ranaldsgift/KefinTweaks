@@ -99,6 +99,7 @@ KefinTweaks provides a modular system of enhancements that can be individually e
 - **New & Trending**: Creates sections for movies and episodes released in the last 7 days (trending sections incomplete)
 - **Infinite Discovery Sections**: Load discovery sections based on items you've watched and favorited, as well as from genres or top people in your library
 - **Seasonal Content**: Seasonally-themed sections (Halloween, Christmas, etc.)
+<img src="pages/images/seasonalsection.png" alt="homescreen" style="max-width: 800px; margin: 0 auto; display: block;"/><br>
 - **Watchlist Integration**: Dedicated watchlist section on home screen
 <img src="pages/images/homescreen.png" alt="homescreen" style="max-width: 800px; margin: 0 auto; display: block;"/><br>
 
