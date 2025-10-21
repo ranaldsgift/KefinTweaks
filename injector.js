@@ -100,7 +100,7 @@
         },
         {
             name: 'backdropLeakFix',
-            script: 'backdrop-leak-fix.js',
+            script: 'backdropLeakFix.js',
             css: null,
             dependencies: [],
             description: 'Fixes issue that causes backdrop images to be continuously added to the page if the tab isn\'t focused.'
