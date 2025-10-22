@@ -6,10 +6,6 @@
 In the Custom Tabs plugin, add a new tab with the following HTML content:
 
 <div class="sections watchlist">
-<div class="watchlist-movies"></div>
-<div class="watchlist-series"></div>
-<div class="watchlist-seasons"></div>
-<div class="watchlist-episodes"></div>
 </div>
 */
 
@@ -68,33 +64,8 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		}));
 	}
 
-	function optimizeMovieDataForStorage(movieDataArray) {
-		// Collect all unique people data
-		const peopleCache = new Map();
-		
-		// First pass: collect all people data
-		movieDataArray.forEach(movie => {
-			if (movie.People) {
-				movie.People.forEach(person => {
-					if (person.Id && person.Name && person.Type) {
-						peopleCache.set(person.Id, {
-							Id: person.Id,
-							Name: person.Name,
-							Type: person.Type
-						});
-					}
-				});
-			}
-		});
-		
-		// Store people cache separately
-		if (peopleCache.size > 0) {
-			const peopleArray = Array.from(peopleCache.values());
-			localStorageCache.set('people', peopleArray);
-			LOG(`Stored ${peopleArray.length} unique people in people cache`);
-		}
-		
-		// Return optimized movie data with only people IDs
+	function optimizeMovieDataForStorage(movieDataArray) {		
+		// Return optimized movie data
 		return movieDataArray.map(movie => ({
 			Id: movie.Id,
 			Name: movie.Name,
@@ -103,7 +74,6 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			PremiereDate: movie.PremiereDate,
 			RunTimeTicks: movie.RunTimeTicks,
 			ProductionYear: movie.ProductionYear,
-			PeopleIds: movie.People ? movie.People.map(person => person.Id).filter(id => id) : [],
 			UserData: {
 				IsFavorite: movie.UserData.IsFavorite,
 				LastPlayedDate: movie.UserData.LastPlayedDate,
@@ -111,28 +81,6 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				Played: movie.UserData.Played
 			}
 		}));
-	}
-
-	// Reconstruct people data from IDs and people cache
-	function reconstructPeopleData(movieDataArray) {
-		// Get people cache
-		const peopleCache = localStorageCache.get('people') || [];
-		const peopleMap = new Map(peopleCache.map(person => [person.Id, person]));
-		
-		// Reconstruct people data for each movie
-		return movieDataArray.map(movie => {
-			const reconstructedMovie = { ...movie };
-			
-			// Reconstruct People array from PeopleIds
-			if (movie.PeopleIds && Array.isArray(movie.PeopleIds)) {
-				reconstructedMovie.People = movie.PeopleIds
-					.map(id => peopleMap.get(id))
-					.filter(person => person); // Remove any undefined entries
-				delete reconstructedMovie.PeopleIds; // Remove the IDs array
-			}
-			
-			return reconstructedMovie;
-		});
 	}
 
 	// Optimize watchlist data for localStorage storage
@@ -157,58 +105,6 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				PlayCount: item.UserData.PlayCount
 			}
 		}));
-	}
-
-	// Show loading state for watchlist tab
-	function showWatchlistLoading() {
-		const watchlistTab = document.querySelector('div[data-tab="watchlist"]');
-		if (!watchlistTab) return;
-		
-		// Hide all watchlist sections
-		const sections = ['movies', 'series', 'seasons', 'episodes'];
-		sections.forEach(section => {
-			const sectionEl = watchlistTab.querySelector(`.watchlist-${section}`);
-			if (sectionEl) sectionEl.style.display = 'none';
-		});
-		
-		// Show loading message
-		const loadingEl = watchlistTab.querySelector('.watchlist-loading') || createWatchlistLoadingElement();
-		loadingEl.style.display = 'block';
-	}
-
-	// Create loading element if it doesn't exist
-	function createWatchlistLoadingElement() {
-		const watchlistTab = document.querySelector('div[data-tab="watchlist"]');
-		if (!watchlistTab) return null;
-		
-		const loadingEl = document.createElement('div');
-		loadingEl.className = 'watchlist-loading';
-		loadingEl.innerHTML = `
-			<div class="loading-message">
-				<div class="loading-spinner"></div>
-				<div>Loading watchlist...</div>
-			</div>
-		`;
-		loadingEl.style.display = 'none';
-		watchlistTab.appendChild(loadingEl);
-		return loadingEl;
-	}
-
-	// Hide loading state and show watchlist sections
-	function hideWatchlistLoading() {
-		const watchlistTab = document.querySelector('div[data-tab="watchlist"]');
-		if (!watchlistTab) return;
-		
-		// Hide loading message
-		const loadingEl = watchlistTab.querySelector('.watchlist-loading');
-		if (loadingEl) loadingEl.style.display = 'none';
-		
-		// Show all watchlist sections
-		const sections = ['movies', 'series', 'seasons', 'episodes'];
-		sections.forEach(section => {
-			const sectionEl = watchlistTab.querySelector(`.watchlist-${section}`);
-			if (sectionEl) sectionEl.style.display = 'block';
-		});
 	}
 
 	// Add refresh button to tab headers
@@ -2173,8 +2069,6 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		} catch (err) {
 			ERR('Error initializing watchlist tab:', err);
 			tabStates.watchlist.isFetching = false;
-			// Hide loading state on error too
-			hideWatchlistLoading();
 		}
 	}
 
@@ -3637,10 +3531,8 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			const cachedData = localStorageCache.get(`movies`);
 			if (cachedData) {
 				LOG('Using localStorage cache for movies');
-				// Reconstruct people data from IDs and people cache
-				const reconstructedData = reconstructPeopleData(cachedData);
-				moviePagination.updateCache(reconstructedData);
-				return reconstructedData;
+				moviePagination.updateCache(cachedData);
+				return cachedData;
 			}
 		}
 
@@ -3653,7 +3545,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		const token = apiClient.accessToken();
 
 		// Fetch movies that have been played
-		const url = `${serverUrl}/Items?IncludeItemTypes=Movie&UserId=${userId}&Recursive=true&Filters=IsPlayed&Fields=UserData,ProviderIds,People&EnableImageTypes=Primary,Backdrop,Thumb&ImageTypeLimit=1&SortBy=DatePlayed&SortOrder=Descending`;
+		const url = `${serverUrl}/Items?IncludeItemTypes=Movie&UserId=${userId}&Recursive=true&Filters=IsPlayed&Fields=UserData,ProviderIds&EnableImageTypes=Primary,Backdrop,Thumb&ImageTypeLimit=1&SortBy=DatePlayed&SortOrder=Descending`;
 
 		try {
 			const res = await fetch(url, { headers: { "Authorization": `MediaBrowser Token=\"${token}\"` } });

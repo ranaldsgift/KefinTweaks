@@ -198,7 +198,7 @@
                 limit: '100',
                 recursive: 'true',
                 searchTerm,
-                fields: 'PrimaryImageAspectRatio,CanDelete,MediaSourceCount',
+                fields: 'PrimaryImageAspectRatio,CanDelete',
                 imageTypeLimit: '1',
                 enableTotalRecordCount: 'false',
                 ...additionalParams
@@ -277,7 +277,7 @@
                     // Use dedicated Artists endpoint for better results
                     const userId = ApiClient.getCurrentUserId();
                     const baseUrl = ApiClient.serverAddress();
-                    url = `${baseUrl}/Artists?limit=100&searchTerm=${encodeURIComponent(searchTerm)}&fields=PrimaryImageAspectRatio&fields=CanDelete&fields=MediaSourceCount&imageTypeLimit=1&userId=${userId}&enableTotalRecordCount=false`;
+                    url = `${baseUrl}/Artists?limit=100&searchTerm=${encodeURIComponent(searchTerm)}&fields=PrimaryImageAspectRatio&fields=CanDelete&imageTypeLimit=1&userId=${userId}&enableTotalRecordCount=false`;
                 } else {
                     url = buildSearchUrl(searchTerm, [type]);
                 }
