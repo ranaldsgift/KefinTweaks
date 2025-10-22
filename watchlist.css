@@ -1804,3 +1804,7 @@ div[data-tab="watchlist"] .loading-message {
     color: rgba(0,0,0,.26);
     cursor: auto
 }
+
+.watchlist-button[data-active="true"], .watchlist-icon[data-active="true"] {
+    color: rgb(34, 197, 94) !important;
+}

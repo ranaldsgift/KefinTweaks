@@ -5355,7 +5355,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		// Create watchlist button
 		const watchlistButton = document.createElement('button');
 		watchlistButton.type = 'button';
-		watchlistButton.className = 'watchlist-button cardOverlayButton cardOverlayButton-hover itemAction paper-icon-button-light emby-button';
+		watchlistButton.className = 'watchlist-button cardOverlayButton cardOverlayButton-hover itemAction paper-icon-button-light emby-button button-flat';
 		watchlistButton.setAttribute('data-action', 'none');
 		watchlistButton.setAttribute('data-id', itemId);
 		watchlistButton.setAttribute('data-active', 'false');
@@ -5483,7 +5483,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		
 		const watchlistIcon = document.createElement('button');
 		watchlistIcon.setAttribute("is", "emby-button");
-		watchlistIcon.className = 'watchlist-icon detailButton emby-button hide';	
+		watchlistIcon.className = 'watchlist-icon detailButton emby-button button-flat hide';	
 		watchlistIcon.title = "Add to Watchlist";
 		watchlistIcon.dataset.active = 'false';
 		
