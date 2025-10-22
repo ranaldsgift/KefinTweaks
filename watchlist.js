@@ -2938,19 +2938,21 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		watchlistSection.dataset.htmlRendered = 'true';
 		// Reset listeners setup flag since we have new DOM elements
 		watchlistSection.dataset.listenersSetup = 'false';
-		
+
+		const watchlistTabIndex = document.querySelector('.libraryPage:not(.hide) .pageTabContent:has(.sections.watchlist)')?.getAttribute("data-index");
+
+		if (watchlistTabIndex) {
+			window.KefinTweaksUtils.addCustomMenuLink(
+				'Watchlist', 
+				'bookmark', 
+				'#/home.html?tab=' + watchlistTabIndex
+			);
+		}
+
 		// Add refresh buttons after HTML is rendered
 		addRefreshButtons();
 		
 		LOG('Watchlist HTML structure rendered successfully');
-	}
-
-	// Clear watchlist cache
-	function clearWatchlistCache() {
-		Object.keys(watchlistCache).forEach(section => {
-			watchlistCache[section].data = [];
-		});
-		LOG('Watchlist cache cleared');
 	}
 
 	// Update watchlist cache when an item is toggled
@@ -5462,13 +5464,6 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 
 	// Initialize the observer
 	setupWatchlistButtonObserver();
-
-	// Add watchlist to custom menu
-	window.KefinTweaksUtils.addCustomMenuLink(
-		'Watchlist', 
-		'bookmark', 
-		'#/home.html?tab=2'
-	);
 
 	/************ Item Detail Page Observer ************/
 
