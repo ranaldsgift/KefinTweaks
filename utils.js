@@ -234,13 +234,6 @@
                 childList: true, 
                 subtree: true 
             });
-
-            // Fallback timeout after 10 seconds
-            setTimeout(() => {
-                observer.disconnect();
-                WARN(`Menu not found after 10 seconds for link: ${name}`);
-                resolve(false);
-            }, 10000);
         });
     }
 
