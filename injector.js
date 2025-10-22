@@ -60,7 +60,7 @@
             name: 'watchlist',
             script: 'watchlist.js',
             css: 'watchlist.css',
-            dependencies: ['cardBuilder', 'localStorageCache', 'modal'],
+            dependencies: ['cardBuilder', 'localStorageCache', 'modal', 'utils'],
             description: 'Adds watchlist functionality throughout Jellyfin interface'
         },
         {

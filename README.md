@@ -156,22 +156,22 @@ KefinTweaks provides a modular system of enhancements that can be individually e
 
 ### Feature Scripts
 
-| Script | Description |
-|--------|-------------|
-| `watchlist.js` | Complete watchlist management system |
-| `homeScreen.js` | Custom home screen sections |
-| `search.js` | Enhanced search functionality |
-| `headerTabs.js` | Header tab improvements |
-| `customMenu.js` | Custom menu link handling |
-| `exclusiveElsewhere.js` | Custom branding for unavailable content |
-| `updoot.js` | Upvote functionality integration |
-| `backdropLeakFix.js` | Memory leak fixes |
-| `dashboardButtonFix.js` | Dashboard button behavior fix |
-| `infiniteScroll.js` | Infinite scroll functionality |
-| `removeContinue.js` | Remove continue watching functionality |
-| `subtitleSearch.js` | Subtitle search in video OSD |
-| `breadcrumbs.js` | Breadcrumb navigation |
-| `playlist.js` | Playlist view enhancements |
+| Script | Description | Dependencies |
+|--------|-------------|--------------|
+| `watchlist.js` | Complete watchlist management system | `cardBuilder`, `localStorageCache`, `modal`, `utils` |
+| `homeScreen.js` | Custom home screen sections | `cardBuilder`, `localStorageCache`, `utils` |
+| `search.js` | Enhanced search functionality | `cardBuilder`, `utils` |
+| `headerTabs.js` | Header tab improvements | None |
+| `customMenu.js` | Custom menu link handling | `utils` |
+| `exclusiveElsewhere.js` | Custom branding for unavailable content | None |
+| `updoot.js` | Upvote functionality integration | None |
+| `backdropLeakFix.js` | Memory leak fixes | None |
+| `dashboardButtonFix.js` | Dashboard button behavior fix | None |
+| `infiniteScroll.js` | Infinite scroll functionality | `cardBuilder` |
+| `removeContinue.js` | Remove continue watching functionality | None |
+| `subtitleSearch.js` | Subtitle search in video OSD | None |
+| `breadcrumbs.js` | Breadcrumb navigation | `utils` |
+| `playlist.js` | Playlist view enhancements | `cardBuilder`, `utils` |
 <br>
 
 ## Auto-Inject Dependencies
