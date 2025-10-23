@@ -2628,7 +2628,6 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			const searchInput = getElementByIdSafe('progress-search');
 			if (searchInput && params.pageTab === 'progress') {
 				searchInput.value = searchTerm;
-				searchInput.focus();
 			}
 			
 			// Check if we should skip rendering
@@ -3701,7 +3700,6 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			const searchInput = getElementByIdSafe('movie-search');
 			if (searchInput && params.pageTab === 'history') {
 				searchInput.value = movieSearchTerm;
-				searchInput.focus();
 			}
 			
 			if (totalPages > 1) {

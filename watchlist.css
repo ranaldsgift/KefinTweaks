@@ -30,17 +30,19 @@
     border-bottom: 2px solid transparent;
     transition: all 0.2s ease;
     position: relative;
+    border-radius: 10px 10px 0 0;
+    font-family: inherit;
 }
 
 .sections.watchlist .watchlist-tabs button:hover {
-    color: rgba(255, 255, 255, 0.9);
+    color: rgba(200, 200, 200, 0.9);
     background: rgba(255, 255, 255, 0.05);
 }
 
 .sections.watchlist .watchlist-tabs button.active {
-    color: #00a4dc;
-    border-bottom-color: #00a4dc;
-    background: rgba(0, 164, 220, 0.1);
+    color: rgba(200, 200, 200, 1);
+    border-bottom-color: #ffffff;
+    background: rgba(200, 200, 200, 0.1);
 }
 
 /* Tab content styling - hide content by default, show only active */
