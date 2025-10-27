@@ -248,6 +248,15 @@
      */
     function addLinkToContainer(container, name, icon, url, openInNewTab) {
         try {
+            // Check if link already exists to prevent duplicates
+            const existingLinks = container.querySelectorAll('a[href="' + url + '"]');
+            const existingByText = Array.from(container.querySelectorAll('.navMenuOptionText')).find(el => el.textContent === name);
+
+            if (existingLinks.length > 0 || existingByText) {
+                LOG(`Custom menu link already exists, skipping: ${name}`);
+                return true;
+            }
+            
             // Create the menu link element
             const link = document.createElement('a');
             link.setAttribute('is', 'emby-linkbutton');
