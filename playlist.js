@@ -11,7 +11,7 @@
     const WARN = (...args) => console.warn('[Playlist]', ...args);
     const ERR = (...args) => console.error('[Playlist]', ...args);
     
-    LOG('Script loaded - JS Injector mode');
+    LOG('Initializing...');
     
     let currentPlaylistId = null;
     
@@ -25,9 +25,13 @@
             return false;
         }
         
-        const childrenItemsContainer = libraryPage.querySelector('.childrenItemsContainer');
+        let childrenItemsContainer = libraryPage.querySelector('.childrenItemsContainer');
         if (!childrenItemsContainer) {
-            return false;
+            childrenItemsContainer = libraryPage.querySelector('#listChildrenCollapsible');
+            if (!childrenItemsContainer) {
+                WARN('Children items container not found');
+                return false;
+            }
         }
         
         const playlistItems = childrenItemsContainer.querySelectorAll('.listItem[data-playlistitemid]');
@@ -90,16 +94,24 @@
             return;
         }
         
-        const childrenItemsContainer = libraryPage.querySelector('.childrenItemsContainer');
+        let childrenItemsContainer = libraryPage.querySelector('.childrenItemsContainer');
         if (!childrenItemsContainer) {
-            WARN('Children items container not found');
-            return;
+            childrenItemsContainer = libraryPage.querySelector('#listChildrenCollapsible');
+            if (!childrenItemsContainer) {
+                WARN('Children items container not found');
+                return;
+            }
         }
         
         const playlistItems = childrenItemsContainer.querySelectorAll('.listItem[data-playlistitemid]');
         LOG(`Found ${playlistItems.length} playlist items`);
         
         playlistItems.forEach((item, index) => {
+            if (item.dataset.customPlaylistButton === 'true') {
+                LOG(`Playlist item ${index} already has a custom button, skipping`);
+                return;
+            }
+
             const playlistItemId = item.getAttribute('data-playlistitemid');
             const serverId = ApiClient.serverId();
             
@@ -114,30 +126,37 @@
             
             // Add new click handler to navigate to details page
             item.addEventListener('click', (e) => {
-                // Check if the click target is within the listViewUserDataButtons container
-                const buttonsContainer = item.querySelector('.listViewUserDataButtons');
-                if (buttonsContainer && buttonsContainer.contains(e.target)) {
-                    LOG(`Click on button detected, not navigating for item: ${playlistItemId}`);
-                    return; // Don't navigate when clicking on buttons
-                }
-                
-                e.preventDefault();
-                e.stopPropagation();
-                
-                const detailsUrl = `#/details?id=${playlistItemId}&serverId=${serverId}`;
-                LOG(`Navigating to: ${detailsUrl}`);
-                
-                // Use Jellyfin's navigation method
-                if (window.Emby && window.Emby.Page) {
-                    window.Emby.Page.show(detailsUrl);
-                } else {
-                    // Fallback to direct navigation
-                    window.location.hash = detailsUrl;
-                }
+                handlePlaylistItemClick(e, item, playlistItemId, serverId);
             });
+
+            item.dataset.customPlaylistButton = 'true';
             
             LOG(`Modified click handler for playlist item: ${playlistItemId}`);
         });
+    }
+
+    function handlePlaylistItemClick(e, item, playlistItemId, serverId) {
+        // Check if the click target is within the listViewUserDataButtons container
+        const buttonsContainer = item.querySelector('.listViewUserDataButtons');
+        if (buttonsContainer && buttonsContainer.contains(e.target)) {
+            LOG(`Click on button detected, not navigating for item: ${playlistItemId}`);
+            return; // Don't navigate when clicking on buttons
+        }
+        
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const detailsUrl = `/details?id=${playlistItemId}&serverId=${serverId}`;
+        LOG(`Navigating to: ${detailsUrl}`);
+        
+        // Use Jellyfin's navigation method
+        if (Dashboard) {
+            Dashboard.navigate(detailsUrl);
+        } else {
+            // Fallback to direct navigation
+            const fullDetailsUrl = `${ApiClient.serverAddress()}/web/#${detailsUrl}`;
+            window.location.href = fullDetailsUrl;
+        }
     }
     
     /**
@@ -150,10 +169,13 @@
             return;
         }
         
-        const childrenItemsContainer = libraryPage.querySelector('.childrenItemsContainer');
+        let childrenItemsContainer = libraryPage.querySelector('.childrenItemsContainer');
         if (!childrenItemsContainer) {
-            WARN('Children items container not found');
-            return;
+            childrenItemsContainer = libraryPage.querySelector('#listChildrenCollapsible');
+            if (!childrenItemsContainer) {
+                WARN('Children items container not found for play buttons');
+                return;
+            }
         }
         
         const playlistItems = childrenItemsContainer.querySelectorAll('.listItem[data-playlistitemid]');
@@ -161,7 +183,6 @@
         
         playlistItems.forEach((item, index) => {
             const playlistItemId = item.getAttribute('data-playlistitemid');
-            const serverId = ApiClient.serverId();
             
             if (!playlistItemId) {
                 WARN(`Playlist item ${index} has no data-playlistitemid`);
@@ -215,12 +236,54 @@
         LOG(`Modifying playlist page for item: ${itemId}`);
         currentPlaylistId = itemId;
         
-        // Wait a bit for the page to fully load
-        setTimeout(() => {
+        // Poll for page elements to be ready (every 100ms for up to 10 seconds)
+        const pollInterval = 100;
+        const maxAttempts = 100; // 100ms * 100 = 10 seconds
+        let attempts = 0;
+        
+        const pollForElements = () => {
+            attempts++;
+            
+            const libraryPage = document.querySelector('.libraryPage:not(.hide)');
+            if (!libraryPage) {
+                if (attempts < maxAttempts) {
+                    setTimeout(pollForElements, pollInterval);
+                } else {
+                    WARN('Library page not found after 10 seconds');
+                }
+                return;
+            }
+            
+            let childrenItemsContainer = libraryPage.querySelector('.childrenItemsContainer');
+            if (!childrenItemsContainer) {
+                childrenItemsContainer = libraryPage.querySelector('#listChildrenCollapsible');
+                if (!childrenItemsContainer) {
+                    if (attempts < maxAttempts) {
+                        setTimeout(pollForElements, pollInterval);
+                    } else {
+                        WARN('Children items container not found after 10 seconds');
+                    }
+                    return;
+                }
+            }
+
+            const playlistItems = childrenItemsContainer.querySelectorAll('.listItem[data-playlistitemid]');
+            if (playlistItems.length === 0) {
+                if (attempts < maxAttempts) {
+                    setTimeout(pollForElements, pollInterval);
+                } else {
+                    WARN('No playlist items found after 10 seconds');
+                }
+                return;
+            }
+            
+            // Elements found, proceed with modifications
             modifyPlaylistItemClicks();
             addPlayButtons();
             LOG('Playlist page modifications complete');
-        }, 500);
+        };
+        
+        pollForElements();
     }
     
     /**
@@ -285,25 +348,6 @@
     
     // Initialize the hook when the script loads
     initializePlaylistHook();
-    
-    // Also check current page on script load in case we're already on a playlist page
-    const currentUrl = window.location.hash;
-    if (currentUrl.includes('#/details')) {
-        const urlParams = new URLSearchParams(currentUrl.split('?')[1]);
-        const itemId = urlParams.get('id');
-        
-        if (itemId) {
-            LOG(`Script loaded on details page with item ID: ${itemId}`);
-            isPlaylistPage(itemId).then(isPlaylist => {
-                if (isPlaylist) {
-                    LOG(`Already on playlist page: ${itemId}`);
-                    modifyPlaylistPage(itemId);
-                }
-            }).catch(error => {
-                ERR('Error checking current playlist page:', error);
-            });
-        }
-    }
     
     console.log('[Playlist] Module loaded and ready');
 })();

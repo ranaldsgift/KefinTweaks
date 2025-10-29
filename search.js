@@ -4,8 +4,8 @@
     const LOG = (...args) => console.log('[SmartSearch]', ...args);
     const WARN = (...args) => console.warn('[SmartSearch]', ...args);
     const ERR = (...args) => console.error('[SmartSearch]', ...args);
-
-    LOG('script load start');
+    
+    LOG('Initializing...');
 
     // Configuration
     const CONFIG = window.KefinTweaksConfig?.search || {
@@ -14,7 +14,7 @@
 
     // Track if we should block XHR requests (only for direct URL navigation with query params)
     let shouldBlockXHR = false;
-    let hasBlockedInitialSearch = false;
+    //let hasBlockedInitialSearch = false;
     
     // Override XHR to block automatic search requests from direct URL navigation
     const OriginalXHR = window.XMLHttpRequest;
@@ -23,17 +23,15 @@
         const originalOpen = xhr.open;
         const originalSend = xhr.send;
         
-        xhr.open = function(method, url, ...args) {
-            LOG('XHR request:', method, url);
-            
+        xhr.open = function(method, url, ...args) {            
             // Check if this is a search request we want to block
             // Only block if we're in smart search mode and haven't blocked yet
             const isSearchRequest = url.includes('/Items?') && 
                                   (url.includes('searchTerm=') || url.includes('query='));
             
-            if (isSearchRequest && shouldBlockXHR && !hasBlockedInitialSearch) {
+            if (isSearchRequest && shouldBlockXHR) {
                 LOG('Blocking initial automatic search XHR request:', url);
-                hasBlockedInitialSearch = true;
+                //hasBlockedInitialSearch = true;
                 // Disable blocking after this first request
                 shouldBlockXHR = false;
                 LOG('XHR blocking disabled after initial search');
@@ -68,10 +66,11 @@
     (function() {
         // Parse query from hash since Jellyfin uses hash-based routing
         let queryFromUrl = null;
-        if (window.location.hash.includes('search.html') && window.location.hash.includes('query=')) {
+        if (window.location.hash.includes('#/search') && window.location.hash.includes('query=')) {
             const hashQuery = window.location.hash.split('query=')[1];
             if (hashQuery) {
                 queryFromUrl = hashQuery.split('&')[0]; // Get query before any other params
+                queryFromUrl = decodeURIComponent(queryFromUrl).replace(/\+/g, ' ');
             }
         }
         
@@ -79,7 +78,7 @@
         LOG('Current pathname:', window.location.pathname);
         LOG('Current hash:', window.location.hash);
         
-        if (queryFromUrl && (window.location.pathname.includes('search.html') || window.location.hash.includes('search'))) {
+        if (queryFromUrl && window.location.pathname.includes('#/search')) {
             LOG('URL query detected, enabling XHR blocking for automatic search prevention');
             shouldBlockXHR = true; // Enable XHR blocking for initial URL query
         }
@@ -127,19 +126,6 @@
         }
     }
 
-    // Function to wait for jellyseerrAPI to be available
-    async function waitForJellyseerrAPI(maxAttempts = 50, interval = 200) {
-        for (let i = 0; i < maxAttempts; i++) {
-            if (window.JellyfinEnhanced?.jellyseerrAPI) {
-                LOG('jellyseerrAPI found after', i * interval, 'ms');
-                return true;
-            }
-            await new Promise(resolve => setTimeout(resolve, interval));
-        }
-        WARN('jellyseerrAPI not found after', maxAttempts * interval, 'ms');
-        return false;
-    }
-
     // styles (dedupe by id)
     function addCustomStyles() {
         if (document.getElementById('smart-search-styles')) return;
@@ -147,18 +133,17 @@
         const style = document.createElement('style');
         style.id = 'smart-search-styles';
         style.textContent = `
-            .smart-search-wrapper { margin: 12px 0 20px 0; }
+            .smart-search-wrapper { margin: 20px 0; }
             .smart-search-input { width:100%; padding:8px; border-radius:4px; box-sizing:border-box; }
             .smart-search-buttons { display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; justify-content: center; }
             .smart-search-btn { padding:8px 12px; border:none; border-radius:4px; cursor:pointer; background:#444; color:#fff; }
-            .smart-search-btn.active { background:var(--btnSubmitColor); }
+            .smart-search-btn.active { background:#673AB7; }
             .smart-search-results { margin-top:12px; }
             .smart-search-stats { color:#999; font-size:12px; margin-top:6px; display: none; }
             #persistent-toggle-btn { display:none; position:relative; padding:8px 12px; background:#00a4dc; color:#fff; border:none; border-radius:4px; cursor:pointer; }
-            
-            /* Smart search mode - hide search icon */
             .smart-search-mode .searchfields-icon {
-                top: 37px;
+                top: 50%;
+                transform: translateY(-50%);
                 position: absolute;
                 z-index: 1;
                 right: 0;
@@ -172,14 +157,15 @@
     function updateSearchUrl(searchTerm, searchType = 'videos') {
         try {
             // Jellyfin uses hash-based routing, so we need to update the hash
-            const baseHash = '#/search.html';
+            const urlSuffix = ApiClient._serverVersion.split('.')[1] > 10 ? '' : '.html';
+            const baseHash = `#/search${urlSuffix}`;
             const params = new URLSearchParams();
+            const trimmed = searchTerm.trim();
             
-            if (searchTerm && searchTerm.trim()) {
-                params.set('query', searchTerm.trim());
+            if (trimmed) {
+                params.set('query', trimmed);
             }
             params.set('type', searchType);
-            
             const newHash = `${baseHash}?${params.toString()}`;
             window.history.replaceState({}, '', window.location.pathname + newHash);
             LOG('Updated search URL hash:', newHash);
@@ -197,7 +183,7 @@
                 userId,
                 limit: '100',
                 recursive: 'true',
-                searchTerm,
+                searchTerm: searchTerm.trim(),
                 fields: 'PrimaryImageAspectRatio,CanDelete',
                 imageTypeLimit: '1',
                 enableTotalRecordCount: 'false',
@@ -413,11 +399,11 @@
         // Define the order to display sections
         const sectionOrder = ['Movie', 'Series', 'Episode', 'Person', 'MusicAlbum', 'Audio', 'Artist', 'Playlist', 'Book', 'AudioBook', 'Photo', 'PhotoAlbum', 'TvChannel', 'LiveTvProgram', 'BoxSet'];
         
-        sectionOrder.forEach((itemType, index) => {
+        sectionOrder.forEach((itemType) => {
             if (results.groupedItems[itemType] && results.groupedItems[itemType].length > 0) {
                 const items = results.groupedItems[itemType];
                 const title = getTypeDisplayName(itemType);
-                const section = window.cardBuilder.renderCards(items, title, null, index);
+                const section = window.cardBuilder.renderCards(items, title, null);
                 frag.appendChild(section);
                 totalShown += items.length;
             }
@@ -439,10 +425,11 @@
         // Handle URL query parameter on page load
         // Parse query from hash since Jellyfin uses hash-based routing
         let queryFromUrl = null;
-        if (window.location.hash.includes('search.html') && window.location.hash.includes('query=')) {
+        if (window.location.hash.includes('#/search') && window.location.hash.includes('query=')) {
             const hashQuery = window.location.hash.split('query=')[1];
             if (hashQuery) {
                 queryFromUrl = hashQuery.split('&')[0]; // Get query before any other params
+                queryFromUrl = decodeURIComponent(queryFromUrl).replace(/\+/g, ' ');
             }
         }
         LOG('initSmartSearch - URL query:', queryFromUrl);
@@ -461,6 +448,11 @@
             wrapper = document.createElement('div');
             wrapper.id = 'smart-search-wrapper';
             wrapper.className = 'smart-search-wrapper';
+
+            // Create the search icon element
+            const searchIcon = document.createElement('span');
+            searchIcon.className = 'searchfields-icon material-icons search';
+            searchIcon.setAttribute('aria-hidden', 'true');
 
             // Replace the original input with our smart search input
             const input = originalInput.cloneNode(true);
@@ -509,7 +501,14 @@
             stats.id = 'smart-search-stats';
             stats.className = 'smart-search-stats';
 
-            wrapper.appendChild(input);
+            // Create input wrapper
+            const inputWrapper = document.createElement('div');
+            inputWrapper.className = 'input-wrapper';
+
+            inputWrapper.appendChild(searchIcon);
+            inputWrapper.appendChild(input);
+
+            wrapper.appendChild(inputWrapper);
             wrapper.appendChild(btnRow);
             wrapper.appendChild(stats);
 
@@ -538,7 +537,10 @@
             smartCoreBtn.classList.remove('active');
             smartMusicBtn.classList.remove('active');
             smartBooksBtn.classList.remove('active');
-            smartRequestBtn.classList.remove('active');
+
+            if (smartRequestBtn) {
+                smartRequestBtn.classList.remove('active');
+            }
             
             // Add active class to the selected button
             if (activeType === 'all') {
@@ -549,7 +551,7 @@
                 smartMusicBtn.classList.add('active');
             } else if (activeType === 'books') {
                 smartBooksBtn.classList.add('active');
-            } else if (activeType === 'request') {
+            } else if (activeType === 'request' && smartRequestBtn) {
                 smartRequestBtn.classList.add('active');
             }
         }
@@ -698,31 +700,6 @@
         setMode(true);
     }
 
-    function init() {
-        LOG('init() called');
-        LOG('Pathname:', window.location.pathname);
-        LOG('Hash:', window.location.hash);
-        
-        if (window.location.pathname.includes('search.html') || window.location.hash.includes('search')) {
-            LOG('Search page detected');
-            
-            // Check for URL query parameter and prevent default search early
-            // Parse query from hash since Jellyfin uses hash-based routing
-            let queryFromUrl = null;
-            if (window.location.hash.includes('search.html') && window.location.hash.includes('query=')) {
-                const hashQuery = window.location.hash.split('query=')[1];
-                if (hashQuery) {
-                    queryFromUrl = hashQuery.split('&')[0]; // Get query before any other params
-                }
-            }
-            LOG('URL query in init:', queryFromUrl);
-            
-            
-            LOG('Calling initSmartSearch');
-            initSmartSearch();
-        }
-    }
-
     // Initialize search hook using utils
     function initializeSearchHook() {
         if (!window.KefinTweaksUtils) {
@@ -753,14 +730,14 @@
     }
 
     // Initialize the hook when the script loads
-    initializeSearchHook();
+    //initializeSearchHook();
     
     if (document.readyState==='loading') { 
         document.addEventListener('DOMContentLoaded', () => {
-            init();
+            initializeSearchHook();
         }); 
     } else { 
-        init(); 
+        initializeSearchHook(); 
     }
-    LOG('script load end');
+    LOG('Initialized successfully');
 })();

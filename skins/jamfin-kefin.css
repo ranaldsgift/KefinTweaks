@@ -1,0 +1,29 @@
+.kefinTweaks-breadcrumbs-wrapper {
+    margin-left: 180px;
+    color: var(--theme-text-colour);
+    border-radius: var(--theme-roundness);
+    box-shadow: inset 0 1px var(--theme-menu-shadow-colour);
+    background-color: var(--theme-menu-background-colour);
+    backdrop-filter: blur(var(--theme-blur)) !important;
+    -webkit-backdrop-filter: blur(var(--theme-blur)) !important;
+    -moz-backdrop-filter: blur(var(--theme-blur)) !important;
+    -o-backdrop-filter: blur(var(--theme-blur)) !important;
+    -ms-backdrop-filter: blur(var(--theme-blur)) !important;
+    height: 100%;
+    display: flex !important;
+    align-items: center;
+}
+
+.watchlist-icon .detailButton-content:before {
+    content: 'Watchlist';
+}
+
+.kefinTweaks-breadcrumbs-wrapper:hover {
+    background: var(--theme-menu-background-colour);
+}
+
+/* Media bar slides container */
+div#slides-container {
+    margin-left: 250px !important;
+    width: calc(100% - 250px) !important;
+}

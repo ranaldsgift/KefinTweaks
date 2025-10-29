@@ -10,7 +10,7 @@
     const WARN = (...args) => console.warn('[SubtitleSearch]', ...args);
     const ERR = (...args) => console.error('[SubtitleSearch]', ...args);
     
-    LOG('Script loaded - Subtitle Search functionality');
+    LOG('Initializing...');
     
     // State management
     let isInitialized = false;
@@ -1259,5 +1259,6 @@
     window.setSubtitleStreamIndex = setSubtitleStreamIndex;
     window.listenForSubtitleStreamChange = listenForSubtitleStreamChange;
     window.triggerPlaybackProgressEvent = triggerPlaybackProgressEvent;
-    
+
+    LOG('Initialized successfully');    
 })();

@@ -10,7 +10,7 @@
     const WARN = (...args) => console.warn('[KefinTweaks Utils]', ...args);
     const ERR = (...args) => console.error('[KefinTweaks Utils]', ...args);
     
-    LOG('Utils script loaded');
+    LOG('Initializing');
     
     // Store the original onViewShow function
     let originalOnViewShow = null;
@@ -142,26 +142,14 @@
      * @returns {string|null} Current view name or null if not available
      */
     function getCurrentView() {
-        // Try to get view from URL hash (primary method)
         const hash = window.location.hash;
         if (hash) {
-            // Extract page name from hash patterns like #/home.html, #/search.html, etc.
-            const pageMatch = hash.match(/#\/([^\/\?]+)\.html/);
+            // Extract page name from hash - match part after #/ and before ? or /
+            // This handles both .html pages (old) and pages without .html (Jellyfin 10.11+)
+            const pageMatch = hash.match(/#\/([^\/\?]+)/);
             if (pageMatch) {
                 return pageMatch[1];
             }
-            
-            // Fallback: look for /view/ pattern
-            const viewMatch = hash.match(/\/view\/([^\/\?]+)/);
-            if (viewMatch) {
-                return viewMatch[1];
-            }
-        }
-        
-        // Try to get view from active page element (fallback)
-        const activePage = document.querySelector('.page:not(.hide)');
-        if (activePage) {
-            return activePage.getAttribute('data-page') || activePage.className.split(' ').find(cls => cls.includes('Page'));
         }
         
         return null;
@@ -287,12 +275,13 @@
     // Expose utilities to global scope
     window.KefinTweaksUtils = {
         onViewPage,
+        notifyHandlers,
         getCurrentView,
         getHandlerCount,
         clearHandlers,
         addCustomMenuLink
     };
     
-    LOG('KefinTweaks Utils loaded and available at window.KefinTweaksUtils');
-    
+    LOG('Initialized successfully');
+    LOG('Available at window.KefinTweaksUtils');
 })();

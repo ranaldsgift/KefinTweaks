@@ -20,7 +20,8 @@
                 console.log("[DashboardButtonFix]: No history to go back. Redirecting to home page.");
 
                 // Changes this to the page you'd like to return to by default
-                Dashboard.navigate('/home.html');
+                const homeUrl = ApiClient.serverVersion().split('.')[1] > 10 ? 'home' : 'home.html';
+                Dashboard.navigate(`/${homeUrl}`);
             }
         }, true);
     }

@@ -9,6 +9,7 @@
 /* Watchlist Tab Styling */
 .sections.watchlist {
     padding-bottom: 20px;
+    margin-top: 20px;
 }
 
 .sections.watchlist .watchlist-tabs {
@@ -36,10 +37,14 @@
 
 .sections.watchlist .watchlist-tabs button:hover {
     color: rgba(200, 200, 200, 0.9);
+    color: rgba(200, 200, 200, 0.9);
     background: rgba(255, 255, 255, 0.05);
 }
 
 .sections.watchlist .watchlist-tabs button.active {
+    color: rgba(200, 200, 200, 1);
+    border-bottom-color: #ffffff;
+    background: rgba(200, 200, 200, 0.1);
     color: rgba(200, 200, 200, 1);
     border-bottom-color: #ffffff;
     background: rgba(200, 200, 200, 0.1);
@@ -133,12 +138,15 @@
     gap: 16px;
 }
 
-.progress-tab-header, .movie-history-header {
+.progress-tab-header, .movie-history-header, .watchlist-header {
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 16px;
+    padding: 10px 0 10px 10px;
+    max-width: 1200px;
+    margin: 0 auto;
 }
 
 .progress-title {
@@ -242,20 +250,48 @@
     gap: 8px;
 }
 
-.progress-header-stats-container, .movie-history-stats-container {
+.progress-header-stats-container, .movie-history-stats-container, .watchlist-header-stats-container {
     display: flex;
     gap: 10px;
 }
 
-.progress-header-stats {
+.progress-header-stats, .watchlist-header-stats, .movie-history-stats {
     font-size: 14px;
     color: rgba(255, 255, 255, 0.7);
     background: rgba(255, 255, 255, 0.1);
-    padding: 6px 12px;
+    padding: 12px;
     border-radius: 16px;
     border: 1px solid rgba(255, 255, 255, 0.15);
     display: flex;
     align-items: center;
+}
+
+.watchlist-header-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.layout-toggle-btn {
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.7);
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.layout-toggle-btn:hover {
+    color: rgba(255, 255, 255, 0.9);
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.layout-toggle-btn .material-icons {
+    font-size: 20px;
 }
 
 .progress-stats-separator {
@@ -485,8 +521,20 @@
         display: none;
     }
 
-    .progress-tab-header h2 {
-        display: none;
+    .tab-header {
+        display: flex;
+        flex-direction: column;
+        padding: 10px;
+    }
+
+    .progress-header-stats-container, .movie-history-stats-container, .watchlist-header-stats-container {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .tab-header h2 {
+        padding: 0;
+        margin: 0;
     }
 }
 
@@ -716,17 +764,6 @@
 
 .pagination-controls>button:first-child, .pagination-controls>button:last-child {
     display: none;
-}
-
-.movie-history-stats {
-    font-size: 14px;
-    color: rgba(255, 255, 255, 0.7);
-    background: rgba(255, 255, 255, 0.1);
-    padding: 6px 12px;
-    border-radius: 16px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    display: flex;
-    align-items: center;
 }
 
 .movie-history-grid {
@@ -972,19 +1009,7 @@
         grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
         gap: 15px;
     }
-    
-    .movie-history-header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 10px;
-        align-items: center;
-        padding: 20px;
-    }
-    
-    .movie-history-header h2 {
-        display: none;
-    }
-    
+
     .movie-poster {
         aspect-ratio: 16 / 9;
     }
@@ -1623,15 +1648,6 @@ div[data-tab="watchlist"] .loading-message {
     color: rgba(255, 255, 255, 0.7);
 }
 
-.episode-count-info {
-    background: rgba(255, 193, 7, 0.1);
-    border: 1px solid rgba(255, 193, 7, 0.3);
-    border-radius: 6px;
-    padding: 12px;
-    margin-bottom: 16px;
-    text-align: center;
-}
-
 .episode-count-info .episode-count {
     font-weight: 600;
     font-size: 16px;
@@ -1639,6 +1655,15 @@ div[data-tab="watchlist"] .loading-message {
 }
 
 .episode-count-info {
+    background: rgba(255, 193, 7, 0.1);
+    border: 1px solid rgba(255, 193, 7, 0.3);
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 16px;
+    text-align: center;
+    display: flex;
+    gap: 10px;
+    justify-content: center;
     color: rgba(255, 255, 255, 0.9);
     font-size: 14px;
 }
@@ -1810,3 +1835,65 @@ div[data-tab="watchlist"] .loading-message {
 .watchlist-button[data-active="true"], .watchlist-icon[data-active="true"] {
     color: rgb(34, 197, 94) !important;
 }
+
+.watchlist-button[data-active="true"] span, .watchlist-icon[data-active="true"] span {
+    font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 48;
+}
+.slide .watchlist-button::before {
+    content: 'bookmark';
+    font-family: 'Material Icons';
+    font-weight: 600;
+    display: inline-block;
+    font-size: 22px;
+    vertical-align: middle;
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 48;
+}
+.slide .watchlist-button {    
+    border-radius: 50%;
+    height: 50px;
+    width: 50px;
+    border: none;
+    cursor: pointer;
+    transition: color 0.2s;
+    -webkit-tap-highlight-color: #fff0;
+}
+
+.card:has(button[data-played="true"]) .watchlist-button {
+    display: none;
+}
+
+/* List View Styling */
+[data-layout='List'] .cardScalable {
+    display: none;
+}
+
+[data-layout='List'] .itemsContainer {
+    display: flex;
+    flex-direction: column;
+}
+
+[data-layout='List'] .verticalSection.emby-scroller-container {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+[data-layout='List'] .cardBox {
+    display: flex;
+    width: 100%;
+}
+
+[data-layout='List'] .card {
+    width: 100% !important;
+    cursor: initial;
+}
+
+[data-layout='List'] .cardText-first {
+    flex: 1;
+    text-align: left !important;
+}
+
+[data-layout='List'] .cardText-secondary {
+    font-size: 100%;
+    padding-top: .24em;
+}
+

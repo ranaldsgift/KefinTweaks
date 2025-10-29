@@ -12,8 +12,8 @@
     const LOG = (...args) => console.log('[RemoveContinue]', ...args);
     const WARN = (...args) => console.warn('[RemoveContinue]', ...args);
     const ERROR = (...args) => console.error('[RemoveContinue]', ...args);
-
-    LOG('Remove continue watching functionality initialized');
+    
+    LOG('Initializing...');
 
     // Add CSS for positioning the remove button in top right corner
     const style = document.createElement('style');
@@ -291,5 +291,5 @@
         processExistingOverlayContainers();
     };
 
-    LOG('Remove continue watching functionality loaded successfully');
+    LOG('Initialized successfully');
 })();

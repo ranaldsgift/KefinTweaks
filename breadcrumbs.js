@@ -11,7 +11,6 @@
     const CONFIG = {
         supportedTypes: ['Movie', 'Series', 'Season', 'Episode', 'MusicArtist', 'MusicAlbum'],
         minWidth: 768, // Only show on screens wider than 768px
-        headerHeight: 80 // Position below .skinHeader
     };
     
     // State management
@@ -59,15 +58,26 @@
             elements: [],
             item: item
         };
+
+        // Don't append .html for server versions 10.11 and above
+        const urlSuffix = ApiClient._serverVersion.split('.')[1] > 10 ? '' : '.html'
+
+        let queryParams = '';
+        if (item.ParentId) {
+            queryParams = `?topParentId=${item.ParentId}&serverId=${ApiClient.serverId()}`;
+        }
+        else if (ApiClient.serverId()) {
+            queryParams = `?serverId=${ApiClient.serverId()}`;
+        }
         
         if (item.Type === 'Movie') {
             structure.elements = [
-                { text: 'Movies', url: '#/movies.html', clickable: true },
+                { text: 'Movies', url: `#/movies${urlSuffix}${queryParams}`, clickable: true },
                 { text: item.Name, url: null, clickable: false }
             ];
         } else if (item.Type === 'Series') {
             structure.elements = [
-                { text: 'Shows', url: '#/tv.html', clickable: true },
+                { text: 'Shows', url: `#/tv${urlSuffix}${queryParams}`, clickable: true },
                 { text: item.Name, url: null, clickable: false },
                 { text: 'All Seasons', url: null, clickable: true, popover: true }
             ];
@@ -77,8 +87,8 @@
             const seriesName = seriesDetails ? seriesDetails.Name : 'Unknown Series';
             
             structure.elements = [
-                { text: 'Shows', url: '#/tv.html', clickable: true },
-                { text: seriesName, url: `#/details?id=${item.ParentId}&serverId=${ApiClient.serverId()}`, clickable: true },
+                { text: 'Shows', url: `#/tv${urlSuffix}${queryParams}`, clickable: true },
+                { text: seriesName, url: `${ApiClient._serverAddress}/web/#/details?id=${item.ParentId}&serverId=${ApiClient.serverId()}`, clickable: true },
                 { text: item.Name || `Season ${item.IndexNumber}`, url: null, clickable: true, popover: true }
             ];
         } else if (item.Type === 'Episode') {
@@ -91,21 +101,21 @@
             const seasonName = seasonDetails ? (seasonDetails.Name || `Season ${seasonDetails.IndexNumber}`) : `Season ${item.ParentIndexNumber}`;
             
             structure.elements = [
-                { text: 'Shows', url: '#/tv.html', clickable: true },
-                { text: seriesName, url: `#/details?id=${item.SeriesId}&serverId=${ApiClient.serverId()}`, clickable: true },
+                { text: 'Shows', url: `#/tv${urlSuffix}${queryParams}`, clickable: true },
+                { text: seriesName, url: `${ApiClient._serverAddress}/web/#/details?id=${item.SeriesId}&serverId=${ApiClient.serverId()}`, clickable: true },
                 { text: seasonName, url: null, clickable: true, popover: true },
                 { text: `${item.ParentIndexNumber}x${padNumber(item.IndexNumber)} - ${item.Name}`, url: null, clickable: false }
             ];
         } else if (item.Type === 'MusicArtist') {
             structure.elements = [
-                { text: 'Music', url: '#/music.html', clickable: true },
+                { text: 'Music', url: `#/music${urlSuffix}${queryParams}`, clickable: true },
                 { text: item.Name, url: null, clickable: false },
                 { text: 'All Albums', url: null, clickable: true, popover: true }
             ];
         } else if (item.Type === 'MusicAlbum') {
             structure.elements = [
-                { text: 'Music', url: '#/music.html', clickable: true },
-                { text: item.AlbumArtist, url: `#/details?id=${item.ParentId}&serverId=${ApiClient.serverId()}`, clickable: true },
+                { text: 'Music', url: `#/music${urlSuffix}${queryParams}`, clickable: true },
+                { text: item.AlbumArtist, url: `${ApiClient._serverAddress}/web/#/details?id=${item.ParentId}&serverId=${ApiClient.serverId()}`, clickable: true },
                 { text: item.Name, url: null, clickable: true, popover: true }
             ];
         }
@@ -233,7 +243,7 @@
             if (elementDef.url) {
                 // Direct link
                 element.addEventListener('click', () => {
-                    window.location.hash = elementDef.url;
+                    window.location.href = elementDef.url;
                 });
             } else if (elementDef.popover) {
                 // Popover functionality
@@ -262,7 +272,7 @@
             if (elementDef.url) {
                 // Direct link
                 newElement.addEventListener('click', () => {
-                    window.location.hash = elementDef.url;
+                    window.location.href = elementDef.url;
                 });
             } else if (elementDef.popover) {
                 // Popover functionality
@@ -281,7 +291,7 @@
             element.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const popover = createPopover(seasons, null, (selectedSeason) => {
-                    window.location.hash = `#/details?id=${selectedSeason.Id}&serverId=${ApiClient.serverId()}`;
+                    window.location.href = `${ApiClient._serverAddress}/web/#/details?id=${selectedSeason.Id}&serverId=${ApiClient.serverId()}`;
                 });
                 showPopover(element, popover);
             });
@@ -291,7 +301,7 @@
             element.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const popover = createPopover(albums, null, (selectedAlbum) => {
-                    window.location.hash = `#/details?id=${selectedAlbum.Id}&serverId=${ApiClient.serverId()}`;
+                    window.location.href = `${ApiClient._serverAddress}/web/#/details?id=${selectedAlbum.Id}&serverId=${ApiClient.serverId()}`;
                 });
                 showPopover(element, popover);
             });
@@ -304,7 +314,7 @@
                 element.addEventListener('click', (e) => {
                     e.stopPropagation();
                     const popover = createPopover(seasons, item, (selectedSeason) => {
-                        window.location.hash = `#/details?id=${selectedSeason.Id}&serverId=${ApiClient.serverId()}`;
+                        window.location.href = `${ApiClient._serverAddress}/web/#/details?id=${selectedSeason.Id}&serverId=${ApiClient.serverId()}`;
                     });
                     showPopover(element, popover);
                 });
@@ -314,14 +324,14 @@
             const seasons = await getSeasonsIfNeeded(item.SeriesId);
             if (seasons.length === 1) {
                 element.addEventListener('click', () => {
-                    window.location.hash = `#/details?id=${seasons[0].Id}&serverId=${ApiClient.serverId()}`;
+                    window.location.href = `${ApiClient._serverAddress}/web/#/details?id=${seasons[0].Id}&serverId=${ApiClient.serverId()}`;
                 });
             } else {
                 const currentSeason = seasons.find(season => season.Id === item.ParentId);
                 element.addEventListener('click', (e) => {
                     e.stopPropagation();
                     const popover = createPopover(seasons, currentSeason, (selectedSeason) => {
-                        window.location.hash = `#/details?id=${selectedSeason.Id}&serverId=${ApiClient.serverId()}`;
+                        window.location.href = `${ApiClient._serverAddress}/web/#/details?id=${selectedSeason.Id}&serverId=${ApiClient.serverId()}`;
                     });
                     showPopover(element, popover);
                 });
@@ -331,13 +341,13 @@
             const albums = await getAlbumsIfNeeded(item.ParentId);
             if (albums.length === 1) {
                 element.addEventListener('click', () => {
-                    window.location.hash = `#/details?id=${albums[0].Id}&serverId=${ApiClient.serverId()}`;
+                    window.location.href = `${ApiClient._serverAddress}/web/#/details?id=${albums[0].Id}&serverId=${ApiClient.serverId()}`;
                 });
             } else {
                 element.addEventListener('click', (e) => {
                     e.stopPropagation();
                     const popover = createPopover(albums, item, (selectedAlbum) => {
-                        window.location.hash = `#/details?id=${selectedAlbum.Id}&serverId=${ApiClient.serverId()}`;
+                        window.location.href = `${ApiClient._serverAddress}/web/#/details?id=${selectedAlbum.Id}&serverId=${ApiClient.serverId()}`;
                     });
                     showPopover(element, popover);
                 });
@@ -352,52 +362,6 @@
     
     function error(message, ...args) {
         console.error(`[KefinTweaks Breadcrumbs] ${message}`, ...args);
-    }
-    
-    function debugBreadcrumbLinks() {
-        if (!breadcrumbContainer) return;
-        
-        const children = Array.from(breadcrumbContainer.children);
-        log('Breadcrumb structure:');
-        children.forEach((child, index) => {
-            if (child.style.cursor === 'pointer') {
-                log(`  Element ${index}: "${child.textContent}" (clickable)`);
-            } else {
-                log(`  Element ${index}: "${child.textContent}" (static)`);
-            }
-        });
-    }
-    
-    function ensureSeriesNameIsClickable(seriesId) {
-        if (!breadcrumbContainer) return;
-        
-        const children = Array.from(breadcrumbContainer.children);
-        
-        // Find the series name element (should be the 3rd element: Shows / Series Name / ...)
-        if (children.length >= 3) {
-            const seriesElement = children[2]; // Shows (0) / Series Name (2) / ...
-            
-            // Check if it's already clickable
-            if (seriesElement.style.cursor !== 'pointer') {
-                log('Making series name clickable:', seriesElement.textContent);
-                
-                // Make it clickable
-                seriesElement.style.cursor = 'pointer';
-                
-                // Add click handler
-                seriesElement.onclick = () => {
-                    window.location.hash = `#/details?id=${seriesId}&serverId=${ApiClient.serverId()}`;
-                };
-                
-                log('Series name is now clickable and links to series page:', seriesId);
-            } else {
-                // Update existing click handler to ensure it points to the series page
-                seriesElement.onclick = () => {
-                    window.location.hash = `#/details?id=${seriesId}&serverId=${ApiClient.serverId()}`;
-                };
-                log('Updated series name click handler to point to series page:', seriesId);
-            }
-        }
     }
     
     function isWideScreen() {
@@ -491,12 +455,7 @@
         }
         closePopover();
     }
-    
-    
-    
-    
-    
-    
+
     function closePopover() {
         if (activePopover) {
             activePopover.remove();
@@ -643,22 +602,6 @@
         }
     }
     
-    // Breadcrumb generation
-    function createBreadcrumbElement(text, url = null, isClickable = true) {
-        const element = document.createElement('span');
-        element.className = 'kefinTweaks-breadcrumb-element';
-        element.textContent = text;
-        
-        if (url && isClickable) {
-            element.style.cursor = 'pointer';
-            element.addEventListener('click', () => {
-                window.location.hash = url;
-            });
-        }
-        
-        return element;
-    }
-    
     function createSeparator() {
         const separator = document.createElement('span');
         separator.className = 'kefinTweaks-breadcrumb-separator';
@@ -747,22 +690,25 @@
             breadcrumbContainer = createBreadcrumbContainer();
         }
         
-        // Clear existing content
-        clearBreadcrumbs();
-        
-        // Add all elements
+        // Build all elements first
+        const elements = [];
         for (let i = 0; i < targetStructure.elements.length; i++) {
             const elementDef = targetStructure.elements[i];
             const element = await createBreadcrumbElementFromStructure(elementDef, targetStructure.item);
-            
-            breadcrumbContainer.appendChild(element);
+            elements.push(element);
             
             // Add separator after each element except the last
             if (i < targetStructure.elements.length - 1) {
                 const separator = createSeparator();
-                breadcrumbContainer.appendChild(separator);
+                elements.push(separator);
             }
         }
+        
+        // Replace the innerHTML entirely to avoid any duplicate appending issues
+        breadcrumbContainer.innerHTML = '';
+        
+        // Append all elements at once
+        elements.forEach(el => breadcrumbContainer.appendChild(el));
         
         log('Created breadcrumbs from scratch with', targetStructure.elements.length, 'elements');
     }

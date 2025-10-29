@@ -7,8 +7,10 @@
     const WARN = (...args) => console.warn('[InfiniteScroll]', ...args);
     const ERR = (...args) => console.error('[InfiniteScroll]', ...args);
     
+    LOG('Initializing...');
+    
     // Supported pages (same as headerTabs)
-    const SUPPORTED_PAGES = ['tv.html', 'movies.html', 'music.html'];
+    const SUPPORTED_PAGES = ['tv.html', 'movies.html', 'music.html', 'tv', 'movies', 'music'];
     
     // Media type configurations - Read from centralized config or use defaults
     const MEDIA_CONFIGS = {
@@ -22,6 +24,26 @@
             context: 'tvshows',
             sortBy: 'SortName,ProductionYear'
         },
+        'music.html': {
+            includeItemTypes: 'Music',
+            context: 'music',
+            sortBy: 'SortName,ProductionYear'
+        },
+        'movies': {
+            includeItemTypes: 'Movie',
+            context: 'movies',
+            sortBy: 'SortName,ProductionYear'
+        },
+        'tv': {
+            includeItemTypes: 'Series',
+            context: 'tvshows',
+            sortBy: 'SortName,ProductionYear'
+        },
+        'music': {
+            includeItemTypes: 'Music',
+            context: 'music',
+            sortBy: 'SortName,ProductionYear'
+        }
     };
     
     let userId = null;
@@ -813,4 +835,6 @@
     
     // Cleanup on page unload
     window.addEventListener('beforeunload', cleanup);
+    
+    LOG('Initialized successfully');
 })();

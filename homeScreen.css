@@ -6,12 +6,20 @@
     display: flex;
     flex-direction: column;
 }
+
 .sections.homeSectionsContainer>div {
     order: 100;
 }
+
+.sections.homeSectionsContainer>div:has(a.homeLibraryButton), 
+.sections.homeSectionsContainer>div:has([data-type="CollectionFolder"]) {
+    order: 1;
+}
+
 .sections.homeSectionsContainer>div:has(div[data-positionticks]) {
     order: 2;
 }
+
 .sections.homeSectionsContainer>div:has(a[href*="type=nextup"]) {
     order: 3;
 }
@@ -27,4 +35,13 @@
     background-image: url('/files/KefinTweaks/pages/images/halloween.jpg');
     background-position: 0px -250px;
     background-size: auto 102%;
+}
+
+.home-screen h2.sectionTitle {
+    margin-bottom: .35em;
+    margin-top: 0;
+}
+
+.sectionTitleContainer.sectionTitleContainer-cards.padded-left > .sectionTitle.sectionTitle-cards {
+    display: flex !important;
 }

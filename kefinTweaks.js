@@ -68,19 +68,22 @@
             breadcrumbs: true,        // Breadcrumb navigation for Movies, Series, Seasons, Episodes, Music
             
             // Branding and external integrations
-            updoot: false,             // Integration with Jellyfin Updoot upvote functionality
+            updoot: false,             // EXPERIMENTAL: Integration with Jellyfin Updoot upvote functionality - Needs more work
             // REQUIRES: ExclusiveElsewhere requires JellyfinEnhanced plugin https://github.com/n00bcodr/Jellyfin-Enhanced
             exclusiveElsewhere: false, // Custom branding when items aren't available on streaming services
             
             // Performance and stability improvements
             backdropLeakFix: true,    // Fixes memory leaks from backdrop images when tab isn't focused
             dashboardButtonFix: true, // Proper back button behavior on dashboard
-            infiniteScroll: true,     // Smooth infinite scrolling for large media libraries
+            infiniteScroll: true,     // Smooth infinite scrolling. Supports Movie and TV libraries. Music to be added in the future.
             
             // Playback and media enhancements
             removeContinue: true,     // Add "Remove from Continue Watching" functionality
             subtitleSearch: true,     // Search and download subtitles directly from video OSD
-            playlist: true            // Enhanced playlist view with better navigation
+            playlist: true,           // Enhanced playlist view with better navigation
+            
+            // UI customization
+            skinManager: true         // Skin selection and management for display preferences
         },
         
         // ============================================================================
@@ -157,6 +160,71 @@
         search: {
             enableJellyseerr: false  // Enable Jellyseerr integration for request functionality
         },
+        
+        // ============================================================================
+        // SKIN CONFIGURATION
+        // ============================================================================
+        // Configure additional skins available in the skin manager
+        // These will be merged with skins from userConfig.js
+        // Each skin can have a single URL (string) or multiple URLs (array) for complex themes
+        // Each skin can also have colorSchemes array for color variations specific to that skin
+        // Each skin should have an author field indicating who created the skin
+        skins: [
+            // Add additional skins here that will be available to all users
+            // These are example skins - replace with your own or remove if not needed
+            /* Example of adding more skins:
+            {
+                name: 'Custom Theme',
+                author: 'username',
+                url: 'https://cdn.jsdelivr.net/gh/username/custom-theme.css',
+                colorSchemes: []
+            },
+            {
+                name: 'Multi-file Theme',
+                author: 'username',
+                url: [
+                    'https://cdn.jsdelivr.net/gh/username/theme-base.css',
+                    'https://cdn.jsdelivr.net/gh/username/theme-extensions.css'
+                ],
+                colorSchemes: [
+                    {
+                        name: 'Dark Blue',
+                        url: 'https://cdn.jsdelivr.net/gh/username/theme-dark-blue.css'
+                    },
+                    {
+                        name: 'Light Green',
+                        url: 'https://cdn.jsdelivr.net/gh/username/theme-light-green.css'
+                    }
+                ]
+            },
+            */
+        ],
+        
+        // Default skin to use when no skin is selected
+        // This overrides the default selection from userConfig.js
+        defaultSkin: null, // Set to skin name (e.g., 'Dark Theme') or null to use userConfig default
+        
+        
+        // ============================================================================
+        // THEME CONFIGURATION
+        // ============================================================================
+        // Configure additional themes available in the theme manager
+        // These will be merged with themes from userConfig.js
+        // Each theme should have a name and URL pointing to a CSS file
+        themes: [
+            // Add additional themes here that will be available to all users
+            // These are example themes - replace with your own or remove if not needed
+            /* Example of adding more themes:
+            {
+                name: 'Custom Dark Theme',
+                url: 'https://cdn.jsdelivr.net/gh/username/custom-dark-theme.css'
+            },
+            {
+                name: 'Custom Light Theme',
+                url: 'https://cdn.jsdelivr.net/gh/username/custom-light-theme.css'
+            },
+            */
+        ],
         
         // ============================================================================
         // CUSTOM MENU LINKS CONFIGURATION

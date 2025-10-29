@@ -48,3 +48,15 @@ div#smart-search-results {
     padding-bottom: 0 !important;
     padding-right: 0 !important;
 }
+
+label[for="searchTextInput"] {
+    display: none;
+}
+
+.searchFieldsInner>.searchfields-icon {
+    display: none;
+}
+
+.input-wrapper {
+    position: relative;
+}

@@ -10,9 +10,9 @@
     const WARN = (...args) => console.warn('[HeaderTabs]', ...args);
     const ERR = (...args) => console.error('[HeaderTabs]', ...args);
     
-    LOG('Script loaded - JS Injector mode');
+    LOG('Initializing...');
     
-    const SUPPORTED_PAGES = ['home.html', 'tv.html', 'movies.html', 'music.html', 'livetv.html'];
+    const SUPPORTED_PAGES = ['home', 'home.html', 'tv', 'tv.html', 'movies', 'movies.html', 'music', 'music.html', 'livetv', 'livetv.html'];
     
     // Get current page from URL hash
     function getCurrentPage() {
@@ -87,10 +87,12 @@
                 newHash = `${currentHash}`;
             }
         }
-        
-        const newUrl = window.location.origin + window.location.pathname + '#' + newHash.substring(1);
+
+        // Manually notify handlers for Header Tab navigation because it doesn't trigger normal Jellyfin navigation
+        window.KefinTweaksUtils.notifyHandlers(currentPage, document);
         
         // Replace history entry instead of adding new one
+        const newUrl = window.location.origin + window.location.pathname + '#' + newHash.substring(1);
         window.history.replaceState(null, '', newUrl);
         LOG('Updated URL with tab:', tabIndex, newUrl);
     }
@@ -139,7 +141,7 @@
         // Patch for media bar because it usually reacts slowly and hides later
         // Hide media bar slideshow if we aren't specifically on the home page first tab
         const currentPage = getCurrentPage();
-        if (currentPage !== 'home.html' || currentTabFromUrl !== 0) {
+        if (currentPage !== 'home' && currentPage !== 'home.html' || currentTabFromUrl !== 0) {
             const mediaBarSlideshow = document.getElementById('slides-container');
             if (mediaBarSlideshow) {
                 mediaBarSlideshow.style.display = 'none';
@@ -148,6 +150,23 @@
 
         const buttons = headerTabs.querySelectorAll('.emby-tab-button');
         const activeButton = headerTabs.querySelector('.emby-tab-button-active');
+
+        const activeTabContent = document.querySelector('.libraryPage:not(.hide) .pageTabContent.is-active');
+        const activeTabContentIndex = activeTabContent ? activeTabContent.getAttribute('data-index') : null;
+
+        // Remove is-active class from the active tab content if it's not the current tab
+        if (activeTabContentIndex && activeTabContentIndex !== currentTabFromUrl) {
+            activeTabContent.classList.remove('is-active');
+        }
+
+        // Add is-active class to the current tab content if it's not already active
+        if (!activeTabContentIndex || activeTabContentIndex !== currentTabFromUrl) {
+            const targetContent = document.querySelector(`.libraryPage:not(.hide) .pageTabContent[data-index="${currentTabFromUrl}"]`);
+            if (targetContent) {
+                targetContent.classList.add('is-active');
+                LOG('Set active tab content:', currentTabFromUrl);
+            }
+        }
 
         if (activeButton && activeButton.getAttribute('data-index') === currentTabFromUrl.toString()) {
             return;
@@ -168,23 +187,6 @@
             correctButton.classList.add('emby-tab-button-active');
             LOG('Set active tab button to index:', currentTabFromUrl);
         }
-
-        const activeTabContent = document.querySelector('.libraryPage:not(.hide) .pageTabContent.is-active');
-        const activeTabContentIndex = activeTabContent ? activeTabContent.getAttribute('data-index') : null;
-
-        // Remove is-active class from the active tab content if it's not the current tab
-        if (activeTabContentIndex && activeTabContentIndex !== currentTabFromUrl) {
-            activeTabContent.classList.remove('is-active');
-        }
-
-        // Add is-active class to the current tab content if it's not already active
-        if (!activeTabContentIndex || activeTabContentIndex !== currentTabFromUrl) {
-            const targetContent = document.querySelector(`.libraryPage:not(.hide) .pageTabContent[data-index="${currentTabFromUrl}"]`);
-            if (targetContent) {
-                targetContent.classList.add('is-active');
-                LOG('Set active tab content:', currentTabFromUrl);
-            }
-        }
     }
     
     // Add click listeners to tab buttons
@@ -203,6 +205,7 @@
         }
     }
     
+    // TODO - Replace the MutationObservers with a less taxing alternative
     // Setup observer to watch for emby-tab-button additions
     function setupHeaderTabsObserver() {
         const headerTabs = document.querySelector('.headerTabs');
@@ -331,62 +334,7 @@
         
         // Check on hash changes
         window.addEventListener('hashchange', checkPageChange);
-        
-        // Fallback: check URL periodically but less frequently
-/*         urlCheckInterval = setInterval(() => {
-            if (window.location.href !== lastUrl) {
-                checkPageChange();
-            }
-        }, 500); */
-        
-        // Check periodically in case we miss something
-        //setInterval(checkPageChange, 1000);
     }
-    
-    // Setup home navigation click handler with retry logic
-/*     function setupHomeNavClickHandler() {
-        const homeNavOption = document.querySelector('.mainDrawer .navMenuOption[href="#/home.html"]');
-        if (homeNavOption) {
-            homeNavOption.addEventListener('click', function(event) {
-                const headerTabs = document.querySelector('.headerTabs');
-                if (headerTabs) {
-                    const firstTab = headerTabs.querySelector('.emby-tab-button[data-index="0"]');
-                    if (firstTab) {
-                        LOG('Triggering click on first homepage tab');
-                        firstTab.click();
-                    } else {
-                        WARN('First homepage tab not found');
-                    }
-                } else {
-                    WARN('Header tabs not found');
-                }
-            });
-            LOG('Added click listener to home navigation option');
-            return true; // Success
-        } else {
-            WARN('Home navigation option not found, will retry...');
-            return false; // Failed, needs retry
-        }
-    }
-    
-    // Retry setup until successful
-    function retryHomeNavSetup() {
-        const maxRetries = 50; // Try for up to 25 seconds (50 * 500ms)
-        let retryCount = 0;
-        
-        const retryInterval = setInterval(() => {
-            if (setupHomeNavClickHandler()) {
-                clearInterval(retryInterval);
-                LOG('Home navigation click handler successfully attached');
-            } else {
-                retryCount++;
-                if (retryCount >= maxRetries) {
-                    clearInterval(retryInterval);
-                    ERR('Failed to attach home navigation click handler after maximum retries');
-                }
-            }
-        }, 500);
-    } */
     
     // Register onViewPage handler to sync active tab state
     if (window.KefinTweaksUtils && window.KefinTweaksUtils.onViewPage) {
@@ -405,7 +353,7 @@
     
     // Initialize
     setupPageMonitor();
-    //retryHomeNavSetup();
+    setupHeaderTabsObserver();
     
     LOG('Header tabs functionality initialized');
     

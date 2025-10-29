@@ -4,9 +4,12 @@
 
 (function() {
     'use strict';
+
+    console.log('[KefinTweaks Injector] Initializing...');
     
-    // Configuration: Read from centralized config or use defaults
-    const ENABLED_SCRIPTS = window.KefinTweaksConfig?.scripts || {
+    // Configuration: Start with defaults, then merge user config
+    // This allows new scripts to work out of the box without requiring config updates
+    const ENABLED_SCRIPTS = {
         // UI and functional enhancements
         watchlist: true,          // Watchlist functionality
         homeScreen: true,         // Custom home screen sections
@@ -20,10 +23,14 @@
         infiniteScroll: true,     // Infinite scroll functionality
         removeContinue: true,     // Remove from continue watching functionality
         subtitleSearch: true,     // Subtitle search functionality
-        playlist: true            // Playlist view page modifications
+        playlist: true,           // Playlist view page modifications
+        skinManager: true,        // Skin selection and management
         
         // Note: Core functionality scripts (utils, cardBuilder, localStorageCache, modal) 
         // are automatically enabled when needed by other scripts
+        
+        // Merge user config on top of defaults (allows users to override defaults)
+        ...window.KefinTweaksConfig?.scripts
     };
     
     // Script definitions with dependencies and metadata
@@ -34,6 +41,20 @@
             css: null,
             dependencies: [],
             description: 'Common utilities for page view management and MutationObserver conversion'
+        },
+        {
+            name: 'userConfig',
+            script: 'userConfig.js',
+            css: null,
+            dependencies: [],
+            description: 'User-specific configuration for skins and other settings'
+        },
+        {
+            name: 'skinManager',
+            script: 'skinManager.js',
+            css: null,
+            dependencies: ['utils', 'userConfig'],
+            description: 'Adds skin selection dropdown to display preferences page and manages skin CSS loading'
         },
         {
             name: 'cardBuilder',
@@ -153,7 +174,7 @@
             css: null,
             dependencies: ['cardBuilder', 'utils'],
             description: 'Modifies playlist view page behavior to navigate to item details instead of playing, and adds play button to playlist items'
-        }
+        },
     ];
     
     // Auto-enable dependencies for enabled scripts
@@ -243,7 +264,7 @@
     function loadScript(filename) {
         return new Promise((resolve, reject) => {
             // Check if script is already loaded
-            const existingScript = document.querySelector(`script[src*="${filename}"]`);
+            const existingScript = document.querySelector(`script[src="${getScriptRoot()}${filename}"]`);
             if (existingScript) {
                 console.log(`[KefinTweaks Injector] Script already loaded: ${filename}`);
                 resolve();
@@ -268,33 +289,55 @@
         });
     }
     
-    // Load a script and its dependencies
-    async function loadScriptWithDependencies(scriptDef) {
-        try {
-            // Load dependencies first - only if they are enabled
-            for (const depName of scriptDef.dependencies) {
-                const depScript = SCRIPT_DEFINITIONS.find(s => s.name === depName);
-                if (depScript && ENABLED_SCRIPTS[depName]) {
-                    await loadScriptWithDependencies(depScript);
-                } else if (depScript && !ENABLED_SCRIPTS[depName]) {
-                    console.warn(`[KefinTweaks Injector] Dependency '${depName}' is disabled, skipping for '${scriptDef.name}'`);
-                }
-            }
-            
-            // Load CSS if specified
-            if (scriptDef.css) {
-                await loadCSS(scriptDef.css);
-            }
-            
-            // Load the script
-            await loadScript(scriptDef.script);
-            
-            console.log(`[KefinTweaks Injector] Successfully loaded: ${scriptDef.name}`);
-            
-        } catch (error) {
-            console.error(`[KefinTweaks Injector] Error loading ${scriptDef.name}:`, error);
-            throw error;
+    // Recursively collect all dependencies for a given script
+    function collectAllDependencies(scriptDef, collected = new Set(), visited = new Set()) {
+        // Avoid infinite recursion
+        if (visited.has(scriptDef.name)) {
+            return collected;
         }
+        visited.add(scriptDef.name);
+        
+        // For each dependency
+        for (const depName of scriptDef.dependencies) {
+            // Only process enabled dependencies
+            if (!ENABLED_SCRIPTS[depName]) {
+                continue;
+            }
+            
+            const depScript = SCRIPT_DEFINITIONS.find(s => s.name === depName);
+            if (!depScript) {
+                continue;
+            }
+            
+            // Add to collected if we haven't already
+            if (!collected.has(depScript.name)) {
+                collected.add(depScript.name);
+                // Recursively collect this dependency's dependencies
+                collectAllDependencies(depScript, collected, visited);
+            }
+        }
+        
+        return collected;
+    }
+    
+    // Load a single script (assumes dependencies are already loaded)
+    async function loadScriptSync(scriptDef) {
+        // Check if already loaded
+        const isAlreadyLoaded = document.querySelector(`script[src*="${scriptDef.script}"]`);
+        if (isAlreadyLoaded) {
+            console.log(`[KefinTweaks Injector] Script already loaded: ${scriptDef.name}`);
+            return;
+        }
+        
+        // Load CSS if specified
+        if (scriptDef.css) {
+            await loadCSS(scriptDef.css);
+        }
+        
+        // Load the script
+        await loadScript(scriptDef.script);
+        
+        console.log(`[KefinTweaks Injector] Successfully loaded: ${scriptDef.name}`);
     }
     
     // Main initialization function
@@ -307,17 +350,45 @@
             return;
         }
         
-        // Get enabled scripts in dependency order
+        // Get enabled scripts
         const enabledScripts = SCRIPT_DEFINITIONS.filter(script => ENABLED_SCRIPTS[script.name]);
         
-        console.log(`[KefinTweaks Injector] Loading ${enabledScripts.length} scripts:`, 
-                   enabledScripts.map(s => s.name));
+        // Step 1: Collect all dependencies from all enabled scripts
+        const allDependencyNames = new Set();
+        for (const script of enabledScripts) {
+            const deps = collectAllDependencies(script);
+            deps.forEach(dep => allDependencyNames.add(dep));
+        }
         
-        // Load all enabled scripts
-        const loadPromises = enabledScripts.map(script => loadScriptWithDependencies(script));
+        // Step 2: Separate dependencies from non-dependencies
+        const dependencyScripts = SCRIPT_DEFINITIONS.filter(script => 
+            allDependencyNames.has(script.name) && ENABLED_SCRIPTS[script.name]
+        );
+        
+        const nonDependencyScripts = enabledScripts.filter(script => 
+            !allDependencyNames.has(script.name)
+        );
+        
+        console.log(`[KefinTweaks Injector] Found ${dependencyScripts.length} dependency scripts:`, 
+                   dependencyScripts.map(s => s.name));
+        console.log(`[KefinTweaks Injector] Found ${nonDependencyScripts.length} non-dependency scripts:`, 
+                   nonDependencyScripts.map(s => s.name));
         
         try {
+            // Step 3: Load all dependencies first
+            console.log('[KefinTweaks Injector] Loading dependencies first...');
+            console.log(`[KefinTweaks Injector] Dependency load order:`, dependencyScripts.map(s => s.name));
+            
+            let dependencyLoadPromises = [];
+            dependencyLoadPromises.push(...dependencyScripts.map(script => loadScriptSync(script)));
+            await Promise.all(dependencyLoadPromises);
+            
+            // Step 4: Load non-dependencies in parallel (their dependencies are already loaded)
+            let loadPromises = [];
+            console.log('[KefinTweaks Injector] Loading non-dependencies...');
+            loadPromises.push(...nonDependencyScripts.map(script => loadScriptSync(script)));
             await Promise.all(loadPromises);
+            
             console.log('[KefinTweaks Injector] All scripts loaded successfully!');
             
             // Dispatch custom event when all scripts are loaded
