@@ -2337,7 +2337,7 @@
      * Sets up scroll-based infinite loading
      * @param {HTMLElement} container - Container to watch for scroll
      */
-    function setupScrollBasedLoading(container) {
+    function setupScrollBasedLoading(container) {        
         // Remove existing handler if present (make idempotent)
         removeScrollBasedLoading();
         
@@ -2345,6 +2345,21 @@
         let scrollTimeout = null;
         
         const handleScroll = () => {
+            // Ensure we're on the home page before proceeding
+            const currentView = window.KefinTweaksUtils?.getCurrentView();
+            const isHomePage = currentView === 'home' || currentView === 'home.html';
+            
+            if (!isHomePage) {
+                LOG('Not on home page, skipping scroll-based loading setup');
+                return;
+            }
+
+            const activeTab = document.querySelector('.headerTabs .emby-tab-button-active').getAttribute('data-index');
+            if (activeTab !== '0') {
+                LOG('Not on home page, skipping scroll-based loading setup');
+                return;
+            }
+
             if (isRenderingDiscoveryGroup) return;
             
             const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
