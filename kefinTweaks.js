@@ -49,7 +49,7 @@
         // SCRIPT ROOT CONFIGURATION
         // ============================================================================
         // Configure where scripts are loaded from
-        scriptRoot: 'https://cdn.jsdelivr.net/gh/ranaldsgift/KefinTweaks/',
+        scriptRoot: 'https://ranaldsgift.github.io/KefinTweaks/',
         
         // ============================================================================
         // SCRIPT ENABLE/DISABLE FLAGS
