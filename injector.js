@@ -238,76 +238,18 @@
         const style = document.createElement('style');
         style.id = styleId;
         style.textContent = `
-body:not(:has(.libraryPage:not(.hide))) .MuiPaper-root.MuiDrawer-paperAnchorLeft {
-    position: relative;
-}
-
-body:not(:has(.libraryPage:not(.hide))) .MuiPaper-root.MuiDrawer-paperAnchorLeft::after {
-    content: 'KefinTweaks v${versionNumber}';
-    font-style: italic;
-    text-align: center;
-    margin-top: 10px;
-    color: #b7b7b7;
-    font-size: 0.9em;
-    display: block;
-    cursor: help;
-}
-
-body:not(:has(.libraryPage:not(.hide))) .MuiPaper-root.MuiDrawer-paperAnchorLeft::before {
-    content: attr(data-version-date);
-    position: absolute;
-    bottom: 0;
-    left: 50%;
-    transform: translateX(-50%) translateY(-100%);
-    background-color: rgba(0, 0, 0, 0.9);
-    color: #fff;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 0.75em;
-    white-space: nowrap;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.2s;
-    margin-bottom: 5px;
-    z-index: 1000;
-}
-
-body:not(:has(.libraryPage:not(.hide))) .MuiPaper-root.MuiDrawer-paperAnchorLeft:hover::before {
-    opacity: 1;
-}
-`;
-        document.head.appendChild(style);
-
-        // Fetch and set version date
-        fetchVersionDate(versionNumber).then(date => {
-            if (date) {
-                const drawer = document.querySelector('.MuiPaper-root.MuiDrawer-paperAnchorLeft');
-                if (drawer) {
-                    // Format date as "Released: MM/DD/YYYY"
-                    const formattedDate = `Released: ${date.toLocaleDateString('en-US', { 
-                        year: 'numeric', 
-                        month: 'short', 
-                        day: 'numeric' 
-                    })}`;
-                    drawer.setAttribute('data-version-date', formattedDate);
-                } else {
-                    // Wait for drawer to be available
-                    const observer = new MutationObserver((mutations, obs) => {
-                        const drawer = document.querySelector('.MuiPaper-root.MuiDrawer-paperAnchorLeft');
-                        if (drawer) {
-                            const formattedDate = `Released: ${date.toLocaleDateString('en-US', { 
-                                year: 'numeric', 
-                                month: 'short', 
-                                day: 'numeric' 
-                            })}`;
-                            drawer.setAttribute('data-version-date', formattedDate);
-                            obs.disconnect();
-                        }
-                    });
-                    observer.observe(document.body, { childList: true, subtree: true });
-                }
+            body:not(:has(.libraryPage:not(.hide))) .MuiPaper-root.MuiDrawer-paperAnchorLeft::after {
+                content: 'KefinTweaks v${versionNumber}';
+                font-style: italic;
+                text-align: center;
+                margin-top: 10px;
+                color: #b7b7b7;
+                font-size: 0.9em;
+                display: block;
+                cursor: help;
             }
-        });
+            `;
+        document.head.appendChild(style);
     }
 
     // Auto-enable dependencies for enabled scripts
