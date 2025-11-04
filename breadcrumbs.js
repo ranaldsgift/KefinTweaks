@@ -1,6 +1,7 @@
 // KefinTweaks Breadcrumbs
 // Adds breadcrumb navigation to item detail pages
-// Supports: Movie, Series, Season, Episode, MusicArtist, MusicAlbum
+// Supports: Movie, Series, Season, Episode, MusicArtist, MusicAlbum, Audio
+// Requires: utils.js module to be loaded before this script
 
 (function() {
     'use strict';
@@ -9,7 +10,7 @@
     
     // Configuration
     const CONFIG = {
-        supportedTypes: ['Movie', 'Series', 'Season', 'Episode', 'MusicArtist', 'MusicAlbum'],
+        supportedTypes: ['Movie', 'Series', 'Season', 'Episode', 'MusicArtist', 'MusicAlbum', 'Audio'],
         minWidth: 768, // Only show on screens wider than 768px
     };
     
@@ -22,8 +23,10 @@
     // Track parent IDs to avoid unnecessary API calls
     let lastSeasonsParentId = null;
     let lastAlbumsParentId = null;
+    let lastSongsParentId = null;
     let cachedSeasonsData = null;
     let cachedAlbumsData = null;
+    let cachedSongsData = null;
     
     // Smart API call functions that check parent ID
     async function getSeasonsIfNeeded(parentId) {
@@ -52,6 +55,19 @@
         return albums;
     }
     
+    async function getSongsIfNeeded(parentId) {
+        if (lastSongsParentId === parentId && cachedSongsData) {
+            log('Using existing songs data for parent:', parentId);
+            return cachedSongsData;
+        }
+        
+        log('Fetching songs for parent:', parentId);
+        const songs = await getSongs(parentId);
+        lastSongsParentId = parentId;
+        cachedSongsData = songs;
+        return songs;
+    }
+    
     // Simplified breadcrumb structure definition
     async function getTargetBreadcrumbStructure(item) {
         const structure = {
@@ -64,7 +80,17 @@
 
         let queryParams = '';
         if (item.ParentId) {
-            queryParams = `?topParentId=${item.ParentId}&serverId=${ApiClient.serverId()}`;
+            // Get the top parent item from the ancestors with a Type = CollectionFolder
+            const ancestors = await ApiClient.getAncestorItems(item.Id);
+            const collectionFolder = ancestors.find(ancestor => ancestor.Type === 'CollectionFolder');
+            const userRootFolder = ancestors.find(ancestor => ancestor.Type === 'UserRootFolder');
+            if (collectionFolder) {
+                queryParams = `?topParentId=${collectionFolder.Id}&serverId=${ApiClient.serverId()}`;
+            } else if (userRootFolder) {
+                queryParams = `?topParentId=${userRootFolder.Id}&serverId=${ApiClient.serverId()}`;
+            } else {
+                queryParams = `?serverId=${ApiClient.serverId()}`;
+            }
         }
         else if (ApiClient.serverId()) {
             queryParams = `?serverId=${ApiClient.serverId()}`;
@@ -116,7 +142,21 @@
             structure.elements = [
                 { text: 'Music', url: `#/music${urlSuffix}${queryParams}`, clickable: true },
                 { text: item.AlbumArtist, url: `${ApiClient._serverAddress}/web/#/details?id=${item.ParentId}&serverId=${ApiClient.serverId()}`, clickable: true },
-                { text: item.Name, url: null, clickable: true, popover: true }
+                { text: item.Name, url: null, clickable: true, popover: true },
+                { text: 'All Songs', url: null, clickable: true, popover: true }
+            ];
+        } else if (item.Type === 'Audio') {
+            // Get album details for the album name and artist info
+            const albumDetails = await getItemDetails(item.ParentId);
+            const albumName = albumDetails ? albumDetails.Name : 'Unknown Album';
+            const artistName = albumDetails ? albumDetails.AlbumArtist : 'Unknown Artist';
+            const artistId = albumDetails ? albumDetails.ParentId : null;
+            
+            structure.elements = [
+                { text: 'Music', url: `#/music${urlSuffix}${queryParams}`, clickable: true },
+                { text: artistName, url: artistId ? `${ApiClient._serverAddress}/web/#/details?id=${artistId}&serverId=${ApiClient.serverId()}` : null, clickable: !!artistId },
+                { text: albumName, url: null, clickable: true, popover: true },
+                { text: item.Name, url: null, clickable: false }
             ];
         }
         
@@ -155,9 +195,10 @@
                 const needsPopoverUpdate = targetElement.popover && (
                     existingText !== targetElement.text || 
                     existingClickable !== targetClickable ||
-                    // Force update for "All Seasons" and "All Albums" elements since the underlying data changes
+                    // Force update for "All Seasons", "All Albums", and "All Songs" elements since the underlying data changes
                     targetElement.text === 'All Seasons' ||
-                    targetElement.text === 'All Albums'
+                    targetElement.text === 'All Albums' ||
+                    targetElement.text === 'All Songs'
                 );
                 
                 if (existingText !== targetElement.text || existingClickable !== targetClickable || needsPopoverUpdate) {
@@ -305,6 +346,16 @@
                 });
                 showPopover(element, popover);
             });
+        } else if (elementDef.text === 'All Songs') {
+            // Music Album page - always show popover
+            const songs = await getSongsIfNeeded(item.Id);
+            element.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const popover = createPopover(songs, null, (selectedSong) => {
+                    window.location.href = `${ApiClient._serverAddress}/web/#/details?id=${selectedSong.Id}&serverId=${ApiClient.serverId()}`;
+                });
+                showPopover(element, popover);
+            });
         } else if (item.Type === 'Season') {
             // Season page - check if single season
             const seasons = await getSeasonsIfNeeded(item.ParentId);
@@ -337,8 +388,19 @@
                 });
             }
         } else if (item.Type === 'MusicAlbum') {
-            // Music album page - check if single album
-            const albums = await getAlbumsIfNeeded(item.ParentId);
+            // Music album page - clicking album name should show albums from all AlbumArtists
+            // Prefer AlbumArtists on the item, fall back to fetching details
+            let albumArtists = item.AlbumArtists;
+            if (!albumArtists || !Array.isArray(albumArtists) || albumArtists.length === 0) {
+                const albumDetails = await getItemDetails(item.Id);
+                albumArtists = (albumDetails && albumDetails.AlbumArtists) ? albumDetails.AlbumArtists : [];
+            }
+
+            const artistIds = (albumArtists || []).map(a => a.Id).filter(Boolean);
+            const albums = artistIds.length > 0
+                ? await getAlbumsByArtistIds(artistIds)
+                : await getAlbumsIfNeeded(item.ParentId);
+
             if (albums.length === 1) {
                 element.addEventListener('click', () => {
                     window.location.href = `${ApiClient._serverAddress}/web/#/details?id=${albums[0].Id}&serverId=${ApiClient.serverId()}`;
@@ -347,6 +409,29 @@
                 element.addEventListener('click', (e) => {
                     e.stopPropagation();
                     const popover = createPopover(albums, item, (selectedAlbum) => {
+                        window.location.href = `${ApiClient._serverAddress}/web/#/details?id=${selectedAlbum.Id}&serverId=${ApiClient.serverId()}`;
+                    });
+                    showPopover(element, popover);
+                });
+            }
+        } else if (item.Type === 'Audio') {
+            // Audio (Song) page - clicking album name should show albums from all AlbumArtists of the album
+            const albumDetails = await getItemDetails(item.ParentId);
+            const albumArtists = (albumDetails && albumDetails.AlbumArtists) ? albumDetails.AlbumArtists : [];
+            const artistIds = albumArtists.map(a => a.Id).filter(Boolean);
+            const albums = artistIds.length > 0
+                ? await getAlbumsByArtistIds(artistIds)
+                : await getAlbumsIfNeeded(albumDetails ? albumDetails.ParentId : null);
+
+            if (albums && albums.length === 1) {
+                element.addEventListener('click', () => {
+                    window.location.href = `${ApiClient._serverAddress}/web/#/details?id=${albums[0].Id}&serverId=${ApiClient.serverId()}`;
+                });
+            } else {
+                element.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const currentAlbum = albumDetails || null;
+                    const popover = createPopover(albums || [], currentAlbum, (selectedAlbum) => {
                         window.location.href = `${ApiClient._serverAddress}/web/#/details?id=${selectedAlbum.Id}&serverId=${ApiClient.serverId()}`;
                     });
                     showPopover(element, popover);
@@ -481,7 +566,16 @@
                 selectedItemElement = itemElement; // Store reference to selected item
             }
             
-            itemElement.textContent = item.Name || `Season ${item.IndexNumber}`;
+            // Format display text based on item type
+            let displayText = item.Name;
+            if (item.Type === 'Season' || item.Type === 'Episode') {
+                displayText = item.Name || `Season ${item.IndexNumber}`;
+            } else if (item.Type === 'Audio') {
+                // For songs, show track number if available
+                displayText = item.IndexNumber ? `${padNumber(item.IndexNumber)}. ${item.Name}` : item.Name;
+            }
+            
+            itemElement.textContent = displayText;
             itemElement.addEventListener('click', () => {
                 log('Popover item clicked:', item.Name);
                 onItemClick(item);
@@ -560,7 +654,7 @@
             log('Retrieved item details:', response.Name, response.Type);
             return response;
         } catch (err) {
-            error('Failed to get item details:', err);
+            console.error('Failed to get item details:', err);
             return null;
         }
     }
@@ -602,6 +696,59 @@
         }
     }
     
+    async function getAlbumsByArtistIds(artistIds) {
+        try {
+            const idsParam = Array.isArray(artistIds) ? artistIds.join(',') : String(artistIds || '');
+            const url = ApiClient.getUrl('Items', {
+                SortOrder: 'Descending',
+                IncludeItemTypes: 'MusicAlbum',
+                Recursive: true,
+                Fields: 'ParentId',
+                Limit: 200,
+                StartIndex: 0,
+                CollapseBoxSetItems: false,
+                AlbumArtistIds: idsParam,
+                SortBy: 'PremiereDate,ProductionYear,Sortname'
+            });
+            const response = await ApiClient.getJSON(url);
+            const items = response.Items || [];
+            // Deduplicate by Id when multiple artists overlap
+            const unique = [];
+            const seen = new Set();
+            for (const it of items) {
+                if (it && it.Id && !seen.has(it.Id)) {
+                    seen.add(it.Id);
+                    unique.push(it);
+                }
+            }
+            log('Retrieved albums by artist IDs:', unique.length);
+            return unique;
+        } catch (err) {
+            error('Failed to get albums by artist IDs:', err);
+            return [];
+        }
+    }
+    
+    async function getSongs(albumId) {
+        try {
+            const url = ApiClient.getUrl('Items', {
+                ParentId: albumId,
+                IncludeItemTypes: 'Audio',
+                Recursive: false,
+                Fields: 'ParentId',
+                Limit: 100,
+                StartIndex: 0,
+                SortBy: 'IndexNumber,SortName'
+            });
+            const response = await ApiClient.getJSON(url);
+            log('Retrieved songs:', response.Items?.length || 0);
+            return response.Items || [];
+        } catch (err) {
+            error('Failed to get songs:', err);
+            return [];
+        }
+    }
+    
     function createSeparator() {
         const separator = document.createElement('span');
         separator.className = 'kefinTweaks-breadcrumb-separator';
@@ -612,7 +759,7 @@
     
     // Page change handler
     // Simplified page change handler
-    async function handlePageChange() {
+    async function handlePageChange(item = null) {
         try {
             // Close any active popovers first
             closePopover();
@@ -627,20 +774,18 @@
                 hideBreadcrumbs();
                 return;
             }
-            
-            // Extract item ID
-            const itemId = getItemIdFromPath(currentPath);
-            if (!itemId) {
-                log('No item ID found in path, hiding and clearing breadcrumbs');
+
+            // Check if the user is logged in
+            if (!ApiClient._loggedIn) {
+                log('User is not logged in, hiding and clearing breadcrumbs');
                 clearBreadcrumbs();
                 hideBreadcrumbs();
                 return;
             }
             
-            // Get item details
-            const item = await getItemDetails(itemId);
-            if (!item) {
-                log('Failed to get item details, hiding and clearing breadcrumbs');
+            // Extract item ID
+            if (!item || !item.Id) {
+                log('No item ID found, hiding and clearing breadcrumbs');
                 clearBreadcrumbs();
                 hideBreadcrumbs();
                 return;
@@ -733,10 +878,12 @@
             log('Registering breadcrumb handler with KefinTweaksUtils');
             
             // Register handler for all pages (breadcrumbs can appear on any detail page)
-            window.KefinTweaksUtils.onViewPage((view, element) => {
+            window.KefinTweaksUtils.onViewPage(async (view, element, itemPromise) => {
                 try {
+                    // Await the item promise to get the actual item data
+                    const item = await itemPromise;
                     // Run our custom code
-                    handlePageChange();
+                    handlePageChange(item);
                 } catch (err) {
                     error('Breadcrumb page change handler failed:', err);
                 }

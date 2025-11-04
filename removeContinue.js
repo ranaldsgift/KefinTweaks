@@ -9,9 +9,9 @@
 (function() {
     'use strict';
     
-    const LOG = (...args) => console.log('[RemoveContinue]', ...args);
-    const WARN = (...args) => console.warn('[RemoveContinue]', ...args);
-    const ERROR = (...args) => console.error('[RemoveContinue]', ...args);
+    const LOG = (...args) => console.log('[KefinTweaks RemoveContinue]', ...args);
+    const WARN = (...args) => console.warn('[KefinTweaks RemoveContinue]', ...args);
+    const ERROR = (...args) => console.error('[KefinTweaks RemoveContinue]', ...args);
     
     LOG('Initializing...');
 

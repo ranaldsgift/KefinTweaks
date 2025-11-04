@@ -6,9 +6,9 @@
     'use strict';
     
     // Common logging function
-    const LOG = (...args) => console.log('[LocalStorageCache]', ...args);
-    const WARN = (...args) => console.warn('[LocalStorageCache]', ...args);
-    const ERR = (...args) => console.error('[LocalStorageCache]', ...args);
+    const LOG = (...args) => console.log('[KefinTweaks LocalStorageCache]', ...args);
+    const WARN = (...args) => console.warn('[KefinTweaks LocalStorageCache]', ...args);
+    const ERR = (...args) => console.error('[KefinTweaks LocalStorageCache]', ...args);
     
     // Generic localStorage cache manager with chunked storage support
     class LocalStorageCache {

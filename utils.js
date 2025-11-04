@@ -48,6 +48,12 @@
     // Array to store registered handlers
     const handlers = [];
     
+    // Cache item per page view to avoid multiple fetches
+    let cachedItem = null;
+    let cachedItemId = null;
+    let fetchInProgress = null; // Track the promise of an in-progress fetch
+    let fetchItemId = null; // Track which item ID is currently being fetched
+    
     /**
      * Register a callback to be called when page view changes
      * @param {Function} callback - Function to call when page view changes
@@ -76,7 +82,9 @@
             const currentView = getCurrentView();
             if (currentView && shouldCallHandler(handlerConfig, currentView)) {
                 try {
-                    callback(currentView, document);
+                    // Pass the promise (not awaited) for consistency with notifyHandlers
+                    const itemPromise = getCurrentItem();
+                    callback(currentView, document, itemPromise);
                 } catch (err) {
                     ERR('Error in immediate handler call:', err);
                 }
@@ -94,15 +102,105 @@
     }
     
     /**
+     * Get item ID from URL parameters
+     * Works with both hash-based routing and traditional query strings
+     * @returns {string|null} Item ID or null if not found
+     */
+    function getItemIdFromUrl() {
+        try {
+            const match = window.location.href.match(/[\?&]id=([^&]+)/);
+            return match ? match[1] : null;
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * Fetch item by ID
+     * @param {string} itemId - The item ID
+     * @returns {Promise<Object|null>} The item object or null if not found
+     */
+    async function fetchItemById(itemId) {
+        if (!itemId || !window.ApiClient || !window.ApiClient.getItem || !window.ApiClient.getCurrentUserId) {
+            return null;
+        }
+
+        try {
+            const userId = window.ApiClient.getCurrentUserId();
+            const item = await window.ApiClient.getItem(userId, itemId);
+            return item;
+        } catch (error) {
+            WARN('Error fetching item:', error);
+            return null;
+        }
+    }
+    
+    /**
+     * Get current item from URL, using cache if available
+     * @returns {Promise<Object|null>} The item object or null if not found
+     */
+    async function getCurrentItem() {
+        const itemId = getItemIdFromUrl();
+        
+        // If no item ID, return null
+        if (!itemId) {
+            return null;
+        }
+        
+        // If we have a cached item for this ID, return it
+        if (cachedItem && cachedItemId === itemId) {
+            return cachedItem;
+        }
+        
+        // If a fetch is already in progress for this item, wait for it
+        if (fetchInProgress && fetchItemId === itemId) {
+            return await fetchInProgress;
+        }
+        
+        // Start a new fetch and store the promise
+        fetchItemId = itemId;
+        fetchInProgress = (async () => {
+            try {
+                const item = await fetchItemById(itemId);
+                cachedItem = item;
+                cachedItemId = itemId;
+                return item;
+            } finally {
+                // Clear the in-progress flag when done (only if still for this item)
+                if (fetchItemId === itemId) {
+                    fetchInProgress = null;
+                    fetchItemId = null;
+                }
+            }
+        })();
+        
+        return await fetchInProgress;
+    }
+
+    /**
      * Notify all registered handlers of a view change
      * @param {string} view - The view name
      * @param {Element} element - The view element
      */
     function notifyHandlers(view, element) {
+        // Clear cache when view changes to ensure fresh data
+        const currentItemId = getItemIdFromUrl();
+        if (cachedItemId !== currentItemId) {
+            cachedItem = null;
+            cachedItemId = null;
+            fetchInProgress = null; // Clear any in-progress fetch for previous item
+            fetchItemId = null;
+        }
+        
+        // Get the item promise once - will be shared across all handlers
+        // The promise is cached/fetched by getCurrentItem(), ensuring only one API call
+        const itemPromise = getCurrentItem();
+
         handlers.forEach((config) => {
             if (shouldCallHandler(config, view)) {
                 try {
-                    config.callback(view, element);
+                    // Pass the promise as third parameter - handlers can await if needed
+                    config.callback(view, element, itemPromise);
                 } catch (err) {
                     ERR('Error in onViewPage handler:', err);
                 }

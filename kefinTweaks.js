@@ -2,7 +2,9 @@
 // Copy this entire file into your Jellyfin JS injector plugin
 // Modify the configuration below to enable/disable features and customize settings
 //
-// VERSION: 1.0.0 - Compatible with Jellyfin 10.10.7
+// VERSION: 0.2.0 
+// Full compatibility with Jellyfin 10.10.7
+// Untested compatibility with Jellyfin 10.11+
 // 
 // FEATURES OVERVIEW:
 // =================
@@ -10,7 +12,6 @@
 //
 // PREREQUISITES:
 // ============
-// - Jellyfin 10.10.7
 // - JS Injector plugin https://github.com/n00bcodr/Jellyfin-JavaScript-Injector
 // - Custom Tabs plugin for watchlist functionality https://github.com/IAmParadox27/jellyfin-plugin-custom-tabs
 // - JellyfinEnhanced plugin for Jellyseerr search functionality and ExclusiveElsewhere https://github.com/n00bcodr/Jellyfin-Enhanced
@@ -59,16 +60,21 @@
             // Major feature enhancements
             homeScreen: true,         // Custom home screen sections and discovery engine
             search: true,             // Enhanced search with better UI and Jellyseerr integration
-            // REQUIRES: Watchlist requires Custom Tabs plugin https://github.com/IAmParadox27/jellyfin-plugin-custom-tabs
+            // REQUIREMENTS: Watchlist requires Custom Tabs plugin https://github.com/IAmParadox27/jellyfin-plugin-custom-tabs
             watchlist: true,          // Complete watchlist management with progress tracking
             
             // UI and navigation improvements
             headerTabs: true,         // Improved header tab functionality and behavior
             customMenuLinks: true,    // Load and add custom menu links from configuration
             breadcrumbs: true,        // Breadcrumb navigation for Movies, Series, Seasons, Episodes, Music
+            playlist: true,           // Enhanced playlist view with better navigation
+            itemDetailsCollections: true, // Shows collections on item details pages (Included In section)
+            flattenSingleSeasonShows: true, // Flattens single-season shows to display episodes directly on series page
             
+            // Reviews and recommendations
+            // updoot: false,             // This is unsupported for now but will be worked on in the future
+
             // Branding and external integrations
-            updoot: false,             // EXPERIMENTAL: Integration with Jellyfin Updoot upvote functionality - Needs more work
             // REQUIRES: ExclusiveElsewhere requires JellyfinEnhanced plugin https://github.com/n00bcodr/Jellyfin-Enhanced
             exclusiveElsewhere: false, // Custom branding when items aren't available on streaming services
             
@@ -77,13 +83,12 @@
             dashboardButtonFix: true, // Proper back button behavior on dashboard
             infiniteScroll: true,     // Smooth infinite scrolling. Supports Movie and TV libraries. Music to be added in the future.
             
-            // Playback and media enhancements
+            // Quality of life improvements
             removeContinue: true,     // Add "Remove from Continue Watching" functionality
             subtitleSearch: true,     // Search and download subtitles directly from video OSD
-            playlist: true,           // Enhanced playlist view with better navigation
             
             // UI customization
-            skinManager: true         // Skin selection and management for display preferences
+            skinManager: true         // Skin selection and management - adds skin dropdown to header and display preferences
         },
         
         // ============================================================================
@@ -113,6 +118,7 @@
             enableInfiniteScroll: false,   // Use infinite scroll vs Load More button
             minPeopleAppearances: 10,     // Minimum movie appearances for people to be featured
             minGenreMovieCount: 50,      // Minimum movie count for genres to be included
+            minimumShowsForNetwork: 5,    // Minimum show count for TV networks to be featured
 
             // WATCHLIST SECTION
             // Requires watchlist script to be enabled
@@ -202,7 +208,7 @@
         
         // Default skin to use when no skin is selected
         // This overrides the default selection from userConfig.js
-        defaultSkin: null, // Set to skin name (e.g., 'Dark Theme') or null to use userConfig default
+        defaultSkin: null, // Set to skin name (e.g., 'ElegantFin') or null to use userConfig default
         
         
         // ============================================================================
@@ -260,12 +266,12 @@
     // ============================================================================
     // Load the injector script which handles loading individual scripts based on configuration
     const script = document.createElement("script");
-    script.src = `${KEFIN_TWEAKS_CONFIG.scriptRoot}injector.js`;
+    script.src = `${KEFIN_TWEAKS_CONFIG.scriptRoot}injector.js?v=${new Date().getTime()}`;
     script.async = true;
     document.head.appendChild(script);
     
     console.log('[KefinTweaks] Central configuration loaded. Available at window.KefinTweaksConfig');
-    console.log('[KefinTweaks] Version 1.0.0 - Compatible with Jellyfin 10.10.7');
+    console.log('[KefinTweaks] Version 0.2.0 - Compatible with Jellyfin 10.10.7');
     
 })();
 

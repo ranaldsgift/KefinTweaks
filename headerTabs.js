@@ -6,9 +6,9 @@
     'use strict';
     
     // Common logging function
-    const LOG = (...args) => console.log('[HeaderTabs]', ...args);
-    const WARN = (...args) => console.warn('[HeaderTabs]', ...args);
-    const ERR = (...args) => console.error('[HeaderTabs]', ...args);
+    const LOG = (...args) => console.log('[KefinTweaks HeaderTabs]', ...args);
+    const WARN = (...args) => console.warn('[KefinTweaks HeaderTabs]', ...args);
+    const ERR = (...args) => console.error('[KefinTweaks HeaderTabs]', ...args);
     
     LOG('Initializing...');
     

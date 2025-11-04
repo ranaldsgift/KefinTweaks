@@ -1,14 +1,15 @@
 // Custom Menu Links Script
 // Loads custom menu links from configuration and adds them to the custom menu
 // Uses utils.addCustomMenuLink to add each configured link
+// Requires: utils.js module to be loaded before this script
 
 (function() {
     'use strict';
     
     // Common logging function
-    const LOG = (...args) => console.log('[CustomMenuLinks]', ...args);
-    const WARN = (...args) => console.warn('[CustomMenuLinks]', ...args);
-    const ERR = (...args) => console.error('[CustomMenuLinks]', ...args);
+    const LOG = (...args) => console.log('[KefinTweaks CustomMenuLinks]', ...args);
+    const WARN = (...args) => console.warn('[KefinTweaks CustomMenuLinks]', ...args);
+    const ERR = (...args) => console.error('[KefinTweaks CustomMenuLinks]', ...args);
     
     LOG('Script loaded - JS Injector mode');
     

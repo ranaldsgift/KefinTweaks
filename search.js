@@ -1,9 +1,12 @@
-// Jellyfin Smart Search - Dual Input + Persistent Toggle + Query Copy
+// KefinTweaks Enhanced Search
+// Enhanced search functionality with better UI and Jellyseerr integration
+// Requires: cardBuilder.js, utils.js modules to be loaded before this script
+
 (function() {
     'use strict';
-    const LOG = (...args) => console.log('[SmartSearch]', ...args);
-    const WARN = (...args) => console.warn('[SmartSearch]', ...args);
-    const ERR = (...args) => console.error('[SmartSearch]', ...args);
+    const LOG = (...args) => console.log('[KefinTweaks Search]', ...args);
+    const WARN = (...args) => console.warn('[KefinTweaks Search]', ...args);
+    const ERR = (...args) => console.error('[KefinTweaks Search]', ...args);
     
     LOG('Initializing...');
 
@@ -11,10 +14,6 @@
     const CONFIG = window.KefinTweaksConfig?.search || {
         enableJellyseerr: false  // Toggle for Jellyseerr integration
     };
-
-    // Track if we should block XHR requests (only for direct URL navigation with query params)
-    let shouldBlockXHR = false;
-    //let hasBlockedInitialSearch = false;
     
     // Override XHR to block automatic search requests from direct URL navigation
     const OriginalXHR = window.XMLHttpRequest;
@@ -25,20 +24,16 @@
         
         xhr.open = function(method, url, ...args) {            
             // Check if this is a search request we want to block
-            // Only block if we're in smart search mode and haven't blocked yet
             const isSearchRequest = url.includes('/Items?') && 
                                   (url.includes('searchTerm=') || url.includes('query='));
+
+            const isSearchPage = window.location.hash.includes('#/search');
             
-            if (isSearchRequest && shouldBlockXHR) {
-                LOG('Blocking initial automatic search XHR request:', url);
-                //hasBlockedInitialSearch = true;
-                // Disable blocking after this first request
-                shouldBlockXHR = false;
-                LOG('XHR blocking disabled after initial search');
+            if (isSearchRequest && isSearchPage) {
+                LOG('Blocking default Jellyfin search request:', url);
                 
                 // Override send to do nothing
                 xhr.send = function() {
-                    LOG('Initial automatic search XHR blocked');
                     // Simulate a successful response
                     setTimeout(() => {
                         xhr.readyState = 4;
@@ -61,30 +56,6 @@
         
         return xhr;
     };
-
-    // Immediate interception for URL queries - run this as early as possible
-    (function() {
-        // Parse query from hash since Jellyfin uses hash-based routing
-        let queryFromUrl = null;
-        if (window.location.hash.includes('#/search') && window.location.hash.includes('query=')) {
-            const hashQuery = window.location.hash.split('query=')[1];
-            if (hashQuery) {
-                queryFromUrl = hashQuery.split('&')[0]; // Get query before any other params
-                queryFromUrl = decodeURIComponent(queryFromUrl).replace(/\+/g, ' ');
-            }
-        }
-        
-        LOG('Early interception - URL query:', queryFromUrl);
-        LOG('Current pathname:', window.location.pathname);
-        LOG('Current hash:', window.location.hash);
-        
-        if (queryFromUrl && window.location.pathname.includes('#/search')) {
-            LOG('URL query detected, enabling XHR blocking for automatic search prevention');
-            shouldBlockXHR = true; // Enable XHR blocking for initial URL query
-        }
-    })();
-
-
 
     // config
     const CORE_TYPES = ['Movie', 'Series', 'Episode', 'Person'];
@@ -199,20 +170,6 @@
         }
     }
 
-    // Show/hide loading spinner
-    function setLoadingSpinner(show) {
-        const spinner = document.querySelector('.docspinner.mdl-spinner');
-        if (spinner) {
-            if (show) {
-                spinner.classList.add('mdlSpinnerActive');
-                LOG('Loading spinner shown');
-            } else {
-                spinner.classList.remove('mdlSpinnerActive');
-                LOG('Loading spinner hidden');
-            }
-        }
-    }
-
     // perform smart search
     async function performSmartSearch(searchTerm, searchType = 'core') {
         LOG('performSmartSearch()', { searchTerm, searchType });
@@ -248,7 +205,7 @@
         }
         
         // Show loading spinner
-        setLoadingSpinner(true);
+        Dashboard.showLoadingMsg();
         
         try {
             const typeGroups = searchType === 'music'
@@ -312,15 +269,13 @@
             // Cache the results
             cacheResults(searchTerm, searchType, results);
             
-            // Hide loading spinner
-            setLoadingSpinner(false);
-            
             return results;
         } catch (e) {
             ERR('performSmartSearch error', e);
-            // Hide loading spinner on error too
-            setLoadingSpinner(false);
             return results;
+        } finally {            
+            // Hide loading spinner
+            Dashboard.hideLoadingMsg()
         }
     }
 
@@ -605,8 +560,8 @@
                 const term = (smartInput.value || '').trim();
                 if (!term) { 
                     const resultsContainer = ensureSmartResultsContainer();
-                    resultsContainer.innerHTML=''; 
-                    setLoadingSpinner(false); // Hide spinner when clearing results
+                    resultsContainer.innerHTML='';
+                    Dashboard.hideLoadingMsg();
                     return; 
                 }
                 if (timer) clearTimeout(timer);

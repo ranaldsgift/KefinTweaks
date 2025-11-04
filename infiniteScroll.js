@@ -1,11 +1,15 @@
+// KefinTweaks Infinite Scroll
+// Adds infinite scrolling to media library pages (Movies, TV, Music)
+// Requires: cardBuilder.js module to be loaded before this script
+
 (function () {    
     const RETRY_ATTEMPTS = 3;
     const RETRY_DELAY = 1000;
     
     // Common logging functions
-    const LOG = (...args) => console.log('[InfiniteScroll]', ...args);
-    const WARN = (...args) => console.warn('[InfiniteScroll]', ...args);
-    const ERR = (...args) => console.error('[InfiniteScroll]', ...args);
+    const LOG = (...args) => console.log('[KefinTweaks InfiniteScroll]', ...args);
+    const WARN = (...args) => console.warn('[KefinTweaks InfiniteScroll]', ...args);
+    const ERR = (...args) => console.error('[KefinTweaks InfiniteScroll]', ...args);
     
     LOG('Initializing...');
     
@@ -383,20 +387,18 @@
         if (!page) return null;
         
         let activeTab = null;
-        if (page === 'tv.html') {
+        if (page === 'tv.html' || page === 'tv') {
             activeTab = document.querySelector("#seriesTab.is-active");
-        } else if (page === 'movies.html') {
+        } else if (page === 'movies.html' || page === 'movies') {
             activeTab = document.querySelector("#moviesTab.is-active");
         }
         
         if (!activeTab) {
-            LOG('No active tab found for page:', page);
             return null;
         }
         
         const container = activeTab.querySelector(".itemsContainer");
         if (!container) {
-            LOG('No itemsContainer found in active tab:', activeTab);
             return null;
         }
         

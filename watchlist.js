@@ -1,6 +1,6 @@
 // Jellyfin Watchlist Script
 // Adds watchlist functionality throughout Jellyfin interface
-// Requires: cardBuilder.js module to be loaded before this script
+// Requires: cardBuilder.js, localStorageCache.js, modal.js, utils.js modules to be loaded before this script
 // Requirement #2: Custom Tabs plugin
 /* 
 In the Custom Tabs plugin, add a new tab with the following HTML content:
@@ -13,9 +13,9 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
     'use strict';
     
     // Common logging function
-    const LOG = (...args) => console.log('[Watchlist]', ...args);
-    const WARN = (...args) => console.warn('[Watchlist]', ...args);
-    const ERR = (...args) => console.error('[Watchlist]', ...args);
+    const LOG = (...args) => console.log('[KefinTweaks Watchlist]', ...args);
+    const WARN = (...args) => console.warn('[KefinTweaks Watchlist]', ...args);
+    const ERR = (...args) => console.error('[KefinTweaks Watchlist]', ...args);
     
     LOG('Initializing...');
 	
@@ -3331,6 +3331,18 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 						LOG('Hidden watchlist button on item detail page of watched item');
 					}
 				}
+
+				// Check for any cards on the page for the item that was just watched and hide the watchlist button if found
+				const itemCards = document.querySelectorAll('.card[data-id="' + itemId + '"]');
+				if (itemCards.length > 0) {
+					for (const card of itemCards) {
+						const watchlistIcon = card.querySelector('.watchlist-button');
+						if (watchlistIcon) {
+							watchlistIcon.dataset.active = "false";
+							LOG('Hidden watchlist button on card for watched item');
+						}
+					}
+				}
 				
 				LOG('Successfully removed played item from watchlist and updated caches:', item.Name);
 			} else {
@@ -3360,7 +3372,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 					}
 				}
 
-				// Hide the watchlist button if we are on the item detail page of the item that was just watched
+				// Unhide the watchlist button if we are on the item detail page of the item that was just watched
 				const watchlistIcon = document.querySelector('.itemDetailPage:not(.hide) .watchlist-icon');
 				if (watchlistIcon) {
 					watchlistIcon.style.display = "block";
@@ -4955,7 +4967,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		
 		// Use cardBuilder to create scrollable container
 		if (typeof window.cardBuilder !== 'undefined' && window.cardBuilder.renderCards) {
-			const scrollableContainer = window.cardBuilder.renderCards(items, getTypeDisplayName(type));
+			const scrollableContainer = window.cardBuilder.renderCards(items, getTypeDisplayName(type), null);
 			container.innerHTML = '';
 			container.appendChild(scrollableContainer);
 			
@@ -4968,53 +4980,6 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		
 		return { type, itemCount: items.length };
 	}
-
-	async function renderCards(container, type) {
-		if (!container) {
-			WARN("Container not found for type:", type);
-			return { type, itemCount: 0 };
-		}
-		const items = await fetchLikedItems(type);
-		
-		// Hide section if no items
-		if (!items || items.length === 0) {
-			container.style.display = 'none';
-			return { type, itemCount: 0 };
-		}
-		
-		// Sort items by release date descending (newest first)
-		const sortedItems = items.sort((a, b) => {
-			const dateA = new Date(a.PremiereDate || a.ProductionYear || 0);
-			const dateB = new Date(b.PremiereDate || b.ProductionYear || 0);
-			return dateB - dateA; // Descending order (newest first)
-		});
-		
-		// Check if content has changed by comparing data-ids
-		if (compareDataIds(container, sortedItems)) {
-			LOG(`Skipping ${type} render - content unchanged (${sortedItems.length} items)`);
-			container.style.display = '';
-			return { type, itemCount: sortedItems.length };
-		}
-		
-		// Show section and use cardBuilder to create scrollable container
-		container.style.display = '';
-		
-		// Use cardBuilder to create scrollable container
-		if (typeof window.cardBuilder !== 'undefined' && window.cardBuilder.renderCards) {
-			const scrollableContainer = window.cardBuilder.renderCards(sortedItems, getTypeDisplayName(type));
-			container.innerHTML = '';
-			container.appendChild(scrollableContainer);
-			
-			LOG(`Rendered ${sortedItems.length} ${type} items using cardBuilder (sorted by release date)`);
-		} else {
-			ERR("cardBuilder not available - this should not happen with proper dependency management");
-			container.style.display = 'none';
-			return { type, itemCount: 0 };
-		}
-		
-		return { type, itemCount: sortedItems.length };
-	}
-
 
 	function getTypeDisplayName(itemType) {
 		const typeMap = {
@@ -5755,28 +5720,33 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		
 		watchlistButton.appendChild(watchlistIcon);
 		
-	// Add click event listener
-	watchlistButton.addEventListener('click', async (e) => {
-		e.preventDefault();
-		e.stopPropagation();
-		
-		// Toggle watchlist status
-		const newRating = watchlistButton.dataset.active === 'false' ? 'true' : 'false';
-		await ApiClient.updateUserItemRating(ApiClient.getCurrentUserId(), itemId, newRating);
-		watchlistButton.dataset.active = newRating;
-		
-		// Update icon and title based on state
-		const isActive = watchlistButton.dataset.active === 'true';
-		// Icon state is handled by CSS class, no need to change textContent
-		watchlistButton.title = isActive ? 'Remove from Watchlist' : 'Add to Watchlist';
-		
-		// Update watchlist cache immediately
-		await updateWatchlistCacheOnToggle(itemId, itemType, isActive);
-	});
+		// Add click event listener
+		watchlistButton.addEventListener('click', async (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			
+			// Toggle watchlist status
+			const newRating = watchlistButton.dataset.active === 'false' ? 'true' : 'false';
+			await ApiClient.updateUserItemRating(ApiClient.getCurrentUserId(), itemId, newRating);
+			watchlistButton.dataset.active = newRating;
+			
+			// Update icon and title based on state
+			const isActive = watchlistButton.dataset.active === 'true';
+			// Icon state is handled by CSS class, no need to change textContent
+			watchlistButton.title = isActive ? 'Remove from Watchlist' : 'Add to Watchlist';
+			
+			// Update watchlist cache immediately
+			await updateWatchlistCacheOnToggle(itemId, itemType, isActive);
+		});
 		
 		// Check if item type is supported for watchlist
 		if (itemType !== "Movie" && itemType !== "Series" && itemType !== "Season" && itemType !== "Episode") {
 			LOG('Item type not supported for watchlist:', itemType);
+			return;
+		}
+
+        if (!ApiClient._loggedIn) {
+			LOG('User is not logged in, skipping watchlist button');
 			return;
 		}
 		
@@ -5788,6 +5758,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				watchlistButton.title = 'Remove from Watchlist';
 			}
 		}).catch(err => {
+			console.log(card);
 			ERR('Error fetching item data for watchlist button:', err);
 		});
 		
@@ -5855,7 +5826,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	/************ Item Detail Page Observer ************/
 
 	// Function to add watchlist button to item detail page
-	function addDetailPageWatchlistButton() {
+	function addDetailPageWatchlistButton(item = null) {
 		const trailerButton = document.querySelector('.itemDetailPage:not(.hide) .btnPlayTrailer');
 		
 		if (!trailerButton) {
@@ -5905,71 +5876,89 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			}
 		});	
 		
-		// Get item data to check if it should be shown and current state
-		ApiClient.getItem(ApiClient.getCurrentUserId(), itemId).then((item) => {
-			// Only show for Movies, Series, Seasons, and Episodes
-			if (item.Type !== "Movie" && item.Type !== "Series" && item.Type !== "Season" && item.Type !== "Episode") {
-				watchlistIcon.style.display = "none";
-			}
-
-			if (item.UserData && item.UserData.Played) {
-				watchlistIcon.style.display = "none";
-			}
-			
+		if (item) {
 			// Set initial state based on current watchlist status
 			if (item.UserData && item.UserData.Likes) {
 				watchlistIcon.dataset.active = 'true';
 				watchlistIcon.title = 'Remove from Watchlist';
 			}
-		}).catch(err => {
-			ERR('Error fetching item data:', err);
-		});
-		
+		} else {
+			// Get item data to check if it should be shown and current state
+			ApiClient.getItem(ApiClient.getCurrentUserId(), itemId).then((item) => {
+				// Only show for Movies, Series, Seasons, and Episodes
+				if (item.Type !== "Movie" && item.Type !== "Series" && item.Type !== "Season" && item.Type !== "Episode") {
+					watchlistIcon.style.display = "none";
+				}
+
+				if (item.UserData && item.UserData.Played) {
+					watchlistIcon.style.display = "none";
+				}
+				
+				// Set initial state based on current watchlist status
+				if (item.UserData && item.UserData.Likes) {
+					watchlistIcon.dataset.active = 'true';
+					watchlistIcon.title = 'Remove from Watchlist';
+				}
+			}).catch(err => {
+				ERR('Error fetching item data:', err);
+			});
+		}
+
 		// Add button after trailer button
 		trailerButton.after(watchlistIcon);
 	}
 
-	// Function to monitor item detail pages
-	function monitorItemDetailPage() {
-		const observer = new MutationObserver(() => {
-			const visibleItemDetailPage = document.querySelector('.itemDetailPage:not(.hide)');
-			if (!visibleItemDetailPage) {
-				return;
-			}
+	// Function to monitor item detail pages using onViewPage
+	function initializeItemDetailPageHandler() {
+		if (!window.KefinTweaksUtils || !window.KefinTweaksUtils.onViewPage) {
+			WARN('KefinTweaksUtils.onViewPage not available, retrying in 1 second');
+			setTimeout(initializeItemDetailPageHandler, 1000);
+			return;
+		}
+
+		LOG('Registering item detail page handler with KefinTweaksUtils');
+
+		window.KefinTweaksUtils.onViewPage(async (view, element, itemPromise) => {
+			// Await the item promise to get the actual item data
+			const item = await itemPromise;
 			
-			// Check if watchlist button already exists
-			const existingButton = document.querySelector('.itemDetailPage:not(.hide) .watchlist-icon');
-			if (existingButton) {
-				return;
-			}
-			
-			// Get item ID from URL to check type before adding button
-			const itemId = window.location.href.substring(window.location.href.indexOf("id=") + 3, window.location.href.indexOf("id=") + 35);
-			if (!itemId) {
-				return;
-			}
-			
-			// Check if item type is supported for watchlist
-			ApiClient.getItem(ApiClient.getCurrentUserId(), itemId).then((item) => {
-				if (item.Type === "Movie" || item.Type === "Series" || item.Type === "Season" || item.Type === "Episode") {
-					addDetailPageWatchlistButton();
+			// Small delay to ensure details DOM is ready
+			setTimeout(() => {
+				const visibleItemDetailPage = document.querySelector('.itemDetailPage:not(.hide)');
+				if (!visibleItemDetailPage) {
+					return;
 				}
-			}).catch(err => {
-				ERR('Error fetching item data for detail page type check:', err);
-			});
+
+				if (visibleItemDetailPage.dataset.watchlistButtonAdded === 'true') {
+					return;
+				}
+				
+				// Check if watchlist button already exists
+				const existingButton = document.querySelector('.itemDetailPage:not(.hide) .watchlist-icon');
+				if (existingButton) {
+					return;
+				}
+
+				// Check if item is provided and if item type is supported for watchlist
+				if (item && (item.Type === "Movie" || item.Type === "Series" || item.Type === "Season" || item.Type === "Episode")) {
+					visibleItemDetailPage.dataset.watchlistButtonAdded = 'true';
+					addDetailPageWatchlistButton(item);
+				}
+			}, 100);
+		}, {
+			immediate: true,
+			pages: ['details']
 		});
 
-		// Start observing the entire document body
-		observer.observe(document.body, {
-			childList: true,
-			subtree: true,
-			attributes: true,
-			attributeFilter: ['class']
-		});
+		LOG('Item detail page handler initialized via KefinTweaksUtils');
 	}
 
-	// Initialize the item detail page observer
-	monitorItemDetailPage();
+	// Initialize the item detail page handler
+	if (document.readyState === 'loading') {
+		document.addEventListener('DOMContentLoaded', initializeItemDetailPageHandler);
+	} else {
+		initializeItemDetailPageHandler();
+	}
 
 	// Function to add watchlist button to a slide
 	function addSlideWatchlistButton(slide) {

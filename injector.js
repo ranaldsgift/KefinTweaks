@@ -6,6 +6,7 @@
     'use strict';
 
     console.log('[KefinTweaks Injector] Initializing...');
+    const versionNumber = "0.2.0";
     
     // Configuration: Start with defaults, then merge user config
     // This allows new scripts to work out of the box without requiring config updates
@@ -24,6 +25,8 @@
         removeContinue: true,     // Remove from continue watching functionality
         subtitleSearch: true,     // Subtitle search functionality
         playlist: true,           // Playlist view page modifications
+        itemDetailsCollections: true, // Add related collections to item details pages
+        flattenSingleSeasonShows: true, // Flatten series with only 1 season to show episodes directly
         skinManager: true,        // Skin selection and management
         
         // Note: Core functionality scripts (utils, cardBuilder, localStorageCache, modal) 
@@ -52,7 +55,7 @@
         {
             name: 'skinManager',
             script: 'skinManager.js',
-            css: null,
+            css: 'defaultSkin.css',
             dependencies: ['utils', 'userConfig'],
             description: 'Adds skin selection dropdown to display preferences page and manages skin CSS loading'
         },
@@ -71,11 +74,25 @@
             description: 'localStorage-based caching layer with 24-hour TTL and manual refresh'
         },
         {
+            name: 'indexedDBCache',
+            script: 'indexedDBCache.js',
+            css: null,
+            dependencies: [],
+            description: 'IndexedDB-based caching layer for large datasets with TTL support'
+        },
+        {
             name: 'modal',
             script: 'modal.js',
             css: null,
             dependencies: [],
             description: 'Generic modal system for Jellyfin-style dialogs'
+        },
+        {
+            name: 'toaster',
+            script: 'toaster.js',
+            css: null,
+            dependencies: [],
+            description: 'Toast notification system using Jellyfin\'s existing toast functionality'
         },
         {
             name: 'watchlist',
@@ -158,7 +175,7 @@
             name: 'subtitleSearch',
             script: 'subtitleSearch.js',
             css: 'subtitleSearch.css',
-            dependencies: [],
+            dependencies: ['toaster'],
             description: 'Adds subtitle search functionality to the video OSD, allowing users to search and download subtitles from remote sources'
         },
         {
@@ -175,8 +192,124 @@
             dependencies: ['cardBuilder', 'utils'],
             description: 'Modifies playlist view page behavior to navigate to item details instead of playing, and adds play button to playlist items'
         },
+        {
+            name: 'itemDetailsCollections',
+            script: 'itemDetailsCollections.js',
+            css: null,
+            dependencies: ['indexedDBCache', 'utils', 'cardBuilder'],
+            description: 'Adds related collections to item details pages showing which collections contain the current item'
+        },
+        {
+            name: 'flattenSingleSeasonShows',
+            script: 'flattenSingleSeasonShows.js',
+            css: null,
+            dependencies: ['cardBuilder', 'utils'],
+            description: 'Flattens series with only 1 season to show episodes directly on the series details page'
+        },
     ];
+
+    // Use this for development
+    //const urlSuffix = '';
+    const urlSuffix = `?v=${new Date().getTime()}`;
     
+    // Fetch version date from GitHub releases API
+    async function fetchVersionDate(version) {
+        try {
+            const response = await fetch(`https://api.github.com/repos/ranaldsgift/KefinTweaks/releases/tags/v${version}`);
+            if (!response.ok) {
+                // Try latest release if tag doesn't exist
+                const latestResponse = await fetch(`https://api.github.com/repos/ranaldsgift/KefinTweaks/releases/latest`);
+                if (!latestResponse.ok) throw new Error('Failed to fetch release data');
+                const data = await latestResponse.json();
+                return new Date(data.published_at);
+            }
+            const data = await response.json();
+            return new Date(data.published_at);
+        } catch (error) {
+            console.warn('[KefinTweaks Injector] Failed to fetch version date from GitHub:', error);
+            return null;
+        }
+    }
+
+    // Inject dashboard drawer version badge CSS using dynamic version number
+    function injectVersionBadgeCSS() {
+        const styleId = 'kefinTweaks-version-css';
+        if (document.getElementById(styleId)) return;
+        const style = document.createElement('style');
+        style.id = styleId;
+        style.textContent = `
+body:not(:has(.libraryPage:not(.hide))) .MuiPaper-root.MuiDrawer-paperAnchorLeft {
+    position: relative;
+}
+
+body:not(:has(.libraryPage:not(.hide))) .MuiPaper-root.MuiDrawer-paperAnchorLeft::after {
+    content: 'KefinTweaks v${versionNumber}';
+    font-style: italic;
+    text-align: center;
+    margin-top: 10px;
+    color: #b7b7b7;
+    font-size: 0.9em;
+    display: block;
+    cursor: help;
+}
+
+body:not(:has(.libraryPage:not(.hide))) .MuiPaper-root.MuiDrawer-paperAnchorLeft::before {
+    content: attr(data-version-date);
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%) translateY(-100%);
+    background-color: rgba(0, 0, 0, 0.9);
+    color: #fff;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.75em;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+    margin-bottom: 5px;
+    z-index: 1000;
+}
+
+body:not(:has(.libraryPage:not(.hide))) .MuiPaper-root.MuiDrawer-paperAnchorLeft:hover::before {
+    opacity: 1;
+}
+`;
+        document.head.appendChild(style);
+
+        // Fetch and set version date
+        fetchVersionDate(versionNumber).then(date => {
+            if (date) {
+                const drawer = document.querySelector('.MuiPaper-root.MuiDrawer-paperAnchorLeft');
+                if (drawer) {
+                    // Format date as "Released: MM/DD/YYYY"
+                    const formattedDate = `Released: ${date.toLocaleDateString('en-US', { 
+                        year: 'numeric', 
+                        month: 'short', 
+                        day: 'numeric' 
+                    })}`;
+                    drawer.setAttribute('data-version-date', formattedDate);
+                } else {
+                    // Wait for drawer to be available
+                    const observer = new MutationObserver((mutations, obs) => {
+                        const drawer = document.querySelector('.MuiPaper-root.MuiDrawer-paperAnchorLeft');
+                        if (drawer) {
+                            const formattedDate = `Released: ${date.toLocaleDateString('en-US', { 
+                                year: 'numeric', 
+                                month: 'short', 
+                                day: 'numeric' 
+                            })}`;
+                            drawer.setAttribute('data-version-date', formattedDate);
+                            obs.disconnect();
+                        }
+                    });
+                    observer.observe(document.body, { childList: true, subtree: true });
+                }
+            }
+        });
+    }
+
     // Auto-enable dependencies for enabled scripts
     function autoEnableDependencies() {
         let hasChanges = false;
@@ -227,14 +360,14 @@
     
     // Get the root path for scripts from configuration
     function getScriptRoot() {        
-        return window.KefinTweaksConfig?.scriptRoot || 'https://cdn.jsdelivr.net/gh/ranaldsgift/KefinTweaks/';
+        return window.KefinTweaksConfig?.scriptRoot || 'https://ranaldsgift.github.io/KefinTweaks/';
     }
     
     // Load a CSS file
     function loadCSS(filename) {
         return new Promise((resolve, reject) => {
             // Check if CSS is already loaded
-            const existingLink = document.querySelector(`link[href*="${filename}"]`);
+            const existingLink = document.querySelector(`link[href="${getScriptRoot()}${filename}${urlSuffix}"]`);
             if (existingLink) {
                 console.log(`[KefinTweaks Injector] CSS already loaded: ${filename}`);
                 resolve();
@@ -244,7 +377,7 @@
             const link = document.createElement('link');
             link.rel = 'stylesheet';
             link.type = 'text/css';
-            link.href = `${getScriptRoot()}${filename}`;
+            link.href = `${getScriptRoot()}${filename}${urlSuffix}`;
             
             link.onload = () => {
                 console.log(`[KefinTweaks Injector] CSS loaded: ${filename}`);
@@ -264,7 +397,7 @@
     function loadScript(filename) {
         return new Promise((resolve, reject) => {
             // Check if script is already loaded
-            const existingScript = document.querySelector(`script[src="${getScriptRoot()}${filename}"]`);
+            const existingScript = document.querySelector(`script[src="${getScriptRoot()}${filename}${urlSuffix}"]`);
             if (existingScript) {
                 console.log(`[KefinTweaks Injector] Script already loaded: ${filename}`);
                 resolve();
@@ -272,7 +405,7 @@
             }
             
             const script = document.createElement('script');
-            script.src = `${getScriptRoot()}${filename}`;
+            script.src = `${getScriptRoot()}${filename}${urlSuffix}`;
             script.async = true;
             
             script.onload = () => {
@@ -445,8 +578,12 @@
     
     // Start initialization when DOM is ready
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initialize);
+        document.addEventListener('DOMContentLoaded', () => {
+            injectVersionBadgeCSS();
+            initialize();
+        });
     } else {
+        injectVersionBadgeCSS();
         initialize();
     }
     

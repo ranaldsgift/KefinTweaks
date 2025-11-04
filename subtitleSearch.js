@@ -1,14 +1,15 @@
 // Jellyfin Subtitle Search Script
 // Adds subtitle search functionality to the video OSD
 // Allows users to search and download subtitles from remote sources
+// Requires: toaster.js module to be loaded before this script
 
 (function() {
     'use strict';
     
     // Common logging function
-    const LOG = (...args) => console.log('[SubtitleSearch]', ...args);
-    const WARN = (...args) => console.warn('[SubtitleSearch]', ...args);
-    const ERR = (...args) => console.error('[SubtitleSearch]', ...args);
+    const LOG = (...args) => console.log('[KefinTweaks SubtitleSearch]', ...args);
+    const WARN = (...args) => console.warn('[KefinTweaks SubtitleSearch]', ...args);
+    const ERR = (...args) => console.error('[KefinTweaks SubtitleSearch]', ...args);
     
     LOG('Initializing...');
     
@@ -39,6 +40,11 @@
     async function checkSubtitlePermissions() {
         if (!isApiClientAvailable()) {
             WARN('ApiClient not available, cannot check subtitle permissions');
+            return false;
+        }
+
+        if (!ApiClient._loggedIn) {
+            LOG('User is not logged in, cannot check subtitle permissions');
             return false;
         }
         
@@ -549,7 +555,7 @@
     }
     
     /**
-     * Get session data by matching PlayState.MediaSourceId
+     * Get session data using device ID
      */
     async function getSession() {
         try {
@@ -559,15 +565,20 @@
             
             const token = ApiClient.accessToken();
             const serverUrl = ApiClient.serverAddress();
+            const deviceId = ApiClient.deviceId();
             
-            // Get current item ID
-            const itemId = getCurrentItemId();
-            if (!itemId) {
-                throw new Error('No current item ID found');
+            if (!deviceId) {
+                throw new Error('Device ID not available');
             }
             
-            // Get item details to find MediaSourceId
-            const itemResponse = await fetch(`${serverUrl}/Items/${itemId}`, {
+            if (!serverUrl) {
+                throw new Error('Server URL not available');
+            }
+            
+            LOG('Getting session with deviceId:', deviceId);
+            
+            // Get session from the endpoint with device ID
+            const response = await fetch(`${serverUrl}/Sessions?deviceId=${deviceId}`, {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',
@@ -575,46 +586,23 @@
                 }
             });
             
-            if (!itemResponse.ok) {
-                throw new Error(`HTTP ${itemResponse.status}: ${itemResponse.statusText}`);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
             
-            const itemData = await itemResponse.json();
-            const mediaSourceId = itemData.MediaSources?.[0]?.Id;
+            const sessions = await response.json();
             
-            if (!mediaSourceId) {
-                throw new Error('No MediaSourceId found for current item');
+            // Return the first session if available, or the sessions array itself
+            if (Array.isArray(sessions) && sessions.length > 0) {
+                LOG('Found session:', sessions[0].Id);
+                return sessions[0];
+            } else if (sessions && !Array.isArray(sessions)) {
+                // If it's not an array, it might be a single session object
+                LOG('Found session:', sessions.Id);
+                return sessions;
+            } else {
+                throw new Error('No active session found for device');
             }
-            
-            LOG('Found MediaSourceId:', mediaSourceId);
-            
-            // Get active sessions
-            const sessionsResponse = await fetch(`${serverUrl}/Sessions`, {
-                method: 'GET',
-                headers: {
-                    'Accept': 'application/json',
-                    'Authorization': `MediaBrowser Token="${token}"`
-                }
-            });
-            
-            if (!sessionsResponse.ok) {
-                throw new Error(`HTTP ${sessionsResponse.status}: ${sessionsResponse.statusText}`);
-            }
-            
-            const sessions = await sessionsResponse.json();
-            
-            // Find session with matching MediaSourceId
-            const matchingSession = sessions.find(session => 
-                session.PlayState && 
-                session.PlayState.MediaSourceId === mediaSourceId
-            );
-            
-            if (!matchingSession) {
-                throw new Error('No active session found with matching MediaSourceId');
-            }
-            
-            LOG('Found matching session:', matchingSession.Id);
-            return matchingSession;
             
         } catch (error) {
             ERR('Error getting session:', error);
@@ -852,52 +840,12 @@
     }
     
     /**
-     * Show download progress UI in top-right corner
+     * Show download progress message
      */
     function showDownloadProgress() {
-        // Remove any existing progress indicators
-        hideDownloadProgress();
-        
-        const progressToast = document.createElement('div');
-        progressToast.id = 'subtitleDownloadProgress';
-        progressToast.style.cssText = `
-            position: fixed;
-            top: 80px;
-            right: 20px;
-            background: rgba(0, 0, 0, 0.95);
-            color: white;
-            padding: 15px 20px;
-            border-radius: 8px;
-            z-index: 99999;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            font-family: 'Roboto', sans-serif;
-            font-size: 14px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.7);
-            border: 2px solid #eed922;
-            min-width: 200px;
-        `;
-        
-        progressToast.innerHTML = `
-            <div style="width: 16px; height: 16px; border: 2px solid #eed922; border-top: 2px solid transparent; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-            <span>Downloading subtitle...</span>
-        `;
-        
-        // Add CSS animation if not already present
-        if (!document.querySelector('#subtitleProgressStyles')) {
-            const style = document.createElement('style');
-            style.id = 'subtitleProgressStyles';
-            style.textContent = `
-                @keyframes spin {
-                    0% { transform: rotate(0deg); }
-                    100% { transform: rotate(360deg); }
-                }
-            `;
-            document.head.appendChild(style);
+        if (window.KefinTweaksToaster && window.KefinTweaksToaster.toast) {
+            window.KefinTweaksToaster.toast('Downloading subtitle...', null, false);
         }
-        
-        document.body.appendChild(progressToast);
     }
     
     /**
@@ -906,56 +854,9 @@
     function showDownloadSuccess() {
         hideDownloadProgress();
         
-        const successToast = document.createElement('div');
-        successToast.id = 'subtitleDownloadSuccess';
-        successToast.style.cssText = `
-            position: fixed;
-            top: 80px;
-            right: 20px;
-            background: rgba(0, 0, 0, 0.95);
-            color: white;
-            padding: 15px 20px;
-            border-radius: 8px;
-            z-index: 99999;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            font-family: 'Roboto', sans-serif;
-            font-size: 14px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.7);
-            border: 2px solid #4caf50;
-            min-width: 200px;
-            animation: fadeInOut 3s ease-in-out;
-        `;
-        
-        successToast.innerHTML = `
-            <span style="font-size: 16px;">✓</span>
-            <span>Subtitle downloaded and activated!</span>
-        `;
-        
-        // Add CSS animation
-        if (!document.querySelector('#subtitleSuccessStyles')) {
-            const style = document.createElement('style');
-            style.id = 'subtitleSuccessStyles';
-            style.textContent = `
-                @keyframes fadeInOut {
-                    0% { opacity: 0; transform: scale(0.8); }
-                    20% { opacity: 1; transform: scale(1); }
-                    80% { opacity: 1; transform: scale(1); }
-                    100% { opacity: 0; transform: scale(0.8); }
-                }
-            `;
-            document.head.appendChild(style);
+        if (window.KefinTweaksToaster && window.KefinTweaksToaster.toast) {
+            window.KefinTweaksToaster.toast('Subtitle downloaded and activated!');
         }
-        
-        document.body.appendChild(successToast);
-        
-        // Auto-remove after 3 seconds
-        setTimeout(() => {
-            if (successToast.parentNode) {
-                successToast.remove();
-            }
-        }, 3000);
     }
     
     /**
@@ -964,56 +865,16 @@
     function showDownloadError(message) {
         hideDownloadProgress();
         
-        const errorToast = document.createElement('div');
-        errorToast.id = 'subtitleDownloadError';
-        errorToast.style.cssText = `
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(211, 47, 47, 0.95);
-            color: white;
-            padding: 20px 30px;
-            border-radius: 8px;
-            z-index: 99999;
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            font-family: 'Roboto', sans-serif;
-            font-size: 16px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.7);
-            animation: fadeInOut 4s ease-in-out;
-        `;
-        
-        errorToast.innerHTML = `
-            <span style="font-size: 20px;">⚠</span>
-            <span>${message}</span>
-        `;
-        
-        // Prepend before the first dialog container instead of appending to body
-        const firstDialog = document.querySelector('.dialogContainer');
-        if (firstDialog) {
-            document.body.insertBefore(errorToast, firstDialog);
-        } else {
-            document.body.appendChild(errorToast);
+        if (window.KefinTweaksToaster && window.KefinTweaksToaster.toast) {
+            window.KefinTweaksToaster.toast(message || 'Failed to download subtitle', '5');
         }
-        
-        // Auto-remove after 4 seconds
-        setTimeout(() => {
-            if (errorToast.parentNode) {
-                errorToast.remove();
-            }
-        }, 4000);
     }
     
     /**
-     * Hide download progress UI
+     * Hide download progress UI (no-op now, kept for compatibility)
      */
     function hideDownloadProgress() {
-        const progressToast = document.querySelector('#subtitleDownloadProgress');
-        if (progressToast) {
-            progressToast.remove();
-        }
+        // No longer needed since we use toaster.toast() which auto-dismisses
     }
     
     /**
@@ -1186,7 +1047,10 @@
             LOG('User has subtitle management permission, initializing...');
             
             // Add CC button if it doesn't exist
-            addCCButton();
+            if (window.location.hash.includes('#/video')) {
+                LOG('Video page detected, adding CC button');
+                addCCButton();
+            }
             
             // Set up observer for subtitle dialogs
             if (subtitleDialogObserver) {

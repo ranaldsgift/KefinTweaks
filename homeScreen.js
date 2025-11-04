@@ -2,15 +2,15 @@
 // Adds custom scrollable sections to the home screen
 // Home screen sections are generated from playlists
 // All playlists used for the home screen sections must be public
-// Requires: cardBuilder.js module to be loaded before this script
+// Requires: cardBuilder.js, localStorageCache.js, utils.js modules to be loaded before this script
 
 (function() {
     'use strict';
     
     // Common logging function
-    const LOG = (...args) => console.log('[HomeScreen]', ...args);
-    const WARN = (...args) => console.warn('[HomeScreen]', ...args);
-    const ERR = (...args) => console.error('[HomeScreen]', ...args);
+    const LOG = (...args) => console.log('[KefinTweaks HomeScreen]', ...args);
+    const WARN = (...args) => console.warn('[KefinTweaks HomeScreen]', ...args);
+    const ERR = (...args) => console.error('[KefinTweaks HomeScreen]', ...args);
     
     LOG('Initializing...');
     
@@ -28,23 +28,22 @@
         style.textContent = `
             /* Discovery section loading indicator */
             .discovery-loading-indicator {
-                display: flex;
                 flex-direction: column;
                 gap: 10px;
                 justify-content: center;
                 align-items: center;
                 padding: 20px;
-                margin: 20px 0;
                 border-radius: 8px;
                 font-size: 14px;
                 color: #666;
-                opacity: 0;
                 transition: opacity 0.3s ease;
                 order: 9999 !important;
+                position: relative;
             }
             
             .discovery-loading-indicator.show {
                 opacity: 1;
+                display: flex;
             }
             
             .discovery-loading-indicator .spinner {
@@ -82,13 +81,25 @@
     
     // Create loading indicator element
     function createDiscoveryLoadingIndicator() {
-        const loadingDiv = document.createElement('div');
+        let loadingDiv = document.getElementById('discovery-loading-indicator');
+        if (loadingDiv) {
+            return loadingDiv;
+        }
+
+        loadingDiv = document.createElement('div');
         loadingDiv.className = 'discovery-loading-indicator';
         loadingDiv.id = 'discovery-loading-indicator';
+        loadingDiv.style.visibility = 'hidden';
         loadingDiv.innerHTML = `
             <div class="spinner"></div>
-            <span>Loading more discovery sections...</span>
         `;
+            
+        // Find the home sections container and append the loading indicator
+        const container = document.querySelector('.libraryPage:not(.hide) .homeSectionsContainer');
+        if (container) {
+            container.appendChild(loadingDiv);
+        }
+
         return loadingDiv;
     }
     
@@ -97,23 +108,12 @@
         let loadingIndicator = document.getElementById('discovery-loading-indicator');
         
         if (!loadingIndicator) {
-            loadingIndicator = createDiscoveryLoadingIndicator();
-            
-            // Find the home sections container and append the loading indicator
-            const container = document.querySelector('.homeSectionsContainer');
-            if (container) {
-                container.appendChild(loadingIndicator);
-            } else {
-                // Fallback: append to body
-                document.body.appendChild(loadingIndicator);
-            }
+            createDiscoveryLoadingIndicator();
         }
         
-        // Show with animation
-        setTimeout(() => {
-            loadingIndicator.classList.add('show');
-        }, 10);
-        
+        loadingIndicator.classList.add('show');
+        loadingIndicator.style.visibility = 'visible';
+        loadingIndicator.style.display = 'flex';
         LOG('Discovery loading indicator shown');
     }
     
@@ -121,15 +121,13 @@
     function hideDiscoveryLoadingIndicator() {
         const loadingIndicator = document.getElementById('discovery-loading-indicator');
         if (loadingIndicator) {
-            loadingIndicator.classList.remove('show');
-            
-            // Remove from DOM after animation
-            setTimeout(() => {
-                if (loadingIndicator.parentNode) {
-                    loadingIndicator.parentNode.removeChild(loadingIndicator);
-                }
-            }, 300);
-            
+            loadingIndicator.classList.remove('show');     
+            loadingIndicator.style.visibility = 'hidden';
+
+            if (!enableInfiniteScroll) {
+                loadingIndicator.style.display = 'none';
+            }
+
             LOG('Discovery loading indicator hidden');
         }
     }
@@ -209,6 +207,7 @@
     // People and genre configuration
     const minPeopleAppearances = window.KefinTweaksConfig?.homeScreen?.minPeopleAppearances || 10;
     const minGenreMovieCount = window.KefinTweaksConfig?.homeScreen?.minGenreMovieCount || 50;
+    const minimumShowsForNetwork = window.KefinTweaksConfig?.homeScreen?.minimumShowsForNetwork || 5;
     const enableInfiniteScroll = window.KefinTweaksConfig?.homeScreen?.enableInfiniteScroll !== false; // Default to true
     
     // Seasonal configuration
@@ -240,8 +239,12 @@
     let renderedActors = new Set(); // Track rendered actor IDs
     let renderedDirectors = new Set(); // Track rendered director IDs
     let renderedWriters = new Set(); // Track rendered writer IDs
-    let renderedWatchedMovies = new Set(); // Track rendered watched movie IDs
+    let renderedStudios = new Set(); // Track rendered studio IDs
+    let renderedWatchedMovies = new Set(); // Track rendered watched movie IDs for "Because you watched" sections
     let renderedFavoriteMovies = new Set(); // Track rendered favorite movie IDs
+    let renderedStarringWatchedMovies = new Set(); // Track movies used for "Starring X since you watched Y" sections
+    let renderedDirectedWatchedMovies = new Set(); // Track movies used for "Directed by X since you watched Y" sections
+    let renderedWrittenWatchedMovies = new Set(); // Track movies used for "Written by X since you watched Y" sections
     
     // Pre-rendered sections waiting to be revealed
     let hiddenDiscoverySections = []; // Array of pre-rendered section DOM elements
@@ -252,6 +255,9 @@
     let preloadedSectionElements = []; // Preloaded section DOM elements (hidden)
     let isPreloadingSections = false; // Prevent parallel preloading
     let discoveryScrollHandler = null; // Reference to scroll handler for cleanup
+    let discoveryWheelHandler = null; // Reference to wheel handler for cleanup
+    let discoveryTouchStartHandler = null; // Reference to touchstart handler for cleanup
+    let discoveryTouchMoveHandler = null; // Reference to touchmove handler for cleanup
 
     /************ Helpers ************/
 
@@ -420,7 +426,8 @@
             const scrollableContainer = await window.cardBuilder.renderCardsFromIds(
                 limitedItemIds,
                 section.name ?? itemData.Name,
-                viewMoreUrl
+                viewMoreUrl,
+                true
             );
             
             // Add data attribute to track rendered sections
@@ -449,7 +456,16 @@
      */
     async function renderAllCustomSections(container) {
         const results = await Promise.all(
-            customHomeSections.map(section => renderCustomSection(section, container))
+            customHomeSections.map(section => {
+                // Check if section is already on the page
+                const sectionContainer = container.querySelector(`[data-custom-section-id="${section.id}"]`);
+                if (sectionContainer) {
+                    LOG(`Section ${section.name} already on the page, skipping...`);
+                    return false;
+                }
+
+                return renderCustomSection(section, container);
+            })
         );
         
         const successCount = results.filter(Boolean).length;
@@ -490,21 +506,28 @@
         
         const sectionsToRender = [];
         
-        // Add new movies section if enabled
-        if (enableNewMovies) {
+        // Add new movies section if enabled and not already on the page
+        const newMoviesContainer = container.querySelector('[data-custom-section-id="new-movies"]');
+
+        if (enableNewMovies && !newMoviesContainer) {   
             sectionsToRender.push(renderNewMoviesSection(container));
         }
         
-        // Add new episodes section if enabled
-        if (enableNewEpisodes) {
+        // Add new episodes section if enabled and not already on the page
+        const newEpisodesContainer = container.querySelector('[data-custom-section-id="new-episodes"]');
+
+        if (enableNewEpisodes && !newEpisodesContainer) {
             sectionsToRender.push(renderNewEpisodesSection(container));
         }
         
         // Add trending sections if enabled (stubs for now)
-        if (enableTrending) {
+/*         const trendingMoviesContainer = container.querySelector('[data-custom-section-id="trending-movies"]');
+        const trendingSeriesContainer = container.querySelector('[data-custom-section-id="trending-series"]');
+
+        if (enableTrending && !trendingMoviesContainer && !trendingSeriesContainer) {
             sectionsToRender.push(renderTrendingMoviesSection(container));
             sectionsToRender.push(renderTrendingSeriesSection(container));
-        }
+        } */
         
         if (sectionsToRender.length === 0) {
             return;
@@ -899,6 +922,7 @@
                 .sort((a, b) => b.directorCount - a.directorCount)
                 .slice(0, 100)
                 .map(person => ({
+                    id: person.id,
                     name: person.name,
                     count: person.directorCount,
                     itemIds: person.directorItemIds
@@ -908,7 +932,8 @@
                 .filter(person => person.writerCount >= minPeopleAppearances)
                 .sort((a, b) => b.writerCount - a.writerCount)
                 .slice(0, 100)
-                .map(person => ({
+                .map(person => ({   
+                    id: person.id,
                     name: person.name,
                     count: person.writerCount,
                     itemIds: person.writerItemIds
@@ -918,7 +943,8 @@
                 .filter(person => person.actorCount >= minPeopleAppearances)
                 .sort((a, b) => b.actorCount - a.actorCount)
                 .slice(0, 100)
-                .map(person => ({
+                .map(person => ({   
+                    id: person.id,
                     name: person.name,
                     count: person.actorCount,
                     itemIds: person.actorItemIds
@@ -1331,6 +1357,239 @@
     }
 
     /**
+     * Gets random recently watched movie with heavy weighting for first 5
+     * @param {Set} trackingSet - Optional set to track rendered movies (defaults to renderedWatchedMovies)
+     * @returns {Object|null} - Random recently watched movie or null
+     */
+    function getRandomRecentlyWatchedMovie(trackingSet = null) {
+        const movies = getMovieHistoryData();
+        if (movies.length === 0) return null;
+        
+        // Sort by LastPlayedDate descending and take top 10
+        const sortedMovies = movies
+            .filter(movie => movie.UserData && movie.UserData.Played && movie.UserData.LastPlayedDate)
+            .sort((a, b) => new Date(b.UserData.LastPlayedDate) - new Date(a.UserData.LastPlayedDate))
+            .slice(0, 10);
+        
+        if (sortedMovies.length === 0) return null;
+        
+        // Use provided tracking set or default to renderedWatchedMovies
+        const usedTrackingSet = trackingSet || renderedWatchedMovies;
+        
+        // Filter out already rendered movies based on the tracking set
+        const availableMovies = sortedMovies.filter(movie => 
+            movie.Id && !usedTrackingSet.has(movie.Id)
+        );
+        
+        if (availableMovies.length === 0) return null;
+        
+        // Heavy weighting: 70% chance for first 5, 30% for rest
+        let selectedMovie;
+        if (Math.random() < 0.7 && availableMovies.length >= 5) {
+            // Pick from first 5
+            const firstFive = availableMovies.slice(0, 5);
+            selectedMovie = firstFive[Math.floor(Math.random() * firstFive.length)];
+        } else {
+            // Pick from all available
+            selectedMovie = availableMovies[Math.floor(Math.random() * availableMovies.length)];
+        }
+        
+        // Track rendered movie in the appropriate set
+        if (selectedMovie && selectedMovie.Id) {
+            usedTrackingSet.add(selectedMovie.Id);
+        }
+        
+        return selectedMovie;
+    }
+
+    /**
+     * Fetches and caches Popular TV Networks (studios) from all TV show libraries
+     * @returns {Promise<Array>} - Array of studio objects sorted by ChildCount (descending)
+     */
+    async function fetchAndCachePopularTVNetworks() {
+        const cache = new window.LocalStorageCache();
+        const cacheKey = 'popularTVNetworks';
+        
+        // Check cache first
+        const cached = cache.get(cacheKey);
+        if (cached) {
+            LOG('Using cached Popular TV Networks');
+            return cached;
+        }
+        
+        try {
+            LOG('Fetching Popular TV Networks...');
+            const apiClient = window.ApiClient;
+            const serverUrl = apiClient.serverAddress();
+            const token = apiClient.accessToken();
+            const userId = apiClient.getCurrentUserId();
+            
+            // Get root libraries
+            const librariesResponse = await apiClient.getItems();
+            const libraries = librariesResponse.Items || [];
+            
+            // Filter for TV show libraries
+            const tvLibraries = libraries.filter(lib => lib.CollectionType === 'tvshows');
+            
+            if (tvLibraries.length === 0) {
+                LOG('No TV show libraries found');
+                return [];
+            }
+            
+            // Fetch studios from all TV libraries
+            const allStudios = [];
+            for (const library of tvLibraries) {
+                try {
+                    const studiosUrl = `${serverUrl}/Studios?SortBy=SortName&SortOrder=Ascending&IncludeItemTypes=Series&Recursive=true&Fields=DateCreated%2CPrimaryImageAspectRatio&StartIndex=0&ParentId=${library.Id}&userId=${userId}`;
+                    const response = await fetch(studiosUrl, {
+                        headers: {
+                            "Authorization": `MediaBrowser Token="${token}"`
+                        }
+                    });
+                    
+                    if (!response.ok) {
+                        WARN(`Failed to fetch studios for library ${library.Name}: ${response.status}`);
+                        continue;
+                    }
+                    
+                    const data = await response.json();
+                    const studios = data.Items || [];
+                    allStudios.push(...studios);
+                } catch (err) {
+                    ERR(`Error fetching studios for library ${library.Name}:`, err);
+                }
+            }
+            
+            // Deduplicate studios by Id
+            const uniqueStudios = [];
+            const seenIds = new Set();
+            for (const studio of allStudios) {
+                if (!seenIds.has(studio.Id)) {
+                    seenIds.add(studio.Id);
+                    uniqueStudios.push(studio);
+                }
+            }
+            
+            // Sort by ChildCount (descending)
+            uniqueStudios.sort((a, b) => (b.ChildCount || 0) - (a.ChildCount || 0));
+            
+            // Filter by minimum shows
+            const filteredStudios = uniqueStudios.filter(studio => 
+                (studio.ChildCount || 0) >= minimumShowsForNetwork
+            );
+            
+            LOG(`Fetched ${filteredStudios.length} Popular TV Networks (filtered from ${uniqueStudios.length})`);
+            
+            // Cache the results
+            cache.set(cacheKey, filteredStudios);
+            
+            return filteredStudios;
+        } catch (err) {
+            ERR('Error fetching Popular TV Networks:', err);
+            return [];
+        }
+    }
+
+    /**
+     * Gets Popular TV Networks from cache or fetches if not cached
+     * @returns {Promise<Array>} - Array of studio objects
+     */
+    async function getPopularTVNetworks() {
+        const cache = new window.LocalStorageCache();
+        const cacheKey = 'popularTVNetworks';
+        
+        const cached = cache.get(cacheKey);
+        if (cached && cached.length > 0) {
+            return cached;
+        }
+        
+        return await fetchAndCachePopularTVNetworks();
+    }
+
+    /**
+     * Fetches items (Series) by studio ID
+     * @param {string} studioId - Studio ID
+     * @returns {Promise<Array>} - Array of series items
+     */
+    async function fetchItemsByStudio(studioId) {
+        try {
+            const apiClient = window.ApiClient;
+            const serverUrl = apiClient.serverAddress();
+            const token = apiClient.accessToken();
+            const userId = apiClient.getCurrentUserId();
+            
+            // Use Items endpoint with StudioIds parameter, sort by random
+            const url = `${serverUrl}/Items?IncludeItemTypes=Series&Recursive=true&SortBy=Random&Fields=PrimaryImageAspectRatio%2CDateCreated%2COverview%2CProductionYear%2CPeople&StudioIds=${studioId}&userId=${userId}&Limit=32`;
+            
+            const response = await fetch(url, {
+                headers: {
+                    "Authorization": `MediaBrowser Token="${token}"`
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            return data.Items || [];
+        } catch (err) {
+            ERR(`Error fetching items by studio ${studioId}:`, err);
+            return [];
+        }
+    }
+
+    /**
+     * Fetches items by person ID (for actors, directors, writers)
+     * @param {string} personId - Person ID
+     * @param {string} includeItemTypes - Item types to include (default: 'Movie')
+     * @returns {Promise<Array>} - Array of items
+     */
+    async function fetchItemsByPersonId(personId, includeItemTypes = 'Movie') {
+        try {
+            const apiClient = window.ApiClient;
+            const serverUrl = apiClient.serverAddress();
+            const token = apiClient.accessToken();
+            const userId = apiClient.getCurrentUserId();
+            
+            // Use Items endpoint with PersonIds parameter, sort by random, include People field
+            const url = `${serverUrl}/Items?IncludeItemTypes=${includeItemTypes}&PersonIds=${personId}&Recursive=true&SortBy=Random&Fields=PrimaryImageAspectRatio%2CDateCreated%2COverview%2CProductionYear%2CPeople&userId=${userId}&Limit=32`;
+            
+            const response = await fetch(url, {
+                headers: {
+                    "Authorization": `MediaBrowser Token="${token}"`
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            return data.Items || [];
+        } catch (err) {
+            ERR(`Error fetching items by person ${personId}:`, err);
+            return [];
+        }
+    }
+
+    /**
+     * Filters items to only include those where the person has the specified type (Actor, Director, Writer)
+     * @param {Array} items - Array of items with People field
+     * @param {string} personId - Person ID to check
+     * @param {string} personType - Type to filter by ('Actor', 'Director', 'Writer')
+     * @returns {Array} - Filtered array of items
+     */
+    function filterPeopleByType(items, personId, personType) {
+        return items.filter(item => {
+            if (!item.People || !Array.isArray(item.People)) return false;
+            return item.People.some(person => 
+                person.Id === personId && person.Type === personType
+            );
+        });
+    }
+
+    /**
      * Fetches newest movies from Jellyfin API
      * @returns {Promise<Array>} - Array of newest movie items
      */
@@ -1487,7 +1746,8 @@
             const scrollableContainer = window.cardBuilder.renderCards(
                 movies,
                 'New Movies',
-                null
+                null,
+                true
             );
             
             // Add data attributes to track rendered sections
@@ -1529,7 +1789,8 @@
             const scrollableContainer = window.cardBuilder.renderCards(
                 episodes,
                 'New Episodes',
-                null
+                null,
+                true
             );
             
             // Add data attributes to track rendered sections
@@ -1555,6 +1816,13 @@
      */
     function renderWatchlistSection(container) {
         try {
+            // Check if section is already on the page
+            const sectionContainer = container.querySelector('[data-custom-section-id="watchlist"]');
+            if (sectionContainer) {
+                LOG('Watchlist section already on the page, skipping...');
+                return false;
+            }
+
             const watchlistItems = getWatchlistData();
             
             if (watchlistItems.length === 0) {
@@ -1601,6 +1869,68 @@
     }
 
     /**
+     * Renders Popular TV Networks section
+     * @param {HTMLElement} container - Container to append the section to
+     * @returns {Promise<boolean>} - Success status
+     */
+    async function renderPopularTVNetworksSection(container) {
+        try {
+            // Check if section is already on the page
+            const sectionContainer = container.querySelector('[data-custom-section-id="popular-tv-networks"]');
+            if (sectionContainer) {
+                LOG('Popular TV Networks section already on the page, skipping...');
+                return false;
+            }
+
+            let networks = await getPopularTVNetworks();
+            
+            if (networks.length === 0) {
+                return false;
+            }
+
+            // Remove any networks without Thumb images
+            networks = networks.filter(network => network.ImageTags?.Thumb);
+            
+            // Shuffle and take 16 random networks
+            const shuffled = [...networks].sort(() => Math.random() - 0.5);
+            const limitedNetworks = shuffled.slice(0, 16);
+            
+            if (limitedNetworks.length === 0) {
+                return false;
+            }
+            
+            // Check if cardBuilder is available
+            if (typeof window.cardBuilder === 'undefined' || !window.cardBuilder.renderCards) {
+                WARN("cardBuilder not available, skipping Popular TV Networks section");
+                return false;
+            }
+
+            // Render the scrollable container with the network/studio items
+            const scrollableContainer = window.cardBuilder.renderCards(
+                limitedNetworks,
+                'Popular TV Networks',
+                null,
+                true,
+                'backdrop'
+            );
+            
+            // Add data attribute to track rendered sections
+            scrollableContainer.setAttribute('data-custom-section-id', 'popular-tv-networks');
+            scrollableContainer.setAttribute('data-custom-section-name', 'Popular TV Networks');
+            scrollableContainer.style.order = 101;
+            
+            // Append to container
+            container.appendChild(scrollableContainer);
+            
+            return true;
+            
+        } catch (err) {
+            ERR('Error rendering Popular TV Networks section:', err);
+            return false;
+        }
+    }
+
+    /**
      * Fetches full item objects from API using item IDs
      * @param {Array<string>} itemIds - Array of item IDs to fetch
      * @returns {Promise<Array>} Array of full item objects
@@ -1614,7 +1944,7 @@
             
             // Use the Items endpoint to fetch multiple items by IDs
             const idsParam = itemIds.join(',');
-            const url = `${ApiClient.serverAddress()}/Items?Ids=${idsParam}&UserId=${userId}&Fields=MediaSources,MediaStreams,Chapters,People,Genres,Studios,Taglines&EnableTotalRecordCount=false&EnableImageTypes=Primary,Backdrop,Thumb,Logo`;
+            const url = `${ApiClient.serverAddress()}/Items?Ids=${idsParam}&UserId=${userId}&EnableTotalRecordCount=false&EnableImageTypes=Primary,Backdrop,Thumb,Logo`;
             
             const response = await ApiClient.fetch({ url, method: 'GET' });
             const data = await response.json();
@@ -1670,7 +2000,8 @@
                                     return {
                                         type: 'director',
                                         data: randomDirector,
-                                        items: items
+                                        items: items,
+                                        viewMoreUrl: `#/details?id=${randomDirector.id}&serverId=${ApiClient.serverId()}`
                                     };
                                 }
                             }
@@ -1695,7 +2026,8 @@
                                     return {
                                         type: 'writer',
                                         data: randomWriter,
-                                        items: items
+                                        items: items,
+                                        viewMoreUrl: `#/details?id=${randomWriter.id}&serverId=${ApiClient.serverId()}`
                                     };
                                 }
                             }
@@ -1720,7 +2052,8 @@
                                     return {
                                         type: 'actor',
                                         data: randomActor,
-                                        items: items
+                                        items: items,
+                                        viewMoreUrl: `#/details?id=${randomActor.id}&serverId=${ApiClient.serverId()}`
                                     };
                                 }
                             }
@@ -1758,6 +2091,243 @@
                             };
                         }
                     }
+                    return null;
+                })(),
+                
+                // 7. Shows from [Studio Name]
+                (async () => {
+                    const networks = await getPopularTVNetworks();
+                    if (networks && networks.length > 0) {
+                        // Filter out already rendered studios
+                        const availableNetworks = networks.filter(network => 
+                            network.Id && !renderedStudios.has(network.Id)
+                        );
+                        
+                        if (availableNetworks.length > 0) {
+                            const randomNetwork = availableNetworks[Math.floor(Math.random() * availableNetworks.length)];
+                            const items = await fetchItemsByStudio(randomNetwork.Id);
+                            
+                            if (items && items.length > 0) {
+                                // Track rendered studio
+                                renderedStudios.add(randomNetwork.Id);
+                                
+                                // Shuffle and limit
+                                const shuffled = [...items].sort(() => Math.random() - 0.5);
+                                const limitedItems = shuffled.slice(0, 16);
+                                
+                                return {
+                                    type: 'studio',
+                                    data: randomNetwork,
+                                    items: limitedItems
+                                };
+                            }
+                        }
+                    }
+                    return null;
+                })(),
+                
+                // 8. Because you recently watched [Movie Name]
+                (async () => {
+                    const randomRecentMovie = getRandomRecentlyWatchedMovie();
+                    if (randomRecentMovie) {
+                        const watchedData = await preloadBecauseYouWatchedSection(randomRecentMovie);
+                        if (watchedData) {
+                            return {
+                                type: 'watched-recent',
+                                data: randomRecentMovie,
+                                items: watchedData.items
+                            };
+                        }
+                    }
+                    return null;
+                })(),
+                
+                // 9. Starring [Actor Name] since you recently watched [Movie Name]
+                (async () => {
+                    const recentMovie = getRandomRecentlyWatchedMovie(renderedStarringWatchedMovies);
+                    if (!recentMovie) return null;
+                    
+                    // Fetch the movie with People field included
+                    try {
+                        const apiClient = window.ApiClient;
+                        const serverUrl = apiClient.serverAddress();
+                        const token = apiClient.accessToken();
+                        const userId = apiClient.getCurrentUserId();
+                        
+                        const movieUrl = `${serverUrl}/Users/${userId}/Items/${recentMovie.Id}?Fields=People`;
+                        const movieResponse = await fetch(movieUrl, {
+                            headers: {
+                                "Authorization": `MediaBrowser Token="${token}"`
+                            }
+                        });
+                        
+                        if (!movieResponse.ok) return null;
+                        
+                        const movieData = await movieResponse.json();
+                        if (!movieData.People || !Array.isArray(movieData.People)) return null;
+                        
+                        // Get first 3 actors
+                        const actors = movieData.People.filter(p => p.Type === 'Actor').slice(0, 3);
+                        if (actors.length === 0) return null;
+                        
+                        // Pick random actor
+                        const selectedActor = actors[Math.floor(Math.random() * actors.length)];
+                        
+                        // Fetch items for this actor
+                        const items = await fetchItemsByPersonId(selectedActor.Id, 'Movie');
+                        
+                        // Remove the source movie and filter for items where person is Actor
+                        const filteredItems = filterPeopleByType(items, selectedActor.Id, 'Actor')
+                            .filter(item => item.Id !== recentMovie.Id);
+                        
+                        if (filteredItems.length > 0) {
+                            // Limit to 16
+                            const limitedItems = filteredItems.slice(0, 16);
+                            
+                            return {
+                                type: 'actor-recent',
+                                data: {
+                                    person: selectedActor,
+                                    movie: recentMovie
+                                },
+                                items: limitedItems,
+                                viewMoreUrl: `#/details?id=${selectedActor.Id}&serverId=${ApiClient.serverId()}`
+                            };
+                        }
+                    } catch (err) {
+                        ERR('Error generating actor-recent section:', err);
+                    }
+                    
+                    return null;
+                })(),
+                
+                // 10. Directed by [Director Name] since you recently watched [Movie Name]
+                (async () => {
+                    const recentMovie = getRandomRecentlyWatchedMovie(renderedDirectedWatchedMovies);
+                    if (!recentMovie) return null;
+                    
+                    // Fetch the movie with People field included
+                    try {
+                        const apiClient = window.ApiClient;
+                        const serverUrl = apiClient.serverAddress();
+                        const token = apiClient.accessToken();
+                        const userId = apiClient.getCurrentUserId();
+                        
+                        const movieUrl = `${serverUrl}/Users/${userId}/Items/${recentMovie.Id}?Fields=People`;
+                        const movieResponse = await fetch(movieUrl, {
+                            headers: {
+                                "Authorization": `MediaBrowser Token="${token}"`
+                            }
+                        });
+                        
+                        if (!movieResponse.ok) return null;
+                        
+                        const movieData = await movieResponse.json();
+                        if (!movieData.People || !Array.isArray(movieData.People)) return null;
+                        
+                        // Get directors
+                        const directors = movieData.People.filter(p => p.Type === 'Director');
+                        if (directors.length === 0) return null;
+                        
+                        // Pick random director
+                        const selectedDirector = directors[Math.floor(Math.random() * directors.length)];
+                        
+                        // Check if already rendered (use same set as regular directors)
+                        if (renderedDirectors.has(selectedDirector.Name)) return null;
+                        
+                        // Fetch items for this director
+                        const items = await fetchItemsByPersonId(selectedDirector.Id, 'Movie');
+                        
+                        // Remove the source movie and filter for items where person is Director
+                        const filteredItems = filterPeopleByType(items, selectedDirector.Id, 'Director')
+                            .filter(item => item.Id !== recentMovie.Id);
+                        
+                        if (filteredItems.length > 0) {
+                            // Track rendered director
+                            renderedDirectors.add(selectedDirector.Name);
+                            
+                            // Limit to 16
+                            const limitedItems = filteredItems.slice(0, 16);
+                            
+                            return {
+                                type: 'director-recent',
+                                data: {
+                                    person: selectedDirector,
+                                    movie: recentMovie
+                                },
+                                items: limitedItems,
+                                viewMoreUrl: `#/details?id=${selectedDirector.Id}&serverId=${ApiClient.serverId()}`
+                            };
+                        }
+                    } catch (err) {
+                        ERR('Error generating director-recent section:', err);
+                    }
+                    
+                    return null;
+                })(),
+                
+                // 11. Written by [Writer Name] since you recently watched [Movie Name]
+                (async () => {
+                    const recentMovie = getRandomRecentlyWatchedMovie(renderedWrittenWatchedMovies);
+                    if (!recentMovie) return null;
+                    
+                    // Fetch the movie with People field included
+                    try {
+                        const apiClient = window.ApiClient;
+                        const serverUrl = apiClient.serverAddress();
+                        const token = apiClient.accessToken();
+                        const userId = apiClient.getCurrentUserId();
+                        
+                        const movieUrl = `${serverUrl}/Users/${userId}/Items/${recentMovie.Id}?Fields=People`;
+                        const movieResponse = await fetch(movieUrl, {
+                            headers: {
+                                "Authorization": `MediaBrowser Token="${token}"`
+                            }
+                        });
+                        
+                        if (!movieResponse.ok) return null;
+                        
+                        const movieData = await movieResponse.json();
+                        if (!movieData.People || !Array.isArray(movieData.People)) return null;
+                        
+                        // Get writers
+                        const writers = movieData.People.filter(p => p.Type === 'Writer');
+                        if (writers.length === 0) return null;
+                        
+                        // Pick random writer
+                        const selectedWriter = writers[Math.floor(Math.random() * writers.length)];
+                        
+                        // Check if already rendered (use same set as regular writers)
+                        if (renderedWriters.has(selectedWriter.Name)) return null;
+                        
+                        // Fetch items for this writer
+                        const items = await fetchItemsByPersonId(selectedWriter.Id, 'Movie');
+                        
+                        // Remove the source movie and filter for items where person is Writer
+                        const filteredItems = filterPeopleByType(items, selectedWriter.Id, 'Writer')
+                            .filter(item => item.Id !== recentMovie.Id);
+                        
+                        if (filteredItems.length > 0) {
+                            // Track rendered writer
+                            renderedWriters.add(selectedWriter.Name);
+                            
+                            // Limit to 16
+                            const limitedItems = filteredItems.slice(0, 16);
+                            
+                            return {
+                                type: 'writer-recent',
+                                data: {
+                                    person: selectedWriter,
+                                    movie: recentMovie
+                                },
+                                items: limitedItems,
+                                viewMoreUrl: `#/details?id=${selectedWriter.Id}&serverId=${ApiClient.serverId()}`
+                            };
+                        }
+                    } catch (err) {
+                        ERR('Error generating writer-recent section:', err);
+                    }
+                    
                     return null;
                 })()
             ];
@@ -1852,7 +2422,7 @@
                     const firstGroup = discoveryBuffer[0];
                     if (firstGroup) {
                         LOG('Pre-rendering first discovery group for smooth reveal');
-                        preRenderDiscoveryGroup(firstGroup).then(preRendered => {
+                        preRenderDiscoveryGroup(discoveryBuffer.shift()).then(preRendered => {
                             hiddenDiscoverySections.push(...preRendered);
                             LOG(`Pre-rendered first group: ${preRendered.length} sections ready`);
                         }).catch(err => {
@@ -1916,71 +2486,115 @@
         
         try {
             LOG('Rendering next discovery group from buffer');
+
+            const loadMoreButton = container.querySelector('.load-more-discovery-btn');
+
+            if (loadMoreButton) {
+                loadMoreButton.remove();
+            }
             
             // Show loading indicator
-            if (enableInfiniteScroll) {
-                showDiscoveryLoadingIndicator();
-            }
+            showDiscoveryLoadingIndicator();
 
             isRenderingDiscoveryGroup = true;
             
             LOG(`Rendering group from buffer (${discoveryBuffer.length} groups available)`);
-            
-            // Check if we have pre-rendered sections ready to reveal
-            if (hiddenDiscoverySections.length > 0) {
-                LOG(`Revealing ${hiddenDiscoverySections.length} pre-rendered sections with animation`);
-                const sectionsToReveal = hiddenDiscoverySections.splice(0); // Take all sections
-                
-                // Reveal sections with smooth animation
-                const revealedCount = await revealSectionsSequentially(container, sectionsToReveal);
-                
-                if (revealedCount > 0) {
-                    LOG(`Successfully revealed ${revealedCount} pre-rendered sections`);
+
+            setTimeout(async () => {
+                async function renderDiscoveryGroup() {            
+                    // Check if we have pre-rendered sections ready to reveal
+                    if (hiddenDiscoverySections.length > 0) {
+                        LOG(`Revealing ${hiddenDiscoverySections.length} pre-rendered sections with animation`);
+                        const sectionsToReveal = hiddenDiscoverySections.splice(0); // Take all sections
+                        
+                        // Reveal sections with smooth animation
+                        const revealedCount = await revealSectionsSequentially(container, sectionsToReveal);
+                        
+                        if (revealedCount > 0) {
+                            LOG(`Successfully revealed ${revealedCount} pre-rendered sections`);
+                            
+                            // Pre-render next group from buffer in background
+                            if (discoveryBuffer.length > 0) {
+                                const nextGroup = discoveryBuffer.shift();
+                                if (nextGroup) {
+                                    const preRendered = await preRenderDiscoveryGroup(nextGroup);
+                                    hiddenDiscoverySections.push(...preRendered);
+                                }
+                            }
+                            
+                            // Trigger background refill of buffer to update UI state
+                            ensureDiscoveryBuffer().catch(err => {
+                                ERR('Error refilling discovery buffer:', err);
+                            });
                     
-                    // Pre-render next group from buffer in background
-                    if (discoveryBuffer.length > 0) {
-                        const nextGroup = discoveryBuffer.shift();
-                        if (nextGroup) {
-                            const preRendered = await preRenderDiscoveryGroup(nextGroup);
-                            hiddenDiscoverySections.push(...preRendered);
+                            // Hide loading indicator
+                            hideDiscoveryLoadingIndicator();
+                            
+                            return revealedCount > 0;
                         }
                     }
                     
-                    // Trigger background refill of buffer to update UI state
-                    ensureDiscoveryBuffer().catch(err => {
-                        ERR('Error refilling discovery buffer:', err);
-                    });
-                    
-                    return revealedCount > 0;
-                }
-            }
-            
-            // Fallback: if no pre-rendered sections, render directly from buffer (legacy behavior)
-            const groupToRender = discoveryBuffer.shift();
-            if (groupToRender && groupToRender.length > 0) {
-                let renderedCount = 0;
-                
-                for (const sectionData of groupToRender) {
-                    try {
-                        const success = await renderDiscoverySection(sectionData, container);
-                        if (success) {
-                            renderedCount++;
+                    // Fallback: if no pre-rendered sections, render directly from buffer (legacy behavior)
+                    const groupToRender = discoveryBuffer.shift();
+                    if (groupToRender && groupToRender.length > 0) {
+                        // Remove loading indicator from DOM before rendering sections to prevent scroll jump
+                        const loadingIndicator = document.getElementById('discovery-loading-indicator');
+                        let loadingIndicatorClone = null;
+                        if (loadingIndicator && loadingIndicator.parentNode) {
+                            loadingIndicatorClone = loadingIndicator.cloneNode(true);
+                            loadingIndicator.remove();
+                            LOG('Removed loading indicator from DOM before rendering sections (fallback path)');
                         }
-                    } catch (err) {
-                        ERR(`Error rendering section ${sectionData.type}:`, err);
+                        
+                        let renderedCount = 0;
+                        
+                        for (const sectionData of groupToRender) {
+                            try {
+                                const success = await renderDiscoverySection(sectionData, container);
+                                if (success) {
+                                    renderedCount++;
+                                }
+                            } catch (err) {
+                                ERR(`Error rendering section ${sectionData.type}:`, err);
+                            }
+                        }
+                        
+                        LOG(`Rendered ${renderedCount}/${groupToRender.length} sections directly from buffer`);
+                        
+                        // Re-add loading indicator at the end of the container
+                        if (loadingIndicatorClone) {
+                            container.appendChild(loadingIndicatorClone);
+                            LOG('Re-added loading indicator at the end of sections (fallback path)');
+                        }
+                        
+                        // Trigger background refill of buffer to update UI state
+                        ensureDiscoveryBuffer().catch(err => {
+                            ERR('Error refilling discovery buffer:', err);
+                        });
+                    
+                        // Hide loading indicator
+                        hideDiscoveryLoadingIndicator();
+                        
+                        return renderedCount > 0;
                     }
+
+                    return false;
+                }
+
+                await renderDiscoveryGroup();
+
+                if (!enableInfiniteScroll) {
+                    setupLoadMoreButton(container);
                 }
                 
-                LOG(`Rendered ${renderedCount}/${groupToRender.length} sections directly from buffer`);
-                
-                // Trigger background refill of buffer to update UI state
-                ensureDiscoveryBuffer().catch(err => {
-                    ERR('Error refilling discovery buffer:', err);
+                // Scroll down a tiny bit with a smooth animation to start revealing the sections
+                window.scrollBy({
+                    top: 100,
+                    behavior: 'smooth'
                 });
-                
-                return renderedCount > 0;
-            }
-            
+                isRenderingDiscoveryGroup = false;
+            }, 100);
+
             return false;
             
         } catch (err) {
@@ -1988,9 +2602,6 @@
             return false;
         } finally {
             isRenderingDiscoveryGroup = false;
-            
-            // Hide loading indicator
-            hideDiscoveryLoadingIndicator();
         }
     }
 
@@ -2005,7 +2616,6 @@
             const homeSectionsContainer = document.querySelector('.homeSectionsContainer');
             if (homeSectionsContainer) {
                 await renderNextDiscoveryGroup(homeSectionsContainer, loadMoreButton);
-                // renderNextDiscoveryGroup now triggers buffer refill automatically
             } else {
                 ERR('Home sections container not found');
             }
@@ -2079,6 +2689,16 @@
         
         LOG(`Revealing ${sections.length} pre-rendered sections with scroll-triggered animation`);
         
+        // Remove loading indicator from DOM before revealing sections to prevent scroll jump
+        // We'll re-add it at the end after sections are revealed
+        const loadingIndicator = document.getElementById('discovery-loading-indicator');
+        let loadingIndicatorClone = null;
+        if (loadingIndicator && loadingIndicator.parentNode) {
+            loadingIndicatorClone = loadingIndicator.cloneNode(true);
+            loadingIndicator.remove();
+            LOG('Removed loading indicator from DOM before revealing sections');
+        }
+        
         // Add all sections to DOM with initial animation class (hidden)
         sections.forEach(section => {
             section.style.display = 'none';
@@ -2105,14 +2725,16 @@
         
         // Remove display: none and observe sections
         sections.forEach(section => {
-            section.style.display = '';
-            
-            // Force reflow to ensure the initial hidden state is rendered
-            void section.offsetHeight;
-            
+            section.style.display = '';            
             // Observe section for viewport entry
             observer.observe(section);
         });
+        
+        // Re-add loading indicator at the end of the container (now it's at the end in DOM order too)
+        if (loadingIndicatorClone) {
+            container.appendChild(loadingIndicatorClone);
+            LOG('Re-added loading indicator at the end of sections');
+        }
         
         LOG(`Revealed ${sections.length} sections with scroll-triggered animation`);
         return sections.length;
@@ -2250,6 +2872,26 @@
                         sectionName = `Because you liked ${sectionData.data.Name} ${sectionData.data.ProductionYear ? `(${sectionData.data.ProductionYear})` : ''}`;
                         sectionId = `liked-${sectionData.data.Id}`;
                         break;
+                    case 'studio':
+                        sectionName = `Shows from ${sectionData.data.Name}`;
+                        sectionId = `studio-${sectionData.data.Id}`;
+                        break;
+                    case 'watched-recent':
+                        sectionName = `Because you recently watched ${sectionData.data.Name} ${sectionData.data.ProductionYear ? `(${sectionData.data.ProductionYear})` : ''}`;
+                        sectionId = `watched-recent-${sectionData.data.Id}`;
+                        break;
+                    case 'actor-recent':
+                        sectionName = `Starring ${sectionData.data.person.Name} since you recently watched ${sectionData.data.movie.Name} ${sectionData.data.movie.ProductionYear ? `(${sectionData.data.movie.ProductionYear})` : ''}`;
+                        sectionId = `actor-recent-${sectionData.data.person.Id}-${sectionData.data.movie.Id}`;
+                        break;
+                    case 'director-recent':
+                        sectionName = `Directed by ${sectionData.data.person.Name} since you recently watched ${sectionData.data.movie.Name} ${sectionData.data.movie.ProductionYear ? `(${sectionData.data.movie.ProductionYear})` : ''}`;
+                        sectionId = `director-recent-${sectionData.data.person.Id}-${sectionData.data.movie.Id}`;
+                        break;
+                    case 'writer-recent':
+                        sectionName = `Written by ${sectionData.data.person.Name} since you recently watched ${sectionData.data.movie.Name} ${sectionData.data.movie.ProductionYear ? `(${sectionData.data.movie.ProductionYear})` : ''}`;
+                        sectionId = `writer-recent-${sectionData.data.person.Id}-${sectionData.data.movie.Id}`;
+                        break;
                     default:
                         return false;
                 }
@@ -2278,14 +2920,14 @@
                     WARN("cardBuilder.renderCards not available, skipping discovery section");
                     return false;
                 }
-                scrollableContainer = window.cardBuilder.renderCards(limitedItems, sectionName, viewMoreUrl);
+                scrollableContainer = window.cardBuilder.renderCards(limitedItems, sectionName, viewMoreUrl, true);
             } else {
                 // Use renderCardsFromIds for ID arrays
                 if (!window.cardBuilder.renderCardsFromIds) {
                     WARN("cardBuilder.renderCardsFromIds not available, skipping discovery section");
                     return false;
                 }
-                scrollableContainer = await window.cardBuilder.renderCardsFromIds(limitedItems, sectionName, viewMoreUrl);
+                scrollableContainer = await window.cardBuilder.renderCardsFromIds(limitedItems, sectionName, viewMoreUrl, true);
             }
             
             // Add data attributes to track rendered sections
@@ -2315,7 +2957,16 @@
      * @param {HTMLElement} container - Container to watch for scroll
      */
     function setupInfiniteLoading(container) {
+        const homePage = document.querySelector('.homePage:not(.hide)');
+
+        if (!homePage || homePage.dataset.discoveryReady === 'true') {
+            return;
+        }
+
+        homePage.dataset.discoveryReady = 'true';
+
         if (enableInfiniteScroll) {
+            homePage.dataset.infiniteScroll = 'true';
             setupScrollBasedLoading(container);
         } else {
             setupLoadMoreButton(container);
@@ -2326,10 +2977,27 @@
      * Removes scroll-based infinite loading handler
      */
     function removeScrollBasedLoading() {
+        // Fade out message for "loading more"
+        const loadingIndicator = document.querySelector('#discovery-loading-indicator');
+
         if (discoveryScrollHandler) {
             window.removeEventListener('scroll', discoveryScrollHandler);
             discoveryScrollHandler = null;
             LOG('Scroll-based infinite loading for discovery sections removed');
+        }
+        if (discoveryWheelHandler) {
+            window.removeEventListener('wheel', discoveryWheelHandler);
+            discoveryWheelHandler = null;
+            LOG('Wheel-based trigger for discovery sections removed');
+        }
+        if (discoveryTouchStartHandler) {
+            window.removeEventListener('touchstart', discoveryTouchStartHandler);
+            discoveryTouchStartHandler = null;
+        }
+        if (discoveryTouchMoveHandler) {
+            window.removeEventListener('touchmove', discoveryTouchMoveHandler);
+            discoveryTouchMoveHandler = null;
+            LOG('Touch-based trigger for discovery sections removed');
         }
     }
 
@@ -2343,54 +3011,122 @@
         
         let lastScrollTop = 0;
         let scrollTimeout = null;
+        let lastTouchY = null;
         
         const handleScroll = () => {
             // Ensure we're on the home page before proceeding
             const currentView = window.KefinTweaksUtils?.getCurrentView();
             const isHomePage = currentView === 'home' || currentView === 'home.html';
             
+            // Only enable scroll-based loading on the home page
             if (!isHomePage) {
-                LOG('Not on home page, skipping scroll-based loading setup');
                 return;
             }
 
+            // Only enable scroll-based loading on the home page first tab
             const activeTab = document.querySelector('.headerTabs .emby-tab-button-active').getAttribute('data-index');
             if (activeTab !== '0') {
-                LOG('Not on home page, skipping scroll-based loading setup');
                 return;
             }
 
             if (isRenderingDiscoveryGroup) return;
-            
+
             const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-            const windowHeight = window.innerHeight;
-            const documentHeight = document.documentElement.scrollHeight;
-            
-            // Calculate distance from bottom (in pixels)
-            const distanceFromBottom = documentHeight - (scrollTop + windowHeight);
-            
-            // Trigger when user is 1500px from the bottom and scrolling down
-            const triggerDistance = 3000;
-            
-            if (distanceFromBottom <= triggerDistance && scrollTop > lastScrollTop) {
-                // Clear any existing timeout
-                if (scrollTimeout) {
-                    clearTimeout(scrollTimeout);
-                }
-                
-                // Debounce the scroll event
-                scrollTimeout = setTimeout(async () => {
-                    LOG(`User scrolled to ${distanceFromBottom.toFixed(0)}px from bottom, rendering more discovery sections from buffer...`);
-                    await renderNextDiscoveryGroup(container);
-                }, 500);
-            }
-            
             lastScrollTop = scrollTop;
         };
         
         // Store handler reference and add scroll listener
         discoveryScrollHandler = handleScroll;
         window.addEventListener('scroll', handleScroll, { passive: true });
+
+        // Also trigger when user attempts to scroll down while already at the bottom
+        const handleWheel = (event) => {
+            // Ensure we're on the home page before proceeding
+            const currentView = window.KefinTweaksUtils?.getCurrentView();
+            const isHomePage = currentView === 'home' || currentView === 'home.html';
+            if (!isHomePage) return;
+
+            // Only on first tab
+            const activeTab = document.querySelector('.headerTabs .emby-tab-button-active').getAttribute('data-index');
+            if (activeTab !== '0') return;
+
+            if (isRenderingDiscoveryGroup) return;
+
+            // Only react to downward scroll attempts
+            if (event.deltaY <= 0) return; 
+
+            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+            const windowHeight = window.innerHeight;
+            const documentHeight = document.documentElement.scrollHeight;
+
+            const atBottom = scrollTop + windowHeight >= documentHeight - 2;
+            if (!atBottom) return;
+
+            if (scrollTimeout) {
+                clearTimeout(scrollTimeout);
+            }
+            scrollTimeout = setTimeout(async () => {
+                LOG('User attempted to scroll past bottom; loading next discovery group...');
+                const homeScreenSectionsContainer = document.querySelector('.libraryPage:not(.hide) .homeSectionsContainer');
+                await renderNextDiscoveryGroup(homeScreenSectionsContainer);
+            }, 200);
+        };
+
+        discoveryWheelHandler = handleWheel;
+        window.addEventListener('wheel', handleWheel, { passive: true });
+
+        // Touch support: trigger when user swipes up (scroll down) while already at bottom
+        const handleTouchStart = (event) => {
+            const touch = event.touches && event.touches[0];
+            lastTouchY = touch ? touch.clientY : null;
+        };
+
+        const handleTouchMove = (event) => {
+            // Ensure we're on the home page before proceeding
+            const currentView = window.KefinTweaksUtils?.getCurrentView();
+            const isHomePage = currentView === 'home' || currentView === 'home.html';
+            if (!isHomePage) return;
+
+            // Only on first tab
+            const activeTab = document.querySelector('.headerTabs .emby-tab-button-active').getAttribute('data-index');
+            if (activeTab !== '0') return;
+
+            if (isRenderingDiscoveryGroup) return;
+
+            const touch = event.touches && event.touches[0];
+            if (!touch) return;
+
+            if (lastTouchY == null) {
+                lastTouchY = touch.clientY;
+                return;
+            }
+
+            const deltaY = touch.clientY - lastTouchY; // negative when swiping up (scrolling down)
+            lastTouchY = touch.clientY;
+
+            // Only react to upward swipe which scrolls content down
+            if (deltaY >= 0) return;
+
+            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+            const windowHeight = window.innerHeight;
+            const documentHeight = document.documentElement.scrollHeight;
+
+            const atBottom = scrollTop + windowHeight >= documentHeight - 2;
+            if (!atBottom) return;
+
+            if (scrollTimeout) {
+                clearTimeout(scrollTimeout);
+            }
+            scrollTimeout = setTimeout(async () => {
+                LOG('User swiped up at bottom; loading next discovery group...');
+                await renderNextDiscoveryGroup(container);
+            }, 200);
+        };
+
+        discoveryTouchStartHandler = handleTouchStart;
+        discoveryTouchMoveHandler = handleTouchMove;
+        window.addEventListener('touchstart', handleTouchStart, { passive: true });
+        window.addEventListener('touchmove', handleTouchMove, { passive: true });
         
         LOG('Scroll-based infinite loading for discovery sections enabled');
     }
@@ -2406,7 +3142,7 @@
             // Create load more button
             loadMoreButton = document.createElement('button');
             loadMoreButton.textContent = 'Discover More';
-            loadMoreButton.className = 'load-more-discovery-btn';
+            loadMoreButton.className = 'load-more-discovery-btn raised button-submit emby-button';
             loadMoreButton.style.cssText = `
                 order: 9998 !important;
                 display: block;
@@ -2522,7 +3258,8 @@
             const scrollableContainer = window.cardBuilder.renderCards(
                 limitedItems,
                 'Halloween Movies',
-                null
+                null,
+                true
             );
             
             scrollableContainer.setAttribute('data-custom-section-id', 'halloween-movies');
@@ -2562,7 +3299,8 @@
             const scrollableContainer = window.cardBuilder.renderCards(
                 limitedItems,
                 'Horror Movies',
-                halloweenViewMoreUrls.horror
+                halloweenViewMoreUrls.horror,
+                true
             );
             
             scrollableContainer.setAttribute('data-custom-section-id', 'horror-movies');
@@ -2602,7 +3340,8 @@
             const scrollableContainer = window.cardBuilder.renderCards(
                 limitedItems,
                 'Thriller Movies',
-                halloweenViewMoreUrls.thriller
+                halloweenViewMoreUrls.thriller,
+                true
             );
             
             scrollableContainer.setAttribute('data-custom-section-id', 'thriller-movies');
@@ -2637,15 +3376,29 @@
                 halloweenMovies = movieData.halloweenMovies;
                 horrorMovies = movieData.horrorMovies;
                 thrillerMovies = movieData.thrillerMovies;
-                halloweenViewMoreUrls = movieData.viewMoreUrls;
-                
+                halloweenViewMoreUrls = movieData.viewMoreUrls;                
+            }
+
+            let sectionsToRender = [];
+
+            if (halloweenMovies.length > 0) {
+                if (!container.querySelector('[data-custom-section-id="halloween-movies"]')) {
+                    sectionsToRender.push(renderHalloweenMoviesSection(container));
+                }
+                if (!container.querySelector('[data-custom-section-id="horror-movies"]')) {
+                    sectionsToRender.push(renderHorrorMoviesSection(container));
+                }
+                if (!container.querySelector('[data-custom-section-id="thriller-movies"]')) {
+                    sectionsToRender.push(renderThrillerMoviesSection(container));
+                }
+            }
+
+            if (sectionsToRender.length === 0) {
+                LOG('No Halloween sections to render, skipping...');
+                return;
             }
             
-            const results = [
-                renderHalloweenMoviesSection(container),
-                renderHorrorMoviesSection(container),
-                renderThrillerMoviesSection(container)
-            ];
+            const results = await Promise.all(sectionsToRender);
             
             const successCount = results.filter(Boolean).length;
             LOG(`Rendered ${successCount}/${results.length} Halloween sections`);
@@ -2766,10 +3519,6 @@
             return;
         }
         
-        if (retries > 0) {
-            LOG(`Found home sections container after ${retries} retries (${retries * 100}ms)`);
-        }
-        
         // Check if sections are already rendered
         const hasRenderedCustomSections = customHomeSections.some(section => 
             homeSectionsContainer.querySelector(`[data-custom-section-id="${section.id}"]`)
@@ -2786,6 +3535,8 @@
         if (hasRenderedCustomSections || hasRenderedNewAndTrendingSections || hasRenderedDiscoverySections) {
             return;
         }
+
+        createDiscoveryLoadingIndicator();
         
         // Set processing flag to prevent parallel execution
         isProcessing = true;
@@ -2809,6 +3560,7 @@
 
                 // Render watchlist section
                 renderWatchlistSection(homeSectionsContainer),
+                renderPopularTVNetworksSection(homeSectionsContainer),
                 
                 // Start preloading first batch of discovery sections (non-blocking)
                 // This will also set up infinite loading handlers if buffer has content
@@ -3171,6 +3923,10 @@
         LOG(`Deduplication result: ${sampleEpisodes.length} episodes → ${deduplicated.length} episodes`);
         
         return deduplicated;
+    };
+
+    window.discoveryBuffer = function() {
+        return discoveryBuffer;
     };
 
     LOG('Home screen functionality initialized');

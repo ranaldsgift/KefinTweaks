@@ -5,7 +5,7 @@
     'use strict';
     
     // Common logging function
-    const LOG = (...args) => console.log('[BackdropLeakFix]', ...args);
+    const LOG = (...args) => console.log('[KefinTweaks BackdropLeakFix]', ...args);
     
     LOG('Script loaded - JS Injector mode');
 

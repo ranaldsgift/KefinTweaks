@@ -32,7 +32,7 @@
     left: 0;
     right: 0;
     bottom: -25%;
-    background-image: url('/files/KefinTweaks/pages/images/halloween.jpg');
+    background: linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)), url(https://ranaldsgift.github.io/KefinTweaks/pages/images/halloween.jpg);
     background-position: 0px -250px;
     background-size: auto 102%;
 }
@@ -44,4 +44,46 @@
 
 .sectionTitleContainer.sectionTitleContainer-cards.padded-left > .sectionTitle.sectionTitle-cards {
     display: flex !important;
+}
+
+div#discovery-loading-indicator:not(.show)::before {
+    content: 'Loading...';
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    transform: translateY(-50%);
+    visibility: visible;
+    text-align: center;
+    opacity: 1;
+}
+
+#indexPage[data-discovery-ready] div#discovery-loading-indicator:not(.show)::before {
+    content: 'Discover More';
+}
+
+div#discovery-loading-indicator:not(.show)::after {
+    content: '\E313';
+    font-family: 'Material Icons';
+    position: absolute;
+    top: calc(50% + 0.4em);
+    left: 50%;
+    transform: translateX(-50%) translateY(-50%);
+    font-size: 1.5em;
+    color: #ffffff;
+    visibility: visible;
+    opacity: 1;
+}
+
+.libraryPage:has(.load-more-discovery-btn) div#discovery-loading-indicator {
+    opacity: 0;
+}
+
+#indexPage[data-discovery-ready]:not([data-infinite-scroll='true']) div#discovery-loading-indicator {
+    display: none;
+}
+
+#indexPage:not([data-discovery-ready]) div#discovery-loading-indicator:not(.show)::after {
+    content: '';
 }

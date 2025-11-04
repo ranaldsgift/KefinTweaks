@@ -1840,7 +1840,7 @@ div[data-tab="watchlist"] .loading-message {
     font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 48;
 }
 .slide .watchlist-button::before {
-    content: 'bookmark';
+    content: 'bookmark_outline';
     font-family: 'Material Icons';
     font-weight: 600;
     display: inline-block;
@@ -1858,7 +1858,15 @@ div[data-tab="watchlist"] .loading-message {
     -webkit-tap-highlight-color: #fff0;
 }
 
-.card:has(button[data-played="true"]) .watchlist-button {
+.mainDetailButtons:has(.btnPlay.hide) .watchlist-icon, .mainDetailButtons:has(.btnPlay.hide) .btnRecommend {
+    display: none;
+}
+
+.card:has(button[data-played="true"]) .watchlist-button, 
+.card:not(:has(button[data-played])) .watchlist-button,
+.mainDetailButtons:has(button[data-played="true"]) .watchlist-icon, 
+.mainDetailButtons:not(:has(button[data-played])) .watchlist-icon,
+.mainDetailButtons:not(:has(button[data-played])) .btnRecommend {
     display: none;
 }
 

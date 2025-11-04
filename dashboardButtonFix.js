@@ -17,18 +17,20 @@
                 e.stopImmediatePropagation();
                 e.preventDefault();
 
-                console.log("[DashboardButtonFix]: No history to go back. Redirecting to home page.");
+                console.log("[KefinTweaks DashboardButtonFix]: No history to go back. Redirecting to home page.");
 
                 // Changes this to the page you'd like to return to by default
                 const homeUrl = ApiClient.serverVersion().split('.')[1] > 10 ? 'home' : 'home.html';
                 Dashboard.navigate(`/${homeUrl}`);
             }
         }, true);
+
+        observer.disconnect();
     }
 
     // Observe DOM in case button is recreated
-    const obs = new MutationObserver(attachHandler);
-    obs.observe(document.body, { childList: true, subtree: true });
+    const observer = new MutationObserver(attachHandler);
+    observer.observe(document.body, { childList: true, subtree: true });
 
     // Initial run
     attachHandler();

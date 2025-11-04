@@ -76,3 +76,16 @@
 .slide .watchlist-button:not(:hover) {
     background: transparent;
 }
+
+.docspinner {
+    contain: layout style size;
+    top: 1em;
+    right: calc(1em + 7px);
+    left: unset;
+    position: fixed;
+    width: 3em;
+    height: 3em;
+    z-index: 9999999;
+    margin: 0;
+    pointer-events: none;
+}

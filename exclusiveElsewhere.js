@@ -20,9 +20,9 @@
     'use strict';
     
     // Common logging function
-    const LOG = (...args) => console.log('[ExclusiveElsewhere]', ...args);
-    const WARN = (...args) => console.warn('[ExclusiveElsewhere]', ...args);
-    const ERR = (...args) => console.error('[ExclusiveElsewhere]', ...args);
+    const LOG = (...args) => console.log('[KefinTweaks ExclusiveElsewhere]', ...args);
+    const WARN = (...args) => console.warn('[KefinTweaks ExclusiveElsewhere]', ...args);
+    const ERR = (...args) => console.error('[KefinTweaks ExclusiveElsewhere]', ...args);
     
     LOG('Script loaded - JS Injector mode');
     

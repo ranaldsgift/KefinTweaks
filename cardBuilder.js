@@ -41,7 +41,7 @@
          * @returns {Promise<HTMLElement>} - The constructed scrollable container
          */
         renderCardsFromIds: async function(itemIds, title, viewMoreUrl = null, overflowCard = false, cardFormat = null) {
-            const LOG = (...args) => console.log('[CardBuilder]', ...args);
+            const LOG = (...args) => console.log('[KefinTweaks CardBuilder]', ...args);
             
             if (!itemIds || itemIds.length === 0) {
                 LOG(`No item IDs provided for section: ${title}`);
@@ -50,14 +50,16 @@
 
             try {
                 // Fetch all items at once
-                const items = await Promise.all(
-                    itemIds.map(id => ApiClient.getItem(ApiClient.getCurrentUserId(), id))
-                );
+                const response = await ApiClient.getItems(ApiClient.getCurrentUserId(), {
+                    Ids: itemIds.join(','),
+                    Recursive: false
+                });
+                const items = response.Items;
                 
                 LOG(`Fetched ${items.length} items for section: ${title}`);
                 return createScrollableContainer(items, title, viewMoreUrl, overflowCard, cardFormat);
             } catch (error) {
-                console.error('[CardBuilder] Error fetching items:', error);
+                console.error('[KefinTweaks CardBuilder] Error fetching items:', error);
                 return createScrollableContainer([], title, viewMoreUrl, overflowCard, cardFormat);
             }
         }
@@ -176,8 +178,10 @@
             let imageUrl = '';
             if (item.BackdropImageTags[0]) {
                 imageUrl = `${serverAddress}/Items/${item.Id}/Images/Backdrop?${imageParams}&quality=96&tag=${item.BackdropImageTags[0]}`;
-            } else if (item.ParentBackdropImageTags[0]) {
+            } else if (item.ParentBackdropImageTags && item.ParentBackdropImageTags[0]) {
                 imageUrl = `${serverAddress}/Items/${item.ParentBackdropItemId}/Images/Backdrop?${imageParams}&quality=96&tag=${item.ParentBackdropImageTags[0]}`;
+            } else if (item.ImageTags?.Thumb) {
+                imageUrl = `${serverAddress}/Items/${item.Id}/Images/Thumb?${imageParams}&quality=96&tag=${item.ImageTags?.Thumb}`;
             } else {
                 imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.ImageTags?.Primary}`;
             }
@@ -453,9 +457,7 @@
      * @param {string} cardFormat - Override card format: 'portrait', 'backdrop', or 'square'
      * @returns {HTMLElement} - The constructed scrollable container
      */
-    function createScrollableContainer(items, title, viewMoreUrl = null, overflowCard = false, cardFormat = null) {
-        const LOG = (...args) => console.log('[CardBuilder]', ...args);
-        
+    function createScrollableContainer(items, title, viewMoreUrl = null, overflowCard = false, cardFormat = null) {        
         // Create the main vertical section container
         const verticalSection = document.createElement('div');
         verticalSection.className = 'verticalSection emby-scroller-container custom-scroller-container';
@@ -514,7 +516,17 @@
         scroller.setAttribute('data-centerfocus', 'card');
         scroller.className = 'padded-top-focusscale padded-bottom-focusscale emby-scroller custom-scroller';
         scroller.setAttribute('data-scroll-mode-x', 'custom');
-        scroller.style.overflow = 'hidden';
+		// Enable smooth native horizontal touch scrolling (no snapping, no buttons)
+		scroller.style.overflowX = 'auto';
+		scroller.style.overflowY = 'hidden';
+		scroller.style.scrollSnapType = 'none';
+		// Allow both axes so vertical page scroll isn't blocked when gesture starts over the scroller
+		scroller.style.touchAction = 'auto';
+		// Keep horizontal scroll self-contained but allow vertical to bubble to page
+		scroller.style.overscrollBehaviorX = 'contain';
+		scroller.style.overscrollBehaviorY = 'auto';
+		// iOS inertia scrolling
+		scroller.style.webkitOverflowScrolling = 'touch';
 
         // Create items container
         const itemsContainer = document.createElement('div');
@@ -573,5 +585,5 @@
     // Expose the cardBuilder to the global window object
     window.cardBuilder = cardBuilder;
     
-    console.log('[CardBuilder] Module loaded and available at window.cardBuilder');
+    console.log('[KefinTweaks CardBuilder] Module loaded and available at window.cardBuilder');
 })();

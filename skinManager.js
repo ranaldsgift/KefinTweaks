@@ -1,6 +1,7 @@
 // KefinTweaks Skin Manager
 // Manages skin selection and CSS loading for the display settings page
 // Adds a skin dropdown to mypreferencesdisplay.html and handles skin switching
+// Requires: utils.js, userConfig.js modules to be loaded before this script
 
 (function() {
     'use strict';
@@ -73,6 +74,10 @@
     
     // Tooltip management
     let currentTooltip = null;
+    
+    // Store unregister functions for handlers
+    let unregisterDisplayPreferencesHandler = null;
+    let unregisterAnyPageHandler = null;
     
     /**
      * Create and show a tooltip
@@ -208,7 +213,7 @@
         const selectedColorSchemeName = localStorage.getItem(COLOR_SCHEMES_STORAGE_KEY);
         if (selectedColorSchemeName && selectedSkin.colorSchemes) {
             const selectedColorScheme = selectedSkin.colorSchemes.find(scheme => scheme.name === selectedColorSchemeName);
-            if (selectedColorScheme) {
+            if (selectedColorScheme && selectedColorScheme.url) {
                 const cssColorSchemesLink = document.getElementById('cssColorSchemes');
                 if (!cssColorSchemesLink || !cssColorSchemesLink.hasAttribute('data-kefin-color-schemes')) {
                     WARN(`Color scheme verification failed: Color scheme '${selectedColorSchemeName}' not properly applied`);
@@ -225,7 +230,7 @@
      * Initialize the skin manager with verification and retry logic
      */
     function initialize(retryCount = 0) {
-        const MAX_RETRIES = 3;
+        const MAX_RETRIES = 10;
         
         if (!window.KefinTweaksUtils) {
             ERR('KefinTweaksUtils not available - skin manager cannot initialize');
@@ -242,19 +247,7 @@
         loadSelectedTheme();
         loadSelectedColorScheme();
         
-        // Register for the display preferences page
-        window.KefinTweaksUtils.onViewPage(handleDisplayPreferencesPage, {
-            pages: ['mypreferencesdisplay'],
-            immediate: true
-        });
-        
-        // Register for all pages to add the appearance button
-        window.KefinTweaksUtils.onViewPage(handleAnyPage, {
-            pages: [],
-            immediate: true
-        });
-        
-        LOG('SkinManager initialized');
+        LOG('SkinManager initializing...');
         
         // Verify skin application after a short delay to allow CSS to load
         setTimeout(() => {
@@ -266,11 +259,40 @@
                     }, 500); // Wait 500ms before retry
                 } else {
                     ERR(`Skin application verification failed after ${MAX_RETRIES} attempts - giving up`);
+                    // Register handlers even if verification failed (give up case)
+                    registerHandlers();
                 }
             } else {
                 LOG('Skin application verified successfully');
+                // Register handlers after successful verification
+                registerHandlers();
             }
         }, 200); // Wait 200ms for CSS to load before verification
+    }
+    
+    /**
+     * Register the onViewPage handlers
+     */
+    function registerHandlers() {
+        // Only register if not already registered
+        if (unregisterDisplayPreferencesHandler) {
+            LOG('Handlers already registered, skipping');
+            return;
+        }
+        
+        // Register for the display preferences page
+        unregisterDisplayPreferencesHandler = window.KefinTweaksUtils.onViewPage(handleDisplayPreferencesPage, {
+            pages: ['mypreferencesdisplay'],
+            immediate: true
+        });
+        
+        // Register for all pages to add the appearance button
+        unregisterAnyPageHandler = window.KefinTweaksUtils.onViewPage(handleAnyPage, {
+            pages: [],
+            immediate: true
+        });
+        
+        LOG('SkinManager handlers registered');
     }
     
     /**
@@ -351,6 +373,13 @@
         }
         
         LOG('Appearance button added successfully');
+        
+        // Unregister the handleAnyPage handler since button is now added and persistent
+        if (unregisterAnyPageHandler) {
+            unregisterAnyPageHandler();
+            unregisterAnyPageHandler = null;
+            LOG('Unregistered handleAnyPage handler - button is now persistent');
+        }
     }
     
     /**

@@ -1,88 +1,17 @@
 // Jellyfin Playlist Script
 // Modifies playlist view page behavior to navigate to item details instead of playing
 // Adds play button to playlist items
-// Requires: cardBuilder.js module to be loaded before this script
+// Requires: utils.js, cardBuilder.js module to be loaded before this script
 
 (function() {
     'use strict';
     
     // Common logging function
-    const LOG = (...args) => console.log('[Playlist]', ...args);
-    const WARN = (...args) => console.warn('[Playlist]', ...args);
-    const ERR = (...args) => console.error('[Playlist]', ...args);
+    const LOG = (...args) => console.log('[KefinTweaks Playlist]', ...args);
+    const WARN = (...args) => console.warn('[KefinTweaks Playlist]', ...args);
+    const ERR = (...args) => console.error('[KefinTweaks Playlist]', ...args);
     
     LOG('Initializing...');
-    
-    let currentPlaylistId = null;
-    
-    /**
-     * Dynamically checks if playlist items have already been modified
-     * @returns {boolean} - True if playlist items have been modified
-     */
-    function isPlaylistPageModified() {
-        const libraryPage = document.querySelector('.libraryPage:not(.hide)');
-        if (!libraryPage) {
-            return false;
-        }
-        
-        let childrenItemsContainer = libraryPage.querySelector('.childrenItemsContainer');
-        if (!childrenItemsContainer) {
-            childrenItemsContainer = libraryPage.querySelector('#listChildrenCollapsible');
-            if (!childrenItemsContainer) {
-                WARN('Children items container not found');
-                return false;
-            }
-        }
-        
-        const playlistItems = childrenItemsContainer.querySelectorAll('.listItem[data-playlistitemid]');
-        if (playlistItems.length === 0) {
-            return false;
-        }
-        
-        // Check if any playlist item has a play button (indicating modification)
-        for (const item of playlistItems) {
-            const buttonsContainer = item.querySelector('.listViewUserDataButtons');
-            if (buttonsContainer && buttonsContainer.querySelector('.playBtn')) {
-                return true;
-            }
-        }
-        
-        return false;
-    }
-    
-    /**
-     * Checks if the current page is a playlist page by fetching the item details
-     * @param {string} itemId - The item ID from the URL
-     * @returns {Promise<boolean>} - True if the item is a Playlist
-     */
-    async function isPlaylistPage(itemId) {
-        try {
-            const apiClient = window.ApiClient;
-            const serverUrl = apiClient.serverAddress();
-            const token = apiClient.accessToken();
-            
-            const url = `${serverUrl}/Items/${itemId}`;
-            
-            const response = await fetch(url, {
-                headers: {
-                    "Authorization": `MediaBrowser Token="${token}"`
-                }
-            });
-            
-            if (!response.ok) {
-                WARN(`Failed to fetch item details: ${response.status}`);
-                return false;
-            }
-            
-            const item = await response.json();
-            LOG(`Item type: ${item.Type}, Name: ${item.Name}`);
-            
-            return item.Type === 'Playlist';
-        } catch (error) {
-            ERR('Error checking if item is playlist:', error);
-            return false;
-        }
-    }
     
     /**
      * Modifies playlist item click behavior to navigate to details page
@@ -130,8 +59,6 @@
             });
 
             item.dataset.customPlaylistButton = 'true';
-            
-            LOG(`Modified click handler for playlist item: ${playlistItemId}`);
         });
     }
 
@@ -216,8 +143,6 @@
             
             // Prepend the play button to the container
             buttonsContainer.insertBefore(playButton, buttonsContainer.firstChild);
-            
-            LOG(`Added play button to playlist item ${index}: ${playlistItemId}`);
         });
         
         LOG(`Added play buttons to ${playlistItems.length} playlist items`);
@@ -227,14 +152,11 @@
      * Main function to modify the playlist page
      * @param {string} itemId - The playlist item ID
      */
-    async function modifyPlaylistPage(itemId) {
-        if (isPlaylistPageModified()) {
+    async function modifyPlaylistPage() {
+        if (document.querySelector('.libraryPage:not(.hide)')?.dataset?.kefinPlaylist === 'true') {
             LOG('Playlist page already modified, skipping');
             return;
         }
-        
-        LOG(`Modifying playlist page for item: ${itemId}`);
-        currentPlaylistId = itemId;
         
         // Poll for page elements to be ready (every 100ms for up to 10 seconds)
         const pollInterval = 100;
@@ -276,22 +198,20 @@
                 }
                 return;
             }
+
+            if (libraryPage.dataset.kefinPlaylist === 'true') {
+                LOG('Playlist page already modified, skipping');
+                return;
+            }
             
             // Elements found, proceed with modifications
+            libraryPage.dataset.kefinPlaylist = 'true';
             modifyPlaylistItemClicks();
             addPlayButtons();
             LOG('Playlist page modifications complete');
         };
         
         pollForElements();
-    }
-    
-    /**
-     * Resets the current playlist ID when navigating away from playlist page
-     */
-    function resetModificationState() {
-        currentPlaylistId = null;
-        LOG('Reset playlist modification state');
     }
     
     /**
@@ -307,36 +227,12 @@
         LOG('Registering playlist handler with KefinTweaksUtils');
         
         // Register handler for details pages
-        window.KefinTweaksUtils.onViewPage((view, element) => {
-            LOG('Details page detected via utils');
-            
-            // Check if we're on a details page
-            const currentUrl = window.location.hash;
-            if (currentUrl.includes('#/details')) {
-                const urlParams = new URLSearchParams(currentUrl.split('?')[1]);
-                const itemId = urlParams.get('id');
-                
-                if (itemId) {
-                    LOG(`Details page detected with item ID: ${itemId}`);
-                    
-                    // Reset state when navigating to a new page
-                    resetModificationState();
-                    
-                    // Check if this is a playlist page
-                    isPlaylistPage(itemId).then(isPlaylist => {
-                        if (isPlaylist) {
-                            LOG(`Playlist page detected: ${itemId}`);
-                            modifyPlaylistPage(itemId);
-                        } else {
-                            LOG(`Not a playlist page: ${itemId}`);
-                        }
-                    }).catch(error => {
-                        ERR('Error checking playlist page:', error);
-                    });
-                }
-            } else {
-                // Not on a details page, reset state
-                resetModificationState();
+        window.KefinTweaksUtils.onViewPage(async (view, element, itemPromise) => {
+            // Await the item promise to get the actual item data
+            const item = await itemPromise;
+            if (item && item.Type === 'Playlist') {
+                modifyPlaylistPage();
+                return;
             }
         }, {
             immediate: true,
@@ -349,5 +245,5 @@
     // Initialize the hook when the script loads
     initializePlaylistHook();
     
-    console.log('[Playlist] Module loaded and ready');
+    console.log('[KefinTweaks Playlist] Module loaded and ready');
 })();
