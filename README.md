@@ -19,7 +19,7 @@ There is no configuration required, but if you wish to customize some of the fea
   - [UI Enhancements](#-ui-enhancements)
     - [Watchlist Support](#watchlist-support)
     - [Navigation Improvements](#navigation-improvements)
-  - [🔧 System Improvements](#-system-improvements)
+  - [System Improvements](#-system-improvements)
     - [Performance & Stability](#performance--stability)
     - [Branding & Customization](#branding--customization)
 - [Script Details](#-script-details)
