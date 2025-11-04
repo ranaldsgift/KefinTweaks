@@ -18,7 +18,7 @@
         headerTabs: true,         // Header tab enhancements
         customMenuLinks: true,    // Custom menu links functionality
         exclusiveElsewhere: true, // Exclusive elsewhere branding
-        updoot: true,             // Upvote functionality
+        updoot: false,             // Upvote functionality
         backdropLeakFix: true,    // Memory leak fixes
         dashboardButtonFix: true, // Dashboard button fix
         infiniteScroll: true,     // Infinite scroll functionality
