@@ -23,7 +23,6 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	const localStorageCache = new window.LocalStorageCache();
 
 	// Playback monitoring for watchlist cleanup
-	let originalFetch = window.fetch;
 	let playbackMonitorInitialized = false;
 
 	// Data optimization functions for localStorage storage
@@ -3212,64 +3211,81 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			return;
 		}
 
-		// Override fetch to intercept playback stopped and watch status update requests
-		window.fetch = async function(...args) {
-			const response = await originalFetch.apply(this, args);
-			
-			// Check if this is a playback stopped request
-			if (args[0] && typeof args[0] === 'string' && args[0].includes('/Sessions/Playing/Stopped')) {
-				try {
-					// Clone the response to avoid consuming it
-					const clonedResponse = response.clone();
-					
-					// Get the request body if it exists
-					if (args[1] && args[1].body) {
-						const body = args[1].body;
-						let payload;
-						
-						// Handle different body types
-						if (typeof body === 'string') {
-							payload = JSON.parse(body);
-						} else if (body instanceof FormData) {
-							// FormData - extract JSON if available
-							const jsonData = body.get('data');
-							if (jsonData) {
-								payload = JSON.parse(jsonData);
+		// Use WebSocket to listen for UserDataChanged messages instead of intercepting fetch
+		// This is more reliable and doesn't interfere with fetch requests
+		function setupWebSocketMonitoring() {
+			try {
+				// Make sure socket is open
+				if (window.ApiClient && typeof window.ApiClient.ensureWebSocket === 'function') {
+					window.ApiClient.ensureWebSocket();
+				}
+
+				// Grab the actual socket
+				const socket = (window.ApiClient && (window.ApiClient.webSocket || window.ApiClient._webSocket)) || null;
+
+				if (socket) {
+					// Store original handler if it exists
+					const originalHandler = socket.onmessage;
+
+					// Hook into onmessage
+					socket.onmessage = function(event) {
+						try {
+							// Parse the WebSocket message data
+							// The event might have event.Data or event.data depending on implementation
+							const messageData = event.Data || event.data;
+							if (!messageData) {
+								// If no data, just pass through to original handler
+								if (originalHandler) originalHandler.call(this, event);
+								return;
 							}
-						} else {
-							payload = body;
+
+							const data = typeof messageData === 'string' ? JSON.parse(messageData) : messageData;
+
+							// Check if this is a UserDataChanged message
+							if (data.MessageType === 'UserDataChanged' && data.Data && data.Data.UserDataList && data.Data.UserDataList.length > 0) {
+								const userData = data.Data.UserDataList[0];
+								if (userData.ItemId) {
+									LOG(`Detected UserDataChanged for item: ${userData.ItemId}, Played: ${userData.Played}`);
+									// Handle the watched status change (works for both played and unplayed)
+									handleItemWatchedStatusChange(userData.ItemId).catch(err => {
+										ERR('Error handling UserDataChanged event:', err);
+									});
+								}
+							}
+						} catch (err) {
+							// Log parse errors but don't break the original handler
+							WARN('WebSocket message parse error:', err);
 						}
-						
-						if (payload && payload.ItemId) {
-							await handlePlaybackStopped(payload.ItemId);
+
+						// Pass it through so Jellyfin still works normally
+						if (originalHandler) {
+							originalHandler.call(this, event);
 						}
-					}
-				} catch (err) {
-					ERR('Error processing playback stopped request:', err);
+					};
+
+					playbackMonitorInitialized = true;
+					LOG('✅ Playback and watch status monitoring initialized via WebSocket');
+					return true;
+				} else {
+					WARN('⚠️ No WebSocket found. Retrying in 1 second...');
+					return false;
 				}
+			} catch (err) {
+				ERR('Error setting up WebSocket monitoring:', err);
+				return false;
 			}
-			
-			// Check if this is a watch status update request (PlayedItems) - both POST and DELETE
-			if (args[0] && typeof args[0] === 'string' && args[0].includes('/PlayedItems/') && args[1] && (args[1].method === 'POST' || args[1].method === 'DELETE')) {
-				try {
-					// Extract item ID from URL: /Users/{userId}/PlayedItems/{itemId}
-					const urlMatch = args[0].match(/\/PlayedItems\/([^/?]+)/);
-					if (urlMatch && urlMatch[1]) {
-						const itemId = urlMatch[1];
-						const method = args[1].method;
-						LOG(`Detected watch status ${method} request for item:`, itemId);
-						await handleWatchStatusUpdate(itemId);
-					}
-				} catch (err) {
-					ERR('Error processing watch status update request:', err);
+		}
+
+		// Try to set up immediately
+		if (!setupWebSocketMonitoring()) {
+			// If WebSocket isn't available yet, retry after a short delay
+			// This can happen if the page loads before the WebSocket connection is established
+			setTimeout(() => {
+				if (!playbackMonitorInitialized) {
+					setupWebSocketMonitoring();
 				}
-			}
-			
-			return response;
-		};
-		
-		playbackMonitorInitialized = true;
-		LOG('Playback and watch status monitoring initialized');
+			}, 1000);
+		}
 	}
 
 	// Shared handler for when items' watched status changes (played or unplayed)
