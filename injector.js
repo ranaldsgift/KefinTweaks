@@ -398,7 +398,7 @@
     // Load a single script (assumes dependencies are already loaded)
     async function loadScriptSync(scriptDef) {
         // Check if already loaded
-        const isAlreadyLoaded = document.querySelector(`script[src*="${scriptDef.script}"]`);
+        const isAlreadyLoaded = document.querySelector(`script[src="${getScriptRoot()}${scriptDef.script}${urlSuffix}"]`);
         if (isAlreadyLoaded) {
             console.log(`[KefinTweaks Injector] Script already loaded: ${scriptDef.name}`);
             return;
