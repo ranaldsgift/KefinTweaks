@@ -12,13 +12,26 @@ There is no configuration required, but if you wish to customize some of the fea
   - [Prerequisites](#prerequisites)
   - [Setup Instructions](#setup-instructions)
 - [Features Overview](#features-overview)
+  - [Data Caching](#data-caching)
+  - [Feature Requests Completed](#-feature-requests-completed)
+  - [Feature Requests Planned](#-feature-requests-planned)
   - [Core Features](#-core-features)
     - [Watchlist Page](#watchlist-page)
     - [Enhanced Home Screen](#enhanced-home-screen)
     - [Enhanced Search](#enhanced-search)
   - [UI Enhancements](#-ui-enhancements)
     - [Watchlist Support](#watchlist-support)
-    - [Navigation Improvements](#navigation-improvements)
+    - [Skin Manager](#skin-manager)
+  - [UX Improvements](#ux-improvements)
+    - [Subtitle Search](#subtitle-search)
+    - [Remove from Continue Watching](#remove-from-continue-watching)
+  - [Navigation Improvements](#navigation-improvements)
+    - [Header Tab Enhancements](#header-tab-enhancements)
+    - [Breadcrumb Navigation](#breadcrumb-navigation)
+    - [Custom Menu Integration](#custom-menu-integration)
+    - [Playlist Screen Improvement](#playlist-screen-improvement)
+    - [Flatten Single Season Shows](#flatten-single-season-shows)
+    - [Collections on Movie/Series Details page](#collections-on-movieseries-details-page)
   - [System Improvements](#-system-improvements)
     - [Performance & Stability](#performance--stability)
     - [Branding & Customization](#branding--customization)
@@ -73,6 +86,25 @@ Add a new tab to your Custom Tabs plugin with the following content:
 KefinTweaks provides a modular system of enhancements that can be individually enabled or disabled based on your needs. Each script is designed to work independently while sharing common utilities and dependencies.
 
 As mentioned above, most of the functionality included in KefinTweaks are features that have been requested by the community. Some of these requests have been pending for 5 years or more. I feel that a lot of the top requests have functionality that is essential to the Jellyfin experience but I have also included less requested features, as well as some things that I just personally needed or wanted.
+
+## Data Caching
+
+One thing that I feel is worth pointing out is the way in which some of the data needed by KefinTweaks is handled. For most of the features, data is grabbed on demand as normal, same as any existing Jellyfin functionality. However there are specific features, or subsets of features which do use local device caching in order to either improve performance, or simply because it is not feasible to fetch the data each time. In the future if this ever becomes a plugin, the caching can be more intelligent and done on the server.
+
+The features in KefinTweaks which use local data caching are listed below, along with accompanying explanations for why they are being cached. Everything is cached by default for 24h unless it is specified otherwise. 
+- Home Screen  
+  - **Genres** [24h]:  
+  Genres are cached simply to reduce API calls to the server. This is not an expensive API call, but under most circumstances the results will be the same even across longer periods of time.
+  - **Top People** [24h]:  
+  In order to populate the "Top People" in your movie library, we fetch the Person data for every movie in your library. We build a list of all the People who appear in at least X number of items based on their type (Actor/Director/Writer). This is an expensive operation, and is longer as the size of your library grows.
+- Watchlist
+  - **Watchlist Items** [24h]:  
+  This is mostly done to provide a more responsive UX, as typically the API call to retreive these items should not be very expensive. The Watchlist cache is also updated any time there is a change to an item's Play State or Watchlist status. Keep in mind that the cache can only be updated locally, so if you watch a movie from your watchlist on Device X, and then you browse your Watchlist on Device Y, the Watchlist will still show the watched item until the cache is manually refreshed or it expires.
+  - **Series Progress and Movie History** [24h]:  
+  These are both more expensive operations, especially if you have watched a very high number of Movies or Shows. It's not practical to fetch this data on demand so we cache it to improve UX.
+- Collections on Details Page  
+  - **Collections** [24h]:  
+  Sadly I know no way to retreive a list of Collections that an Item is a child of from the API directly. The Ancestors endpoint only returns the physical ancestors of an item. In order to be able to populate the "Included In" section, we fetch the children from every Collection in your library and add the Item ID of each child to the cache.
 
 ### ✅ **Feature Requests Completed**
 
@@ -216,28 +248,9 @@ Select from a list of pre-defined Skins created by other Jellyfin community memb
 Certain Skins either support or require a color scheme. This lets you change the UI colors within an individual Skin. These options are automatically available for the Skins which support them.
 <hr>
 
+### UX Improvements
 
-#### **Navigation Improvements**
-- **Header Tab Enhancements**:  
-Improved tab navigation and functionality, supports linking to specific tabs  
-
-- **Breadcrumb Navigation**:  
-Clear navigation paths for Movies, Series, Seasons, Episodes, Music Artists, Albums and Songs
-
-<div align="center">
-  <img src="pages/images/breadcrumbs.png" alt="breadcrumbs" style="max-width: 100%; height: auto;"/>
-</div>  
-<br/>  
-
-- **Custom Menu Integration**:  
-Add custom menu links to the side navigation drawer menu  
-
-<div align="center">
-  <img src="pages/images/custommenu.png" alt="custommenu" style="max-width: 100%; height: auto;"/>
-</div>  
-<br/>  
-
-- **Subtitle Search**:  
+#### **Subtitle Search**:  
 Search and download subtitles directly from the video OSD  
 
 <div align="center">
@@ -245,7 +258,7 @@ Search and download subtitles directly from the video OSD
 </div>  
 <br/>  
 
-- **Remove Continue Watching**:  
+#### **Remove from Continue Watching**:  
 Adds a card overlay button to remove items from Continue Watching for all resumable items  
 
 <div align="center">
@@ -253,10 +266,31 @@ Adds a card overlay button to remove items from Continue Watching for all resuma
 </div>  
 <br/>  
 
-- **Playlist Screen Improvement**:  
+### Navigation Improvements
+
+#### **Header Tab Enhancements**:  
+Improved tab navigation and functionality, supports linking to specific tabs  
+
+#### **Breadcrumb Navigation**:  
+Clear navigation paths for Movies, Series, Seasons, Episodes, Music Artists, Albums and Songs
+
+<div align="center">
+  <img src="pages/images/breadcrumbs.png" alt="breadcrumbs" style="max-width: 100%; height: auto;"/>
+</div>  
+<br/>  
+
+#### **Custom Menu Integration**:  
+Add custom menu links to the side navigation drawer menu  
+
+<div align="center">
+  <img src="pages/images/custommenu.png" alt="custommenu" style="max-width: 100%; height: auto;"/>
+</div>  
+<br/>  
+
+#### **Playlist Screen Improvement**:  
 Updates the default playlist functionality to include a play button to start playback and make clicking an item go to the item detail page  
 
-- **Flatten Single Season Shows**:  
+#### **Flatten Single Season Shows**:  
 This will display the list of episodes from the first season on the Series details page for Shows which only have 1 season.  
 
 <div align="center">
@@ -264,7 +298,7 @@ This will display the list of episodes from the first season on the Series detai
 </div>  
 <br/>  
 
-- **Collections on Movie/Series Details page**:  
+#### **Collections on Movie/Series Details page**:  
 This shows an "Included In" section on the Item Details page which displays any Collections that the item is a part of.  
 
 <div align="center">
