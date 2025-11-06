@@ -154,6 +154,7 @@
         
         // If a fetch is already in progress for this item, wait for it
         if (fetchInProgress && fetchItemId === itemId) {
+            LOG('Fetch already in progress for this item, waiting for it to complete');
             return await fetchInProgress;
         }
         
@@ -161,6 +162,7 @@
         fetchItemId = itemId;
         fetchInProgress = (async () => {
             try {
+                LOG('Fetching item:', itemId);
                 const item = await fetchItemById(itemId);
                 cachedItem = item;
                 cachedItemId = itemId;
@@ -174,6 +176,7 @@
             }
         })();
         
+        LOG('Fetch in progress for item:', itemId);
         return await fetchInProgress;
     }
 
@@ -186,6 +189,7 @@
         // Clear cache when view changes to ensure fresh data
         const currentItemId = getItemIdFromUrl();
         if (cachedItemId !== currentItemId) {
+            LOG('Clearing cache for new item:', currentItemId);
             cachedItem = null;
             cachedItemId = null;
             fetchInProgress = null; // Clear any in-progress fetch for previous item
@@ -194,6 +198,7 @@
         
         // Get the item promise once - will be shared across all handlers
         // The promise is cached/fetched by getCurrentItem(), ensuring only one API call
+        LOG('Getting current item for ID:', currentItemId);
         const itemPromise = getCurrentItem();
 
         handlers.forEach((config) => {
