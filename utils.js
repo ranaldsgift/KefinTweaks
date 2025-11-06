@@ -78,7 +78,8 @@
         LOG(`Registered onViewPage handler (total: ${handlers.length})`);
         
         // Call immediately if requested and we're on a matching page
-        if (handlerConfig.options.immediate) {
+        // Test if this is causing issues
+        if (handlerConfig.options.immediate && false) {
             const currentView = getCurrentView();
             if (currentView && shouldCallHandler(handlerConfig, currentView)) {
                 try {
