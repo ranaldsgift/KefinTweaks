@@ -1465,6 +1465,11 @@
             LOG(`Skin CSS already loaded: ${url}`);
             return;
         }
+
+        if (!url || url === '') {
+            LOG(`Invalid skin CSS URL: ${url}, skipping`);
+            return;
+        }
         
         const link = document.createElement('link');
         link.id = `cssSkin-${Date.now()}-${Math.random()}`; // Unique ID to prevent conflicts
