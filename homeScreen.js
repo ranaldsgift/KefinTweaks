@@ -2460,6 +2460,12 @@
             
             // Ensure buffer has 2 groups (simple constant buffer)
             await ensureDiscoveryBuffer();
+
+            if (discoveryBuffer.length === 0) {
+                LOG('No discovery sections to preload');
+                hideDiscoveryLoadingIndicator();
+                return;
+            }
             
             LOG(`Discovery buffer populated with ${discoveryBuffer.length} groups`);
             
@@ -3545,27 +3551,35 @@
             LOG('Starting parallel initialization of home screen sections...');
             
             // Run all initialization functions in parallel for faster loading
-            const initPromises = [
-                // Initialize people cache in background (non-blocking)
-                initializePeopleCache(),
-                
-                // Render custom sections
-                renderAllCustomSections(homeSectionsContainer),
-                
-                // Render new and trending sections
-                renderAllNewAndTrendingSections(homeSectionsContainer),
+            let initPromises = [];
 
-                // Render seasonal sections
-                renderAllSeasonalSections(homeSectionsContainer),
+            // Add people cache and preloading if discovery is enabled
+            if (enableDiscovery) {
+                initPromises.push(initializePeopleCache());
+                initPromises.push(preloadNextSections());
+            }
 
-                // Render watchlist section
-                renderWatchlistSection(homeSectionsContainer),
-                renderPopularTVNetworksSection(homeSectionsContainer),
-                
-                // Start preloading first batch of discovery sections (non-blocking)
-                // This will also set up infinite loading handlers if buffer has content
-                preloadNextSections()
-            ];
+            // Add custom sections if enabled
+            if (customHomeSections && customHomeSections.length > 0) {
+                initPromises.push(renderAllCustomSections(homeSectionsContainer));
+            }
+
+            // Add new and trending sections if enabled
+            if (enableNewAndTrending) {
+                initPromises.push(renderAllNewAndTrendingSections(homeSectionsContainer));
+            }
+
+            // Add seasonal sections if enabled
+            if (enableSeasonal) {
+                initPromises.push(renderAllSeasonalSections(homeSectionsContainer));
+            }
+
+            // Add watchlist section if enabled
+            if (enableWatchlist) {
+                initPromises.push(renderWatchlistSection(homeSectionsContainer));
+            }
+            
+            initPromises.push(renderPopularTVNetworksSection(homeSectionsContainer));
             
             // Wait for all parallel operations to complete
             await Promise.all(initPromises);
