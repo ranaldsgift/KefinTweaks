@@ -10,6 +10,51 @@
     const ERR = (...args) => console.error('[KefinTweaks FlattenSingleSeasonShows]', ...args);
 
     /**
+     * Fetches the Next Up episode for a given series
+     * @param {string} seriesId - The series ID
+     * @returns {Promise<Object|null>} - Episode number object with season and episode, or null
+     */
+    async function fetchNextUpEpisode(seriesId) {
+        try {
+            const apiClient = window.ApiClient;
+            const userId = apiClient.getCurrentUserId();
+            const serverUrl = apiClient.serverAddress();
+            const token = apiClient.accessToken();
+
+            LOG(`Fetching Next Up episode for series: ${seriesId}`);
+            const nextUpUrl = `${serverUrl}/Shows/NextUp?SeriesId=${seriesId}&UserId=${userId}&Fields=MediaSourceCount`;
+            const nextUpRes = await fetch(nextUpUrl, { 
+                headers: { "Authorization": `MediaBrowser Token="${token}"` } 
+            });
+            
+            if (!nextUpRes.ok) {
+                throw new Error(`HTTP ${nextUpRes.status}: ${nextUpRes.statusText}`);
+            }
+            
+            const nextUpData = await nextUpRes.json();
+            const items = nextUpData.Items || [];
+            
+            if (items.length > 0) {
+                const item = items[0];
+                if (item.IndexNumber && item.ParentIndexNumber) {
+                    const episodeNumber = {
+                        season: item.ParentIndexNumber,
+                        episode: item.IndexNumber
+                    };
+                    LOG(`Fetched Next Up episode from API: S${episodeNumber.season}:E${episodeNumber.episode}`);
+                    return episodeNumber;
+                }
+            }
+            
+            LOG('No Next Up episode found in API response');
+            return null;
+        } catch (error) {
+            ERR(`Failed to fetch Next Up episode for series ${seriesId}:`, error);
+            return null;
+        }
+    }
+
+    /**
      * Fetches all episodes for a given series
      * @param {string} seriesId - The series ID
      * @returns {Promise<Array>} - Array of episode items
@@ -22,7 +67,7 @@
             const token = apiClient.accessToken();
 
             LOG(`Fetching episodes for series: ${seriesId}`);
-            const episodesUrl = `${serverUrl}/Shows/${seriesId}/Episodes?UserId=${userId}&Fields=UserData&EnableImageTypes=Primary`;
+            const episodesUrl = `${serverUrl}/Shows/${seriesId}/Episodes?UserId=${userId}&Fields=UserData`;
             const episodesRes = await fetch(episodesUrl, { 
                 headers: { "Authorization": `MediaBrowser Token="${token}"` } 
             });
@@ -104,12 +149,51 @@
                 WARN('Could not determine season ID from episodes');
             }
 
-            // Render Season 1 section using renderCards
+            // Check if Next Up section exists
+            const nextUpSection = activePage?.querySelector('.nextUpSection');
+            const nextUpItemsContainer = nextUpSection?.querySelector('.itemsContainer');
+            
+            // Extract episode info from Next Up if it exists
+            let targetEpisodeNumber = null;
+            if (nextUpSection && nextUpItemsContainer) {
+                LOG('Next Up section found, hiding nextUpSection');
+                
+                // Get the existing card from Next Up and extract episode info
+                const existingCard = nextUpItemsContainer.querySelector('.card');
+                if (existingCard) {
+                    // Find the .cardText a element that contains the episode number
+                    const cardTextLinks = existingCard.querySelectorAll('.cardText a');
+                    for (const link of cardTextLinks) {
+                        const linkText = link.innerText || link.textContent;
+                        // Match SX:EY pattern (may be part of longer text like "S1:E5 - Episode Name")
+                        const match = linkText.match(/S(\d+):E(\d+)/);
+                        if (match) {
+                            targetEpisodeNumber = {
+                                season: parseInt(match[1], 10),
+                                episode: parseInt(match[2], 10)
+                            };
+                            LOG(`Found Next Up episode from DOM: S${targetEpisodeNumber.season}:E${targetEpisodeNumber.episode}`);
+                            break;
+                        }
+                    }
+                }
+                
+                // If we couldn't find it from the DOM, fetch from API
+                if (!targetEpisodeNumber) {
+                    LOG('Could not find episode number from DOM, fetching from API');
+                    targetEpisodeNumber = await fetchNextUpEpisode(seriesId);
+                }
+                
+                // Hide the entire Next Up section
+                nextUpSection.style.display = 'none';
+            }
+
+            // Render Season 1 section using renderCards (default behavior)
             const seasonSection = window.cardBuilder.renderCards(
                 episodes,
                 'Season 1',
                 viewMoreUrl,
-                false, // overflowCard
+                true, // overflowCard
                 null   // cardFormat (use default)
             );
 
@@ -129,6 +213,72 @@
 
             // Prepend the Season 1 section right before #childrenCollapsible
             childrenCollapsible.parentNode.insertBefore(seasonSection, childrenCollapsible);
+
+            // Check if childrenCollapsible has only one child in its itemsContainer, and hide it if so
+            const childrenItemsContainer = childrenCollapsible.querySelector('.itemsContainer');
+            if (childrenItemsContainer) {
+                LOG('childrenCollapsible contains only one child, hiding it');
+                childrenCollapsible.style.display = 'none';
+            }
+
+            // If we found a target episode from Next Up, scroll to it
+            if (targetEpisodeNumber && scrollerContainer) {
+                // Wait for cards to be rendered and positioned
+                setTimeout(() => {
+                    const scrollerItemsContainer = scrollerContainer.querySelector('.itemsContainer');
+                    if (!scrollerItemsContainer) {
+                        WARN('Could not find itemsContainer in scroller');
+                        return;
+                    }
+
+                    // Find the card that matches the target episode number
+                    const cards = scrollerItemsContainer.querySelectorAll('.card');
+                    let targetCard = null;
+                    
+                    for (const card of cards) {
+                        const cardTextLinks = card.querySelectorAll('.cardText a');
+                        for (const link of cardTextLinks) {
+                            const linkText = link.innerText || link.textContent;
+                            const match = linkText.match(/S(\d+):E(\d+)/);
+                            if (match && 
+                                parseInt(match[1], 10) === targetEpisodeNumber.season &&
+                                parseInt(match[2], 10) === targetEpisodeNumber.episode) {
+                                targetCard = card;
+                                break;
+                            }
+                        }
+                        if (targetCard) break;
+                    }
+
+                    // Scroll to make the target card the leftmost visible element
+                    if (targetCard) {
+                        const itemsContainer = scrollerItemsContainer;
+                        const cardOffset = targetCard.offsetLeft;
+                        const scrollerPadding = parseInt(window.getComputedStyle(scrollerContainer).paddingLeft, 10) || 0;
+                        
+                        // Calculate the translateX value (negative to move left)
+                        // The card offset minus padding gives us how much to translate
+                        const translateX = -(cardOffset - scrollerPadding);
+                        
+                        // Update the transform property on the itemsContainer
+                        itemsContainer.style.transform = `translateX(${translateX}px)`;
+                        
+                        // Enable the left scroll button so users can scroll back
+                        const scrollButtons = scrollerContainer.closest('.emby-scroller-container')?.querySelector('.emby-scrollbuttons');
+                        if (scrollButtons) {
+                            const leftButton = scrollButtons.querySelector('button[data-direction="left"]');
+                            if (leftButton) {
+                                leftButton.removeAttribute('disabled');
+                                LOG('Enabled left scroll button');
+                            }
+                        }
+                        
+                        LOG(`Scrolled to target episode S${targetEpisodeNumber.season}:E${targetEpisodeNumber.episode} using translateX(${translateX}px)`);
+                    } else {
+                        WARN(`Could not find target episode card S${targetEpisodeNumber.season}:E${targetEpisodeNumber.episode}`);
+                    }
+                }, 100);
+            }
 
             // Mark as flattened for this series to avoid duplicates
             if (activePage) {
@@ -154,7 +304,7 @@
         LOG('Registering flatten single season shows handler with KefinTweaksUtils');
 
         window.KefinTweaksUtils.onViewPage(
-            async (view, element, itemPromise) => {
+            async (view, element, hash, itemPromise) => {
                 // Only handle details pages
                 const activePage = document.querySelector('.libraryPage:not(.hide)');
                 if (!activePage) return;
@@ -162,9 +312,9 @@
                 // Remove any existing flattened section and reset flag when page changes
                 const existingSection = activePage.querySelector('.flattened-season-section');
                 if (existingSection) {
-                    existingSection.remove();
+                    LOG('Flattened section already exists, skipping');
+                    return;
                 }
-                delete activePage.dataset.flattenedSeriesId;
 
                 // Await the item promise to get the actual item data
                 const item = await itemPromise;
@@ -180,7 +330,6 @@
                 }
             },
             {
-                immediate: true,
                 pages: ['details']
             }
         );

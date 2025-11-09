@@ -21,9 +21,14 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	
 	// Initialize localStorage cache manager
 	const localStorageCache = new window.LocalStorageCache();
+	
+	const WATCHLIST_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 	// Playback monitoring for watchlist cleanup
 	let playbackMonitorInitialized = false;
+
+	// Store watchlist tab index
+	let _watchlistTabIndex = null;
 
 	// Data optimization functions for localStorage storage
 	function optimizeProgressDataForStorage(progressDataArray) {
@@ -92,6 +97,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			SeriesId: item.SeriesId,
 			SeriesName: item.SeriesName,
 			SeriesPrimaryImageTag: item.SeriesPrimaryImageTag,
+			ParentBackdropItemId: item.ParentBackdropItemId,
 			ParentBackdropImageTags: item.ParentBackdropImageTags,
 			ParentThumbImageTag: item.ParentPrimaryImageTags,
 			IndexNumber: item.IndexNumber,
@@ -148,12 +154,12 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	function createRefreshButton(cacheName, label) {
 		const refreshBtn = document.createElement('button');
 		refreshBtn.className = 'paper-icon-button-light emby-button ';
-		refreshBtn.innerHTML = '<span class="material-icons">refresh</span>';
+		refreshBtn.innerHTML = '<span class="material-icons refresh"></span>';
 		refreshBtn.title = `Refresh ${label} data from server`;
 		
 		refreshBtn.onclick = async () => {
 			refreshBtn.disabled = true;
-			refreshBtn.innerHTML = '<span class="material-icons">refresh</span>';
+			refreshBtn.innerHTML = '<span class="material-icons refresh"></span>';
 			
 			try {
 				// Clear localStorage cache
@@ -190,17 +196,17 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				}
 				
 				// Show success feedback with checkmark
-				refreshBtn.innerHTML = '<span class="material-icons">check</span>';
+				refreshBtn.innerHTML = '<span class="material-icons check"></span>';
 				setTimeout(() => {
-					refreshBtn.innerHTML = '<span class="material-icons">refresh</span>';
+					refreshBtn.innerHTML = '<span class="material-icons refresh"></span>';
 					refreshBtn.disabled = false;
 				}, 2000);
 				
 			} catch (error) {
 				ERR('Failed to refresh cache:', error);
-				refreshBtn.innerHTML = '<span class="material-icons">error</span>';
+				refreshBtn.innerHTML = '<span class="material-icons error"></span>';
 				setTimeout(() => {
-					refreshBtn.innerHTML = '<span class="material-icons">refresh</span>';
+					refreshBtn.innerHTML = '<span class="material-icons refresh"></span>';
 					refreshBtn.disabled = false;
 				}, 3000);
 			}
@@ -220,9 +226,9 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		const currentLabel = SORT_OPTIONS[currentSort]?.label || 'Last Watched';
 		
 		sortBtn.innerHTML = `
-			<span class="material-icons">sort</span>
+			<span class="material-icons sort"></span>
 			<span class="sort-label">${currentLabel}</span>
-			<span class="material-icons">arrow_drop_down</span>
+			<span class="material-icons arrow_drop_down"></span>
 		`;
 		sortBtn.title = 'Sort series by different criteria';
 		
@@ -249,9 +255,9 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		const currentLabel = MOVIE_SORT_OPTIONS[currentSort]?.label || 'Last Watched';
 		
 		sortBtn.innerHTML = `
-			<span class="material-icons">sort</span>
+			<span class="material-icons sort"></span>
 			<span class="sort-label">${currentLabel}</span>
-			<span class="material-icons">arrow_drop_down</span>
+			<span class="material-icons arrow_drop_down"></span>
 		`;
 		sortBtn.title = 'Sort movies by different criteria';
 		
@@ -558,8 +564,41 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		}
 	}
 
+	// Helper function to fetch episode by series ID, season, and episode number
+	async function fetchEpisode(seriesId, season, episode) {
+		if (!seriesId || !season || !episode) {
+			throw new Error('Missing required information: seriesId, season, or episode');
+		}
+
+		LOG(`Fetching episode ID: series ${seriesId}, season ${season}, episode ${episode}`);
+		const episodes = await fetchEpisodesForSeries(seriesId);
+		
+		if (!episodes || episodes.length === 0) {
+			throw new Error(`No episodes found for series ${seriesId}`);
+		}
+
+		// Find the episode that matches the season and episode number
+		const matchingEpisode = episodes.find(ep => {
+			const start = ep.IndexNumber;
+			const end = ep.IndexNumberEnd || ep.IndexNumber;
+			return ep.ParentIndexNumber === parseInt(season) && 
+			       parseInt(episode) >= start && 
+			       parseInt(episode) <= end;
+		});
+
+		if (matchingEpisode) {
+			LOG(`Found episode ID: ${matchingEpisode.Id} for season ${season}, episode ${episode}`);
+			return matchingEpisode;
+		} else {
+			throw new Error(`Could not find episode for series ${seriesId}, season ${season}, episode ${episode}`);
+		}
+	}
+
 	// Show episode watched confirmation modal
 	function showEpisodeWatchedConfirmation(episodeId, element, episodeInfo = null, seriesId = null, isWatched = false) {
+		// Note: If episodeId is missing, it will be fetched when the confirm button is clicked
+		// using the seriesId, season, and episode information from episodeInfo
+
 		// Create modal content based on watched status
 		const episodeTitle = episodeInfo ? episodeInfo.title : 'Episode Title';
 		const episodeDetails = episodeInfo ? `Season ${episodeInfo.season}, Episode ${episodeInfo.episode}` : 'Season X, Episode Y';
@@ -581,15 +620,15 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			</div>
 			<div class="confirmation-actions">
 				<button class="view-episode-btn" id="view-episode-btn">
-					<span class="material-icons">info</span>
+					<span class="material-icons info"></span>
 					Go To Episode
 				</button>
 				<button class="confirm-btn" id="confirm-episode-action">
-					<span class="material-icons">${confirmButtonIcon}</span>
+					<span class="material-icons ${confirmButtonIcon}"></span>
 					${confirmButtonText}
 				</button>
 				<button class="cancel-btn" id="cancel-episode-action">
-					<span class="material-icons">close</span>
+					<span class="material-icons close"></span>
 					Cancel
 				</button>
 			</div>
@@ -602,15 +641,15 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			content: confirmationContent,
 			onOpen: (modalInstance) => {
 				// Store the episode ID, element, and watched status for the confirmation
-				modalInstance.dialog.dataset.episodeId = episodeId;
+				modalInstance.dialog.dataset.episodeId = episodeId || '';
 				modalInstance.dialog.dataset.elementType = element.classList.contains('progress-chunk') ? 'chunk' : 'button';
-				modalInstance.dialog.dataset.seriesId = episodeInfo.seriesId;
+				modalInstance.dialog.dataset.seriesId = (episodeInfo && episodeInfo.seriesId) || seriesId || '';
 				modalInstance.dialog.dataset.isWatched = isWatched;
 				
 				// Store season/episode for binary mode
 				if (episodeInfo) {
-					modalInstance.dialog.dataset.season = episodeInfo.season;
-					modalInstance.dialog.dataset.episode = episodeInfo.episode;
+					modalInstance.dialog.dataset.season = episodeInfo.season || '';
+					modalInstance.dialog.dataset.episode = episodeInfo.episode || '';
 				}
 
 				// Add event listeners
@@ -618,9 +657,28 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				const cancelBtn = modalInstance.dialog.querySelector('#cancel-episode-action');
 				const viewEpisodeBtn = modalInstance.dialog.querySelector('#view-episode-btn');
 				
-				viewEpisodeBtn.onclick = () => {
+				viewEpisodeBtn.onclick = async () => {
 					// Navigate to the episode's item page
-					const episodeId = modalInstance.dialog.dataset.episodeId;
+					let episodeId = modalInstance.dialog.dataset.episodeId;
+					const seriesId = modalInstance.dialog.dataset.seriesId;
+					const season = modalInstance.dialog.dataset.season;
+					const episode = modalInstance.dialog.dataset.episode;
+					
+					// If episodeId is missing, fetch it using seriesId, season, and episode
+					if (!episodeId) {
+						try {
+							const item = await fetchEpisode(seriesId, season, episode);
+							if (item) {
+								episodeId = item.Id;
+								modalInstance.dialog.dataset.episodeId = episodeId;
+							}
+						} catch (err) {
+							WARN('Cannot navigate to episode:', err.message);
+							window.ModalSystem.close('episode-confirmation-modal');
+							return;
+						}
+					}
+					
 					if (episodeId) {
 						Dashboard.navigate(`#/details?id=${episodeId}`);
 					}
@@ -629,10 +687,27 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				};
 				
 				confirmBtn.onclick = async () => {
-					const episodeId = modalInstance.dialog.dataset.episodeId;
+					let episodeId = modalInstance.dialog.dataset.episodeId;
 					const elementType = modalInstance.dialog.dataset.elementType;
 					const seriesId = modalInstance.dialog.dataset.seriesId;
+					const season = modalInstance.dialog.dataset.season;
+					const episode = modalInstance.dialog.dataset.episode;
 					const isCurrentlyWatched = modalInstance.dialog.dataset.isWatched === 'true';
+					
+					// If episodeId is missing, fetch it using seriesId, season, and episode
+					if (!episodeId) {
+						try {
+							const item = await fetchEpisode(seriesId, season, episode);
+							if (item) {
+								episodeId = item.Id;
+								modalInstance.dialog.dataset.episodeId = episodeId;
+							}
+						} catch (err) {
+							ERR(err.message);
+							window.ModalSystem.close('episode-confirmation-modal');
+							return;
+						}
+					}
 					
 					// Find the original element
 					let element = null;
@@ -646,7 +721,17 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 						}
 					}
 					
-					element = document.querySelector(`[data-episode-id="${episodeId}"].episode-watched-toggle`);
+					if (!element) {
+						element = document.querySelector(`[data-episode-id="${episodeId}"].episode-watched-toggle`);
+					}
+					
+					// Reconstruct episodeInfo for updateLastWatched if needed
+					const episodeInfoForUpdate = episodeInfo || {
+						title: modalInstance.dialog.querySelector('.episode-title')?.textContent || 'Episode',
+						season: parseInt(modalInstance.dialog.dataset.season),
+						episode: parseInt(modalInstance.dialog.dataset.episode),
+						seriesId: seriesId
+					};
 					
 					if (isCurrentlyWatched) {
 						// Remove from watched
@@ -662,7 +747,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 						const progressCard = document.querySelector(`[data-series-id="${seriesId}"]`)?.closest('.progress-card');
 						if (progressCard) {
 							const lastWatchedElement = progressCard.querySelector('.progress-last-watched');
-							updateLastWatched(lastWatchedElement, episodeInfo);
+							updateLastWatched(lastWatchedElement, episodeInfoForUpdate);
 						}
 					}
 					
@@ -746,11 +831,11 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			</div>
 			<div class="confirmation-actions">
 				<button class="confirm-btn" id="confirm-mark-all-watched">
-					<span class="material-icons">check_circle</span>
+					<span class="material-icons check_circle"></span>
 					Mark All as Watched
 				</button>
 				<button class="cancel-btn" id="cancel-mark-all-watched">
-					<span class="material-icons">close</span>
+					<span class="material-icons close"></span>
 					Cancel
 				</button>
 			</div>
@@ -1241,11 +1326,41 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	}
 
 	// Main function to update episode watched status in cache
-	function updateEpisodeWatchedStatusInCache(seriesId, episodeId, isWatched = true) {
-		const cachedProgress = getCachedSeriesProgress(seriesId);
+	async function updateEpisodeWatchedStatusInCache(seriesId, episodeId, isWatched = true) {
+		let cachedProgress = getCachedSeriesProgress(seriesId);
 		if (!cachedProgress) {
-			LOG(`No cached progress found for series: ${seriesId}`);
-			return false;
+			LOG(`No cached progress found for series: ${seriesId}, fetching and adding to cache`);
+			
+			// Fetch series data from API
+			const apiClient = window.ApiClient;
+			const userId = apiClient.getCurrentUserId();
+			const serverUrl = apiClient.serverAddress();
+			const token = apiClient.accessToken();
+			
+			try {
+				// Fetch the series item
+				const seriesUrl = `${serverUrl}/Items/${seriesId}?UserId=${userId}&Fields=UserData,RecursiveItemCount&EnableImageTypes=Primary,Banner`;
+				const seriesRes = await fetch(seriesUrl, { headers: { "Authorization": `MediaBrowser Token=\"${token}\"` } });
+				const series = await seriesRes.json();
+				
+				if (!series || !series.Id) {
+					LOG(`Failed to fetch series data for seriesId: ${seriesId}`);
+					return false;
+				}
+				
+				// Fetch and create progress data for this series
+				cachedProgress = await fetchSeriesProgressWithMissingEpisodes(series, userId, serverUrl, token);
+				
+				if (!cachedProgress) {
+					LOG(`Failed to create progress data for series: ${seriesId}`);
+					return false;
+				}
+				
+				LOG(`Successfully added series ${series.Name} to cache`);
+			} catch (err) {
+				ERR(`Failed to fetch and add series ${seriesId} to cache:`, err);
+				return false;
+			}
 		}
 		
 		// Update episode data if available in memory
@@ -1297,6 +1412,15 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		// Regenerate binaryProgress from episodes if available
 		if (Array.isArray(cachedProgress.episodes) && cachedProgress.episodes.length > 0) {
 			cachedProgress.binaryProgress = generateBinaryProgressData(cachedProgress.episodes);
+		}
+		
+		// Get the last watched episode based on the cachedProgress.episodes
+		const lastWatchedEpisode = cachedProgress.episodes
+			.filter(ep => ep.UserData && ep.UserData.LastPlayedDate)
+			.sort((a, b) => new Date(b.UserData.LastPlayedDate) - new Date(a.UserData.LastPlayedDate))[0];
+
+		if (lastWatchedEpisode) {
+			cachedProgress.lastWatchedEpisode = lastWatchedEpisode;
 		}
 		
 		// Update the cache
@@ -1472,20 +1596,6 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		if (progressData.binaryProgress) {
 			// Create progress bar from binary data (instant)
 			createBinaryProgressBar(progressBar, progressData.binaryProgress, seriesId);
-			LOG(`Created binary progress bar for series: ${progressData.series.Name}`);
-			
-			// Enhance with episode details in background
-			setTimeout(async () => {
-				try {
-					const episodes = await fetchEpisodesForSeries(seriesId);
-					if (episodes && episodes.length > 0) {
-						enhanceProgressBarWithEpisodes(progressBar, episodes);
-						LOG(`Enhanced progress bar with episode details for series: ${progressData.series.Name}`);
-					}
-				} catch (err) {
-					ERR(`Failed to enhance progress bar for series ${seriesId}:`, err);
-				}
-			}, 100); // Small delay to let initial render complete
 			
 		} else {
 			// Fallback to simple progress bar
@@ -2081,7 +2191,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		}
 		
 		LOG('Initializing progress tab');
-		//renderProgressContent();
+		renderProgressContent();
 		
 		try {
 			await fetchAllProgressData(true);
@@ -2173,7 +2283,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			
 			// Store in localStorage for next time (optimized)
 			const optimizedData = optimizeWatchlistDataForStorage(sortedItems);
-			localStorageCache.set(`watchlist_${section}`, optimizedData);
+			localStorageCache.set(`watchlist_${section}`, optimizedData, ApiClient._currentUser.Id, WATCHLIST_CACHE_TTL);
 			LOG(`Stored optimized watchlist ${section} data in localStorage`);
 			
 			// Sync watched status for this section (remove played items)
@@ -2453,8 +2563,6 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				LOG(`Using cached progress for series: ${series.Name}`);
 				return cachedProgress;
 			}
-
-			LOG(`Fetching progress for series: ${series.Name} (${series.Status})`);
 			
 			// Get all episodes including missing ones to get accurate TotalRecordCount
 			const episodesUrl = `${serverUrl}/Shows/${series.Id}/Episodes?UserId=${userId}&Fields=UserData&EnableImageTypes=Primary`;
@@ -2985,7 +3093,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 						</div>
 					</div>
 					<button class="layout-toggle-btn" id="watchlist-layout-toggle" title="Toggle layout">
-						<span class="material-icons">view_module</span>
+						<span class="material-icons view_module"></span>
 					</button>
 				</div>
 			</div>
@@ -2995,10 +3103,10 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			<div class="watchlist-episodes"></div>
 			<div class="watchlist-empty-message" style="display: none;">
 				<div class="empty-message-icon">
-					<span class="material-icons">bookmark_border</span>
+					<span class="material-icons bookmark_border"></span>
 				</div>
 				<div class="empty-message-title">Your Watchlist is Empty</div>
-				<div class="empty-message-subtitle">Click the <span class="material-icons">bookmark_border</span> to add movies and shows to your watchlist</div>
+				<div class="empty-message-subtitle">Click the <span class="material-icons bookmark_border"></span> to add movies and shows to your watchlist</div>
 			</div>
 		</div>
 			
@@ -3016,10 +3124,10 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				</div>
 				<div class="search-container">
 					<div class="search-input-wrapper">
-						<span class="material-icons search-icon">search</span>
+						<span class="material-icons search-icon search"></span>
 						<input type="text" id="progress-search" class="search-input" placeholder="Search shows..." />
 						<button class="search-clear-btn" id="progress-search-clear" style="display: none;">
-							<span class="material-icons">close</span>
+							<span class="material-icons close"></span>
 						</button>
 					</div>
 				</div>
@@ -3028,7 +3136,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				</div>
 				<div class="progress-empty-message" style="display: none;">
 					<div class="empty-message-icon">
-						<span class="material-icons">acute</span>
+						<span class="material-icons acute"></span>
 					</div>
 					<div class="empty-message-title">No Progress to Show</div>
 					<div class="empty-message-subtitle">Start watching some shows to track your progress here</div>
@@ -3046,10 +3154,10 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				</div>
 				<div class="search-container">
 					<div class="search-input-wrapper">
-						<span class="material-icons search-icon">search</span>
+						<span class="material-icons search-icon search"></span>
 						<input type="text" id="movie-search" placeholder="Search movies..." class="search-input">
 						<button class="search-clear-btn" id="movie-search-clear" style="display: none;">
-							<span class="material-icons">close</span>
+							<span class="material-icons close"></span>
 						</button>
 					</div>
 				</div>
@@ -3060,7 +3168,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				</div>
 				<div class="movie-history-empty-message" style="display: none;">
 					<div class="empty-message-icon">
-						<span class="material-icons">movie</span>
+						<span class="material-icons movie"></span>
 					</div>
 					<div class="empty-message-title">No Movies Watched</div>
 					<div class="empty-message-subtitle">Start watching some movies to see your history here</div>
@@ -3078,7 +3186,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 					<div class="progress-stats-grid">
 						<div class="stat-card">
 							<div class="stat-icon">
-								<span class="material-icons">play_circle</span>
+								<span class="material-icons play_circle"></span>
 							</div>
 							<div class="stat-content">
 								<div class="stat-value" id="stat-series-started">0</div>
@@ -3087,7 +3195,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 						</div>
 						<div class="stat-card">
 							<div class="stat-icon">
-								<span class="material-icons">check_circle_outline</span>
+								<span class="material-icons check_circle_outline"></span>
 							</div>
 							<div class="stat-content">
 								<div class="stat-value" id="stat-series-watched">0</div>
@@ -3096,7 +3204,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 						</div>
 						<div class="stat-card">
 							<div class="stat-icon">
-								<span class="material-icons">tv</span>
+								<span class="material-icons tv"></span>
 							</div>
 							<div class="stat-content">
 								<div class="stat-value" id="stat-episodes-watched">0</div>
@@ -3105,7 +3213,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 						</div>
 						<div class="stat-card">
 							<div class="stat-icon">
-								<span class="material-icons">movie</span>
+								<span class="material-icons movie"></span>
 							</div>
 							<div class="stat-content">
 								<div class="stat-value" id="stat-movies-watched">0</div>
@@ -3115,10 +3223,10 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 					</div>
 					<div class="top-shows-container">
 						<div class="top-shows-header">
-							<span class="material-icons">star</span>
+							<span class="material-icons star"></span>
 							<span>Top 5 Shows</span>
 							<button class="show-all-btn" id="show-all-shows-btn" title="View all watched shows">
-								<span class="material-icons">list</span>
+								<span class="material-icons list"></span>
 								<span>Show All</span>
 							</button>
 						</div>
@@ -3182,7 +3290,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 						
 						// Update localStorage cache
 						const optimizedData = optimizeWatchlistDataForStorage(watchlistCache[sectionName].data);
-						localStorageCache.set(`watchlist_${sectionName}`, optimizedData);
+						localStorageCache.set(`watchlist_${sectionName}`, optimizedData, ApiClient._currentUser.Id, WATCHLIST_CACHE_TTL);
 						
 						LOG(`Added ${itemType} to watchlist cache: ${item.Name}`);
 					}
@@ -3195,7 +3303,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 					
 					// Update localStorage cache
 					const optimizedData = optimizeWatchlistDataForStorage(watchlistCache[sectionName].data);
-					localStorageCache.set(`watchlist_${sectionName}`, optimizedData);
+					localStorageCache.set(`watchlist_${sectionName}`, optimizedData, ApiClient._currentUser.Id, WATCHLIST_CACHE_TTL);
 					
 					LOG(`Removed ${itemType} from watchlist cache: ${removedItem.Name}`);
 				}
@@ -3215,69 +3323,70 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		// This is more reliable and doesn't interfere with fetch requests
 		function setupWebSocketMonitoring() {
 			try {
-				// Make sure socket is open
-				if (window.ApiClient && typeof window.ApiClient.ensureWebSocket === 'function') {
-					window.ApiClient.ensureWebSocket();
-				}
-
 				// Grab the actual socket
 				const socket = (window.ApiClient && (window.ApiClient.webSocket || window.ApiClient._webSocket)) || null;
 
-				if (socket) {
-					// Store original handler if it exists
-					const originalHandler = socket.onmessage;
-
-					// Hook into onmessage
-					socket.onmessage = function(event) {
-						try {
-							// Parse the WebSocket message data
-							// The event might have event.Data or event.data depending on implementation
-							const messageData = event.Data || event.data;
-							if (!messageData) {
-								// If no data, just pass through to original handler
-								if (originalHandler) originalHandler.call(this, event);
-								return;
-							}
-
-							const data = typeof messageData === 'string' ? JSON.parse(messageData) : messageData;
-
-							// Check if this is a UserDataChanged message
-							if (data.MessageType === 'UserDataChanged' && data.Data && data.Data.UserDataList && data.Data.UserDataList.length > 0) {
-								const userData = data.Data.UserDataList[0];
-								if (userData.ItemId) {
-									LOG(`Detected UserDataChanged for item: ${userData.ItemId}, Played: ${userData.Played}`);
-									// Handle the watched status change (works for both played and unplayed)
-									handleItemWatchedStatusChange(userData.ItemId).catch(err => {
-										ERR('Error handling UserDataChanged event:', err);
-									});
-								}
-							}
-						} catch (err) {
-							// Log parse errors but don't break the original handler
-							WARN('WebSocket message parse error:', err);
+				if (!socket) {
+					setTimeout(() => {
+						if (!playbackMonitorInitialized) {
+							setupWebSocketMonitoring();
 						}
-
-						// Pass it through so Jellyfin still works normally
-						if (originalHandler) {
-							originalHandler.call(this, event);
-						}
-					};
-
-					playbackMonitorInitialized = true;
-					LOG('✅ Playback and watch status monitoring initialized via WebSocket');
-					return true;
-				} else {
-					WARN('⚠️ No WebSocket found. Retrying in 1 second...');
-					return false;
+					}, 1000);
+					return;
 				}
+
+				// Store original handler if it exists
+				const originalHandler = socket.onmessage;
+
+				// Hook into onmessage
+				socket.onmessage = function(event) {
+					try {
+						// Parse the WebSocket message data
+						// The event might have event.Data or event.data depending on implementation
+						const messageData = event.Data || event.data;
+						if (!messageData) {
+							// If no data, just pass through to original handler
+							if (originalHandler) originalHandler.call(this, event);
+							return;
+						}
+
+						const data = typeof messageData === 'string' ? JSON.parse(messageData) : messageData;
+
+						// Check if this is a UserDataChanged message
+						if (data.MessageType === 'UserDataChanged' && data.Data && data.Data.UserDataList && data.Data.UserDataList.length > 0) {
+							const userData = data.Data.UserDataList[0];
+							if (userData.ItemId) {
+								LOG(`Detected UserDataChanged for item: ${userData.ItemId}, Played: ${userData.Played}`);
+								// Handle the watched status change (works for both played and unplayed)
+								handleItemWatchedStatusChange(userData.ItemId, userData.Played, userData.Likes).catch(err => {
+									ERR('Error handling UserDataChanged event:', err);
+								});
+							}
+						}
+					} catch (err) {
+						// Log parse errors but don't break the original handler
+						WARN('WebSocket message parse error:', err);
+					}
+
+					// Pass it through so Jellyfin still works normally
+					if (originalHandler) {
+						originalHandler.call(this, event);
+					}
+				};
+
+				playbackMonitorInitialized = true;
+				LOG('Playback and watch status monitoring initialized via WebSocket');
+				return true;
 			} catch (err) {
 				ERR('Error setting up WebSocket monitoring:', err);
 				return false;
 			}
 		}
 
+		setupWebSocketMonitoring();
+
 		// Try to set up immediately
-		if (!setupWebSocketMonitoring()) {
+/* 		if (!setupWebSocketMonitoring()) {
 			// If WebSocket isn't available yet, retry after a short delay
 			// This can happen if the page loads before the WebSocket connection is established
 			setTimeout(() => {
@@ -3285,28 +3394,48 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 					setupWebSocketMonitoring();
 				}
 			}, 1000);
+		} */
+	}
+
+	let watchedItems = [];
+
+	async function getWatchedItem(itemId) {
+		const watchedItem = watchedItems.find(item => item.Id === itemId);
+		if (watchedItem) {
+			return watchedItem;
 		}
+
+		const item = await ApiClient.getItem(ApiClient.getCurrentUserId(), itemId);
+		if (!item) {
+			LOG('Could not fetch item data for:', itemId);
+			return;
+		}
+
+		watchedItems.push(item);
+		return item;
 	}
 
 	// Shared handler for when items' watched status changes (played or unplayed)
-	async function handleItemWatchedStatusChange(itemId) {
+	async function handleItemWatchedStatusChange(itemId, isPlayed, isWatchlisted) {
 		try {
 			LOG('Item watched status changed:', itemId);
 			
 			// Get the item data to check current played status
-			const item = await ApiClient.getItem(ApiClient.getCurrentUserId(), itemId);
-			if (!item) {
-				LOG('Could not fetch item data for:', itemId);
+			const item = await getWatchedItem(itemId);
+
+			// Only handle movies, series, seasons, and episodes
+			if (item.Type !== 'Movie' && item.Type !== 'Series' && item.Type !== 'Season' && item.Type !== 'Episode') {
 				return;
 			}
 			
-			const isPlayed = item.UserData && item.UserData.Played;
 			LOG(`Item is now ${isPlayed ? 'played' : 'unplayed'}:`, item.Name);
 			
 			if (isPlayed) {
-				// Item is now played - remove from watchlist and update caches
-				LOG('Item is now played, removing from watchlist:', item.Name);
-				await removeItemFromWatchlist(itemId, item.Type);
+				if (isWatchlisted) {
+					// Item is now played - remove from watchlist and update caches
+					LOG('Item is now played and watchlisted, removing from watchlist:', item.Name);
+					await removeItemFromWatchlist(itemId, item.Type);
+				}
 				
 				// Update relevant caches based on item type
 				if (item.Type === 'Episode') {
@@ -3314,7 +3443,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 					if (item.SeriesId) {
 						if (progressCache.allDataLoaded) {
 							LOG('Updating series progress cache for episode:', item.Name);
-							updateEpisodeWatchedStatusInCache(item.SeriesId, itemId, true);
+							await updateEpisodeWatchedStatusInCache(item.SeriesId, itemId, true);
 						} else {
 							LOG('Progress cache not fully loaded, updating localStorage only for episode:', item.Name);
 							await updateEpisodeInLocalStorage(item);
@@ -3371,7 +3500,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 					if (item.SeriesId) {
 						if (progressCache.allDataLoaded) {
 							LOG('Updating series progress cache for episode (unwatched):', item.Name);
-							updateEpisodeWatchedStatusInCache(item.SeriesId, itemId, false);
+							await updateEpisodeWatchedStatusInCache(item.SeriesId, itemId, false);
 						} else {
 							LOG('Progress cache not fully loaded, updating localStorage only for episode (unwatched):', item.Name);
 							await updateEpisodeInLocalStorageUnwatched(item);
@@ -3414,7 +3543,37 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			const seriesIndex = cachedProgress.findIndex(p => p.series.Id === episode.SeriesId);
 			if (seriesIndex === -1) {
 				LOG('Series not found in localStorage progress data:', episode.SeriesId);
-				return;
+
+				// Fetch series data from API
+				const apiClient = window.ApiClient;
+				const userId = apiClient.getCurrentUserId();
+				const serverUrl = apiClient.serverAddress();
+				const token = apiClient.accessToken();
+				
+				try {
+					// Fetch the series item
+					const seriesUrl = `${serverUrl}/Items/${seriesId}?UserId=${userId}&Fields=UserData,RecursiveItemCount&EnableImageTypes=Primary,Banner`;
+					const seriesRes = await fetch(seriesUrl, { headers: { "Authorization": `MediaBrowser Token=\"${token}\"` } });
+					const series = await seriesRes.json();
+					
+					if (!series || !series.Id) {
+						LOG(`Failed to fetch series data for seriesId: ${seriesId}`);
+						return;
+					}
+					
+					// Fetch and create progress data for this series
+					cachedProgress = await fetchSeriesProgressWithMissingEpisodes(series, userId, serverUrl, token);
+					
+					if (!cachedProgress) {
+						LOG(`Failed to create progress data for series: ${seriesId}`);
+						return;
+					}
+					
+					LOG(`Successfully added series ${series.Name} to cache`);
+				} catch (err) {
+					ERR(`Failed to fetch and add series ${seriesId} to cache:`, err);
+					return;
+				}
 			}
 			
 			const seriesProgress = cachedProgress[seriesIndex];
@@ -3594,16 +3753,6 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		}
 	}
 
-	// Handle playback stopped event
-	async function handlePlaybackStopped(itemId) {
-		await handleItemWatchedStatusChange(itemId);
-	}
-
-	// Handle watch status update (manual "Mark as Watched" or "Mark as Unwatched")
-	async function handleWatchStatusUpdate(itemId) {
-		await handleItemWatchedStatusChange(itemId);
-	}
-
 	// Remove item from watchlist (API + cache + UI)
 	async function removeItemFromWatchlist(itemId, itemType) {
 		// Remove from watchlist via API
@@ -3715,7 +3864,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			}
 			
 			// Update button based on current watchlist status
-			const isInWatchlist = item.UserData.Likes;
+			const isInWatchlist = item.UserData.Likes ?? false;
 			watchlistButton.setAttribute('data-active', isInWatchlist.toString());
 			watchlistButton.title = isInWatchlist ? 'Remove from Watchlist' : 'Add to Watchlist';
 			
@@ -3864,14 +4013,14 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		card.innerHTML = `
 			<a href="${ApiClient._serverAddress}/web/#/details?id=${movie.Id}&serverId=${ApiClient.serverId()}">
 				<div class="movie-poster">
-					${imageUrl ? `<img src="${imageUrl}" alt="${movie.Name}" loading="lazy">` : `<div class="movie-poster-placeholder"><span class="material-icons">movie</span></div>`}
+					${imageUrl ? `<img src="${imageUrl}" alt="${movie.Name}" loading="lazy">` : `<div class="movie-poster-placeholder"><span class="material-icons movie"></span></div>`}
 					<div class="movie-poster-overlay">
 						<div class="movie-watched-badge">
-							<span class="material-icons">check_circle</span>
+							<span class="material-icons check_circle"></span>
 							<span>Watched</span>
 						</div>
 						<button class="cardOverlayButton cardOverlayButton-hover emby-button ${favoriteClass}" onclick="event.preventDefault(); event.stopPropagation(); toggleMovieFavorite('${movie.Id}', this)">
-							<span class="material-icons">${favoriteIcon}</span>
+							<span class="material-icons ${favoriteIcon}"></span>
 						</button>
 					</div>
 				</div>
@@ -3883,7 +4032,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				<div class="movie-meta">
 					<div class="movie-year">${year}</div>
 					<div class="movie-runtime">
-						<span class="material-icons">schedule</span>
+						<span class="material-icons schedule"></span>
 						<span>${runtime}</span>
 					</div>
 				</div>
@@ -4101,19 +4250,19 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			</div>
 			<div class="pagination-controls">
 				<button class="pagination-btn ${currentPage === 1 ? 'disabled' : ''}" data-page="1">
-					<span class="material-icons">first_page</span>
+					<span class="material-icons first_page"></span>
 				</button>
 				<button class="pagination-btn ${currentPage === 1 ? 'disabled' : ''}" data-page="${currentPage - 1}">
-					<span class="material-icons">chevron_left</span>
+					<span class="material-icons chevron_left"></span>
 				</button>
 				<div class="pagination-pages">
 					${generatePageNumbers(currentPage, totalPages)}
 				</div>
 				<button class="pagination-btn ${currentPage === totalPages ? 'disabled' : ''}" data-page="${currentPage + 1}">
-					<span class="material-icons">chevron_right</span>
+					<span class="material-icons chevron_right"></span>
 				</button>
 				<button class="pagination-btn ${currentPage === totalPages ? 'disabled' : ''}" data-page="${totalPages}">
-					<span class="material-icons">last_page</span>
+					<span class="material-icons last_page"></span>
 				</button>
 			</div>
 		`;
@@ -4407,6 +4556,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				const isWatched = binaryString[i] === '1';
 				const chunk = document.createElement('div');
 				chunk.className = `progress-chunk ${isWatched ? 'watched' : 'unwatched'} binary-chunk`;
+				chunk.dataset.isWatched = isWatched;
 				chunk.setAttribute('data-season', season);
 				chunk.setAttribute('data-episode', i + 1);
 				chunk.title = `S${season}:E${i + 1} (${isWatched ? 'Watched' : 'Unwatched'})`;
@@ -4415,6 +4565,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				chunk.addEventListener('click', async (e) => {
 					e.preventDefault();
 					e.stopPropagation();
+					const playState = chunk.dataset.isWatched === 'true';
 					
 					// Show confirmation modal - episode details will be enhanced if available
 					const episodeInfo = {
@@ -4425,7 +4576,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 					};
 
 					const episodeId = chunk.getAttribute('data-episode-id');
-					showEpisodeWatchedConfirmation(episodeId, chunk, episodeInfo, seriesId, isWatched);
+					showEpisodeWatchedConfirmation(episodeId, chunk, episodeInfo, seriesId, playState);
 				});
 				
 				progressBar.appendChild(chunk);
@@ -4435,6 +4586,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 
 	// Function to enhance progress bar with episode details
 	function enhanceProgressBarWithEpisodes(progressBar, episodes) {
+		return;
 		const today = new Date();
 		today.setHours(23, 59, 59, 999);
 		
@@ -4519,6 +4671,8 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				const episode = parseInt(chunk.getAttribute('data-episode'));
 				const isWatched = updatedProgress.binaryProgress[season] && 
 					updatedProgress.binaryProgress[season][episode - 1] === '1';
+
+				chunk.dataset.isWatched = isWatched;
 				
 				// Update chunk state
 				chunk.classList.toggle('watched', isWatched);
@@ -4633,13 +4787,13 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				const episodeImageHtml = hasImage 
 					? `<img src="${ApiClient._serverAddress}/Items/${episode.Id}/Images/Primary?maxHeight=60&maxWidth=100&tag=${episode.ImageTags.Primary}" alt="${episodeTitle}" loading="lazy">`
 					: `<div class="episode-placeholder">
-							<span class="material-icons">tv</span>
+							<span class="material-icons tv"></span>
 					</div>`;
 				
 				return `
 					<div class="unwatched-episode-item" data-episode-id="${episode.Id}" data-series-id="${seriesId}" data-season="${episode.ParentIndexNumber}" data-episode="${episode.IndexNumber}" data-name="${episodeTitle}">
 						<button class="episode-watched-toggle" data-episode-id="${episode.Id}" title="Mark as watched">
-							<span class="material-icons">check</span>
+							<span class="material-icons check"></span>
 						</button>
 						<div class="episode-image">
 							${episodeImageHtml}
@@ -4747,7 +4901,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				buttonElement.closest('.progress-card')?.querySelector('[data-series-id]')?.getAttribute('data-series-id');
 			
 			if (seriesId) {
-				const cacheUpdated = updateEpisodeWatchedStatusInCache(seriesId, episodeId, isWatched);
+				const cacheUpdated = await updateEpisodeWatchedStatusInCache(seriesId, episodeId, isWatched);
 				if (cacheUpdated) {
 					// If episodes weren't cached, attempt a direct binaryProgress flip for the specific season/episode
 					const cached = getCachedSeriesProgress(seriesId);
@@ -5572,7 +5726,13 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 					// Update button icon based on layout
 					const icon = layoutToggleBtn.querySelector('.material-icons');
 					if (icon) {
-						icon.textContent = newLayout === 'List' ? 'view_quilt' : 'view_module';
+						if (newLayout === 'List') {
+							icon.classList.add('view_list');
+							icon.classList.remove('view_module');
+						} else {
+							icon.classList.add('view_module');
+							icon.classList.remove('view_list');
+						}
 					}
 					
 					LOG(`Layout switched to: ${newLayout}`);
@@ -5633,14 +5793,110 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 
 	LOG('Watchlist functionality initialized');
 
+	// Get watchlist tab index, fetching if not yet set
+	async function getWatchlistTabIndex() {
+		if (_watchlistTabIndex !== null) {
+			return _watchlistTabIndex;
+		}
+
+		// Fetch the tab index as we do in addCustomMenuLink
+		try {
+			const response = await fetch(`${ApiClient._serverAddress}/CustomTabs/Config`, {
+				method: "GET",
+				headers: {
+					"Content-Type": "application/json",
+					"X-Emby-Token": ApiClient._serverInfo.AccessToken || ApiClient.accessToken(),
+				},
+			});
+			const data = await response.json();
+			data.forEach((tab, index) => {
+				if (tab.ContentHtml.indexOf('sections watchlist') !== -1) {
+					_watchlistTabIndex = index + 2;
+					LOG('Fetched and stored watchlist tab index:', _watchlistTabIndex);
+				}
+			});
+		} catch (err) {
+			ERR('Failed to fetch watchlist tab index:', err);
+		}
+
+		return _watchlistTabIndex;
+	}
+
+	// Function to fetch episodes and enhance progress bars on the watchlist tab
+	async function fetchEpisodesAndEnhanceProgressBar() {
+		const watchlistSection = getWatchlistSection();
+		if (!watchlistSection) {
+			LOG('Watchlist section not found, skipping progress bar enhancement');
+			return;
+		}
+
+		const progressTab = watchlistSection.querySelector('div[data-tab="progress"]');
+		if (!progressTab) {
+			LOG('Progress tab not found, skipping progress bar enhancement');
+			return;
+		}
+
+		// Find all progress cards with progress bars
+		const progressCards = progressTab.querySelectorAll('.progress-card');
+		if (progressCards.length === 0) {
+			LOG('No progress cards found, skipping progress bar enhancement');
+			return;
+		}
+
+		LOG(`Found ${progressCards.length} progress cards, enhancing progress bars with episode details`);
+
+		// Enhance each progress bar
+		for (const card of progressCards) {
+			const progressBar = card.querySelector('.progress-bar');
+			if (!progressBar) continue;
+
+			const seriesIdElement = card.querySelector('[data-series-id]');
+			if (!seriesIdElement) continue;
+
+			const seriesId = seriesIdElement.getAttribute('data-series-id');
+			if (!seriesId) continue;
+
+			// Only enhance if it has binary chunks (already rendered)
+			const hasBinaryChunks = progressBar.querySelectorAll('.binary-chunk').length > 0;
+			if (!hasBinaryChunks) continue;
+
+			try {
+				const episodes = await fetchEpisodesForSeries(seriesId);
+				if (episodes && episodes.length > 0) {
+					enhanceProgressBarWithEpisodes(progressBar, episodes);
+					LOG(`Enhanced progress bar with episode details for series: ${seriesId}`);
+				}
+			} catch (err) {
+				ERR(`Failed to enhance progress bar for series ${seriesId}:`, err);
+			}
+		}
+	}
+
 	// Register onViewPage handler to call setActiveTab
 	if (window.KefinTweaksUtils && window.KefinTweaksUtils.onViewPage) {
-		window.KefinTweaksUtils.onViewPage((view, element) => {
+		window.KefinTweaksUtils.onViewPage(async (view, element, hash) => {
 			LOG('onViewPage handler triggered for view:', view);
 			renderWatchlist();
+
+			// Check if we're on the watchlist tab
+			const watchlistTabIndex = await getWatchlistTabIndex();
+			if (watchlistTabIndex !== null && hash) {
+				// Get current tab from URL
+				const hashParams = hash.includes('?') ? hash.split('?')[1] : '';
+				const urlParams = new URLSearchParams(hashParams);
+				const currentTab = urlParams.get('tab');
+				const currentTabIndex = currentTab ? parseInt(currentTab, 10) : 0;
+
+				if (currentTabIndex === watchlistTabIndex) {
+					LOG('On watchlist tab, enhancing progress bars with episode details');
+					// Small delay to let initial render complete
+					setTimeout(() => {
+						//fetchEpisodesAndEnhanceProgressBar();
+					}, 100);
+				}
+			}
 		}, {
-			pages: ['home', 'home.html'], // Only trigger for home page where watchlist tabs are
-			immediate: true
+			pages: ['home', 'home.html'] // Only trigger for home page where watchlist tabs are
 		});
 		LOG('Registered onViewPage handler for setActiveTab');
 	} else {
@@ -5648,6 +5904,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	}
 
 	function addCustomMenuLink() {
+		LOG('Adding custom menu link for Watchlist tab');
 		if (window.KefinTweaksUtils && window.KefinTweaksUtils.addCustomMenuLink) {
 			fetch(`${ApiClient._serverAddress}/CustomTabs/Config`, {
 				method: "GET",
@@ -5662,6 +5919,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				data.forEach((tab, index) => {
 					if (tab.ContentHtml.indexOf('sections watchlist') !== -1) {
 						const watchlistTabIndex = index + 2;
+						_watchlistTabIndex = watchlistTabIndex; // Store the tab index
 						let homePageSuffix = '.html';
 						if (ApiClient._serverInfo.Version?.split('.')[1] > 10) {
 							homePageSuffix = '';
@@ -5757,7 +6015,6 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		
 		// Check if item type is supported for watchlist
 		if (itemType !== "Movie" && itemType !== "Series" && itemType !== "Season" && itemType !== "Episode") {
-			LOG('Item type not supported for watchlist:', itemType);
 			return;
 		}
 
@@ -5766,17 +6023,48 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			return;
 		}
 		
-		// Check item's current watchlist status and set initial state
-		ApiClient.getItem(ApiClient.getCurrentUserId(), itemId).then((item) => {
-			if (item.UserData && item.UserData.Likes) {
+		// Check item's current watchlist status from cache only (no server fetch)
+		// Map itemType to section name
+		let sectionName;
+		switch (itemType) {
+			case 'Movie':
+				sectionName = 'movies';
+				break;
+			case 'Series':
+				sectionName = 'series';
+				break;
+			case 'Season':
+				sectionName = 'seasons';
+				break;
+			case 'Episode':
+				sectionName = 'episodes';
+				break;
+			default:
+				// Unknown type, skip check
+				break;
+		}
+		
+		if (sectionName) {
+			// First check in-memory cache
+			let isInWatchlist = false;
+			if (watchlistCache[sectionName] && watchlistCache[sectionName].data) {
+				isInWatchlist = watchlistCache[sectionName].data.some(item => item.Id === itemId);
+			}
+			
+			// If not in memory cache, check localStorage cache
+			if (!isInWatchlist) {
+				const cachedData = localStorageCache.get(`watchlist_${sectionName}`);
+				if (cachedData && Array.isArray(cachedData)) {
+					isInWatchlist = cachedData.some(item => item.Id === itemId);
+				}
+			}
+			
+			// Set button state if item is in watchlist
+			if (isInWatchlist) {
 				watchlistButton.dataset.active = 'true';
-				// Icon state is handled by CSS class, no need to change textContent
 				watchlistButton.title = 'Remove from Watchlist';
 			}
-		}).catch(err => {
-			console.log(card);
-			ERR('Error fetching item data for watchlist button:', err);
-		});
+		}
 		
 		// Add the watchlist button to the button container
 		buttonContainer.appendChild(watchlistButton);
@@ -5934,7 +6222,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 
 		LOG('Registering item detail page handler with KefinTweaksUtils');
 
-		window.KefinTweaksUtils.onViewPage(async (view, element, itemPromise) => {
+		window.KefinTweaksUtils.onViewPage(async (view, element, hash, itemPromise) => {
 			// Await the item promise to get the actual item data
 			const item = await itemPromise;
 			
@@ -5962,7 +6250,6 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				}
 			}, 100);
 		}, {
-			immediate: true,
 			pages: ['details']
 		});
 

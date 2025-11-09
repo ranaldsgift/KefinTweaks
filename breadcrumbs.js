@@ -515,8 +515,6 @@
         const currentPath = Emby.Page.lastPath || '';
         const isSupportedPage = currentPath.startsWith('/details?');
         
-        log('showBreadcrumbs called - wrapper exists:', !!wrapper, 'isWideScreen:', wideScreen, 'isSupportedPage:', isSupportedPage, 'currentPath:', currentPath);
-        
         if (wrapper && wideScreen && isSupportedPage) {
             wrapper.style.display = 'block';
             log('Breadcrumbs shown successfully');
@@ -878,7 +876,7 @@
             log('Registering breadcrumb handler with KefinTweaksUtils');
             
             // Register handler for all pages (breadcrumbs can appear on any detail page)
-            window.KefinTweaksUtils.onViewPage(async (view, element, itemPromise) => {
+            window.KefinTweaksUtils.onViewPage(async (view, element, hash, itemPromise) => {
                 try {
                     // Await the item promise to get the actual item data
                     const item = await itemPromise;
@@ -888,7 +886,6 @@
                     error('Breadcrumb page change handler failed:', err);
                 }
             }, {
-                immediate: true,
                 pages: [] // Empty array means all pages
             });
         } else {

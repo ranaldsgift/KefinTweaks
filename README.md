@@ -6,6 +6,8 @@ While working on these scripts to meet my personal needs, I noticed that there w
 
 There is no configuration required, but if you wish to customize some of the features, there are options to do so.
 
+I think it's also worth mentioning that before the 1.0 release, you can expect to potentially encounter some issues or bugs. I try to address these as quickly as I can, and I appreciate your time for raising the issues in the first place!
+
 ## Table of Contents
 
 - [Installation](#-installation)
@@ -46,17 +48,18 @@ There is no configuration required, but if you wish to customize some of the fea
   - [Planned Features](#planned-features)
   - [Version History](#version-history)
 
-## 📦 Installation
+## Installation
 
 ### Prerequisites
-- Jellyfin 10.10.7 or later
+- Jellyfin 10.10.7 or earlier (10.11.X is untested and "unsupported" but may be mostly functional)
 - [JS Injector](https://github.com/n00bcodr/Jellyfin-JavaScript-Injector) plugin installed and configured
 - [Custom Tabs](https://github.com/IAmParadox27/jellyfin-plugin-custom-tabs) plugin for watchlist functionality
 - [JellyfinEnhanced](https://github.com/n00bcodr/Jellyfin-Enhanced) plugin for Jellyseerr search functionality and ExclusiveElsewhere
 
 ### Setup Instructions
 
-0. **Install Prerequisites listed above**
+0a. **Install Prerequisites listed above**
+0b. **If you are using JellyfinEnhanced, you MUST disable the "Watchlist" feature from the plugin settings**
 1. **Add a new script to your JS Injector Plugin**
 2. **Copy this entire contents of kefinTweaks.js into the new script**
 
@@ -98,8 +101,8 @@ The features in KefinTweaks which use local data caching are listed below, along
   - **Top People** [24h]:  
   In order to populate the "Top People" in your movie library, we fetch the Person data for every movie in your library. We build a list of all the People who appear in at least X number of items based on their type (Actor/Director/Writer). This is an expensive operation, and is longer as the size of your library grows.
 - Watchlist
-  - **Watchlist Items** [24h]:  
-  This is mostly done to provide a more responsive UX, as typically the API call to retreive these items should not be very expensive. The Watchlist cache is also updated any time there is a change to an item's Play State or Watchlist status. Keep in mind that the cache can only be updated locally, so if you watch a movie from your watchlist on Device X, and then you browse your Watchlist on Device Y, the Watchlist will still show the watched item until the cache is manually refreshed or it expires.
+  - **Watchlist Items** [5m]:  
+  This is mostly done to provide a more responsive UX, as typically the API call to retreive these items should not be very expensive. The Watchlist cache is also updated any time there is a change to an item's Play State or Watchlist status.
   - **Series Progress and Movie History** [24h]:  
   These are both more expensive operations, especially if you have watched a very high number of Movies or Shows. It's not practical to fetch this data on demand so we cache it to improve UX.
 - Collections on Details Page  

@@ -89,7 +89,7 @@
         }
 
         // Manually notify handlers for Header Tab navigation because it doesn't trigger normal Jellyfin navigation
-        window.KefinTweaksUtils.notifyHandlers(currentPage, document);
+        window.KefinTweaksUtils.notifyHandlers(currentPage, document, newHash);
         
         // Replace history entry instead of adding new one
         const newUrl = window.location.origin + window.location.pathname + '#' + newHash.substring(1);
@@ -343,8 +343,7 @@
             // Sync active tab state when page view changes
             syncActiveTabState();
         }, {
-            pages: SUPPORTED_PAGES, // Only trigger for supported pages
-            immediate: false
+            pages: SUPPORTED_PAGES // Only trigger for supported pages
         });
         LOG('Registered onViewPage handler for syncActiveTabState');
     } else {

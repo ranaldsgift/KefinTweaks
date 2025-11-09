@@ -1858,10 +1858,6 @@ div[data-tab="watchlist"] .loading-message {
     -webkit-tap-highlight-color: #fff0;
 }
 
-.mainDetailButtons:has(.btnPlay.hide) .watchlist-icon, .mainDetailButtons:has(.btnPlay.hide) .btnRecommend {
-    display: none;
-}
-
 .card:has(button[data-played="true"]) .watchlist-button, 
 .card:not(:has(button[data-played])) .watchlist-button,
 .mainDetailButtons:has(button[data-played="true"]) .watchlist-icon, 

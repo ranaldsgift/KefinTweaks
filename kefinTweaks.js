@@ -18,7 +18,8 @@
 //
 // INSTALLATION:
 // ============
-// 0. Install required prerequisites listed above
+// 0a. Install required prerequisites listed above
+// 0b. If you are using JellyfinEnhanced, you MUST disable the "Watchlist" feature from the plugin settings
 // 1. Add a new script to your JS Injector plugin
 // 2. Copy this entire file into the new script
 // (Optional) Enable/disable features, or customize their configuration by editing the script below
@@ -61,6 +62,7 @@
             homeScreen: true,         // Custom home screen sections and discovery engine
             search: true,             // Enhanced search with better UI and Jellyseerr integration
             // REQUIREMENTS: Watchlist requires Custom Tabs plugin https://github.com/IAmParadox27/jellyfin-plugin-custom-tabs
+            // If you are using JellyfinEnhanced, you MUST disable the "Watchlist" feature from the plugin settings
             watchlist: true,          // Complete watchlist management with progress tracking
             
             // UI and navigation improvements

@@ -282,15 +282,19 @@
         
         // Register for the display preferences page
         unregisterDisplayPreferencesHandler = window.KefinTweaksUtils.onViewPage(handleDisplayPreferencesPage, {
-            pages: ['mypreferencesdisplay'],
-            immediate: true
+            pages: ['mypreferencesdisplay']
         });
         
         // Register for all pages to add the appearance button
         unregisterAnyPageHandler = window.KefinTweaksUtils.onViewPage(handleAnyPage, {
-            pages: [],
-            immediate: true
+            pages: []
         });
+
+/*         if (window.location.hash.includes('mypreferencesdisplay')) {
+            handleDisplayPreferencesPage();
+        }
+
+        handleAnyPage(); */
         
         LOG('SkinManager handlers registered');
     }

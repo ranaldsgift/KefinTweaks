@@ -177,7 +177,6 @@
     // Set up page view monitoring
     if (window.KefinTweaksUtils) {
         window.KefinTweaksUtils.onViewPage(manageBodyClasses, {
-            immediate: true,
             pages: []
         });
         LOG('Registered body class management for home page');
@@ -771,22 +770,25 @@
         const token = apiClient.accessToken();
         const userId = apiClient.getCurrentUserId();
         const cache = new window.LocalStorageCache();
+        const indexedDBCache = new window.IndexedDBCache();
         
         try {
             LOG('Starting paginated fetch of movies for people data processing...');
             
-            let allMovies = [];
             let startIndex = 0;
             const limit = 500;
             let hasMoreData = true;
+            let peopleMap = null; // Will hold raw (unfiltered) people data
             
-            // Load existing partial data if available
-            const existingData = cache.get('movies_top_people');
-            if (existingData && !existingData.isComplete) {
-                const moviesProcessed = countMoviesFromPeopleData(existingData);
+            // Load existing raw people data if available (for resuming) - use IndexedDB
+            const existingRawData = await indexedDBCache.get('movies_top_people_raw', userId);
+            if (existingRawData && !existingRawData.isComplete) {
+                const moviesProcessed = existingRawData.moviesProcessedCount;
                 if (moviesProcessed > 0) {
                     startIndex = moviesProcessed;
-                    LOG(`Resuming from existing data: ${moviesProcessed} movies already processed`);
+                    // Reconstruct Map from cached array
+                    peopleMap = new Map(existingRawData.peopleData || []);
+                    LOG(`Resuming from existing data: ${moviesProcessed} movies already processed, ${peopleMap.size} people in cache`);
                 }
             }
             
@@ -813,25 +815,28 @@
                     hasMoreData = false;
                     LOG('No more movies to fetch');
                 } else {
-                    allMovies = allMovies.concat(movies);
+                    // Process new movies and merge with existing people data
+                    peopleMap = processPeopleDataRaw(movies, peopleMap);
                     startIndex += movies.length;
                     
-                    LOG(`Fetched ${movies.length} movies, total: ${allMovies.length}`);
+                    LOG(`Fetched ${movies.length} movies, total processed: ${startIndex}, people tracked: ${peopleMap ? peopleMap.size : 0}`);
                     
-                    // Process and cache partial data after each chunk
-                    const partialPeopleData = processPeopleData(allMovies);
-                    if (partialPeopleData) {
-                        // Mark as incomplete and store movie count for resuming
-                        partialPeopleData.isComplete = movies.length < limit; // Complete if we got less than limit
-                        partialPeopleData.moviesProcessedCount = allMovies.length;
-                        
+                    // Filter for display (but cache raw data)
+                    const filteredData = filterPeopleData(peopleMap);
+                    if (filteredData) {
                         // Update the global moviesTopPeople immediately so discovery sections can use it
-                        moviesTopPeople = partialPeopleData;
-                        
-                        // Cache partial data
-                        cache.set('movies_top_people', partialPeopleData, userId, 7 * 24 * 60 * 60 * 1000);
-                        LOG(`Updated moviesTopPeople with partial data: ${partialPeopleData.actors.length} actors, ${partialPeopleData.directors.length} directors, ${partialPeopleData.writers.length} writers (${allMovies.length} movies processed)`);
+                        moviesTopPeople = filteredData;
+                        LOG(`Updated moviesTopPeople with partial data: ${filteredData.actors.length} actors, ${filteredData.directors.length} directors, ${filteredData.writers.length} writers (${startIndex} movies processed)`);
                     }
+                    
+                    // Cache RAW (unfiltered) data for resuming - use IndexedDB for large data
+                    // Convert Map to array for JSON serialization
+                    const rawDataToCache = {
+                        isComplete: movies.length < limit,
+                        moviesProcessedCount: startIndex,
+                        peopleData: Array.from(peopleMap.entries())
+                    };
+                    await indexedDBCache.set('movies_top_people_raw', rawDataToCache, userId, 7 * 24 * 60 * 60 * 1000);
                     
                     // If we got less than the limit, we've reached the end
                     if (movies.length < limit) {
@@ -842,20 +847,23 @@
                 }
             }
             
-            // Final processing of all data
-            LOG(`Final processing of ${allMovies.length} movies...`);
-            const finalPeopleData = processPeopleData(allMovies);
+            // Final processing: filter the complete raw data
+            LOG(`Final filtering of people data from ${startIndex} movies...`);
+            const finalPeopleData = filterPeopleData(peopleMap);
             
             if (finalPeopleData) {
-                // Mark as complete and remove movies count to save space
+                // Mark as complete
                 finalPeopleData.isComplete = true;
-                delete finalPeopleData.moviesProcessedCount;
                 
                 // Update global variable
                 moviesTopPeople = finalPeopleData;
                 
-                // Cache final data
-                cache.set('movies_top_people', finalPeopleData, userId, 7 * 24 * 60 * 60 * 1000);
+                // Cache final filtered data (for quick loading) - use IndexedDBCache for larger data with items
+                await indexedDBCache.set('movies_top_people', finalPeopleData, userId, 7 * 24 * 60 * 60 * 1000);
+                
+                // Also remove raw cache since we're complete (optional, saves space)
+                await indexedDBCache.clear('movies_top_people_raw', userId);
+                
                 LOG(`Final cached people data: ${finalPeopleData.actors.length} actors, ${finalPeopleData.directors.length} directors, ${finalPeopleData.writers.length} writers`);
             }
             
@@ -868,53 +876,109 @@
     }
 
     /**
-     * Processes people data from movies array
-     * @param {Array} movies - Array of movie objects with People data
-     * @returns {Object|null} - Processed people data or null if failed
+     * Extracts necessary item data for caching (similar to watchlist format)
+     * @param {Object} item - Full Jellyfin item object
+     * @returns {Object} - Optimized item data for storage
      */
-    function processPeopleData(movies) {
-        try {
-        const peopleMap = new Map();
-        
-        movies.forEach(movie => {
-            if (movie.People) {
-                movie.People.forEach(person => {
-                    const key = person.Id;
-                    if (!peopleMap.has(key)) {
-                        peopleMap.set(key, {
-                            id: person.Id,
-                            name: person.Name,
-                            directorCount: 0,
-                            writerCount: 0,
-                            actorCount: 0,
-                            directorItemIds: [],
-                            writerItemIds: [],
-                            actorItemIds: []
-                        });
-                    }
-                    
-                    const personData = peopleMap.get(key);
-                    if (person.Type === 'Director') {
-                        personData.directorCount++;
-                        if (!personData.directorItemIds.includes(movie.Id)) {
-                            personData.directorItemIds.push(movie.Id);
-                        }
-                    } else if (person.Type === 'Writer') {
-                        personData.writerCount++;
-                        if (!personData.writerItemIds.includes(movie.Id)) {
-                            personData.writerItemIds.push(movie.Id);
-                        }
-                    } else if (person.Type === 'Actor') {
-                        personData.actorCount++;
-                        if (!personData.actorItemIds.includes(movie.Id)) {
-                            personData.actorItemIds.push(movie.Id);
-                        }
-                    }
-                });
+    function extractItemDataForCache(item) {
+        return {
+            Id: item.Id,
+            Type: item.Type,
+            MediaType: item.MediaType,
+            Name: item.Name,
+            SeriesId: item.SeriesId,
+            SeriesName: item.SeriesName,
+            SeriesPrimaryImageTag: item.SeriesPrimaryImageTag,
+            ParentBackdropItemId: item.ParentBackdropItemId,
+            ParentBackdropImageTags: item.ParentBackdropImageTags,
+            ParentThumbImageTag: item.ParentPrimaryImageTags,
+            IndexNumber: item.IndexNumber,
+            ParentIndexNumber: item.ParentIndexNumber,
+            ImageTags: item.ImageTags,
+            BackdropImageTags: item.BackdropImageTags,
+            PremiereDate: item.PremiereDate,
+            ProductionYear: item.ProductionYear,
+            UserData: {
+                IsFavorite: item.UserData?.IsFavorite || false,
+                Played: item.UserData?.Played || false,
+                LastPlayedDate: item.UserData?.LastPlayedDate || null,
+                PlayCount: item.UserData?.PlayCount || 0,
+                Likes: item.UserData?.Likes || false
             }
-        });
-        
-            // Filter and sort people by count, taking top 100 per category
+        };
+    }
+
+    /**
+     * Processes people data from movies array and returns RAW data (all people, unfiltered)
+     * @param {Array} movies - Array of movie objects with People data
+     * @param {Map} existingPeopleMap - Optional existing people map to merge with
+     * @returns {Map|null} - Map of all people data (unfiltered) or null if failed
+     */
+    function processPeopleDataRaw(movies, existingPeopleMap = null) {
+        try {
+            const peopleMap = existingPeopleMap ? new Map(existingPeopleMap) : new Map();
+            
+            movies.forEach(movie => {
+                // Extract item data for caching
+                const itemData = extractItemDataForCache(movie);
+                
+                if (movie.People) {
+                    movie.People.forEach(person => {
+                        const key = person.Id;
+                        if (!peopleMap.has(key)) {
+                            peopleMap.set(key, {
+                                id: person.Id,
+                                name: person.Name,
+                                directorCount: 0,
+                                writerCount: 0,
+                                actorCount: 0,
+                                directorItems: [],
+                                writerItems: [],
+                                actorItems: []
+                            });
+                        }
+                        
+                        const personData = peopleMap.get(key);
+                        if (person.Type === 'Director') {
+                            personData.directorCount++;
+                            // Check if item already exists by Id
+                            if (!personData.directorItems.some(item => item.Id === movie.Id)) {
+                                personData.directorItems.push(itemData);
+                            }
+                        } else if (person.Type === 'Writer') {
+                            personData.writerCount++;
+                            if (!personData.writerItems.some(item => item.Id === movie.Id)) {
+                                personData.writerItems.push(itemData);
+                            }
+                        } else if (person.Type === 'Actor') {
+                            personData.actorCount++;
+                            if (!personData.actorItems.some(item => item.Id === movie.Id)) {
+                                personData.actorItems.push(itemData);
+                            }
+                        }
+                    });
+                }
+            });
+            
+            return peopleMap;
+            
+        } catch (err) {
+            ERR('Failed to process people data:', err);
+            return null;
+        }
+    }
+
+    /**
+     * Filters and sorts raw people data by minPeopleAppearances, returning top 100 per category
+     * @param {Map} peopleMap - Map of all people data (unfiltered)
+     * @returns {Object|null} - Filtered and sorted people data or null if failed
+     */
+    function filterPeopleData(peopleMap) {
+        try {
+            if (!peopleMap) {
+                return null;
+            }
+            
             const allPeople = Array.from(peopleMap.values());
             
             const topDirectors = allPeople
@@ -925,7 +989,7 @@
                     id: person.id,
                     name: person.name,
                     count: person.directorCount,
-                    itemIds: person.directorItemIds
+                    items: person.directorItems || []
                 }));
                 
             const topWriters = allPeople
@@ -936,7 +1000,7 @@
                     id: person.id,
                     name: person.name,
                     count: person.writerCount,
-                    itemIds: person.writerItemIds
+                    items: person.writerItems || []
                 }));
                 
             const topActors = allPeople
@@ -947,7 +1011,7 @@
                     id: person.id,
                     name: person.name,
                     count: person.actorCount,
-                    itemIds: person.actorItemIds
+                    items: person.actorItems || []
                 }));
             
             return {
@@ -957,9 +1021,19 @@
             };
             
         } catch (err) {
-            ERR('Failed to process people data:', err);
+            ERR('Failed to filter people data:', err);
             return null;
         }
+    }
+
+    /**
+     * Processes people data from movies array (legacy function, now uses raw processing + filtering)
+     * @param {Array} movies - Array of movie objects with People data
+     * @returns {Object|null} - Processed people data or null if failed
+     */
+    function processPeopleData(movies) {
+        const peopleMap = processPeopleDataRaw(movies);
+        return filterPeopleData(peopleMap);
     }
 
 
@@ -979,43 +1053,48 @@
             return;
         }
         
-        const cache = new window.LocalStorageCache();
+        const indexedDBCache = new window.IndexedDBCache();
+        const apiClient = window.ApiClient;
+        const userId = apiClient.getCurrentUserId();
         
-        // Check if we have valid cached data
-        if (cache.isCacheValid('movies_top_people')) {
-            const cachedData = cache.get('movies_top_people');
+        // First, check if we have valid complete filtered data (in IndexedDBCache)
+        if (await indexedDBCache.isCacheValid('movies_top_people', userId)) {
+            const cachedData = await indexedDBCache.get('movies_top_people', userId);
             
             // Check if data is complete
-            if (cachedData.isComplete) {
+            if (cachedData && cachedData.isComplete) {
                 moviesTopPeople = cachedData;
                 isPeopleCacheComplete = true;
-                LOG('Loaded complete top people data from cache');
+                LOG('Loaded complete top people data from IndexedDB cache');
                 return;
-            } else if (cachedData.moviesProcessedCount) {
-                // Use the stored count for resuming
-                const moviesProcessed = cachedData.moviesProcessedCount;
-                if (moviesProcessed > 0 && moviesProcessed % 500 === 0) {
-                    // We have a complete set of 500-item chunks, continue loading
-                    moviesTopPeople = cachedData;
-                    isPeopleCacheComplete = false;
-                    LOG(`Loaded partial top people data from cache (${moviesProcessed} movies), will continue fetching...`);
-                } else if (moviesProcessed > 0) {
-                    // We have incomplete data, use what we have but don't continue loading
-                    moviesTopPeople = cachedData;
-                    isPeopleCacheComplete = true;
-                    LOG(`Loaded incomplete top people data from cache (${moviesProcessed} movies), not divisible by 500, using as-is`);
-                    return;
-                } else {
-                    // We have partial data without count info, load it and continue fetching
-                    moviesTopPeople = cachedData;
-                    isPeopleCacheComplete = false;
-                    LOG('Loaded partial top people data from cache, will continue fetching...');
+            }
+        }
+        
+        // If no complete data, check for raw partial data (in IndexedDBCache)
+        if (await indexedDBCache.isCacheValid('movies_top_people_raw', userId)) {
+            const rawCachedData = await indexedDBCache.get('movies_top_people_raw', userId);
+            
+            if (rawCachedData && rawCachedData.peopleData) {
+                // Reconstruct Map and filter for immediate display
+                const peopleMap = new Map(rawCachedData.peopleData);
+                const filteredData = filterPeopleData(peopleMap);
+                
+                if (filteredData) {
+                    moviesTopPeople = filteredData;
+                    isPeopleCacheComplete = rawCachedData.isComplete || false;
+                    LOG(`Loaded partial top people data from raw cache (${rawCachedData.moviesProcessedCount || 0} movies), ${filteredData.actors.length} actors, ${filteredData.directors.length} directors, ${filteredData.writers.length} writers`);
+                    
+                    // If incomplete, we'll continue fetching in background
+                    if (!isPeopleCacheComplete) {
+                        // Continue in background
+                    } else {
+                        // It's marked complete but wasn't in filtered cache, update filtered cache
+                        filteredData.isComplete = true;
+                        await indexedDBCache.set('movies_top_people', filteredData, userId, 7 * 24 * 60 * 60 * 1000);
+                        await indexedDBCache.clear('movies_top_people_raw', userId);
+                        return;
+                    }
                 }
-            } else {
-                // No moviesProcessedCount stored, treat as incomplete and continue fetching
-                moviesTopPeople = cachedData;
-                isPeopleCacheComplete = false;
-                LOG('Loaded partial top people data from cache (no count stored), will continue fetching...');
             }
         }
         
@@ -1745,7 +1824,7 @@
             // Render the scrollable container
             const scrollableContainer = window.cardBuilder.renderCards(
                 movies,
-                'New Movies',
+                'Recently Released Movies',
                 null,
                 true
             );
@@ -1788,7 +1867,7 @@
             // Render the scrollable container
             const scrollableContainer = window.cardBuilder.renderCards(
                 episodes,
-                'New Episodes',
+                'Recently Aired Episodes',
                 null,
                 true
             );
@@ -1908,7 +1987,7 @@
             // Render the scrollable container with the network/studio items
             const scrollableContainer = window.cardBuilder.renderCards(
                 limitedNetworks,
-                'Popular TV Networks',
+                'Popular TV Studios',
                 null,
                 true,
                 'backdrop'
@@ -1984,78 +2063,63 @@
                     return null;
                 })(),
                 
-                // 2. Directed by [Director] (async - fetch actual items)
+                // 2. Directed by [Director] (use cached items directly)
                 (async () => {
                     if (moviesTopPeople && moviesTopPeople.directors.length > 0) {
                         const randomDirector = getRandomItem(moviesTopPeople.directors, renderedDirectors);
-                        if (randomDirector && randomDirector.itemIds && randomDirector.itemIds.length > 0) {
-                            // Validate that itemIds contain actual valid IDs (not undefined/null)
-                            const validItemIds = randomDirector.itemIds.filter(id => id && typeof id === 'string' && id.trim() !== '');
-                            if (validItemIds.length > 0) {
-                                // Fetch actual items from API
-                                const shuffledIds = shuffleArray(validItemIds).slice(0, 16);
-                                const items = await fetchItemsByIds(shuffledIds);
-                                
-                                if (items && items.length > 0) {
-                                    return {
-                                        type: 'director',
-                                        data: randomDirector,
-                                        items: items,
-                                        viewMoreUrl: `#/details?id=${randomDirector.id}&serverId=${ApiClient.serverId()}`
-                                    };
-                                }
+                        if (randomDirector && randomDirector.items && randomDirector.items.length > 0) {
+                            // Use cached items directly - no need to fetch from API
+                            const shuffledItems = shuffleArray(randomDirector.items).slice(0, 16);
+                            
+                            if (shuffledItems && shuffledItems.length > 0) {
+                                return {
+                                    type: 'director',
+                                    data: randomDirector,
+                                    items: shuffledItems,
+                                    viewMoreUrl: `#/details?id=${randomDirector.id}&serverId=${ApiClient.serverId()}`
+                                };
                             }
                         }
                     }
                     return null;
                 })(),
                 
-                // 3. Written by [Writer] (async - fetch actual items)
+                // 3. Written by [Writer] (use cached items directly)
                 (async () => {
                     if (moviesTopPeople && moviesTopPeople.writers.length > 0) {
                         const randomWriter = getRandomItem(moviesTopPeople.writers, renderedWriters);
-                        if (randomWriter && randomWriter.itemIds && randomWriter.itemIds.length > 0) {
-                            // Validate that itemIds contain actual valid IDs (not undefined/null)
-                            const validItemIds = randomWriter.itemIds.filter(id => id && typeof id === 'string' && id.trim() !== '');
-                            if (validItemIds.length > 0) {
-                                // Fetch actual items from API
-                                const shuffledIds = shuffleArray(validItemIds).slice(0, 16);
-                                const items = await fetchItemsByIds(shuffledIds);
-                                
-                                if (items && items.length > 0) {
-                                    return {
-                                        type: 'writer',
-                                        data: randomWriter,
-                                        items: items,
-                                        viewMoreUrl: `#/details?id=${randomWriter.id}&serverId=${ApiClient.serverId()}`
-                                    };
-                                }
+                        if (randomWriter && randomWriter.items && randomWriter.items.length > 0) {
+                            // Use cached items directly - no need to fetch from API
+                            const shuffledItems = shuffleArray(randomWriter.items).slice(0, 16);
+                            
+                            if (shuffledItems && shuffledItems.length > 0) {
+                                return {
+                                    type: 'writer',
+                                    data: randomWriter,
+                                    items: shuffledItems,
+                                    viewMoreUrl: `#/details?id=${randomWriter.id}&serverId=${ApiClient.serverId()}`
+                                };
                             }
                         }
                     }
                     return null;
                 })(),
                 
-                // 4. Starring [Actor] (async - fetch actual items)
+                // 4. Starring [Actor] (use cached items directly)
                 (async () => {
                     if (moviesTopPeople && moviesTopPeople.actors.length > 0) {
                         const randomActor = getRandomItem(moviesTopPeople.actors, renderedActors);
-                        if (randomActor && randomActor.itemIds && randomActor.itemIds.length > 0) {
-                            // Validate that itemIds contain actual valid IDs (not undefined/null)
-                            const validItemIds = randomActor.itemIds.filter(id => id && typeof id === 'string' && id.trim() !== '');
-                            if (validItemIds.length > 0) {
-                                // Fetch actual items from API
-                                const shuffledIds = shuffleArray(validItemIds).slice(0, 16);
-                                const items = await fetchItemsByIds(shuffledIds);
-                                
-                                if (items && items.length > 0) {
-                                    return {
-                                        type: 'actor',
-                                        data: randomActor,
-                                        items: items,
-                                        viewMoreUrl: `#/details?id=${randomActor.id}&serverId=${ApiClient.serverId()}`
-                                    };
-                                }
+                        if (randomActor && randomActor.items && randomActor.items.length > 0) {
+                            // Use cached items directly - no need to fetch from API
+                            const shuffledItems = shuffleArray(randomActor.items).slice(0, 16);
+                            
+                            if (shuffledItems && shuffledItems.length > 0) {
+                                return {
+                                    type: 'actor',
+                                    data: randomActor,
+                                    items: shuffledItems,
+                                    viewMoreUrl: `#/details?id=${randomActor.id}&serverId=${ApiClient.serverId()}`
+                                };
                             }
                         }
                     }
@@ -3526,19 +3590,7 @@
         }
         
         // Check if sections are already rendered
-        const hasRenderedCustomSections = customHomeSections.some(section => 
-            homeSectionsContainer.querySelector(`[data-custom-section-id="${section.id}"]`)
-        );
-        
-        const hasRenderedNewAndTrendingSections = (enableNewMovies && homeSectionsContainer.querySelector('[data-custom-section-id="new-movies"]')) ||
-            (enableNewEpisodes && homeSectionsContainer.querySelector('[data-custom-section-id="new-episodes"]')) ||
-            (enableTrending && homeSectionsContainer.querySelector('[data-custom-section-id="trending-movies"]'));
-        
-        const hasRenderedDiscoverySections = (enableWatchlist && homeSectionsContainer.querySelector('[data-custom-section-id="watchlist"]')) ||
-            (enableDiscovery && homeSectionsContainer.querySelector('[data-custom-section-id="watched-movie"]')) ||
-            (enableSeasonal && homeSectionsContainer.querySelector('[data-custom-section-id="halloween-movies"]'));
-        
-        if (hasRenderedCustomSections || hasRenderedNewAndTrendingSections || hasRenderedDiscoverySections) {
+        if (homeSectionsContainer.dataset.customSectionsRendered === 'true') {
             return;
         }
 
@@ -3546,6 +3598,7 @@
         
         // Set processing flag to prevent parallel execution
         isProcessing = true;
+        homeSectionsContainer.dataset.customSectionsRendered = 'true';
         
         try {
             LOG('Starting parallel initialization of home screen sections...');
@@ -3605,7 +3658,6 @@
                 ERR('Home screen page change handler failed:', err);
             }
         }, {
-            immediate: true,
             pages: ['home', 'home.html']
         });
     } else {

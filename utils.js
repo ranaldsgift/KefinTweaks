@@ -36,7 +36,7 @@
                 }
                 
                 // Call our registered handlers
-                notifyHandlers(args[0], args[1]);
+                notifyHandlers(args[0], args[1], window.location.hash);
             };
             
             LOG('Hooked into Emby.Page.onViewShow');
@@ -68,7 +68,6 @@
         const handlerConfig = {
             callback,
             options: {
-                immediate: false, // Call immediately if on matching page
                 pages: [], // Specific pages to watch (empty = all pages)
                 ...options
             }
@@ -77,18 +76,15 @@
         handlers.push(handlerConfig);
         LOG(`Registered onViewPage handler (total: ${handlers.length})`);
         
-        // Call immediately if requested and we're on a matching page
         // Test if this is causing issues
-        if (handlerConfig.options.immediate && false) {
-            const currentView = getCurrentView();
-            if (currentView && shouldCallHandler(handlerConfig, currentView)) {
-                try {
-                    // Pass the promise (not awaited) for consistency with notifyHandlers
-                    const itemPromise = getCurrentItem();
-                    callback(currentView, document, itemPromise);
-                } catch (err) {
-                    ERR('Error in immediate handler call:', err);
-                }
+        const currentView = getCurrentView();
+        if (currentView && shouldCallHandler(handlerConfig, currentView)) {
+            try {
+                // Pass the promise (not awaited) for consistency with notifyHandlers
+                const itemPromise = getCurrentItem();
+                callback(currentView, document, window.location.hash, itemPromise);
+            } catch (err) {
+                ERR('Error in immediate handler call:', err);
             }
         }
         
@@ -122,7 +118,7 @@
      * @returns {Promise<Object|null>} The item object or null if not found
      */
     async function fetchItemById(itemId) {
-        if (!itemId || !window.ApiClient || !window.ApiClient.getItem || !window.ApiClient.getCurrentUserId) {
+        if (!itemId || !window.ApiClient || !window.ApiClient.getItem || !window.ApiClient.getCurrentUserId || !window.ApiClient._loggedIn) {
             return null;
         }
 
@@ -186,7 +182,7 @@
      * @param {string} view - The view name
      * @param {Element} element - The view element
      */
-    function notifyHandlers(view, element) {
+    function notifyHandlers(view, element, hash) {
         // Clear cache when view changes to ensure fresh data
         const currentItemId = getItemIdFromUrl();
         if (cachedItemId !== currentItemId) {
@@ -206,7 +202,7 @@
             if (shouldCallHandler(config, view)) {
                 try {
                     // Pass the promise as third parameter - handlers can await if needed
-                    config.callback(view, element, itemPromise);
+                    config.callback(view, element, hash, itemPromise);
                 } catch (err) {
                     ERR('Error in onViewPage handler:', err);
                 }

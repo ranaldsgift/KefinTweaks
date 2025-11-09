@@ -227,7 +227,7 @@
         LOG('Registering playlist handler with KefinTweaksUtils');
         
         // Register handler for details pages
-        window.KefinTweaksUtils.onViewPage(async (view, element, itemPromise) => {
+        window.KefinTweaksUtils.onViewPage(async (view, element, hash, itemPromise) => {
             // Await the item promise to get the actual item data
             const item = await itemPromise;
             if (item && item.Type === 'Playlist') {
@@ -235,7 +235,6 @@
                 return;
             }
         }, {
-            immediate: true,
             pages: ['details']
         });
         

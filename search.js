@@ -59,7 +59,7 @@
 
     // config
     const CORE_TYPES = ['Movie', 'Series', 'Episode', 'Person'];
-    const MUSIC_TYPES = ['MusicAlbum', 'Audio', 'Artist'];
+    const MUSIC_TYPES = ['MusicAlbum', 'Audio', 'Artist', 'MusicVideo'];
     const BOOKS_TYPES = ['Book', 'AudioBook'];
     const OTHER_TYPES = ['Playlist', 'Photo', 'PhotoAlbum', 'TvChannel', 'LiveTvProgram', 'BoxSet'];
 
@@ -677,7 +677,6 @@
                 }
             }, 100);
         }, {
-            immediate: true,
             pages: ['search']
         });
         

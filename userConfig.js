@@ -39,6 +39,16 @@
                 colorSchemes: []
             },
             {
+                name: 'NeutralFin',
+                author: 'KartoffelChipss',
+                url: [ 
+                    'https://cdn.jsdelivr.net/gh/KartoffelChipss/NeutralFin@latest/theme/neutralfin-minified.css',
+                    'https://cdn.jsdelivr.net/gh/KartoffelChipss/Jellyfin-Lucide@main/theme/jellyfin-lucide.css',
+                    `${KefinTweaksConfig.scriptRoot}skins/neutralfin-kefin.css`
+                 ],
+                colorSchemes: []
+            },
+            {
                 name: 'Jellypane',
                 author: 'tedhinklater',
                 url: 'https://cdn.jsdelivr.net/gh/tedhinklater/Jellypane@main/Jellypane.css',

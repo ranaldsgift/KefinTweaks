@@ -24,3 +24,11 @@ div#seriesScheduleSection {
 .commentsSection {
     order: 3;
 }
+
+@media (max-width: 768px) {
+    .headerRight .btnRecommendations, 
+    .headerRight .btnAdmin, 
+    .headerRight .headerAppearanceButton {
+        display: none;
+    }
+}

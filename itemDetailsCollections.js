@@ -194,7 +194,7 @@
         LOG('Registering collections handler with KefinTweaksUtils');
 
         window.KefinTweaksUtils.onViewPage(
-            async (view, element, itemPromise) => {
+            async (view, element, hash, itemPromise) => {
                 // Only handle details pages
                 const activePage = document.querySelector('.libraryPage:not(.hide)');
                 if (!activePage) return;
@@ -210,7 +210,6 @@
                 }, 100);
             },
             {
-                immediate: true,
                 pages: ['details']
             }
         );

@@ -16,7 +16,7 @@
     order: 1;
 }
 
-.sections.homeSectionsContainer>div:has(div[data-positionticks]) {
+.sections.homeSectionsContainer>div:has(>.emby-scroller div[data-positionticks]) {
     order: 2;
 }
 
@@ -86,4 +86,9 @@ div#discovery-loading-indicator:not(.show)::after {
 
 #indexPage:not([data-discovery-ready]) div#discovery-loading-indicator:not(.show)::after {
     content: '';
+}
+
+/* Ensure Editor's Choice Banner appears at top of home screen if enabled */
+.editorsChoiceContainer {
+    order: 1 !important;
 }
