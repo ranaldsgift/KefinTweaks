@@ -517,8 +517,6 @@
         scroller.className = 'padded-top-focusscale padded-bottom-focusscale emby-scroller custom-scroller';
         scroller.setAttribute('data-scroll-mode-x', 'custom');
 		// Enable smooth native horizontal touch scrolling (no snapping, no buttons)
-		scroller.style.overflowX = 'auto';
-		scroller.style.overflowY = 'hidden';
 		scroller.style.scrollSnapType = 'none';
 		// Allow both axes so vertical page scroll isn't blocked when gesture starts over the scroller
 		scroller.style.touchAction = 'auto';

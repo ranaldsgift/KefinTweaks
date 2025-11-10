@@ -98,12 +98,12 @@
         
         if (item.Type === 'Movie') {
             structure.elements = [
-                { text: 'Movies', url: `#/movies${urlSuffix}${queryParams}`, clickable: true },
+                { text: 'Movies', url: `#/movies${urlSuffix}${queryParams}&tab=0`, clickable: true },
                 { text: item.Name, url: null, clickable: false }
             ];
         } else if (item.Type === 'Series') {
             structure.elements = [
-                { text: 'Shows', url: `#/tv${urlSuffix}${queryParams}`, clickable: true },
+                { text: 'Shows', url: `#/tv${urlSuffix}${queryParams}&tab=0`, clickable: true },
                 { text: item.Name, url: null, clickable: false },
                 { text: 'All Seasons', url: null, clickable: true, popover: true }
             ];
@@ -113,7 +113,7 @@
             const seriesName = seriesDetails ? seriesDetails.Name : 'Unknown Series';
             
             structure.elements = [
-                { text: 'Shows', url: `#/tv${urlSuffix}${queryParams}`, clickable: true },
+                { text: 'Shows', url: `#/tv${urlSuffix}${queryParams}&tab=0`, clickable: true },
                 { text: seriesName, url: `${ApiClient._serverAddress}/web/#/details?id=${item.ParentId}&serverId=${ApiClient.serverId()}`, clickable: true },
                 { text: item.Name || `Season ${item.IndexNumber}`, url: null, clickable: true, popover: true }
             ];
@@ -127,20 +127,20 @@
             const seasonName = seasonDetails ? (seasonDetails.Name || `Season ${seasonDetails.IndexNumber}`) : `Season ${item.ParentIndexNumber}`;
             
             structure.elements = [
-                { text: 'Shows', url: `#/tv${urlSuffix}${queryParams}`, clickable: true },
+                { text: 'Shows', url: `#/tv${urlSuffix}${queryParams}&tab=0`, clickable: true },
                 { text: seriesName, url: `${ApiClient._serverAddress}/web/#/details?id=${item.SeriesId}&serverId=${ApiClient.serverId()}`, clickable: true },
                 { text: seasonName, url: null, clickable: true, popover: true },
                 { text: `${item.ParentIndexNumber}x${padNumber(item.IndexNumber)} - ${item.Name}`, url: null, clickable: false }
             ];
         } else if (item.Type === 'MusicArtist') {
             structure.elements = [
-                { text: 'Music', url: `#/music${urlSuffix}${queryParams}`, clickable: true },
+                { text: 'Music', url: `#/music${urlSuffix}${queryParams}&tab=0`, clickable: true },
                 { text: item.Name, url: null, clickable: false },
                 { text: 'All Albums', url: null, clickable: true, popover: true }
             ];
         } else if (item.Type === 'MusicAlbum') {
             structure.elements = [
-                { text: 'Music', url: `#/music${urlSuffix}${queryParams}`, clickable: true },
+                { text: 'Music', url: `#/music${urlSuffix}${queryParams}&tab=0`, clickable: true },
                 { text: item.AlbumArtist, url: `${ApiClient._serverAddress}/web/#/details?id=${item.ParentId}&serverId=${ApiClient.serverId()}`, clickable: true },
                 { text: item.Name, url: null, clickable: true, popover: true },
                 { text: 'All Songs', url: null, clickable: true, popover: true }
@@ -153,7 +153,7 @@
             const artistId = albumDetails ? albumDetails.ParentId : null;
             
             structure.elements = [
-                { text: 'Music', url: `#/music${urlSuffix}${queryParams}`, clickable: true },
+                { text: 'Music', url: `#/music${urlSuffix}${queryParams}&tab=0`, clickable: true },
                 { text: artistName, url: artistId ? `${ApiClient._serverAddress}/web/#/details?id=${artistId}&serverId=${ApiClient.serverId()}` : null, clickable: !!artistId },
                 { text: albumName, url: null, clickable: true, popover: true },
                 { text: item.Name, url: null, clickable: false }
