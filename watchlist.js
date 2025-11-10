@@ -966,10 +966,13 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			const currentDirection = getCurrentMovieSortDirection();
 			isSameSort = state.currentSort === currentSort && state.currentDirection === currentDirection;
 		}
+
+		const children = container.querySelectorAll(':scope > *:not(.loading-message)');
 		
 		// Check if container has the right number of children
+		// TODO - Improve this to check if the children are the same as the data
 		const hasCorrectContent = container && 
-								container.children.length === data.length;
+								children.length === data.length;
 		
 		// Skip if we have content and it's the same page/search/sort/data count
 		return state.hasContent && isSamePage && isSameSearch && isSameSort && hasCorrectContent;

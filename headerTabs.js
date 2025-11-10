@@ -29,10 +29,23 @@
         return null;
     }
     
+    // Get parent ID from URL (topParentId or parentId)
+    function getParentIdFromUrl() {
+        const hash = window.location.hash;
+        if (!hash.includes('?')) return null;
+        
+        const [hashPath, hashSearch] = hash.split('?');
+        const params = new URLSearchParams(hashSearch);
+        
+        // Prefer topParentId, fall back to parentId
+        return params.get('topParentId') || params.get('parentId') || null;
+    }
+    
     // Get current tab index from URL parameter
+    // Returns null if no tab parameter is present (so we can fetch from preferences)
     function getCurrentTabFromUrl() {
         const hash = window.location.hash;
-        if (!hash.includes('?')) return 0;
+        if (!hash.includes('?')) return null;
         
         const [hashPath, hashSearch] = hash.split('?');
         const params = new URLSearchParams(hashSearch);
@@ -46,7 +59,91 @@
             }
         }
         
-        return 0;
+        return null;
+    }
+
+    let _userDisplayPreferences = null;
+    
+    // Fetch display preferences and find matching tab based on landing preference
+    // Returns the tab index if found, or null if no match/preference found
+    // landingKey can be either a parentId (e.g., "f137a2dd21bbc1b99aa5c0f6bf02a805") or a page name (e.g., "livetv")
+    async function getTabFromDisplayPreferences(landingKey) {
+        if (!landingKey || !window.ApiClient) {
+            LOG('No landingKey or ApiClient not available');
+            return null;
+        }
+        
+        try {
+            const userId = window.ApiClient.getCurrentUserId();
+            if (!userId) {
+                LOG('No user ID available');
+                return null;
+            }
+
+            if (!_userDisplayPreferences) {            
+                const serverAddress = window.ApiClient._serverAddress;
+                const accessToken = window.ApiClient.accessToken();
+                
+                if (!serverAddress || !accessToken) {
+                    LOG('Server address or access token not available');
+                    return null;
+                }
+                
+                const response = await fetch(
+                    `${serverAddress}/DisplayPreferences/usersettings?userId=${userId}&client=emby`,
+                    {
+                        headers: {
+                            'X-Emby-Token': accessToken
+                        }
+                    }
+                );
+                
+                if (!response.ok) {
+                    WARN('Failed to fetch display preferences:', response.status);
+                    return null;
+                }
+                
+                _userDisplayPreferences = await response.json();
+                LOG('Fetched display preferences for landing tab preference');
+            }
+
+            const customPrefs = _userDisplayPreferences.CustomPrefs || {};
+            
+            // Look for landing-{landingKey} in CustomPrefs
+            const fullLandingKey = `landing-${landingKey}`;
+            const landingValue = customPrefs[fullLandingKey];
+            
+            if (!landingValue) {
+                LOG(`No landing preference found for ${fullLandingKey}`);
+                return null;
+            }
+            
+            LOG(`Found landing preference for ${fullLandingKey}:`, landingValue);
+            
+            // Find the tab button whose inner div text matches the landing value
+            const headerTabs = document.querySelector('.headerTabs');
+            if (!headerTabs) {
+                LOG('Header tabs not found');
+                return null;
+            }
+            
+            const buttons = headerTabs.querySelectorAll('.emby-tab-button');
+            for (const button of buttons) {
+                const div = button.querySelector('div');
+                if (div && div.innerText && div.innerText.replace(/\s+/g, '').trim().toLowerCase() === landingValue.replace(/\s+/g, '').trim().toLowerCase()) {
+                    const tabIndex = parseInt(button.getAttribute('data-index') || '0', 10);
+                    LOG(`Matched landing preference "${landingValue}" to tab index:`, tabIndex);
+                    return tabIndex;
+                }
+            }
+            
+            LOG(`No tab button found matching landing preference "${landingValue}"`);
+            return null;
+            
+        } catch (error) {
+            ERR('Error fetching display preferences:', error);
+            return null;
+        }
     }
     
     // Update URL with tab parameter
@@ -55,6 +152,10 @@
         const currentPage = getCurrentPage();
         
         if (!currentPage) return;
+        
+        // Check if there's a parentId - if not, don't add tab=0
+        const parentId = getParentIdFromUrl();
+        const shouldIncludeTab = tabIndex !== 0 || parentId !== null;
         
         let newHash = currentHash;
         
@@ -71,20 +172,22 @@
             params.delete('movieSort');
             params.delete('movieSortDirection');
             
-            if (tabIndex === 0) {
-                params.delete('tab');
-            } else {
+            if (shouldIncludeTab) {
                 params.set('tab', tabIndex.toString());
+            } else {
+                // Remove tab parameter if it's tab 0 and no parentId
+                params.delete('tab');
             }
             
             const paramString = params.toString();
             newHash = paramString ? `${hashPath}?${paramString}` : hashPath;
         } else {
-            // Add tab parameter
-            if (tabIndex !== 0) {
+            // Add tab parameter only if we should include it
+            if (shouldIncludeTab) {
                 newHash = `${currentHash}?tab=${tabIndex}`;
             } else {
-                newHash = `${currentHash}`;
+                // Don't add tab parameter for tab 0 when no parentId
+                newHash = currentHash;
             }
         }
 
@@ -132,11 +235,42 @@
     }
     
     // Synchronize active tab state with URL parameter
-    function syncActiveTabState() {
+    async function syncActiveTabState() {
         const headerTabs = document.querySelector('.headerTabs');
         if (!headerTabs) return;
         
-        const currentTabFromUrl = getCurrentTabFromUrl();
+        let currentTabFromUrl = getCurrentTabFromUrl();
+        
+        // If no tab parameter in URL, try to fetch from display preferences
+        if (currentTabFromUrl === null) {
+            const parentId = getParentIdFromUrl();
+            let matchedTab = null;
+            
+            if (parentId) {
+                // Try to get landing preference using parentId
+                LOG('No tab parameter found, fetching from display preferences for parentId:', parentId);
+                matchedTab = await getTabFromDisplayPreferences(parentId);
+            } else {
+                // No parentId, try to get landing preference using page name (e.g., "livetv", "home")
+                const currentPage = getCurrentPage();
+                if (currentPage) {
+                    // Remove .html extension if present for the landing key
+                    const pageName = currentPage.replace('.html', '');
+                    LOG('No tab parameter and no parentId, fetching from display preferences for page:', pageName);
+                    matchedTab = await getTabFromDisplayPreferences(pageName);
+                }
+            }
+            
+            if (matchedTab !== null) {
+                // Only update URL if we successfully matched a landing preference
+                currentTabFromUrl = matchedTab;
+                updateUrlWithTab(matchedTab);
+            } else {
+                // No match found, use tab 0 for active state but don't update URL
+                LOG('No landing preference match found, using tab 0 without updating URL');
+                currentTabFromUrl = 0;
+            }
+        }
 
         // Patch for media bar because it usually reacts slowly and hides later
         // Hide media bar slideshow if we aren't specifically on the home page first tab
@@ -155,12 +289,12 @@
         const activeTabContentIndex = activeTabContent ? activeTabContent.getAttribute('data-index') : null;
 
         // Remove is-active class from the active tab content if it's not the current tab
-        if (activeTabContentIndex && activeTabContentIndex !== currentTabFromUrl) {
+        if (activeTabContentIndex && activeTabContentIndex !== currentTabFromUrl.toString()) {
             activeTabContent.classList.remove('is-active');
         }
 
         // Add is-active class to the current tab content if it's not already active
-        if (!activeTabContentIndex || activeTabContentIndex !== currentTabFromUrl) {
+        if (!activeTabContentIndex || activeTabContentIndex !== currentTabFromUrl.toString()) {
             const targetContent = document.querySelector(`.libraryPage:not(.hide) .pageTabContent[data-index="${currentTabFromUrl}"]`);
             if (targetContent) {
                 targetContent.classList.add('is-active');
@@ -201,7 +335,9 @@
             LOG('Added click listeners to', buttons.length, 'buttons');
             
             // Synchronize active tab state with URL parameter
-            syncActiveTabState();
+            syncActiveTabState().catch(err => {
+                ERR('Error in syncActiveTabState:', err);
+            });
         }
     }
     
@@ -324,7 +460,11 @@
                     setupHeaderTabsObserver();
                     setupObserver();
                     // Sync active tab state after page change
-                    setTimeout(syncActiveTabState, 100);
+                    setTimeout(() => {
+                        syncActiveTabState().catch(err => {
+                            ERR('Error in syncActiveTabState:', err);
+                        });
+                    }, 100);
                 }
             }
         }
@@ -341,7 +481,9 @@
         window.KefinTweaksUtils.onViewPage((view, element) => {
             LOG('onViewPage handler triggered for view:', view);
             // Sync active tab state when page view changes
-            syncActiveTabState();
+            syncActiveTabState().catch(err => {
+                ERR('Error in syncActiveTabState:', err);
+            });
         }, {
             pages: SUPPORTED_PAGES // Only trigger for supported pages
         });
