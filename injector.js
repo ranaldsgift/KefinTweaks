@@ -308,8 +308,8 @@
     // Load a CSS file
     function loadCSS(filename) {
         return new Promise((resolve, reject) => {
-            // Check if CSS is already loaded
-            const existingLink = document.querySelector(`link[href="${getScriptRoot()}${filename}${urlSuffix}"]`);
+            // Check if CSS is already loaded (match by root and filename, ignore suffix)
+            const existingLink = document.querySelector(`link[href*="${getScriptRoot()}${filename}"]`);
             if (existingLink) {
                 console.log(`[KefinTweaks Injector] CSS already loaded: ${filename}`);
                 resolve();
@@ -339,7 +339,7 @@
     function loadScript(filename) {
         return new Promise((resolve, reject) => {
             // Check if script is already loaded
-            const existingScript = document.querySelector(`script[src="${getScriptRoot()}${filename}${urlSuffix}"]`);
+            const existingScript = document.querySelector(`script[src*="${getScriptRoot()}${filename}"]`);
             if (existingScript) {
                 console.log(`[KefinTweaks Injector] Script already loaded: ${filename}`);
                 resolve();
@@ -397,8 +397,8 @@
     
     // Load a single script (assumes dependencies are already loaded)
     async function loadScriptSync(scriptDef) {
-        // Check if already loaded
-        const isAlreadyLoaded = document.querySelector(`script[src="${getScriptRoot()}${scriptDef.script}${urlSuffix}"]`);
+        // Check if already loaded (match by root and filename, ignore suffix)
+        const isAlreadyLoaded = document.querySelector(`script[src*="${getScriptRoot()}${scriptDef.script}"]`);
         if (isAlreadyLoaded) {
             console.log(`[KefinTweaks Injector] Script already loaded: ${scriptDef.name}`);
             return;
