@@ -98,7 +98,7 @@ The features in KefinTweaks which use local data caching are listed below, along
 - Home Screen  
   - **Genres** [24h]:  
   Genres are cached simply to reduce API calls to the server. This is not an expensive API call, but under most circumstances the results will be the same even across longer periods of time.
-  - **Top People** [24h]:  
+  - **Top People** [7d]:  
   In order to populate the "Top People" in your movie library, we fetch the Person data for every movie in your library. We build a list of all the People who appear in at least X number of items based on their type (Actor/Director/Writer). This is an expensive operation, and is longer as the size of your library grows.
 - Watchlist
   - **Watchlist Items** [5m]:  
@@ -413,6 +413,8 @@ Allow users to also customize various configuration options through the UI
 <hr>
 
 ### Version History
+- **v0.2.2**: Add support for skin server versions, fixes for HeaderTabs
+- **v0.2.1**: Caching improvements for Watchlist and Top People, Mobile UI fixes and Flatten TV Shows improvements
 - **v0.2.0**: New Features: Skin Manager, Collections on Details Page, Flatten TV Shows
 - **v0.1.3**: Improve Watchlist UI and Search UX
 - **v0.1.2**: Added proper support for Base URLs configured in Jellyfin

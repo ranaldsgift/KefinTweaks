@@ -20,6 +20,142 @@
     const THEME_STORAGE_KEY = 'kefinTweaks_selectedTheme';
     const COLOR_SCHEMES_STORAGE_KEY = 'kefinTweaks_selectedColorScheme';
     
+    /**
+     * Get the current major server version from ApiClient
+     * @returns {number|null} The major version number (e.g., 10 for "10.10.X", 11 for "10.11.X"), or null if unavailable
+     */
+    function getCurrentMajorServerVersion() {
+        try {
+            if (typeof ApiClient !== 'undefined' && ApiClient._serverVersion) {
+                const versionParts = ApiClient._serverVersion.split('.');
+                if (versionParts.length >= 2) {
+                    const majorVersion = parseInt(versionParts[1], 10);
+                    if (!isNaN(majorVersion)) {
+                        return majorVersion;
+                    }
+                }
+            }
+        } catch (error) {
+            WARN('Error getting server version:', error);
+        }
+        return null;
+    }
+    
+    /**
+     * Extract URLs from skin configuration based on current server version
+     * Supports both new structure (array of objects) and old structure (string/array of strings)
+     * @param {Object} skin - The skin configuration object
+     * @returns {Array<string>|null} Array of URLs to load, or null if no URLs
+     */
+    function getSkinUrlsForCurrentVersion(skin) {
+        if (!skin.url) {
+            return null;
+        }
+        
+        const currentMajorVersion = getCurrentMajorServerVersion();
+        
+        // New structure: array of objects with majorServerVersions and urls
+        if (Array.isArray(skin.url) && skin.url.length > 0 && typeof skin.url[0] === 'object' && skin.url[0].majorServerVersions) {
+            // Find all URL objects that match the current server version
+            const matchingUrlObjects = skin.url.filter(urlObj => {
+                if (!urlObj.majorServerVersions || !Array.isArray(urlObj.majorServerVersions)) {
+                    return false;
+                }
+                return currentMajorVersion !== null && urlObj.majorServerVersions.includes(currentMajorVersion);
+            });
+            
+            if (matchingUrlObjects.length === 0) {
+                if (currentMajorVersion !== null) {
+                    LOG(`No URL configuration found for skin '${skin.name}' on server version ${currentMajorVersion}`);
+                }
+                return null;
+            }
+            
+            // Merge all URLs from matching objects
+            const allUrls = [];
+            matchingUrlObjects.forEach(urlObj => {
+                if (Array.isArray(urlObj.urls)) {
+                    allUrls.push(...urlObj.urls);
+                } else if (urlObj.urls) {
+                    allUrls.push(urlObj.urls);
+                }
+            });
+            
+            return allUrls.length > 0 ? allUrls : null;
+        }
+        
+        // Old structure: string or array of strings (backward compatibility)
+        if (typeof skin.url === 'string') {
+            return [skin.url];
+        }
+        if (Array.isArray(skin.url)) {
+            return skin.url;
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Filter skins based on the current server version
+     * Checks majorServerVersions in the URL structure
+     * @param {Array} skins - Array of skin configuration objects
+     * @returns {Array} Filtered array of skins compatible with current server version
+     */
+    function filterSkinsByServerVersion(skins) {
+        const currentMajorVersion = getCurrentMajorServerVersion();
+        
+        // If we can't determine the server version, include all skins (backward compatibility)
+        if (currentMajorVersion === null) {
+            WARN('Could not determine server version, showing all skins');
+            return skins;
+        }
+        
+        return skins.filter(skin => {
+            // Check if skin has URL configuration
+            if (!skin.url) {
+                // Skin with no URL (like Default) - check old majorServerVersions field for backward compatibility
+                if (skin.majorServerVersions && Array.isArray(skin.majorServerVersions)) {
+                    const isSupported = skin.majorServerVersions.includes(currentMajorVersion);
+                    if (!isSupported) {
+                        LOG(`Skin '${skin.name}' is not supported for server version ${currentMajorVersion} (supports: ${skin.majorServerVersions.join(', ')})`);
+                    }
+                    return isSupported;
+                }
+                // No version info, include for backward compatibility
+                return true;
+            }
+            
+            // New structure: check majorServerVersions in URL objects
+            if (Array.isArray(skin.url) && skin.url.length > 0 && typeof skin.url[0] === 'object' && skin.url[0].majorServerVersions) {
+                // Check if any URL object supports the current version
+                const hasMatchingVersion = skin.url.some(urlObj => {
+                    if (!urlObj.majorServerVersions || !Array.isArray(urlObj.majorServerVersions)) {
+                        return false;
+                    }
+                    return urlObj.majorServerVersions.includes(currentMajorVersion);
+                });
+                
+                if (!hasMatchingVersion) {
+                    LOG(`Skin '${skin.name}' is not supported for server version ${currentMajorVersion}`);
+                }
+                return hasMatchingVersion;
+            }
+            
+            // Old structure: check top-level majorServerVersions field (backward compatibility)
+            if (skin.majorServerVersions && Array.isArray(skin.majorServerVersions)) {
+                const isSupported = skin.majorServerVersions.includes(currentMajorVersion);
+                if (!isSupported) {
+                    LOG(`Skin '${skin.name}' is not supported for server version ${currentMajorVersion} (supports: ${skin.majorServerVersions.join(', ')})`);
+                }
+                return isSupported;
+            }
+            
+            // No version info specified, include for backward compatibility
+            LOG(`Skin '${skin.name}' has no version information, including it for backward compatibility`);
+            return true;
+        });
+    }
+    
     // Load and merge skin configurations
     function loadSkinConfig() {
         const userSkins = window.KefinTweaksUserConfig?.skins || [];
@@ -44,6 +180,15 @@
                     url: null
                 }
             ];
+        }
+        
+        // Filter skins based on current server version
+        const skinsBeforeFilter = SKINS_CONFIG.length;
+        SKINS_CONFIG = filterSkinsByServerVersion(SKINS_CONFIG);
+        const skinsAfterFilter = SKINS_CONFIG.length;
+        
+        if (skinsBeforeFilter !== skinsAfterFilter) {
+            LOG(`Filtered skins by server version: ${skinsBeforeFilter} -> ${skinsAfterFilter} (removed ${skinsBeforeFilter - skinsAfterFilter} incompatible skins)`);
         }
         
         LOG(`Loaded ${SKINS_CONFIG.length} skins (${userSkins.length} user + ${additionalSkins.length} additional)`);
@@ -1445,16 +1590,19 @@
         
         // Step 1: Load the new CSS first (gets cached and starts loading)
         requestAnimationFrame(() => {
-            let cssUrls = [];
-            if (Array.isArray(skin.url)) {
-                LOG(`Loading skin with ${skin.url.length} CSS files: ${skin.name}`);
-                cssUrls = skin.url;
-                skin.url.forEach(url => loadSkinCSS(url, skin.name));
-            } else {
-                LOG(`Loading skin with single CSS file: ${skin.name}`);
-                cssUrls = [skin.url];
-                loadSkinCSS(skin.url, skin.name);
+            const cssUrls = getSkinUrlsForCurrentVersion(skin);
+            
+            if (!cssUrls || cssUrls.length === 0) {
+                LOG(`No CSS URLs found for skin: ${skin.name}`);
+                return;
             }
+            
+            LOG(`Loading skin with ${cssUrls.length} CSS files: ${skin.name}`);
+            cssUrls.forEach(url => {
+                if (url) { // Skip null/empty URLs
+                    loadSkinCSS(url, skin.name);
+                }
+            });
         });
     }
     

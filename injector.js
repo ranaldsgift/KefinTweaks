@@ -6,7 +6,7 @@
     'use strict';
 
     console.log('[KefinTweaks Injector] Initializing...');
-    const versionNumber = "0.2.0";
+    const versionNumber = "0.2.2";
     
     // Configuration: Start with defaults, then merge user config
     // This allows new scripts to work out of the box without requiring config updates
@@ -417,7 +417,7 @@
     
     // Main initialization function
     async function initialize() {
-        console.log('[KefinTweaks Injector] Starting initialization...');
+        console.log(`[KefinTweaks Injector] Starting KefinTweaks v${versionNumber} initialization...`);
         
         // Validate configuration
         if (!validateConfiguration()) {

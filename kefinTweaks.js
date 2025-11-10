@@ -2,7 +2,6 @@
 // Copy this entire file into your Jellyfin JS injector plugin
 // Modify the configuration below to enable/disable features and customize settings
 //
-// VERSION: 0.2.0 
 // Full compatibility with Jellyfin 10.10.7
 // Untested compatibility with Jellyfin 10.11+
 // 
@@ -174,7 +173,8 @@
         // ============================================================================
         // Configure additional skins available in the skin manager
         // These will be merged with skins from userConfig.js
-        // Each skin can have a single URL (string) or multiple URLs (array) for complex themes
+        // Each skin's url field should be an array of objects with majorServerVersions and urls arrays
+        // This allows you to specify different CSS bundles for different server versions
         // Each skin can also have colorSchemes array for color variations specific to that skin
         // Each skin should have an author field indicating who created the skin
         skins: [
@@ -184,15 +184,25 @@
             {
                 name: 'Custom Theme',
                 author: 'username',
-                url: 'https://cdn.jsdelivr.net/gh/username/custom-theme.css',
+                url: [
+                    {
+                        majorServerVersions: [10, 11],
+                        urls: ['https://cdn.jsdelivr.net/gh/username/custom-theme.css']
+                    }
+                ],
                 colorSchemes: []
             },
             {
                 name: 'Multi-file Theme',
                 author: 'username',
                 url: [
-                    'https://cdn.jsdelivr.net/gh/username/theme-base.css',
-                    'https://cdn.jsdelivr.net/gh/username/theme-extensions.css'
+                    {
+                        majorServerVersions: [10, 11],
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/username/theme-base.css',
+                            'https://cdn.jsdelivr.net/gh/username/theme-extensions.css'
+                        ]
+                    }
                 ],
                 colorSchemes: [
                     {
@@ -204,6 +214,24 @@
                         url: 'https://cdn.jsdelivr.net/gh/username/theme-light-green.css'
                     }
                 ]
+            },
+            {
+                name: 'Version-Specific Theme',
+                author: 'username',
+                url: [
+                    {
+                        majorServerVersions: [10],
+                        urls: ['https://cdn.jsdelivr.net/gh/username/theme-v10.css']
+                    },
+                    {
+                        majorServerVersions: [11],
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/username/theme-v11.css',
+                            'https://cdn.jsdelivr.net/gh/username/theme-v11-fixes.css'
+                        ]
+                    }
+                ],
+                colorSchemes: []
             },
             */
         ],
@@ -272,8 +300,6 @@
     script.async = true;
     document.head.appendChild(script);
     
-    console.log('[KefinTweaks] Central configuration loaded. Available at window.KefinTweaksConfig');
-    console.log('[KefinTweaks] Version 0.2.0 - Compatible with Jellyfin 10.10.7');
-    
+    console.log('[KefinTweaks] Central configuration loaded. Available at window.KefinTweaksConfig');    
 })();
 
