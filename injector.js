@@ -84,7 +84,7 @@
         {
             name: 'modal',
             script: 'modal.js',
-            css: null,
+            css: 'modal.css',
             dependencies: [],
             description: 'Generic modal system for Jellyfin-style dialogs'
         },
