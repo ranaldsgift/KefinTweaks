@@ -31,6 +31,9 @@
 
     // Store collection data per page
     const collectionData = new Map();
+    
+    // Single MutationObserver for the current collection (only one can exist at a time)
+    let collectionObserver = null;
 
     /**
      * Get default sort from collection DisplayOrder property
@@ -413,6 +416,107 @@
     }
 
     /**
+     * Re-apply sorting after container re-render
+     * @param {string} collectionId - Collection item ID
+     * @param {HTMLElement} collectionItemsContainer - Collection items container
+     * @param {string} defaultSort - Default sort key from collection DisplayOrder
+     */
+    async function reapplyCollectionSorting(collectionId, collectionItemsContainer, defaultSort) {
+        // Poll for section title (up to 2 seconds, every 200ms) - shorter timeout since we know container exists
+        const sectionTitle = await pollForElement(() => {
+            return collectionItemsContainer.querySelector('.sectionTitle');
+        }, 2000, 200);
+
+        if (!sectionTitle) {
+            WARN('Section title not found after re-render for collection:', collectionId);
+            return;
+        }
+
+        // Find items container
+        const itemsContainer = collectionItemsContainer.querySelector('.itemsContainer');
+        if (!itemsContainer) {
+            WARN('Items container not found after re-render for collection:', collectionId);
+            return;
+        }
+
+        // Check if sort button exists, if not add it
+        const sortButton = sectionTitle.querySelector('.kt-collections-sort-btn');
+        if (!sortButton) {
+            LOG('Sort button missing after re-render, re-adding for collection:', collectionId);
+            addSortButton(sectionTitle, collectionId, defaultSort);
+        }
+
+        // Update stored items container reference (in case it was recreated)
+        const data = collectionData.get(collectionId);
+        if (data) {
+            data.itemsContainer = itemsContainer;
+            
+            // Re-apply sort
+            sortCollectionItems(collectionId, defaultSort);
+        } else {
+            WARN('Collection data not found for re-render:', collectionId);
+        }
+    }
+
+    /**
+     * Setup MutationObserver for collection items container
+     * @param {string} collectionId - Collection item ID
+     * @param {HTMLElement} collectionItemsContainer - Collection items container
+     * @param {string} defaultSort - Default sort key from collection DisplayOrder
+     */
+    function setupCollectionObserver(collectionId, collectionItemsContainer, defaultSort) {
+        // Disconnect existing observer if any
+        if (collectionObserver) {
+            collectionObserver.disconnect();
+            collectionObserver = null;
+        }
+
+        // Debounce timer for re-apply
+        let debounceTimer = null;
+
+        collectionObserver = new MutationObserver((mutations) => {
+            let shouldReapply = false;
+
+            mutations.forEach((mutation) => {
+                if (mutation.type === 'childList') {
+                    // Check if nodes were added (indicating a re-render)
+                    if (mutation.addedNodes.length > 0) {
+                        // Check if any added node is a direct child or contains important elements
+                        mutation.addedNodes.forEach((node) => {
+                            if (node.nodeType === Node.ELEMENT_NODE) {
+                                // If sectionTitle or itemsContainer was added, we need to reapply
+                                if (node.classList?.contains('sectionTitle') || 
+                                    node.classList?.contains('itemsContainer') ||
+                                    node.querySelector?.('.sectionTitle') ||
+                                    node.querySelector?.('.itemsContainer')) {
+                                    shouldReapply = true;
+                                }
+                            }
+                        });
+                    }
+                }
+            });
+
+            if (shouldReapply) {
+                // Debounce to avoid multiple rapid re-applications
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => {
+                    LOG('Collection container re-rendered, re-applying sort for:', collectionId);
+                    reapplyCollectionSorting(collectionId, collectionItemsContainer, defaultSort);
+                }, 300); // 300ms debounce
+            }
+        });
+
+        // Observe only the collectionItems container with childList changes
+        collectionObserver.observe(collectionItemsContainer, {
+            childList: true,
+            subtree: true
+        });
+
+        LOG('MutationObserver set up for collection:', collectionId);
+    }
+
+    /**
      * Add collection sorting functionality
      * @param {Object} item - Collection item (BoxSet)
      */
@@ -427,15 +531,16 @@
             return;
         }
 
-        // Check if already processed
-        if (activePage.dataset.collectionSortingAdded === 'true') {
-            return;
-        }
-
         // Find collection items container
         const collectionItemsContainer = activePage.querySelector('.collectionItems');
         if (!collectionItemsContainer) {
             WARN('Collection items container not found');
+            return;
+        }
+
+        // Check if already processed (but allow re-processing if button is missing)
+        const sortButton = collectionItemsContainer.querySelector('.kt-collections-sort-btn');
+        if (activePage.dataset.collectionSortingAdded === 'true' && sortButton) {
             return;
         }
 
@@ -475,11 +580,16 @@
             defaultSort: defaultSort
         });
 
-        // Add sort button
-        addSortButton(sectionTitle, collectionId, defaultSort);
+        // Add sort button (only if it doesn't exist)
+        if (!sortButton) {
+            addSortButton(sectionTitle, collectionId, defaultSort);
+        }
 
         // Apply initial sort on page load
         sortCollectionItems(collectionId, defaultSort);
+
+        // Setup MutationObserver to handle re-renders
+        setupCollectionObserver(collectionId, collectionItemsContainer, defaultSort);
 
         // Mark as processed
         activePage.dataset.collectionSortingAdded = 'true';
