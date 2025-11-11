@@ -71,6 +71,7 @@
             playlist: true,           // Enhanced playlist view with better navigation
             itemDetailsCollections: true, // Shows collections on item details pages (Included In section)
             flattenSingleSeasonShows: true, // Flattens single-season shows to display episodes directly on series page
+            collections: true,        // Collection sorting functionality
             
             // Reviews and recommendations
             // updoot: false,             // This is unsupported for now but will be worked on in the future

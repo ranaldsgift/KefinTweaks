@@ -27,6 +27,7 @@
         playlist: true,           // Playlist view page modifications
         itemDetailsCollections: true, // Add related collections to item details pages
         flattenSingleSeasonShows: true, // Flatten series with only 1 season to show episodes directly
+        collections: true,         // Collection sorting functionality
         skinManager: true,        // Skin selection and management
         
         // Note: Core functionality scripts (utils, cardBuilder, localStorageCache, modal) 
@@ -205,6 +206,13 @@
             css: null,
             dependencies: ['cardBuilder', 'utils'],
             description: 'Flattens series with only 1 season to show episodes directly on the series details page'
+        },
+        {
+            name: 'collections',
+            script: 'collections.js',
+            css: null,
+            dependencies: ['utils', 'modal'],
+            description: 'Adds sorting functionality to collection pages'
         },
     ];
 
