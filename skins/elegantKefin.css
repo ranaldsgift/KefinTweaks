@@ -89,3 +89,7 @@
     margin: 0;
     pointer-events: none;
 }
+
+#reactRoot>div:nth-of-type(3) {
+    container-type: normal !important;
+}
