@@ -6145,10 +6145,12 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		if (existingButton) {
 			return;
 		}
+
+		const isTVLayout = document.getRootNode().documentElement.className.includes('layout-tv')
 		
 		const watchlistIcon = document.createElement('button');
 		watchlistIcon.setAttribute("is", "emby-button");
-		watchlistIcon.className = 'watchlist-icon detailButton emby-button button-flat';	
+		watchlistIcon.className = `watchlist-icon detailButton emby-button button-flat${isTVLayout ? ' show-focus' : ''}`;	
 		watchlistIcon.title = "Add to Watchlist";
 		watchlistIcon.dataset.active = 'false';
 		
