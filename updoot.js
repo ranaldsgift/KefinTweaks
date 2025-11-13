@@ -138,15 +138,7 @@
 
             const addCommentButton = document.createElement('button');
             addCommentButton.textContent = '+ Add Comment';
-            addCommentButton.style.cssText = `
-                background: #4CAF50;
-                color: white;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
-                cursor: pointer;
-                margin-bottom: 10px;
-            `;
+            addCommentButton.className = "btnAddComment button-submit emby-button button-flat show-focus";
             addCommentButton.addEventListener('click', () => {
                 console.log('Add Comment button clicked');
                 if (!userId) {
@@ -683,7 +675,7 @@
                 document.body.appendChild(overlay);
 
                 const closeButton = document.createElement('button');
-                closeButton.innerHTML = '<span class="material-icons">close</span>';
+                closeButton.innerHTML = '<span class="material-icons close"></span>';
                 closeButton.style.cssText = `
                     position: absolute;
                     top: 10px;
@@ -850,7 +842,7 @@
                 }
 
                 const closeButton = document.createElement('button');
-                closeButton.innerHTML = '<span class="material-icons">close</span>';
+                closeButton.innerHTML = '<span class="material-icons close"></span>';
                 closeButton.style.cssText = `
                     position: absolute;
                     top: 10px;
@@ -883,7 +875,7 @@
 
             adminOverlay.innerHTML = '';
             const closeButton = document.createElement('button');
-            closeButton.innerHTML = '<span class="material-icons">close</span>';
+            closeButton.innerHTML = '<span class="material-icons close"></span>';
             closeButton.style.cssText = `
                 position: absolute;
                 top: 10px;
