@@ -256,12 +256,10 @@
                         const cardOffset = targetCard.offsetLeft;
                         const scrollerPadding = parseInt(window.getComputedStyle(scrollerContainer).paddingLeft, 10) || 0;
                         
-                        // Calculate the translateX value (negative to move left)
-                        // The card offset minus padding gives us how much to translate
-                        const translateX = -(cardOffset - scrollerPadding);
-                        
-                        // Update the transform property on the itemsContainer
-                        itemsContainer.style.transform = `translateX(${translateX}px)`;
+                        // Calculate the scrollToPosition value
+                        // The card offset minus padding gives us how much to scroll
+                        const translateX = (cardOffset - scrollerPadding);
+                        scrollerContainer.scrollToPosition(translateX);
                         
                         // Enable the left scroll button so users can scroll back
                         const scrollButtons = scrollerContainer.closest('.emby-scroller-container')?.querySelector('.emby-scrollbuttons');
