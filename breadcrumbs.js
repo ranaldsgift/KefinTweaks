@@ -76,7 +76,7 @@
         };
 
         // Don't append .html for server versions 10.11 and above
-        const urlSuffix = ApiClient._serverVersion.split('.')[1] > 10 ? '' : '.html'
+        const urlSuffix = ApiClient._appVersion.split('.')[1] > 10 ? '' : '.html'
 
         let queryParams = '';
         if (item.ParentId) {
@@ -763,11 +763,9 @@
             closePopover();
             
             const currentPath = Emby.Page.lastPath;
-            log('Page changed to:', currentPath);
             
             // Check if we're on a details page
             if (!currentPath || !currentPath.startsWith('/details?')) {
-                log('Not a details page, hiding and clearing breadcrumbs');
                 clearBreadcrumbs();
                 hideBreadcrumbs();
                 return;
@@ -775,7 +773,6 @@
 
             // Check if the user is logged in
             if (!ApiClient._loggedIn) {
-                log('User is not logged in, hiding and clearing breadcrumbs');
                 clearBreadcrumbs();
                 hideBreadcrumbs();
                 return;
@@ -783,7 +780,6 @@
             
             // Extract item ID
             if (!item || !item.Id) {
-                log('No item ID found, hiding and clearing breadcrumbs');
                 clearBreadcrumbs();
                 hideBreadcrumbs();
                 return;
@@ -791,7 +787,6 @@
             
             // Check if item type is supported
             if (!CONFIG.supportedTypes.includes(item.Type)) {
-                log('Item type not supported:', item.Type, 'hiding and clearing breadcrumbs');
                 clearBreadcrumbs();
                 hideBreadcrumbs();
                 return;

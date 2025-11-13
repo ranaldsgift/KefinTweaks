@@ -20,25 +20,75 @@
     const THEME_STORAGE_KEY = 'kefinTweaks_selectedTheme';
     const COLOR_SCHEMES_STORAGE_KEY = 'kefinTweaks_selectedColorScheme';
     
+    // Cached server version for synchronous access
+    let cachedServerVersion = null;
+    let versionPollingStarted = false;
+    
     /**
      * Get the current major server version from ApiClient
+     * Polls every 500ms for up to 5 seconds in the background if not immediately available
      * @returns {number|null} The major version number (e.g., 10 for "10.10.X", 11 for "10.11.X"), or null if unavailable
      */
     function getCurrentMajorServerVersion() {
         try {
-            if (typeof ApiClient !== 'undefined' && ApiClient._serverVersion) {
-                const versionParts = ApiClient._serverVersion.split('.');
+            // Check if ApiClient and serverVersion are available immediately
+            if (typeof window.ApiClient !== 'undefined' && window.ApiClient._appVersion) {
+                const versionParts = window.ApiClient._appVersion.split('.');
                 if (versionParts.length >= 2) {
                     const majorVersion = parseInt(versionParts[1], 10);
                     if (!isNaN(majorVersion)) {
+                        cachedServerVersion = majorVersion; // Cache it
                         return majorVersion;
                     }
                 }
             }
+            
+            // If we have a cached value, return it
+            if (cachedServerVersion !== null) {
+                return cachedServerVersion;
+            }
+            
+            // Start background polling if not already started
+            if (!versionPollingStarted) {
+                versionPollingStarted = true;
+                const pollInterval = 500; // 500ms
+                const maxDuration = 5000; // 5 seconds
+                const maxAttempts = maxDuration / pollInterval; // 10 attempts
+                let attempts = 0;
+                
+                const poll = setInterval(() => {
+                    attempts++;
+                    
+                    try {
+                        if (typeof window.ApiClient !== 'undefined' && window.ApiClient._appVersion) {
+                            const versionParts = window.ApiClient._appVersion.split('.');
+                            if (versionParts.length >= 2) {
+                                const majorVersion = parseInt(versionParts[1], 10);
+                                if (!isNaN(majorVersion)) {
+                                    clearInterval(poll);
+                                    cachedServerVersion = majorVersion;
+                                    return;
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        WARN('Error getting server version during poll:', error);
+                    }
+                    
+                    // Timeout after max attempts
+                    if (attempts >= maxAttempts) {
+                        clearInterval(poll);
+                        cachedServerVersion = null; // Cache null to indicate we tried
+                    }
+                }, pollInterval);
+            }
+            
+            // Return null immediately (callers can check again later or use cached value)
+            return null;
         } catch (error) {
             WARN('Error getting server version:', error);
+            return null;
         }
-        return null;
     }
     
     /**
@@ -434,12 +484,6 @@
         unregisterAnyPageHandler = window.KefinTweaksUtils.onViewPage(handleAnyPage, {
             pages: []
         });
-
-/*         if (window.location.hash.includes('mypreferencesdisplay')) {
-            handleDisplayPreferencesPage();
-        }
-
-        handleAnyPage(); */
         
         LOG('SkinManager handlers registered');
     }
