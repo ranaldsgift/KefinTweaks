@@ -18,8 +18,6 @@
     async function populateCollectionsCache() {
         // Check if user is logged in and poll for 5 seconds if not
         if (ApiClient._loggedIn === false) {
-            WARN('User not logged in, retrying in ' + POLL_INTERVAL + ' milliseconds');
-            setTimeout(populateCollectionsCache, POLL_INTERVAL);
             return;
         }
 
@@ -195,6 +193,12 @@
 
         window.KefinTweaksUtils.onViewPage(
             async (view, element, hash, itemPromise) => {
+                if (ApiClient._loggedIn === false) {
+                    return;
+                }
+
+                await populateCollectionsCache();
+
                 // Only handle details pages
                 const activePage = document.querySelector('.libraryPage:not(.hide)');
                 if (!activePage) return;
@@ -217,16 +221,21 @@
         LOG('Collections hook initialized');
     }
 
+    const maxInitAttempts = 10;
+    let initAttempts = 0;
+
     // Initialize cache population on script load
     function initialize() {
-        if (!window.IndexedDBCache || !window.ApiClient || !window.ApiClient.getCurrentUserId) {
+        if (!window.ApiClient) {
             WARN('Dependencies not available, retrying in 1 second');
-            setTimeout(initialize, 1000);
+            if (initAttempts < maxInitAttempts) {
+                setTimeout(initialize, 1000);
+                initAttempts++;
+            } else {
+                ERR('Dependencies not available after 10 seconds, giving up');
+            }
             return;
         }
-
-        LOG('Initializing collections cache...');
-        populateCollectionsCache();
 
         // Initialize collections hook
         initializeCollectionsHook();
