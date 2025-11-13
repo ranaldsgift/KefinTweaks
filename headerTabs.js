@@ -324,162 +324,120 @@
     }
     
     // Add click listeners to tab buttons
-    function addClickListeners() {
+    async function addClickListeners() {
         const headerTabs = document.querySelector('.headerTabs');
         if (headerTabs) {
             const buttons = headerTabs.querySelectorAll('.emby-tab-button');
+            let totalButtons = 2;
             buttons.forEach(button => {
-                button.removeEventListener('click', handleTabClick);
+                if (button.dataset.kefin === 'true') {
+                    return;
+                }
                 button.addEventListener('click', handleTabClick);
+                button.dataset.kefin = 'true';
             });
-            LOG('Added click listeners to', buttons.length, 'buttons');
-            
-            // Synchronize active tab state with URL parameter
-            syncActiveTabState().catch(err => {
-                ERR('Error in syncActiveTabState:', err);
-            });
-        }
-    }
-    
-    // TODO - Replace the MutationObservers with a less taxing alternative
-    // Setup observer to watch for emby-tab-button additions
-    function setupHeaderTabsObserver() {
-        const headerTabs = document.querySelector('.headerTabs');
-        if (!headerTabs) {
-            LOG('No .headerTabs found, will retry...');
-            setTimeout(setupHeaderTabsObserver, 500);
-            return;
-        }
-        
-        LOG('Setting up headerTabs observer');
-        
-        const observer = new MutationObserver(function(mutations) {
-            let shouldReinit = false;
-            
-            mutations.forEach(mutation => {
-                if (mutation.type === 'childList') {
-                    const addedNodes = Array.from(mutation.addedNodes);
-                    const removedNodes = Array.from(mutation.removedNodes);
-                    
-                    const hasTabButtons = addedNodes.some(node => 
-                        node.nodeType === Node.ELEMENT_NODE && 
-                        (node.classList.contains('emby-tab-button') || 
-                         node.querySelector && node.querySelector('.emby-tab-button'))
-                    ) || removedNodes.some(node => 
-                        node.nodeType === Node.ELEMENT_NODE && 
-                        (node.classList.contains('emby-tab-button') || 
-                         node.querySelector && node.querySelector('.emby-tab-button'))
-                    );
-                    
-                    if (hasTabButtons) {
-                        shouldReinit = true;
+
+            const view = window.KefinTweaksUtils.getCurrentView();
+            if (view === 'home' || view === 'home.html') {
+                // Check for custom tabs
+                
+                const response = await fetch(`${ApiClient._serverAddress}/CustomTabs/Config`, {
+                    method: "GET",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-Emby-Token": ApiClient._serverInfo.AccessToken || ApiClient.accessToken(),
+                    },
+                });
+                const customTabs = await response.json();
+                const customTabsCount = customTabs?.length || 0;
+                totalButtons += customTabsCount;
+
+                if (totalButtons > buttons.length && customTabsCount > 0) {
+                    // Wait for custom tabs to be rendered and add click listeners to them
+                    const tabsSlider = headerTabs.querySelector('.emby-tabs-slider');
+                    if (tabsSlider) {
+                        // Check if all custom tabs are already present
+                        const checkAllTabsPresent = () => {
+                            for (let i = 0; i < customTabsCount; i++) {
+                                const customTabId = `customTabButton_${i}`;
+                                if (!tabsSlider.querySelector(`#${customTabId}`)) {
+                                    return false;
+                                }
+                            }
+                            return true;
+                        };
+
+                        if (checkAllTabsPresent()) {
+                            // All tabs already present, add listeners immediately
+                            const newButtons = headerTabs.querySelectorAll('.emby-tab-button');
+                            newButtons.forEach(button => {
+                                if (button.dataset.kefin !== 'true') {
+                                    button.addEventListener('click', handleTabClick);
+                                    button.dataset.kefin = 'true';
+                                }
+                            });
+                            LOG('All custom tabs already present, added click listeners');
+                        } else {
+                            // Wait for custom tabs using MutationObserver
+                            LOG('Waiting for custom tabs to be rendered...');
+                            const observer = new MutationObserver((mutations, obs) => {
+                                if (checkAllTabsPresent()) {
+                                    // All custom tabs are now present
+                                    obs.disconnect();
+                                    LOG('All custom tabs rendered, adding click listeners');
+                                    syncActiveTabState();
+                                    
+                                    // Add click listeners to all buttons including the new custom tabs
+                                    const allButtons = headerTabs.querySelectorAll('.emby-tab-button');
+                                    allButtons.forEach(button => {
+                                        if (button.dataset.kefin !== 'true') {
+                                            button.addEventListener('click', handleTabClick);
+                                            button.dataset.kefin = 'true';
+                                        }
+                                    });
+                                }
+                            });
+
+                            // Start observing the tabs slider for child additions
+                            observer.observe(tabsSlider, {
+                                childList: true,
+                                subtree: true
+                            });
+
+                            // Set a timeout to disconnect observer after a reasonable time (e.g., 10 seconds)
+                            setTimeout(() => {
+                                observer.disconnect();
+                                LOG('MutationObserver timeout reached, stopped waiting for custom tabs');
+                            }, 10000);
+                        }
+                        LOG('Synced active tab state after custom tabs were rendered');
                     }
                 }
-            });
-            
-            if (shouldReinit) {
-                LOG('Tab buttons changed, reinitializing...');
-                setTimeout(addClickListeners, 100);
             }
-        });
-        
-        observer.observe(headerTabs, {
-            childList: true,
-            subtree: true
-        });
-        
-        // Initial setup
-        addClickListeners();
+
+            LOG('Added click listeners to', totalButtons, 'buttons');
+        }
     }
-    
-    // Setup observer to watch for pageTabContent changes
-    function setupObserver() {
-        // Find the library page container
-        const libraryPage = document.querySelector('.libraryPage:not(.hide)');
-        if (!libraryPage) {
-            LOG('No library page found, will retry...');
-            setTimeout(setupObserver, 500);
+
+    const MAX_INIT_ATTEMPTS = 10;
+    let INIT_ATTEMPTS = 0;
+
+    function initialize() {
+        if (!window.KefinTweaksUtils || !window.KefinTweaksUtils.onViewPage) {
+            WARN('KefinTweaksUtils not available, retrying in 1 second');
+            if (INIT_ATTEMPTS < MAX_INIT_ATTEMPTS) {
+                setTimeout(initialize, 1000);
+                INIT_ATTEMPTS++;
+            } else {
+                ERR('KefinTweaksUtils not available after 10 seconds, giving up');
+            }
             return;
         }
-        
-        LOG('Setting up observer on library page');
-        
-        const observer = new MutationObserver(function(mutations) {
-            let shouldReinit = false;
-            
-            mutations.forEach(mutation => {
-                // Check if pageTabContent elements were added/removed
-                if (mutation.type === 'childList') {
-                    const addedNodes = Array.from(mutation.addedNodes);
-                    const removedNodes = Array.from(mutation.removedNodes);
-                    
-                    const hasPageTabContent = addedNodes.some(node => 
-                        node.nodeType === Node.ELEMENT_NODE && 
-                        (node.classList.contains('pageTabContent') || 
-                         node.querySelector && node.querySelector('.pageTabContent'))
-                    ) || removedNodes.some(node => 
-                        node.nodeType === Node.ELEMENT_NODE && 
-                        (node.classList.contains('pageTabContent') || 
-                         node.querySelector && node.querySelector('.pageTabContent'))
-                    );
-                    
-                    if (hasPageTabContent) {
-                        shouldReinit = true;
-                    }
-                }
-            });
-            
-            if (shouldReinit) {
-                LOG('pageTabContent changed, reinitializing...');
-                setTimeout(addClickListeners, 100);
-            }
-        });
-        
-        observer.observe(libraryPage, {
-            childList: true,
-            subtree: true
-        });
-    }
     
-    // Monitor for page changes
-    function setupPageMonitor() {
-        let lastPage = null;
-        let lastUrl = window.location.href;
-        
-        function checkPageChange() {
-            const newPage = getCurrentPage();
-            const currentUrl = window.location.href;
-            
-            // Check if page changed OR if URL changed (including query params)
-            if (newPage !== lastPage || currentUrl !== lastUrl) {
-                lastPage = newPage;
-                lastUrl = currentUrl;
-                if (newPage) {
-                    LOG('Page change detected:', newPage);
-                    // Setup observers when page changes
-                    setupHeaderTabsObserver();
-                    setupObserver();
-                    // Sync active tab state after page change
-                    setTimeout(() => {
-                        syncActiveTabState().catch(err => {
-                            ERR('Error in syncActiveTabState:', err);
-                        });
-                    }, 100);
-                }
-            }
-        }
-        
-        // Check immediately
-        checkPageChange();
-        
-        // Check on hash changes
-        window.addEventListener('hashchange', checkPageChange);
-    }
-    
-    // Register onViewPage handler to sync active tab state
-    if (window.KefinTweaksUtils && window.KefinTweaksUtils.onViewPage) {
+        // Register onViewPage handler to sync active tab state
         window.KefinTweaksUtils.onViewPage((view, element) => {
             LOG('onViewPage handler triggered for view:', view);
+            addClickListeners();
             // Sync active tab state when page view changes
             syncActiveTabState().catch(err => {
                 ERR('Error in syncActiveTabState:', err);
@@ -488,14 +446,8 @@
             pages: SUPPORTED_PAGES // Only trigger for supported pages
         });
         LOG('Registered onViewPage handler for syncActiveTabState');
-    } else {
-        WARN('KefinTweaksUtils.onViewPage not available');
-    }
-    
-    // Initialize
-    setupPageMonitor();
-    setupHeaderTabsObserver();
-    
-    LOG('Header tabs functionality initialized');
-    
+        LOG('Header tabs functionality initialized');
+   }
+   
+   initialize();        
 })();
