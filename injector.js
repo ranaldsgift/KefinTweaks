@@ -6,7 +6,7 @@
     'use strict';
 
     console.log('[KefinTweaks Injector] Initializing...');
-    const versionNumber = "0.2.2";
+    const versionNumber = "0.2.3";
     
     // Configuration: Start with defaults, then merge user config
     // This allows new scripts to work out of the box without requiring config updates
@@ -310,8 +310,15 @@
     }
     
     // Get the root path for scripts from configuration
-    function getScriptRoot() {        
-        return window.KefinTweaksConfig?.scriptRoot || 'https://ranaldsgift.github.io/KefinTweaks/';
+    function getScriptRoot() {
+        const configScriptRoot = window.KefinTweaksConfig?.scriptRoot;
+
+        // Handle legacy configuration pointing to the root directory
+        if (configScriptRoot === 'https://ranaldsgift.github.io/KefinTweaks/') {
+            return 'https://ranaldsgift.github.io/KefinTweaks/scripts/';
+        }
+
+        return window.KefinTweaksConfig?.scriptRoot || 'https://ranaldsgift.github.io/KefinTweaks/scripts/';
     }
     
     // Load a CSS file

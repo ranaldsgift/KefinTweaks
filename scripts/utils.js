@@ -195,7 +195,6 @@
         
         // Get the item promise once - will be shared across all handlers
         // The promise is cached/fetched by getCurrentItem(), ensuring only one API call
-        LOG('Getting current item for ID:', currentItemId);
         const itemPromise = getCurrentItem();
 
         handlers.forEach((config) => {

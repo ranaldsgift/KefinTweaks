@@ -33,10 +33,12 @@
 // - Search: Enable Jellyseerr integration adds an option to search for Jellyseerr results only
 //
 // Considerations for the home screen sections:
-// 1. Custom sections (order 1-29) - Your playlist-based sections
-// 2. New and Trending sections (order 30-49) - Newest movies and episodes
-// 3. Seasonal sections (order 50+) - Holiday-themed content
-// 4. Discovery sections (order 200+) - Intelligent recommendations based on your library
+// - Default Jellyfin sections (order 1-10)
+// - New releases sections (order 30-49) - Newest movies and episodes
+// - Seasonal sections (order 50-59) - Holiday-themed content
+// - One-off sections: Watchlist, TV Networks,  section (order 60-69) - Your watchlist
+// - Discovery sections (order 1000+) - Intelligent recommendations based on your library
+// - Custom sections can be placed anywhere in the order by using the order field in the configuration
 
 (function() {
     'use strict';
@@ -50,7 +52,8 @@
         // SCRIPT ROOT CONFIGURATION
         // ============================================================================
         // Configure where scripts are loaded from
-        scriptRoot: 'https://ranaldsgift.github.io/KefinTweaks/',
+        kefinTweaksRoot: 'https://ranaldsgift.github.io/KefinTweaks/',
+        scriptRoot: 'https://ranaldsgift.github.io/KefinTweaks/scripts/',
         
         // ============================================================================
         // SCRIPT ENABLE/DISABLE FLAGS
@@ -117,7 +120,7 @@
             enableDiscovery: true,        // Enables discovery sections on the home screen
             
             // Discovery section behavior and filtering
-            enableInfiniteScroll: false,   // Use infinite scroll vs Load More button
+            enableInfiniteScroll: true,   // Use infinite scroll vs Load More button
             minPeopleAppearances: 10,     // Minimum movie appearances for people to be featured
             minGenreMovieCount: 50,      // Minimum movie count for genres to be included
             minimumShowsForNetwork: 5,    // Minimum show count for TV networks to be featured
@@ -297,7 +300,7 @@
     // ============================================================================
     // Load the injector script which handles loading individual scripts based on configuration
     const script = document.createElement("script");
-    script.src = `${KEFIN_TWEAKS_CONFIG.scriptRoot}injector.js?v=${new Date().getTime()}`;
+    script.src = `${KEFIN_TWEAKS_CONFIG.kefinTweaksRoot}injector.js?v=${new Date().getTime()}`;
     script.async = true;
     document.head.appendChild(script);
     

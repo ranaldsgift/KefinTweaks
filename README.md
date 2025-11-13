@@ -117,9 +117,11 @@ The features in KefinTweaks which use local data caching are listed below, along
 - ✅ [Watched History](https://features.jellyfin.org/posts/633/watched-history)
 - ✅ [On-Demand Subtitle Search in Video OSD](https://features.jellyfin.org/posts/3385/on-demand-subtitle-search)
 - ✅ [Add genres and recommendations to home screen](https://features.jellyfin.org/posts/3501/add-genres-and-recommendations-to-home-screen)
+- ✅ [New or Improved Home Screen Sections](https://features.jellyfin.org/posts/1986/new-or-improved-home-secreen-sections)
+- ✅ [Custom Carousel Options on Home Screen](https://features.jellyfin.org/posts/1439/custom-carousel-options-on-home-screen)
 - ✅ [Improved Playlist UX](https://features.jellyfin.org/posts/2823/playlist-moviesummary)
 - ✅ [Flattening TV Shows with 1 season](https://features.jellyfin.org/posts/8/flattening-tv-shows) [[2]](https://features.jellyfin.org/posts/3352/add-option-to-flatten-single-season-tv-shows-skip-season-level)
-- ✅ [List all collections that an item belongs to on the details page](https://features.jellyfin.org/posts/540/list-all-collections-that-a-movie-belong-to-in-movie-details) [[2]](https://features.jellyfin.org/posts/3540/collection-data-present-on-content-within-the-collection)
+- ✅ [List all collections that an item belongs to on the details page](https://features.jellyfin.org/posts/540/list-all-collections-that-a-movie-belong-to-in-movie-details) [[2]](https://features.jellyfin.org/posts/3540/collection-data-present-on-content-within-the-collection) [[3]](https://features.jellyfin.org/posts/3549/show-collections-on-movie-page)
 - ✅ [Custom Skins/Themes](https://features.jellyfin.org/posts/2509/themes-skins-or-clone-plex-layout-to-convert-the-rest-of-the-plex-and-emby-user-base-to-jellyfin) [[2]](https://features.jellyfin.org/posts/2616/theme-skins)
 - ✅ [TV Season Selection at the Series level](https://forum.jellyfin.org/t-tv-season-selection-when-browsing-seasons)
 
@@ -182,6 +184,9 @@ Creates sections for movies and episodes released in the last 7 days (trending s
 
 - **Infinite Discovery Sections**:  
 Load discovery sections based on items you've watched and favorited, as well as from genres or top people in your library  
+
+- **HSS Support**:  
+Full compatibility with [Home Screen Sections](https://github.com/IAmParadox27/jellyfin-plugin-home-sections) plugin by [IAmParadox27](https://github.com/IAmParadox27/)  
 
 - **Seasonal Content**:  
 Seasonally-themed sections (Halloween, Christmas, etc.)  
@@ -268,6 +273,9 @@ Adds a card overlay button to remove items from Continue Watching for all resuma
   <img src="pages/images/continuewatching.png" alt="continuewatching" style="max-width: 100%; height: auto;"/>
 </div>  
 <br/>  
+
+#### **Collection Sorting**:
+Adds the ability to sort collection items on the Collection page. Supports sorting by Title, Release Date, Date Added, Community Rating, Critic Rating.
 
 ### Navigation Improvements
 
@@ -413,6 +421,7 @@ Allow users to also customize various configuration options through the UI
 <hr>
 
 ### Version History
+- **v0.2.3**: New Feature: Collection Sorting, general fixes
 - **v0.2.2**: Add support for skin server versions, fixes for HeaderTabs
 - **v0.2.1**: Caching improvements for Watchlist and Top People, Mobile UI fixes and Flatten TV Shows improvements
 - **v0.2.0**: New Features: Skin Manager, Collections on Details Page, Flatten TV Shows

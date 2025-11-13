@@ -547,7 +547,7 @@
         // Poll for section title (up to 5 seconds, every 500ms)
         const sectionTitle = await pollForElement(() => {
             return collectionItemsContainer.querySelector('.sectionTitle');
-        }, 5000, 500);
+        }, 5000, 100);
 
         if (!sectionTitle) {
             WARN('Section title not found after polling for 5 seconds');
