@@ -59,7 +59,7 @@ I think it's also worth mentioning that before the 1.0 release, you can expect t
 
 ### Setup Instructions
 
-0a. **Install Prerequisites listed above**
+0a. **Install Prerequisites listed above**  
 0b. **If you are using JellyfinEnhanced, you MUST disable the "Watchlist" feature from the plugin settings**
 1. **Add a new script to your JS Injector Plugin**
 2. **Copy this entire contents of kefinTweaks.js into the new script**
