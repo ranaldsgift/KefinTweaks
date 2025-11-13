@@ -58,6 +58,7 @@
             script: 'skinManager.js',
             css: 'defaultSkin.css',
             dependencies: ['utils', 'userConfig'],
+            priority: true, // Load immediately after dependencies to reduce UI disruption
             description: 'Adds skin selection dropdown to display preferences page and manages skin CSS loading'
         },
         {
@@ -452,10 +453,16 @@
             !allDependencyNames.has(script.name)
         );
         
+        // Step 2.5: Separate priority scripts from regular non-dependency scripts
+        const priorityScripts = nonDependencyScripts.filter(script => script.priority === true);
+        const regularScripts = nonDependencyScripts.filter(script => !script.priority);
+        
         console.log(`[KefinTweaks Injector] Found ${dependencyScripts.length} dependency scripts:`, 
                    dependencyScripts.map(s => s.name));
-        console.log(`[KefinTweaks Injector] Found ${nonDependencyScripts.length} non-dependency scripts:`, 
-                   nonDependencyScripts.map(s => s.name));
+        console.log(`[KefinTweaks Injector] Found ${priorityScripts.length} priority scripts:`, 
+                   priorityScripts.map(s => s.name));
+        console.log(`[KefinTweaks Injector] Found ${regularScripts.length} regular scripts:`, 
+                   regularScripts.map(s => s.name));
         
         try {
             // Step 3: Load all dependencies first
@@ -466,10 +473,19 @@
             dependencyLoadPromises.push(...dependencyScripts.map(script => loadScriptSync(script)));
             await Promise.all(dependencyLoadPromises);
             
-            // Step 4: Load non-dependencies in parallel (their dependencies are already loaded)
+            // Step 4: Load priority scripts immediately after dependencies
+            if (priorityScripts.length > 0) {
+                console.log('[KefinTweaks Injector] Loading priority scripts...');
+                console.log(`[KefinTweaks Injector] Priority load order:`, priorityScripts.map(s => s.name));
+                let priorityLoadPromises = [];
+                priorityLoadPromises.push(...priorityScripts.map(script => loadScriptSync(script)));
+                await Promise.all(priorityLoadPromises);
+            }
+            
+            // Step 5: Load regular non-dependencies in parallel (their dependencies are already loaded)
             let loadPromises = [];
-            console.log('[KefinTweaks Injector] Loading non-dependencies...');
-            loadPromises.push(...nonDependencyScripts.map(script => loadScriptSync(script)));
+            console.log('[KefinTweaks Injector] Loading regular non-dependencies...');
+            loadPromises.push(...regularScripts.map(script => loadScriptSync(script)));
             await Promise.all(loadPromises);
             
             console.log('[KefinTweaks Injector] All scripts loaded successfully!');
