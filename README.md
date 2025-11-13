@@ -27,6 +27,7 @@ I think it's also worth mentioning that before the 1.0 release, you can expect t
   - [UX Improvements](#ux-improvements)
     - [Subtitle Search](#subtitle-search)
     - [Remove from Continue Watching](#remove-from-continue-watching)
+    - [Collection Sorting](#collection-sorting)
   - [Navigation Improvements](#navigation-improvements)
     - [Header Tab Enhancements](#header-tab-enhancements)
     - [Breadcrumb Navigation](#breadcrumb-navigation)
@@ -276,6 +277,7 @@ Adds a card overlay button to remove items from Continue Watching for all resuma
 
 #### **Collection Sorting**:
 Adds the ability to sort collection items on the Collection page. Supports sorting by Title, Release Date, Date Added, Community Rating, Critic Rating.
+<hr>
 
 ### Navigation Improvements
 
