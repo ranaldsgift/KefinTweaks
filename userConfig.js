@@ -35,7 +35,7 @@
                         majorServerVersions: [10, 11],
                         urls: [
                             'https://cdn.jsdelivr.net/gh/lscambo13/ElegantFin@main/Theme/ElegantFin-jellyfin-theme-build-latest-minified.css',
-                            'https://cdn.jsdelivr.net/gh/lscambo13/ElegantFin@main/Theme/assets/add-ons/media-bar-plugin-support-latest-min.css',
+                            'https://cdn.jsdelivr.net/gh/lscambo13/ElegantFin@main/Theme/assets/add-ons/media-bar-plugin-support-nightly.css',
                             `${KefinTweaksConfig.scriptRoot}skins/elegantKefin.css`
                         ]
                     }
