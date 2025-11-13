@@ -1,27 +1,60 @@
-/* This will put the Continue Watching and Next Up sections at the top of the home screen
-   You can order your custom sections between those and the rest of the sections by using 3-99 for the section order
-   Discovery sections are 101-110 if they are enabled
-   If you want your custom section to appear after all other sections, use 111+ for the section order */
+/* Please use the CSS commented below to customize the order of KefinTweaks custom home sections */
+
+/*
+[data-custom-section-id="watchlist"] {
+    order: 60 !important;
+}
+
+[data-custom-section-id="popular-tv-networks"] {
+    order: 61 !important;
+}
+
+[data-custom-section-id="new-movies"] {
+    order: 30 !important;
+}
+
+[data-custom-section-id="new-episodes"] {
+    order: 31 !important;
+}
+*/
+
 .sections.homeSectionsContainer {
     display: flex;
     flex-direction: column;
 }
 
-.sections.homeSectionsContainer>div {
-    order: 100;
-}
-
-.sections.homeSectionsContainer>div:has(a.homeLibraryButton), 
-.sections.homeSectionsContainer>div:has([data-type="CollectionFolder"]) {
+.homeSectionsContainer > .section0 {
     order: 1;
 }
-
-.sections.homeSectionsContainer>div:has(>.emby-scroller div[data-positionticks]) {
+.homeSectionsContainer > .section1 {
     order: 2;
 }
-
-.sections.homeSectionsContainer>div:has(a[href*="type=nextup"]) {
+.homeSectionsContainer > .section2 {
     order: 3;
+}
+.homeSectionsContainer > .section3 {
+    order: 4;
+}
+.homeSectionsContainer > .section4 {
+    order: 5;
+}
+.homeSectionsContainer > .section5 {
+    order: 6;
+}
+.homeSectionsContainer > .section6 {
+    order: 7;
+}
+.homeSectionsContainer > .section7 {
+    order: 8;
+}
+.homeSectionsContainer > .section8 {
+    order: 9;
+}
+.homeSectionsContainer > .section9 {
+    order: 10;
+}
+.homeSectionsContainer > .section10 {
+    order: 11;
 }
 
 /* Halloween theme */

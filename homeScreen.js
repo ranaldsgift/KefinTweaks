@@ -37,7 +37,7 @@
                 font-size: 14px;
                 color: #666;
                 transition: opacity 0.3s ease;
-                order: 9999 !important;
+                order: 99999 !important;
                 position: relative;
             }
             
@@ -211,6 +211,12 @@
     
     // Seasonal configuration
     const SEASONAL_ITEM_LIMIT = window.KefinTweaksConfig?.homeScreen?.seasonalItemLimit || 16;
+    const SEASONAL_ORDER = window.KefinTweaksConfig?.homeScreen?.seasonalOrder || 50;
+    const DISCOVERY_ORDER = window.KefinTweaksConfig?.homeScreen?.discoveryOrder || 1000;
+    const WATCHLIST_ORDER = window.KefinTweaksConfig?.homeScreen?.watchlistOrder || 60;
+    const POPULAR_TV_NETWORKS_ORDER = window.KefinTweaksConfig?.homeScreen?.popularTVNetworksOrder || 61;
+    const NEW_MOVIES_ORDER = window.KefinTweaksConfig?.homeScreen?.newMoviesOrder || 30;
+    const NEW_EPISODES_ORDER = window.KefinTweaksConfig?.homeScreen?.newEpisodesOrder || 31;
 
     // Processing flag to prevent parallel execution
     let isProcessing = false;
@@ -1832,7 +1838,7 @@
             // Add data attributes to track rendered sections
             scrollableContainer.setAttribute('data-custom-section-id', 'new-movies');
             scrollableContainer.setAttribute('data-custom-section-name', 'New Movies');
-            scrollableContainer.style.order = 30;
+            scrollableContainer.style.order = NEW_MOVIES_ORDER;
             
             // Append to container
             container.appendChild(scrollableContainer);
@@ -1875,7 +1881,7 @@
             // Add data attributes to track rendered sections
             scrollableContainer.setAttribute('data-custom-section-id', 'new-episodes');
             scrollableContainer.setAttribute('data-custom-section-name', 'New Episodes');
-            scrollableContainer.style.order = 31;
+            scrollableContainer.style.order = NEW_EPISODES_ORDER;
             
             // Append to container
             container.appendChild(scrollableContainer);
@@ -1934,7 +1940,7 @@
             // Add data attribute to track rendered sections
             scrollableContainer.setAttribute('data-custom-section-id', 'watchlist');
             scrollableContainer.setAttribute('data-custom-section-name', 'Your Watchlist');
-            scrollableContainer.style.order = 32;
+            scrollableContainer.style.order = WATCHLIST_ORDER;
             
             // Append to container
             container.appendChild(scrollableContainer);
@@ -1987,7 +1993,7 @@
             // Render the scrollable container with the network/studio items
             const scrollableContainer = window.cardBuilder.renderCards(
                 limitedNetworks,
-                'Popular TV Studios',
+                'Popular TV Networks',
                 null,
                 true,
                 'backdrop'
@@ -1996,7 +2002,7 @@
             // Add data attribute to track rendered sections
             scrollableContainer.setAttribute('data-custom-section-id', 'popular-tv-networks');
             scrollableContainer.setAttribute('data-custom-section-name', 'Popular TV Networks');
-            scrollableContainer.style.order = 101;
+            scrollableContainer.style.order = POPULAR_TV_NETWORKS_ORDER;
             
             // Append to container
             container.appendChild(scrollableContainer);
@@ -2908,7 +2914,7 @@
             let items = [];
             let viewMoreUrl = null;
             let sectionId = '';
-            let order = 200 + renderedSections.size;
+            let order = DISCOVERY_ORDER + renderedSections.size;
             
             // Handle preloaded section data
             if (typeof sectionData === 'object' && sectionData.type) {
