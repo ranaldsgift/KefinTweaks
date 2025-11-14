@@ -145,6 +145,8 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		// Watchlist tab refresh button
 		const watchlistHeaderRight = watchlistSection.querySelector('.watchlist-header-right');
 		if (watchlistHeaderRight) {
+			const importExportBtn = createImportExportButton();
+			watchlistHeaderRight.appendChild(importExportBtn);
 			const refreshBtn = createRefreshButton('watchlist', 'Watchlist');
 			watchlistHeaderRight.appendChild(refreshBtn);
 		}
@@ -213,6 +215,20 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		};
 		
 		return refreshBtn;
+	}
+
+	// Create import/export button element
+	function createImportExportButton() {
+		const btn = document.createElement('button');
+		btn.className = 'layout-toggle-btn';
+		btn.innerHTML = '<span class="material-icons import_export"></span>';
+		btn.title = 'Import/Export Watchlist';
+		
+		btn.onclick = () => {
+			showImportExportModal();
+		};
+		
+		return btn;
 	}
 
 	// Create sort button element
@@ -3252,6 +3268,791 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		LOG('Watchlist HTML structure rendered successfully');
 	}
 
+	/************ Import/Export Functions ************/
+
+	// Show import/export modal
+	function showImportExportModal() {
+		const modalContent = document.createElement('div');
+		modalContent.className = 'import-export-modal-content';
+		modalContent.style.minWidth = '500px';
+		modalContent.style.maxWidth = '800px';
+
+		// Create tab buttons
+		const tabContainer = document.createElement('div');
+		tabContainer.className = 'import-export-tabs';
+		tabContainer.style.display = 'flex';
+		tabContainer.style.gap = '8px';
+		tabContainer.style.marginBottom = '20px';
+		tabContainer.style.borderBottom = '1px solid rgba(255, 255, 255, 0.1)';
+
+		const exportTabBtn = document.createElement('button');
+		exportTabBtn.className = 'import-export-tab active';
+		exportTabBtn.textContent = 'Export';
+		exportTabBtn.style.cssText = 'flex: 1; padding: 12px; background: transparent; border: none; border-bottom: 2px solid #00a4dc; color: rgba(255, 255, 255, 0.7); cursor: pointer; font-size: 14px; font-weight: 500;';
+		
+		const importTabBtn = document.createElement('button');
+		importTabBtn.className = 'import-export-tab';
+		importTabBtn.textContent = 'Import';
+		importTabBtn.style.cssText = 'flex: 1; padding: 12px; background: transparent; border: none; border-bottom: 2px solid transparent; color: rgba(255, 255, 255, 0.7); cursor: pointer; font-size: 14px; font-weight: 500;';
+
+		// Tab content container
+		const tabContent = document.createElement('div');
+		tabContent.className = 'import-export-tab-content';
+		tabContent.style.minHeight = '400px';
+
+		// Active tab state
+		let activeTab = 'export';
+
+		// Store exported data to preserve across tab switches
+		let savedExportData = '';
+
+		// Tab switching
+		const switchTab = (tab) => {
+			// Save export data before clearing
+			if (activeTab === 'export') {
+				const exportTextarea = tabContent.querySelector('#export-textarea');
+				if (exportTextarea) {
+					savedExportData = exportTextarea.value;
+				}
+			}
+
+			activeTab = tab;
+			exportTabBtn.classList.toggle('active', tab === 'export');
+			importTabBtn.classList.toggle('active', tab === 'import');
+			exportTabBtn.style.borderBottomColor = tab === 'export' ? '#00a4dc' : 'transparent';
+			exportTabBtn.style.color = tab === 'export' ? '#fff' : 'rgba(255, 255, 255, 0.7)';
+			importTabBtn.style.borderBottomColor = tab === 'import' ? '#00a4dc' : 'transparent';
+			importTabBtn.style.color = tab === 'import' ? '#fff' : 'rgba(255, 255, 255, 0.7)';
+			
+			tabContent.innerHTML = '';
+			if (tab === 'export') {
+				renderExportTab(tabContent, savedExportData, (newData) => {
+					savedExportData = newData;
+				});
+			} else {
+				renderImportTab(tabContent);
+			}
+		};
+
+		exportTabBtn.onclick = () => switchTab('export');
+		importTabBtn.onclick = () => switchTab('import');
+
+		tabContainer.appendChild(exportTabBtn);
+		tabContainer.appendChild(importTabBtn);
+		modalContent.appendChild(tabContainer);
+		modalContent.appendChild(tabContent);
+
+		// Render default tab (export)
+		renderExportTab(tabContent, savedExportData, (newData) => {
+			savedExportData = newData;
+		});
+
+		// Create modal
+		const modal = window.ModalSystem.create({
+			id: 'import-export-modal',
+			content: modalContent,
+			closeOnBackdrop: true,
+			closeOnEscape: true
+		});
+	}
+
+	// Render export tab
+	function renderExportTab(container, savedData = '', updateSavedData = null) {
+		container.innerHTML = '';
+
+		const description = document.createElement('p');
+		description.style.cssText = 'color: rgba(255, 255, 255, 0.7); margin-bottom: 20px; font-size: 14px; line-height: 1.5;';
+		description.textContent = 'Export your watchlist to a JSON file. The export includes item names and provider IDs (IMDb, TMDB, TVDB).';
+		container.appendChild(description);
+
+		const exportBtn = document.createElement('button');
+		exportBtn.className = 'emby-button emby-button-raised button-submit';
+		exportBtn.textContent = 'Export Watchlist';
+		exportBtn.style.cssText = 'margin-bottom: 20px;';
+		exportBtn.style.alignSelf = 'flex-start';
+		
+		const textarea = document.createElement('textarea');
+		textarea.id = 'export-textarea';
+		textarea.readOnly = true;
+		textarea.style.cssText = 'width: 100%; min-height: 300px; padding: 12px; background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 4px; color: #fff; font-family: monospace; font-size: 12px; resize: vertical; box-sizing: border-box;';
+		textarea.placeholder = 'Exported watchlist data will appear here...';
+		// Preserve saved data if switching tabs
+		if (savedData) {
+			textarea.value = savedData;
+		}
+		container.appendChild(exportBtn);
+		container.appendChild(textarea);
+
+		const buttonContainer = document.createElement('div');
+		buttonContainer.style.cssText = 'display: flex; gap: 10px; margin-top: 10px;';
+		
+		const copyBtn = document.createElement('button');
+		copyBtn.className = 'emby-button';
+		copyBtn.textContent = 'Copy to Clipboard';
+		copyBtn.style.cssText = 'padding: 8px 16px; background: rgba(255, 255, 255, 0.1); color: white; border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 4px; cursor: pointer; font-size: 14px;';
+		// Enable copy button if there's saved content
+		copyBtn.disabled = !savedData;
+
+		copyBtn.onclick = async () => {
+			try {
+				await navigator.clipboard.writeText(textarea.value);
+				copyBtn.textContent = 'Copied!';
+				setTimeout(() => {
+					copyBtn.textContent = 'Copy to Clipboard';
+				}, 2000);
+			} catch (err) {
+				ERR('Failed to copy to clipboard:', err);
+				alert('Failed to copy to clipboard. Please copy manually.');
+			}
+		};
+
+		buttonContainer.appendChild(copyBtn);
+		container.appendChild(buttonContainer);
+
+		exportBtn.onclick = async () => {
+			exportBtn.disabled = true;
+			exportBtn.textContent = 'Exporting...';
+			textarea.value = '';
+
+			try {
+				const exportData = await exportWatchlistData();
+				const jsonString = JSON.stringify(exportData, null, 2);
+				textarea.value = jsonString;
+				// Update saved data so it persists across tab switches
+				if (updateSavedData) {
+					updateSavedData(jsonString);
+				}
+				copyBtn.disabled = false;
+				exportBtn.disabled = false;
+				exportBtn.textContent = 'Export Watchlist';
+			} catch (err) {
+				ERR('Export failed:', err);
+				textarea.value = `Error exporting watchlist: ${err.message}`;
+				// Clear saved data on error
+				if (updateSavedData) {
+					updateSavedData('');
+				}
+				exportBtn.disabled = false;
+				exportBtn.textContent = 'Export Watchlist';
+			}
+		};
+	}
+
+	// Render import tab
+	function renderImportTab(container) {
+		container.innerHTML = '';
+
+		const description = document.createElement('p');
+		description.style.cssText = 'color: rgba(255, 255, 255, 0.7); margin-bottom: 20px; font-size: 14px; line-height: 1.5;';
+		description.textContent = 'Paste your watchlist JSON data below. Each item must have at least one provider ID (IMDb, TMDB, or TVDB).';
+		container.appendChild(description);
+
+		const textarea = document.createElement('textarea');
+		textarea.id = 'import-textarea';
+		textarea.style.cssText = 'width: 100%; min-height: 200px; padding: 12px; background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 4px; color: #fff; font-family: monospace; font-size: 12px; resize: vertical; box-sizing: border-box; margin-bottom: 10px;';
+		textarea.placeholder = 'Paste your watchlist JSON data here...';
+		container.appendChild(textarea);
+
+		const validationMsg = document.createElement('div');
+		validationMsg.id = 'import-validation';
+		validationMsg.style.cssText = 'margin-bottom: 10px; padding: 10px; border-radius: 4px; font-size: 13px; display: none;';
+		container.appendChild(validationMsg);
+
+		const previewContainer = document.createElement('div');
+		previewContainer.id = 'import-preview';
+		previewContainer.style.cssText = 'margin-bottom: 10px; max-height: 200px; overflow-y: auto; display: none;';
+		container.appendChild(previewContainer);
+
+		const progressContainer = document.createElement('div');
+		progressContainer.id = 'import-progress';
+		progressContainer.style.cssText = 'margin-bottom: 10px; display: none;';
+		container.appendChild(progressContainer);
+
+		const summaryContainer = document.createElement('div');
+		summaryContainer.id = 'import-summary';
+		summaryContainer.style.cssText = 'margin-bottom: 10px; padding: 10px; border-radius: 4px; display: none;';
+		container.appendChild(summaryContainer);
+
+		const buttonContainer = document.createElement('div');
+		buttonContainer.style.cssText = 'display: flex; gap: 10px; margin-top: 10px;';
+
+		const validateBtn = document.createElement('button');
+		validateBtn.className = 'emby-button';
+		validateBtn.textContent = 'Validate & Preview';
+		validateBtn.style.cssText = 'padding: 8px 16px; background: rgba(255, 255, 255, 0.1); color: white; border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 4px; cursor: pointer; font-size: 14px;';
+
+		const importBtn = document.createElement('button');
+		importBtn.className = 'emby-button emby-button-raised button-submit';
+		importBtn.textContent = 'Import Watchlist';
+		importBtn.disabled = true;
+		importBtn.style.display = 'none'; // Hide until validated
+
+		const clearBtn = document.createElement('button');
+		clearBtn.className = 'emby-button';
+		clearBtn.textContent = 'Clear Watchlist';
+		clearBtn.style.cssText = 'padding: 8px 16px; background: rgba(255, 0, 0, 0.2); color: #ff6b6b; border: 1px solid rgba(255, 0, 0, 0.3); border-radius: 4px; cursor: pointer; font-size: 14px; margin-left: auto;';
+
+		buttonContainer.appendChild(validateBtn);
+		buttonContainer.appendChild(importBtn);
+		buttonContainer.appendChild(clearBtn);
+		container.appendChild(buttonContainer);
+
+		let validatedData = null;
+
+		validateBtn.onclick = () => {
+			const jsonText = textarea.value.trim();
+			if (!jsonText) {
+				showValidationMessage(validationMsg, 'Please paste JSON data first.', 'error');
+				return;
+			}
+
+			// Hide progress container when validating
+			progressContainer.style.display = 'none';
+			summaryContainer.style.display = 'none';
+
+			try {
+				const data = JSON.parse(jsonText);
+				const validation = validateImportData(data);
+				
+				if (validation.valid) {
+					validatedData = data;
+					showValidationMessage(validationMsg, validation.message, 'success');
+					showPreview(previewContainer, data);
+					importBtn.disabled = false;
+					importBtn.style.display = ''; // Show button when validated
+				} else {
+					validatedData = null;
+					showValidationMessage(validationMsg, validation.message, 'error');
+					previewContainer.style.display = 'none';
+					importBtn.disabled = true;
+					importBtn.style.display = 'none'; // Hide button on validation failure
+				}
+			} catch (err) {
+				validatedData = null;
+				showValidationMessage(validationMsg, `Invalid JSON: ${err.message}`, 'error');
+				previewContainer.style.display = 'none';
+				importBtn.disabled = true;
+				importBtn.style.display = 'none'; // Hide button on parse error
+			}
+		};
+
+		importBtn.onclick = async () => {
+			if (!validatedData) {
+				showValidationMessage(validationMsg, 'Please validate the data first.', 'error');
+				return;
+			}
+
+			importBtn.disabled = true;
+			validateBtn.disabled = true;
+			clearBtn.disabled = true;
+			summaryContainer.style.display = 'none';
+			
+			// Show progress container immediately at 0/X items
+			progressContainer.style.display = 'block';
+			showImportProgress(progressContainer, 0, validatedData.length, 'Starting import...');
+
+			try {
+				const results = await importWatchlistData(validatedData, progressContainer);
+				showImportSummary(summaryContainer, results);
+				summaryContainer.style.display = 'block';
+				
+				// Refresh watchlist
+				await initWatchlistTab();
+				renderWatchlistContent();
+			} catch (err) {
+				ERR('Import failed:', err);
+				showValidationMessage(validationMsg, `Import failed: ${err.message}`, 'error');
+			} finally {
+				importBtn.disabled = false;
+				validateBtn.disabled = false;
+				clearBtn.disabled = false;
+			}
+		};
+
+		clearBtn.onclick = async () => {
+			if (confirm('Are you sure you want to clear your entire watchlist? This action cannot be undone.')) {
+				if (confirm('This will remove ALL items from your watchlist. Are you absolutely sure?')) {
+					clearBtn.disabled = true;
+					clearBtn.textContent = 'Clearing...';
+					try {
+						await clearWatchlist();
+						// Close modal after clearing
+						window.ModalSystem.close('import-export-modal');
+					} catch (err) {
+						ERR('Failed to clear watchlist:', err);
+						alert('Failed to clear watchlist. Please try again.');
+					} finally {
+						clearBtn.disabled = false;
+						clearBtn.textContent = 'Clear Watchlist';
+					}
+				}
+			}
+		};
+	}
+
+	// Show validation message
+	function showValidationMessage(container, message, type) {
+		container.style.display = 'block';
+		container.textContent = message;
+		container.style.background = type === 'success' ? 'rgba(76, 175, 80, 0.2)' : 'rgba(255, 0, 0, 0.2)';
+		container.style.border = type === 'success' ? '1px solid rgba(76, 175, 80, 0.4)' : '1px solid rgba(255, 0, 0, 0.4)';
+		container.style.color = type === 'success' ? '#4caf50' : '#ff6b6b';
+	}
+
+	// Show preview
+	function showPreview(container, data) {
+		container.innerHTML = '';
+		container.style.display = 'block';
+
+		const previewTitle = document.createElement('div');
+		previewTitle.style.cssText = 'font-weight: 600; margin-bottom: 8px; color: #fff;';
+		previewTitle.textContent = `Preview: ${data.length} item(s) to import`;
+		container.appendChild(previewTitle);
+
+		const previewList = document.createElement('div');
+		previewList.style.cssText = 'max-height: 150px; overflow-y: auto;';
+		
+		data.slice(0, 10).forEach((item, index) => {
+			const itemDiv = document.createElement('div');
+			itemDiv.style.cssText = 'padding: 6px; margin-bottom: 4px; background: rgba(255, 255, 255, 0.05); border-radius: 4px; font-size: 12px; color: rgba(255, 255, 255, 0.8);';
+			const name = item.Name || item.name || 'Unknown';
+			const providers = [];
+			if (item.Imdb || item.imdb) providers.push('IMDb');
+			if (item.Tmdb || item.tmdb) providers.push('TMDB');
+			if (item.Tvdb || item.tvdb) providers.push('TVDB');
+			itemDiv.textContent = `${index + 1}. ${name} (${providers.join(', ')})`;
+			previewList.appendChild(itemDiv);
+		});
+
+		if (data.length > 10) {
+			const moreDiv = document.createElement('div');
+			moreDiv.style.cssText = 'padding: 6px; font-size: 12px; color: rgba(255, 255, 255, 0.6); font-style: italic;';
+			moreDiv.textContent = `... and ${data.length - 10} more item(s)`;
+			previewList.appendChild(moreDiv);
+		}
+
+		container.appendChild(previewList);
+	}
+
+	// Show import progress
+	function showImportProgress(container, current, total, itemName) {
+		container.innerHTML = `
+			<div style="color: rgba(255, 255, 255, 0.8); font-size: 13px; margin-bottom: 8px;">
+				Importing: ${current} / ${total}
+			</div>
+			<div style="width: 100%; height: 8px; background: rgba(255, 255, 255, 0.1); border-radius: 4px; overflow: hidden;">
+				<div style="width: ${(current / total) * 100}%; height: 100%; background: #00a4dc; transition: width 0.3s;"></div>
+			</div>
+			<div style="color: rgba(255, 255, 255, 0.6); font-size: 12px; margin-top: 4px;">
+				${itemName || ''}
+			</div>
+		`;
+	}
+
+	// Show import summary
+	function showImportSummary(container, results) {
+		container.innerHTML = '';
+		container.style.display = 'block';
+		container.style.background = 'rgba(255, 255, 255, 0.05)';
+		container.style.border = '1px solid rgba(255, 255, 255, 0.1)';
+		container.style.padding = '12px';
+		container.style.borderRadius = '4px';
+
+		const summaryTitle = document.createElement('div');
+		summaryTitle.style.cssText = 'font-weight: 600; margin-bottom: 8px; color: #fff; font-size: 14px;';
+		summaryTitle.textContent = 'Import Summary';
+		container.appendChild(summaryTitle);
+
+		const summaryList = document.createElement('div');
+		summaryList.style.cssText = 'display: flex; flex-direction: column; gap: 4px; font-size: 13px;';
+
+		const successDiv = document.createElement('div');
+		successDiv.style.color = '#4caf50';
+		successDiv.textContent = `✓ Successfully imported: ${results.imported} item(s)`;
+		summaryList.appendChild(successDiv);
+
+		if (results.skipped > 0) {
+			const skippedDiv = document.createElement('div');
+			skippedDiv.style.color = 'rgba(255, 255, 255, 0.7)';
+			skippedDiv.textContent = `⊘ Already in watchlist: ${results.skipped} item(s)`;
+			summaryList.appendChild(skippedDiv);
+		}
+
+		if (results.notFound > 0) {
+			const notFoundDiv = document.createElement('div');
+			notFoundDiv.style.color = '#ff6b6b';
+			notFoundDiv.textContent = `✗ Not found in library: ${results.notFound} item(s)`;
+			summaryList.appendChild(notFoundDiv);
+		}
+
+		if (results.errors > 0) {
+			const errorsDiv = document.createElement('div');
+			errorsDiv.style.color = '#ff6b6b';
+			errorsDiv.textContent = `✗ Errors: ${results.errors} item(s)`;
+			summaryList.appendChild(errorsDiv);
+		}
+
+		container.appendChild(summaryList);
+	}
+
+	// Export watchlist data from server
+	async function exportWatchlistData() {
+		const apiClient = window.ApiClient;
+		const userId = apiClient.getCurrentUserId();
+		const serverUrl = apiClient.serverAddress();
+		const token = apiClient.accessToken();
+
+		const exportData = [];
+
+		// Fetch all watchlist items from server (not cache)
+		const types = [
+			{ type: 'Movie', section: 'movies' },
+			{ type: 'Series', section: 'series' },
+			{ type: 'Season', section: 'seasons' },
+			{ type: 'Episode', section: 'episodes' }
+		];
+
+		for (const { type, section } of types) {
+			try {
+				// Fetch from server with Fields to get SeriesName for episodes/seasons
+				const url = `${serverUrl}/Items?Filters=Likes&IncludeItemTypes=${type}&UserId=${userId}&Recursive=true&Fields=ProviderIds,SeriesName,ParentId&ImageTypeLimit=1&EnableImageTypes=Primary,Backdrop,Thumb`;
+				const res = await fetch(url, { headers: { "Authorization": `MediaBrowser Token=\"${token}\"` } });
+				const data = await res.json();
+				const items = data.Items || [];
+
+				for (const item of items) {
+					const exportItem = {
+						status: true,
+						Name: item.Name,
+						Type: type // Add Type field for efficient import
+					};
+
+					// Add provider IDs (only if they exist)
+					if (item.ProviderIds) {
+						if (item.ProviderIds.Imdb) exportItem.Imdb = item.ProviderIds.Imdb;
+						if (item.ProviderIds.Tmdb) exportItem.Tmdb = item.ProviderIds.Tmdb;
+						if (item.ProviderIds.Tvdb) exportItem.Tvdb = item.ProviderIds.Tvdb;
+					}
+
+					// For episodes, add SeriesName and SeasonName
+					if (type === 'Episode') {
+						if (item.SeriesName) {
+							exportItem.SeriesName = item.SeriesName;
+						}
+						// Get SeasonName from parent season
+						if (item.ParentId) {
+							try {
+								const seasonUrl = `${serverUrl}/Items/${item.ParentId}?UserId=${userId}&Fields=Name`;
+								const seasonRes = await fetch(seasonUrl, { headers: { "Authorization": `MediaBrowser Token=\"${token}\"` } });
+								const seasonData = await seasonRes.json();
+								if (seasonData.Name) {
+									exportItem.SeasonName = seasonData.Name;
+								}
+							} catch (err) {
+								WARN('Failed to fetch season name for episode:', err);
+							}
+						}
+					}
+
+					// For seasons, add SeriesName
+					if (type === 'Season') {
+						if (item.SeriesName) {
+							exportItem.SeriesName = item.SeriesName;
+						}
+					}
+
+					// Only add if at least one provider ID exists
+					if (exportItem.Imdb || exportItem.Tmdb || exportItem.Tvdb) {
+						exportData.push(exportItem);
+					}
+				}
+			} catch (err) {
+				ERR(`Failed to fetch ${type} items:`, err);
+			}
+		}
+
+		return exportData;
+	}
+
+	// Validate import data
+	function validateImportData(data) {
+		if (!Array.isArray(data)) {
+			return { valid: false, message: 'Data must be an array of items.' };
+		}
+
+		if (data.length === 0) {
+			return { valid: false, message: 'No items to import.' };
+		}
+
+		const errors = [];
+		const providerIdMap = new Map(); // Track provider IDs for duplicate detection
+
+		for (let i = 0; i < data.length; i++) {
+			const item = data[i];
+			const itemNum = i + 1;
+
+			// Check if item is an object
+			if (typeof item !== 'object' || item === null) {
+				errors.push(`Item ${itemNum}: Must be an object.`);
+				continue;
+			}
+
+			// Check status field
+			if (item.status !== undefined && typeof item.status !== 'boolean') {
+				errors.push(`Item ${itemNum}: 'status' must be a boolean.`);
+			}
+
+			// Check Type field (required)
+			const itemType = item.Type || item.type;
+			if (!itemType) {
+				errors.push(`Item ${itemNum}: 'Type' field is required (Movie, Series, Season, or Episode).`);
+				continue;
+			}
+			if (!['Movie', 'Series', 'Season', 'Episode'].includes(itemType)) {
+				errors.push(`Item ${itemNum}: 'Type' must be one of: Movie, Series, Season, Episode.`);
+				continue;
+			}
+
+			// Check for at least one provider ID
+			const imdb = item.Imdb || item.imdb;
+			const tmdb = item.Tmdb || item.tmdb;
+			const tvdb = item.Tvdb || item.tvdb;
+
+			if (!imdb && !tmdb && !tvdb) {
+				errors.push(`Item ${itemNum}: Must have at least one provider ID (Imdb, Tmdb, or Tvdb).`);
+				continue;
+			}
+
+			// Check for duplicate provider IDs (include Type in key to allow same ID for different types)
+			const providerKeys = [];
+			if (imdb) providerKeys.push(`Imdb:${imdb}:${itemType}`);
+			if (tmdb) providerKeys.push(`Tmdb:${tmdb}:${itemType}`);
+			if (tvdb) providerKeys.push(`Tvdb:${tvdb}:${itemType}`);
+
+			for (const key of providerKeys) {
+				if (providerIdMap.has(key)) {
+					const existingItem = providerIdMap.get(key);
+					errors.push(`Item ${itemNum}: Duplicate provider ID '${key}' found (also in item ${existingItem}).`);
+				} else {
+					providerIdMap.set(key, itemNum);
+				}
+			}
+		}
+
+		if (errors.length > 0) {
+			return { valid: false, message: `Validation failed:\n${errors.slice(0, 10).join('\n')}${errors.length > 10 ? `\n... and ${errors.length - 10} more error(s).` : ''}` };
+		}
+
+		return { valid: true, message: `Validation successful: ${data.length} item(s) ready to import.` };
+	}
+
+	// Import watchlist data
+	async function importWatchlistData(data, progressContainer) {
+		const apiClient = window.ApiClient;
+		const userId = apiClient.getCurrentUserId();
+		const serverUrl = apiClient.serverAddress();
+		const token = apiClient.accessToken();
+
+		const results = {
+			imported: 0,
+			skipped: 0,
+			notFound: 0,
+			errors: 0
+		};
+
+		// Analyze import data to determine which types are used
+		const usedTypes = new Set();
+		for (const item of data) {
+			const itemType = item.Type || item.type;
+			if (itemType) usedTypes.add(itemType);
+		}
+
+		// Build query parameters
+		const includeTypes = Array.from(usedTypes).join(',');
+		const queryParams = new URLSearchParams({
+			UserId: userId,
+			Recursive: 'true',
+			IncludeItemTypes: includeTypes,
+			Fields: 'ProviderIds,Type'
+		});
+
+		// Fetch all matching items in bulk
+		let allLibraryItems = [];
+		try {
+			const url = `${serverUrl}/Items?${queryParams.toString()}`;
+			const res = await fetch(url, { headers: { "Authorization": `MediaBrowser Token=\"${token}\"` } });
+			const libraryData = await res.json();
+			allLibraryItems = libraryData.Items || [];
+			LOG(`Fetched ${allLibraryItems.length} items from library matching import criteria`);
+		} catch (err) {
+			ERR('Failed to fetch library items:', err);
+			throw new Error('Failed to fetch library items. Please try again.');
+		}
+
+		// Create a lookup map: providerId -> item
+		const libraryMap = new Map();
+		for (const item of allLibraryItems) {
+			if (item.ProviderIds) {
+				if (item.ProviderIds.Imdb) {
+					const key = `Imdb:${item.ProviderIds.Imdb}:${item.Type}`;
+					libraryMap.set(key, item);
+				}
+				if (item.ProviderIds.Tmdb) {
+					const key = `Tmdb:${item.ProviderIds.Tmdb}:${item.Type}`;
+					libraryMap.set(key, item);
+				}
+				if (item.ProviderIds.Tvdb) {
+					const key = `Tvdb:${item.ProviderIds.Tvdb}:${item.Type}`;
+					libraryMap.set(key, item);
+				}
+			}
+		}
+
+		// Get all current watchlist items to check for duplicates
+		const currentWatchlist = new Set();
+		const watchlistTypes = ['Movie', 'Series', 'Season', 'Episode'];
+		for (const type of watchlistTypes) {
+			try {
+				const url = `${serverUrl}/Items?Filters=Likes&IncludeItemTypes=${type}&UserId=${userId}&Recursive=true&Fields=ProviderIds`;
+				const res = await fetch(url, { headers: { "Authorization": `MediaBrowser Token=\"${token}\"` } });
+				const watchlistData = await res.json();
+				const items = watchlistData.Items || [];
+				for (const item of items) {
+					if (item.ProviderIds) {
+						if (item.ProviderIds.Imdb) currentWatchlist.add(`Imdb:${item.ProviderIds.Imdb}:${type}`);
+						if (item.ProviderIds.Tmdb) currentWatchlist.add(`Tmdb:${item.ProviderIds.Tmdb}:${type}`);
+						if (item.ProviderIds.Tvdb) currentWatchlist.add(`Tvdb:${item.ProviderIds.Tvdb}:${type}`);
+					}
+				}
+			} catch (err) {
+				WARN(`Failed to fetch current watchlist for ${type}:`, err);
+			}
+		}
+
+		// Process each import item
+		for (let i = 0; i < data.length; i++) {
+			const importItem = data[i];
+			const itemName = importItem.Name || importItem.name || `Item ${i + 1}`;
+			
+			// Update progress before processing item
+			showImportProgress(progressContainer, i + 1, data.length, itemName);
+			
+			// Allow UI to update before processing
+			await new Promise(resolve => requestAnimationFrame(resolve));
+
+			try {
+				// Get provider IDs and type
+				const imdb = importItem.Imdb || importItem.imdb;
+				const tmdb = importItem.Tmdb || importItem.tmdb;
+				const tvdb = importItem.Tvdb || importItem.tvdb;
+				const itemType = importItem.Type || importItem.type;
+
+				// Find matching item in library using provider IDs and type
+				let foundItem = null;
+				const searchKeys = [];
+				if (imdb) searchKeys.push(`Imdb:${imdb}:${itemType}`);
+				if (tmdb) searchKeys.push(`Tmdb:${tmdb}:${itemType}`);
+				if (tvdb) searchKeys.push(`Tvdb:${tvdb}:${itemType}`);
+
+				for (const key of searchKeys) {
+					if (libraryMap.has(key)) {
+						foundItem = libraryMap.get(key);
+						break; // Use first match
+					}
+				}
+
+				if (!foundItem) {
+					results.notFound++;
+					// Update progress after processing
+					await new Promise(resolve => requestAnimationFrame(resolve));
+					continue;
+				}
+
+				// Check if already in watchlist
+				let alreadyInWatchlist = false;
+				for (const key of searchKeys) {
+					if (currentWatchlist.has(key)) {
+						alreadyInWatchlist = true;
+						break;
+					}
+				}
+
+				if (alreadyInWatchlist) {
+					results.skipped++;
+					// Update progress after processing
+					await new Promise(resolve => requestAnimationFrame(resolve));
+					continue;
+				}
+
+				// Add to watchlist
+				await apiClient.updateUserItemRating(userId, foundItem.Id, 'true');
+				results.imported++;
+
+				// Update current watchlist set
+				if (foundItem.ProviderIds) {
+					if (foundItem.ProviderIds.Imdb) currentWatchlist.add(`Imdb:${foundItem.ProviderIds.Imdb}:${foundItem.Type}`);
+					if (foundItem.ProviderIds.Tmdb) currentWatchlist.add(`Tmdb:${foundItem.ProviderIds.Tmdb}:${foundItem.Type}`);
+					if (foundItem.ProviderIds.Tvdb) currentWatchlist.add(`Tvdb:${foundItem.ProviderIds.Tvdb}:${foundItem.Type}`);
+				}
+
+				// Update progress after processing
+				await new Promise(resolve => requestAnimationFrame(resolve));
+
+			} catch (err) {
+				ERR(`Error importing item ${i + 1}:`, err);
+				results.errors++;
+				// Update progress after error
+				await new Promise(resolve => requestAnimationFrame(resolve));
+			}
+		}
+
+		return results;
+	}
+
+	// Clear entire watchlist
+	async function clearWatchlist() {
+		const apiClient = window.ApiClient;
+		const userId = apiClient.getCurrentUserId();
+		const serverUrl = apiClient.serverAddress();
+		const token = apiClient.accessToken();
+
+		const types = ['Movie', 'Series', 'Season', 'Episode'];
+		let cleared = 0;
+
+		for (const type of types) {
+			try {
+				const url = `${serverUrl}/Items?Filters=Likes&IncludeItemTypes=${type}&UserId=${userId}&Recursive=true&Fields=Id`;
+				const res = await fetch(url, { headers: { "Authorization": `MediaBrowser Token=\"${token}\"` } });
+				const data = await res.json();
+				const items = data.Items || [];
+
+				for (const item of items) {
+					try {
+						await apiClient.updateUserItemRating(userId, item.Id, 'false');
+						cleared++;
+					} catch (err) {
+						ERR(`Failed to remove item ${item.Id}:`, err);
+					}
+				}
+			} catch (err) {
+				ERR(`Failed to fetch ${type} items for clearing:`, err);
+			}
+		}
+
+		// Clear cache
+		const sections = ['movies', 'series', 'seasons', 'episodes'];
+		sections.forEach(section => {
+			localStorageCache.clear(`watchlist_${section}`);
+			watchlistCache[section].data = [];
+		});
+
+		// Refresh watchlist
+		await initWatchlistTab();
+		renderWatchlistContent();
+
+		alert(`Watchlist cleared: ${cleared} item(s) removed.`);
+	}
+
 	// Update watchlist cache when an item is toggled
 	async function updateWatchlistCacheOnToggle(itemId, itemType, isAdded) {
 		try {
@@ -3386,7 +4187,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			}
 		}
 
-		setupWebSocketMonitoring();
+		//setupWebSocketMonitoring();
 
 		// Try to set up immediately
 /* 		if (!setupWebSocketMonitoring()) {

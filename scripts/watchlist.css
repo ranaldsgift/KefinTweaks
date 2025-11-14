@@ -1866,6 +1866,58 @@ div[data-tab="watchlist"] .loading-message {
     display: none;
 }
 
+/* Import/Export Modal Styles */
+.import-export-modal-content {
+    min-width: 500px;
+    max-width: 800px;
+}
+
+.import-export-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.import-export-tab {
+    flex: 1;
+    padding: 12px;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: rgba(255, 255, 255, 0.7);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.import-export-tab:hover {
+    color: rgba(255, 255, 255, 0.9);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.import-export-tab.active {
+    color: #fff;
+    border-bottom-color: #00a4dc;
+}
+
+.import-export-tab-content {
+    min-height: 400px;
+}
+
+/* Responsive Design for Import/Export Modal */
+@media (max-width: 768px) {
+    .import-export-modal-content {
+        min-width: calc(100vw - 40px);
+        max-width: calc(100vw - 40px);
+    }
+    
+    .import-export-tab-content {
+        min-height: 300px;
+    }
+}
+
 /* List View Styling */
 [data-layout='List'] .cardScalable {
     display: none;
@@ -1901,3 +1953,8 @@ div[data-tab="watchlist"] .loading-message {
     padding-top: .24em;
 }
 
+.import-export-tab-content {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}

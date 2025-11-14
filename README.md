@@ -18,7 +18,7 @@ I think it's also worth mentioning that before the 1.0 release, you can expect t
   - [Feature Requests Completed](#-feature-requests-completed)
   - [Feature Requests Planned](#-feature-requests-planned)
   - [Core Features](#-core-features)
-    - [Watchlist Page](#watchlist-page)
+    - [Watchlist](#watchlist)
     - [Enhanced Home Screen](#enhanced-home-screen)
     - [Enhanced Search](#enhanced-search)
   - [UI Enhancements](#-ui-enhancements)
@@ -62,7 +62,7 @@ I think it's also worth mentioning that before the 1.0 release, you can expect t
 0a. **Install Prerequisites listed above**  
 0b. **If you are using JellyfinEnhanced, you MUST disable the "Watchlist" feature from the plugin settings**
 1. **Add a new script to your JS Injector Plugin**
-2. **Copy this entire contents of kefinTweaks.js into the new script**
+2. **Copy the entire contents of kefinTweaks.js into the new script**
 
 **Optionally update the "scriptRoot" in the KefinTweaks script if you wish to customize and host these scripts yourself.**
 
@@ -136,7 +136,7 @@ The features in KefinTweaks which use local data caching are listed below, along
 
 ### Core Features
 
-#### **Watchlist Page**
+#### **Watchlist**
 - **Watchlist**:  
 Tired of forgetting everything you wanted to watch? Add movies, series, seasons, and episodes to your Watchlist!  
 
@@ -167,6 +167,21 @@ A summary of your watched items by the numbers. See how many movies, shows or ep
 <div align="center">
   <img src="pages/images/statistics.png" alt="statistics" style="max-width: 100%; height: auto;"/>
 </div>
+
+- **Export/Import**:  
+Export your Watchlist to JSON which can later be imported using the Watchlist Import feature. You can use this feature to make bulk changes to your Watchlist if you need to.
+
+<table align="center" style="width: 100%;">
+  <tr>
+    <th style="text-align:center;">Watchlist Export</th>
+    <th style="text-align:center;">Watchlist Import</th>
+  </tr>
+  <tr>
+    <td style="width: 50%;"><img src="pages/images/watchlist-export.png" width="1000"/></td>
+    <td style="width: 50%;"><img src="pages/images/watchlist-import.png" width="1000"/></td>
+  </tr>
+</table>
+<br/>  
 
 - **Auto-Remove**:  
 Automatically removes watched items from your watchlist when playback completes.  
@@ -423,6 +438,7 @@ Allow users to also customize various configuration options through the UI
 <hr>
 
 ### Version History
+- **v0.2.4**: New Feature: Watchlist Export/Import
 - **v0.2.3**: New Feature: Collection Sorting, general fixes
 - **v0.2.2**: Add support for skin server versions, fixes for HeaderTabs
 - **v0.2.1**: Caching improvements for Watchlist and Top People, Mobile UI fixes and Flatten TV Shows improvements
