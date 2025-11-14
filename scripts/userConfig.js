@@ -8,6 +8,10 @@
     // ============================================================================
     // USER CONFIGURATION
     // ============================================================================
+
+    const getKefinTweaksRoot = () => {
+        return window.KefinTweaksConfig?.kefinTweaksRoot || 'https://ranaldsgift.github.io/KefinTweaks/';
+    }
     
     const USER_CONFIG = {
         // ============================================================================
@@ -36,7 +40,7 @@
                         urls: [
                             'https://cdn.jsdelivr.net/gh/lscambo13/ElegantFin@main/Theme/ElegantFin-jellyfin-theme-build-latest-minified.css',
                             'https://cdn.jsdelivr.net/gh/lscambo13/ElegantFin@main/Theme/assets/add-ons/media-bar-plugin-support-nightly.css',
-                            `${KefinTweaksConfig.scriptRoot}skins/elegantKefin.css`
+                            `${getKefinTweaksRoot()}skins/elegantKefin.css`
                         ]
                     }
                 ],
@@ -51,7 +55,7 @@
                         urls: [
                             'https://cdn.jsdelivr.net/gh/KartoffelChipss/NeutralFin@latest/theme/neutralfin-minified.css',
                             'https://cdn.jsdelivr.net/gh/KartoffelChipss/Jellyfin-Lucide@main/theme/jellyfin-lucide.css',
-                            `${KefinTweaksConfig.scriptRoot}skins/neutralfin-kefin.css`
+                            `${getKefinTweaksRoot()}skins/neutralfin-kefin.css`
                         ]
                     }
                 ],
@@ -202,15 +206,15 @@
                         majorServerVersions: [10],
                         urls: [
                             'https://cdn.jsdelivr.net/gh/JamsRepos/Jamfin@latest/theme/complete.css',
-                            `${KefinTweaksConfig.scriptRoot}skins/jamfin-kefin.css`,
-                            `${KefinTweaksConfig.scriptRoot}skins/jamfin-kefin-10.css`
+                            `${getKefinTweaksRoot()}skins/jamfin-kefin.css`,
+                            `${getKefinTweaksRoot()}skins/jamfin-kefin-10.css`
                         ]
                     },
                     {
                         majorServerVersions: [11],
                         urls: [
                             'https://cdn.jsdelivr.net/gh/JamsRepos/Jamfin@latest/theme/complete.css',
-                            `${KefinTweaksConfig.scriptRoot}skins/jamfin-kefin.css`
+                            `${getKefinTweaksRoot()}skins/jamfin-kefin.css`
                         ]
                     }
                 ],
@@ -224,14 +228,14 @@
                         majorServerVersions: [10],
                         urls: [
                             'https://cdn.jsdelivr.net/gh/loof2736/scyfin@v1.4.17/CSS/scyfin-theme.css',
-                            `${KefinTweaksConfig.scriptRoot}skins/scyfin-kefin.css`
+                            `${getKefinTweaksRoot()}skins/scyfin-kefin.css`
                         ]
                     },
                     {
                         majorServerVersions: [11],
                         urls: [
                             'https://cdn.jsdelivr.net/gh/loof2736/scyfin@latest/CSS/scyfin-theme.css',
-                            `${KefinTweaksConfig.scriptRoot}skins/scyfin-kefin.css`
+                            `${getKefinTweaksRoot()}skins/scyfin-kefin.css`
                         ]
                     }
                 ],
@@ -294,7 +298,7 @@
                         majorServerVersions: [10],
                         urls: [
                             'https://cdn.jsdelivr.net/gh/LitCastVlog/Flow@main/CSS/ScyFlow-oneliner.css',
-                            `${KefinTweaksConfig.scriptRoot}skins/flow-kefin.css`
+                            `${getKefinTweaksRoot()}skins/flow-kefin.css`
                         ]
                     },
                     {
@@ -302,7 +306,7 @@
                         urls: [
                             'https://cdn.jsdelivr.net/gh/LitCastVlog/Flow@main/CSS/ScyFlow-oneliner.css',
                             'https://cdn.jsdelivr.net/gh/LitCastVlog/Flow@main/CSS/ScyFlow-Compatibility.css',
-                            `${KefinTweaksConfig.scriptRoot}skins/flow-kefin.css`
+                            `${getKefinTweaksRoot()}skins/flow-kefin.css`
                         ]
                     }
                 ],
@@ -357,7 +361,7 @@
                         majorServerVersions: [10, 11],
                         urls: [
                             'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/presets/monochromic_preset.css',
-                            `${KefinTweaksConfig.scriptRoot}skins/chromic-kefin.css`
+                            `${getKefinTweaksRoot()}skins/chromic-kefin.css`
                         ]
                     }
                 ],
@@ -371,7 +375,7 @@
                         majorServerVersions: [10, 11],
                         urls: [
                             'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/presets/kaleidochromic_preset.css',
-                            `${KefinTweaksConfig.scriptRoot}skins/chromic-kefin.css`
+                            `${getKefinTweaksRoot()}skins/chromic-kefin.css`
                         ]
                     }
                 ],
@@ -385,7 +389,7 @@
                         majorServerVersions: [10, 11],
                         urls: [
                             'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/presets/novachromic_preset.css',
-                            `${KefinTweaksConfig.scriptRoot}skins/chromic-kefin.css`
+                            `${getKefinTweaksRoot()}skins/chromic-kefin.css`
                         ]
                     }
                 ],
