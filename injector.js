@@ -787,9 +787,18 @@ window.KefinTweaksConfig = ${JSON.stringify(defaultConfig, null, 2)};`;
                 return true;
             }
 
-            // Check if Watchlist is enabled in the configuration
+            // Check if Watchlist is enabled in the configuration and remove it if not
             if (!window.KefinTweaksConfig.scripts.watchlist) {
-                console.log('[KefinTweaks Startup] Watchlist is disabled in configuration, skipping Watchlist tab check');
+                console.log('[KefinTweaks Startup] Watchlist is disabled in configuration, removing Watchlist tab');
+                const pluginId = await findPlugin('Custom Tabs');
+                if (!pluginId) {
+                    console.warn('[KefinTweaks Startup] CustomTabs plugin not found');
+                    return false;
+                }
+                const config = await getPluginConfig(pluginId);
+                const tabs = config.Tabs.filter(tab => tab.Title !== 'Watchlist');
+                await savePluginConfig(pluginId, { Tabs: tabs });
+                console.log('[KefinTweaks Startup] Removed Watchlist tab from CustomTabs');
                 return true;
             }
 
