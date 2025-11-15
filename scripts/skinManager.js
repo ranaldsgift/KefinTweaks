@@ -208,18 +208,15 @@
     
     // Load and merge skin configurations
     function loadSkinConfig() {
-        const userSkins = window.KefinTweaksUserConfig?.skins || [];
-        const additionalSkins = window.KefinTweaksConfig?.skins || [];
+        // Only load from window.KefinTweaksConfig (from JS Injector)
+        const configSkins = window.KefinTweaksConfig?.skins || [];
         
-        // Start with user skins (these take priority)
-        SKINS_CONFIG = [...userSkins];
-        
-        // Add additional skins from main config, avoiding duplicates by name
-        additionalSkins.forEach(skin => {
-            const exists = SKINS_CONFIG.some(existingSkin => existingSkin.name === skin.name);
-            if (!exists) {
-                SKINS_CONFIG.push(skin);
-            }
+        // Filter to only include enabled skins (enabled !== false)
+        // Default to enabled if the property is not set
+        SKINS_CONFIG = configSkins.filter(skin => {
+            // Include skin if enabled is not explicitly false
+            // If enabled is undefined/null, treat as enabled (true)
+            return skin.enabled !== false;
         });
         
         // Ensure we always have at least a default skin
@@ -241,7 +238,9 @@
             LOG(`Filtered skins by server version: ${skinsBeforeFilter} -> ${skinsAfterFilter} (removed ${skinsBeforeFilter - skinsAfterFilter} incompatible skins)`);
         }
         
-        LOG(`Loaded ${SKINS_CONFIG.length} skins (${userSkins.length} user + ${additionalSkins.length} additional)`);
+        const enabledCount = configSkins.filter(s => s.enabled !== false).length;
+        const disabledCount = configSkins.length - enabledCount;
+        LOG(`Loaded ${SKINS_CONFIG.length} enabled skins from KefinTweaksConfig (${enabledCount} enabled, ${disabledCount} disabled)`);
     }
     
     // Load and merge theme configurations
@@ -374,8 +373,13 @@
         const selectedSkin = SKINS_CONFIG.find(skin => skin.name === selectedSkinName);
         
         if (!selectedSkin) {
-            ERR('Selected skin not found during verification');
-            return false;
+            ERR('Selected skin not found, reverting to default skin');
+            const defaultSkinName = getDefaultSkinName();
+            const defaultSkin = SKINS_CONFIG.find(skin => skin.name === defaultSkinName);
+            if (defaultSkin) {
+                loadSkin(defaultSkin);
+            }
+            return true;
         }
         
         // Check if skin CSS is properly loaded

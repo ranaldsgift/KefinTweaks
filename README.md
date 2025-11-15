@@ -13,6 +13,7 @@ I think it's also worth mentioning that before the 1.0 release, you can expect t
 - [Installation](#-installation)
   - [Prerequisites](#prerequisites)
   - [Setup Instructions](#setup-instructions)
+- [Configuration](#configuration)
 - [Features Overview](#features-overview)
   - [Data Caching](#data-caching)
   - [Feature Requests Completed](#-feature-requests-completed)
@@ -62,27 +63,70 @@ I think it's also worth mentioning that before the 1.0 release, you can expect t
 0a. **Install Prerequisites listed above**  
 0b. **If you are using JellyfinEnhanced, you MUST disable the "Watchlist" feature from the plugin settings**
 1. **Add a new script to your JS Injector Plugin**
-2. **Copy the entire contents of kefinTweaks.js into the new script**
+2. **Copy the the code below and paste it into the new script:**
 
-**Optionally update the "scriptRoot" in the KefinTweaks script if you wish to customize and host these scripts yourself.**
+```javascript
+const script = document.createElement("script");
+script.src = `https://ranaldsgift.github.io/KefinTweaks/injector.js?v=${new Date().getTime()}`;
+script.async = true;
+document.head.appendChild(script);
+```
 
-3. **Ensure the script is enabled**
-4. **Save your changes**
+3. **Save your changes**
 
 <div align="center">
   <img src="pages/images/injector.png" alt="injector" style="max-width: 100%; height: auto;"/>
 </div>  
 <br/>  
+<hr>
 
-5. **Required for Watchlist:**  
-Add a new tab to your Custom Tabs plugin with the following content:
-   ```html
-   <div class="sections watchlist"></div>
-   ```
+## Configuration
+
+KefinTweaks includes a comprehensive configuration interface accessible to administrators. The configuration UI allows you to customize all aspects of KefinTweaks without editing code files.
+
+### Accessing Configuration
+
+The configuration interface can be accessed in multiple ways:
+
+1. **From User Preferences**: Navigate to your User Preferences page and find the "Administration" section. Click the "Configure KefinTweaks" button.
+2. **From Dashboard**: In the Dashboard side menu, find the "KefinTweaks" button under the Plugins section.
+3. **From Left Navigation Menu**: A "Configure" link will appear in the left navigation menu beneath a KefinTweaks heading.
+
+### Configuration Features
+
+All configuration options for KefinTweaks can be managed directly from the UI.
+
+- **Feature Toggle**: Toggle individual KefinTweaks features on or off
+- **Home Screen Configuration**: Configure custom sections, discovery features, and seasonal content
+- **Search Configuration**: Enable/disable Jellyseerr integration
+- **Skin Configuration**: Manage available skins, set default skins, and enable/disable specific skins
+- **Theme Configuration**: Add custom themes available to all users
+- **Exclusive Elsewhere Configuration**: Configure branding behavior
+- **Custom Menu Links**: Add custom links to the navigation menu
+- **Script Root URLs**: Configure custom script hosting locations (advanced)
+
+### Export and Import
+
+- **Export**: Export your entire configuration to clipboard as JSON for backup or sharing
+- **Import**: Import a previously exported configuration to restore settings or apply configurations from other servers
+
 <div align="center">
-  <img src="pages/images/customtab.png" alt="customtab" style="max-width: 100%; height: auto;"/>
-</div>  
-<br/>  
+  <img src="pages/images/config-1.png" alt="Configuration Interface" style="max-width: 100%; height: auto;"/>
+</div>
+<br/>
+
+<div align="center">
+  <img src="pages/images/config-2.png" alt="Configuration Interface" style="max-width: 100%; height: auto;"/>
+</div>
+<br/>
+
+### Automatic Setup
+
+On first load, KefinTweaks automatically:
+- Creates the `KefinTweaks-Config` script in the JavaScript Injector plugin with default settings
+- Ensures the Watchlist tab exists in the CustomTabs plugin with the correct HTML structure
+
+These tasks only run for administrator users and happen automatically in the background.
 <hr>
 
 ## Features Overview
@@ -373,6 +417,7 @@ Coming soon...requires the [Updoot](https://github.com/BobHasNoSoul/jellyfin-upd
 | `modal.js` | Generic modal system for dialogs |
 | `toaster.js` | Toast notification system |
 | `userConfig.js` | User-specific configuration for skins and settings |
+| `apiHelper.js` | API helper functions for common operations |
 
 ### Feature Scripts
 
@@ -382,7 +427,7 @@ Coming soon...requires the [Updoot](https://github.com/BobHasNoSoul/jellyfin-upd
 | `homeScreen.js` | Custom home screen sections | `cardBuilder`, `localStorageCache`, `utils` |
 | `search.js` | Enhanced search functionality | `cardBuilder`, `utils` |
 | `headerTabs.js` | Header tab improvements | None |
-| `customMenu.js` | Custom menu link handling | `utils` |
+| `customMenuLinks.js` | Custom menu link handling | `utils` |
 | `exclusiveElsewhere.js` | Custom branding for unavailable content | None |
 | `updoot.js` | Upvote functionality integration | None |
 | `backdropLeakFix.js` | Memory leak fixes | None |
@@ -395,6 +440,9 @@ Coming soon...requires the [Updoot](https://github.com/BobHasNoSoul/jellyfin-upd
 | `itemDetailsCollections.js` | Collections display on item details pages | `indexedDBCache`, `utils`, `cardBuilder` |
 | `flattenSingleSeasonShows.js` | Flatten single-season shows to show episodes directly | `cardBuilder`, `utils` |
 | `skinManager.js` | Skin selection and management | `utils`, `userConfig` |
+| `collections.js` | Collection sorting functionality | `utils`, `modal` |
+| `sonarrRequests.js` | Sonarr request functionality for missing episodes and series | None |
+| `deviceManager.js` | Device management with remove device functionality | `utils` |
 <br>
 
 ## Auto-Inject Dependencies
@@ -432,12 +480,10 @@ This README and the inline comments in kefinTweaks.js and the other scripts is t
 ### Planned Features
 - **Jellyfin 10.11 Support**:  
 
-- **UI Configuration**:  
-Allow admins to customize the configuration through the UI instead of the JS script  
-Allow users to also customize various configuration options through the UI
 <hr>
 
 ### Version History
+- **v0.3.0**: KefinTweaks configuration for admins in the Jellyfin UI!
 - **v0.2.4**: New Feature: Watchlist Export/Import
 - **v0.2.3**: New Feature: Collection Sorting, general fixes
 - **v0.2.2**: Add support for skin server versions, fixes for HeaderTabs

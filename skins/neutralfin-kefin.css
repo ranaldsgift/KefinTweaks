@@ -43,6 +43,9 @@
 .material-icons.favorite_border:before {
     content: '\e0f6';
 }
+.material-icons.build:before {
+    content: '\e1b1';
+}
 
 /* Lazy workaround for the pause button on the media bar plugin */
 .pause-button .material-icons {

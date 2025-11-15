@@ -4123,6 +4123,8 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			return;
 		}
 
+		const maxRetries = 10;
+		let retries = 0;
 		// Use WebSocket to listen for UserDataChanged messages instead of intercepting fetch
 		// This is more reliable and doesn't interfere with fetch requests
 		function setupWebSocketMonitoring() {
@@ -4131,6 +4133,11 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				const socket = (window.ApiClient && (window.ApiClient.webSocket || window.ApiClient._webSocket)) || null;
 
 				if (!socket) {
+					if (retries >= maxRetries) {
+						ERR('Max retries reached, giving up on WebSocket monitoring');
+						return false;
+					}
+					retries++;
 					setTimeout(() => {
 						if (!playbackMonitorInitialized) {
 							setupWebSocketMonitoring();
@@ -4190,7 +4197,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		//setupWebSocketMonitoring();
 
 		// Try to set up immediately
-/* 		if (!setupWebSocketMonitoring()) {
+		if (!setupWebSocketMonitoring()) {
 			// If WebSocket isn't available yet, retry after a short delay
 			// This can happen if the page loads before the WebSocket connection is established
 			setTimeout(() => {
@@ -4198,7 +4205,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 					setupWebSocketMonitoring();
 				}
 			}, 1000);
-		} */
+		}
 	}
 
 	let watchedItems = [];

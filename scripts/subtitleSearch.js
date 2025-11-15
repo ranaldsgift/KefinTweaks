@@ -16,7 +16,8 @@
     // State management
     let isInitialized = false;
     let isAddingCCButton = false;
-    let subtitleDialogObserver = null;
+    let onViewPageUnregister = null;
+    let dialogCheckInterval = null;
     
     // Configuration
     const CONFIG = {
@@ -1020,6 +1021,66 @@
         });
     }
     
+    /**
+     * Start checking for subtitle dialogs periodically (only when on video page)
+     * This is much more efficient than a MutationObserver watching the entire document
+     */
+    function startDialogCheck() {
+        // Clear any existing interval
+        if (dialogCheckInterval) {
+            clearInterval(dialogCheckInterval);
+        }
+        
+        // Check for dialogs periodically while on video page
+        // The interval is automatically stopped when navigating away via onViewPage
+        dialogCheckInterval = setInterval(() => {
+            addSearchButtonToExistingDialogs();
+        }, 500); // Check every 500ms
+    }
+    
+    /**
+     * Stop checking for subtitle dialogs
+     */
+    function stopDialogCheck() {
+        if (dialogCheckInterval) {
+            clearInterval(dialogCheckInterval);
+            dialogCheckInterval = null;
+        }
+    }
+    
+    
+    /**
+     * Initialize subtitle search functionality for video page
+     */
+    async function initializeForVideoPage() {
+        try {
+            // Check if ApiClient is available first
+            if (!isApiClientAvailable()) {
+                LOG('ApiClient not available, skipping initialization');
+                return;
+            }
+            
+            // Check permissions first
+            const hasPermission = await checkSubtitlePermissions();
+            if (!hasPermission) {
+                LOG('User does not have subtitle management permission, skipping initialization');
+                return;
+            }
+            
+            LOG('User has subtitle management permission, initializing for video page...');
+            
+            // Add CC button if it doesn't exist
+            addCCButton();
+            
+            // Start checking for subtitle dialogs
+            startDialogCheck();
+            
+            LOG('Subtitle search functionality initialized for video page');
+            
+        } catch (error) {
+            ERR('Error initializing subtitle search:', error);
+        }
+    }
     
     /**
      * Initialize subtitle search functionality
@@ -1046,36 +1107,35 @@
             
             LOG('User has subtitle management permission, initializing...');
             
-            // Add CC button if it doesn't exist
+            // Wait for KefinTweaksUtils to be available
+            if (!window.KefinTweaksUtils || !window.KefinTweaksUtils.onViewPage) {
+                LOG('KefinTweaksUtils.onViewPage not available, retrying in 1 second');
+                setTimeout(initialize, 1000);
+                return;
+            }
+            
+            // Register onViewPage handler for video page
+            onViewPageUnregister = window.KefinTweaksUtils.onViewPage(async (view, element, hash) => {
+                if (hash && hash.includes('#/video')) {
+                    LOG('Video page detected via onViewPage, initializing...');
+                    // Small delay to ensure OSD is ready
+                    setTimeout(() => {
+                        initializeForVideoPage();
+                    }, 500);
+                } else {
+                    // Stop dialog checking when not on video page
+                    stopDialogCheck();
+                }
+            }, {
+                pages: ['video']
+            });
+            
+            // Also check current page on initial load
             if (window.location.hash.includes('#/video')) {
-                LOG('Video page detected, adding CC button');
-                addCCButton();
+                setTimeout(() => {
+                    initializeForVideoPage();
+                }, 500);
             }
-            
-            // Set up observer for subtitle dialogs
-            if (subtitleDialogObserver) {
-                subtitleDialogObserver.disconnect();
-            }
-            
-            subtitleDialogObserver = new MutationObserver((mutations) => {
-                mutations.forEach((mutation) => {
-                    if (mutation.type === 'childList') {
-                        mutation.addedNodes.forEach((node) => {
-                            if (node.nodeType === Node.ELEMENT_NODE) {
-                                // Check if a subtitle dialog was added
-                                if (node.classList && node.classList.contains('dialogContainer')) {
-                                    setTimeout(() => addSearchButtonToExistingDialogs(), 100);
-                                }
-                            }
-                        });
-                    }
-                });
-            });
-            
-            subtitleDialogObserver.observe(document.body, {
-                childList: true,
-                subtree: true
-            });
             
             isInitialized = true;
             LOG('Subtitle search functionality initialized successfully');
@@ -1089,10 +1149,13 @@
      * Clean up resources
      */
     function cleanup() {
-        if (subtitleDialogObserver) {
-            subtitleDialogObserver.disconnect();
-            subtitleDialogObserver = null;
+        stopDialogCheck();
+        
+        if (onViewPageUnregister) {
+            onViewPageUnregister();
+            onViewPageUnregister = null;
         }
+        
         isInitialized = false;
         LOG('Subtitle search functionality cleaned up');
     }
@@ -1103,19 +1166,6 @@
     } else {
         initialize();
     }
-    
-    // Re-initialize when navigating (for SPA behavior)
-    let lastUrl = location.href;
-    new MutationObserver(() => {
-        const url = location.href;
-        if (url !== lastUrl) {
-            lastUrl = url;
-            setTimeout(() => {
-                cleanup();
-                initialize();
-            }, 1000);
-        }
-    }).observe(document, { subtree: true, childList: true });
     
     // Expose functions globally for debugging
     window.subtitleSearchCleanup = cleanup;

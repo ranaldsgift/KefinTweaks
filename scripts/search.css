@@ -60,3 +60,10 @@ label[for="searchTextInput"] {
 .input-wrapper {
     position: relative;
 }
+
+span.searchfields-icon {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+}

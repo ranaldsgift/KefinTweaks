@@ -10,8 +10,11 @@
     -o-backdrop-filter: blur(var(--theme-blur)) !important;
     -ms-backdrop-filter: blur(var(--theme-blur)) !important;
     height: 100%;
-    display: flex !important;
     align-items: center;
+}
+
+.kefinTweaks-breadcrumbs-wrapper[style="display: block;"] {
+    display: flex !important;
 }
 
 .watchlist-icon .detailButton-content:before {

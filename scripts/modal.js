@@ -14,11 +14,13 @@ window.ModalSystem = (function() {
      * @param {Object} options - Modal configuration
      * @param {string} options.id - Unique modal ID
      * @param {string} options.title - Modal title
-     * @param {string} options.content - HTML content for the modal body
+     * @param {string|HTMLElement} options.content - HTML content for the modal body
+     * @param {string|HTMLElement} options.footer - Optional footer HTML content
      * @param {Function} options.onClose - Callback when modal closes
      * @param {Function} options.onOpen - Callback when modal opens
      * @param {boolean} options.closeOnBackdrop - Whether to close when clicking backdrop (default: true)
      * @param {boolean} options.closeOnEscape - Whether to close on Escape key (default: true)
+     * @param {boolean} options.showCloseButton - Whether to show close button in header (default: true if title exists)
      * @returns {Object} Modal instance
      */
     function createModal(options = {}) {
@@ -26,10 +28,12 @@ window.ModalSystem = (function() {
             id,
             title,
             content,
+            footer,
             onClose,
             onOpen,
             closeOnBackdrop = true,
-            closeOnEscape = true
+            closeOnEscape = true,
+            showCloseButton = true
         } = options;
 
         if (!id) {
@@ -54,30 +58,86 @@ window.ModalSystem = (function() {
         dialog.setAttribute('data-autofocus', 'true');
         dialog.setAttribute('data-removeonclose', 'true');
         dialog.style.animation = '160ms ease-out 0s 1 normal both running scaleup';
+        dialog.style.display = 'flex';
+        dialog.style.flexDirection = 'column';
+        dialog.style.maxHeight = '90vh';
 
-        const dialogContent = document.createElement('div');
-        dialogContent.style.margin = '0';
-        dialogContent.style.padding = '1.25em 1.5em 1.5em';
-
-        // Add title if provided
+        // Create header if title is provided
+        let dialogHeader = null;
         if (title) {
+            dialogHeader = document.createElement('div');
+            dialogHeader.className = 'formDialogHeader';
+            dialogHeader.style.display = 'flex';
+            dialogHeader.style.justifyContent = 'space-between';
+            dialogHeader.style.alignItems = 'center';
+            dialogHeader.style.padding = '1.25em 1.5em';
+            dialogHeader.style.borderBottom = '1px solid rgba(255,255,255,0.1)';
+            dialogHeader.style.flexShrink = '0';
+
             const titleElement = document.createElement('h2');
-            titleElement.style.margin = '0 0 .5em';
+            titleElement.style.margin = '0';
+            titleElement.style.textAlign = 'left';
             titleElement.textContent = title;
-            dialogContent.appendChild(titleElement);
+            dialogHeader.appendChild(titleElement);
+
+            // Add close button if enabled
+            if (showCloseButton) {
+                const closeButton = document.createElement('button');
+                closeButton.setAttribute('is', 'paper-icon-button-light');
+                closeButton.className = 'btnCancel btnClose autoSize paper-icon-button-light';
+                closeButton.setAttribute('tabindex', '-1');
+                closeButton.title = 'Close';
+                closeButton.onclick = () => closeModal(id);
+
+                const closeIcon = document.createElement('span');
+                closeIcon.className = 'material-icons close';
+                closeIcon.setAttribute('aria-hidden', 'true');
+                closeButton.appendChild(closeIcon);
+
+                dialogHeader.appendChild(closeButton);
+            }
+
+            dialog.appendChild(dialogHeader);
         }
+
+        // Create scrollable content area
+        const dialogContent = document.createElement('div');
+        dialogContent.style.marginBottom = '5em';
+        dialogContent.style.padding = title || footer ? '1.25em 1.5em' : '1.25em 1.5em 1.5em';
+        dialogContent.style.overflowY = 'auto';
+        dialogContent.style.flex = '1';
+        dialogContent.style.minHeight = '0';
 
         // Add content
         if (content) {
             if (typeof content === 'string') {
-                dialogContent.innerHTML += content;
+                dialogContent.innerHTML = content;
             } else if (content instanceof HTMLElement) {
                 dialogContent.appendChild(content);
             }
         }
 
+        // Create footer if provided
+        let dialogFooter = null;
+        if (footer) {
+            dialogFooter = document.createElement('div');
+            dialogFooter.className = 'formDialogFooter';
+            dialogFooter.style.padding = '1.25em 1.5em';
+            dialogFooter.style.borderTop = '1px solid rgba(255,255,255,0.1)';
+            dialogFooter.style.flexShrink = '0';
+
+            if (typeof footer === 'string') {
+                dialogFooter.innerHTML = footer;
+            } else if (footer instanceof HTMLElement) {
+                dialogFooter.appendChild(footer);
+            }
+        }
+
         // Assemble modal
         dialog.appendChild(dialogContent);
+        if (dialogFooter) {
+            dialog.appendChild(dialogFooter);
+        }
         dialogContainer.appendChild(dialog);
 
         // Add to DOM
@@ -91,6 +151,8 @@ window.ModalSystem = (function() {
             dialogContainer,
             dialog,
             dialogContent,
+            dialogHeader,
+            dialogFooter,
             isOpen: true,
             close: () => closeModal(id),
             updateContent: (newContent) => updateModalContent(id, newContent),

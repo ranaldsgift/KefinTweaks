@@ -36,11 +36,29 @@
                 xhr.send = function() {
                     // Simulate a successful response
                     setTimeout(() => {
-                        xhr.readyState = 4;
-                        xhr.status = 200;
-                        xhr.responseText = '{"Items":[],"TotalRecordCount":0}';
+                        // Use Object.defineProperty to override read-only properties
+                        Object.defineProperty(xhr, 'readyState', {
+                            value: 4,
+                            writable: true,
+                            configurable: true
+                        });
+                        Object.defineProperty(xhr, 'status', {
+                            value: 200,
+                            writable: true,
+                            configurable: true
+                        });
+                        Object.defineProperty(xhr, 'responseText', {
+                            value: '{"Items":[],"TotalRecordCount":0}',
+                            writable: true,
+                            configurable: true
+                        });
+                        
+                        // Trigger the event handlers
                         if (xhr.onreadystatechange) {
                             xhr.onreadystatechange();
+                        }
+                        if (xhr.onload) {
+                            xhr.onload();
                         }
                     }, 100);
                 };
@@ -581,7 +599,9 @@
             smartMusicBtn.addEventListener('click', ()=>setSearchType('music'));
             smartBooksBtn.addEventListener('click', ()=>setSearchType('books'));
             smartAllBtn.addEventListener('click', ()=>setSearchType('all'));
-            smartRequestBtn.addEventListener('click', ()=>setSearchType('request'));
+            if (smartRequestBtn) {
+                smartRequestBtn.addEventListener('click', ()=>setSearchType('request'));
+            }
 
             // Parse type parameter from URL
             let typeFromUrl = 'videos'; // default

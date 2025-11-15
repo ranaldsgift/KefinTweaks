@@ -6,7 +6,7 @@
     'use strict';
 
     console.log('[KefinTweaks Injector] Initializing...');
-    const versionNumber = "0.2.4";
+    const versionNumber = "0.3.0";
     
     // Configuration: Start with defaults, then merge user config
     // This allows new scripts to work out of the box without requiring config updates
@@ -497,6 +497,16 @@
             
             console.log('[KefinTweaks Injector] All scripts loaded successfully!');
             
+            // Always load configuration.js for admin UI (loads after other scripts)
+            console.log('[KefinTweaks Injector] Loading configuration script...');
+            try {
+                await loadScript('configuration.js');
+                await loadCSS('configuration.css');
+                console.log('[KefinTweaks Injector] Configuration script loaded successfully');
+            } catch (error) {
+                console.warn('[KefinTweaks Injector] Failed to load configuration script:', error);
+            }
+            
             // Dispatch custom event when all scripts are loaded
             const event = new CustomEvent('kefinTweaksLoaded', {
                 detail: {
@@ -549,15 +559,335 @@
         }
     };
     
+    // Check if user is admin (with timeout for login)
+    async function checkAdminWithTimeout(maxWaitMs = 5000) {
+        const startTime = Date.now();
+        const checkInterval = 100; // Check every 100ms
+        
+        return new Promise((resolve) => {
+            const checkAdmin = async () => {
+                try {
+                    if (window.ApiClient && window.ApiClient.getCurrentUser) {
+                        const user = await window.ApiClient.getCurrentUser();
+                        if (user && user.Policy && user.Policy.IsAdministrator === true) {
+                            console.log('[KefinTweaks Startup] User is admin');
+                            resolve(true);
+                            return;
+                        }
+                        // User is logged in but not admin
+                        if (user) {
+                            console.log('[KefinTweaks Startup] User is not admin');
+                            resolve(false);
+                            return;
+                        }
+                    }
+                } catch (error) {
+                    // User might not be logged in yet, continue waiting
+                }
+                
+                // Check if we've exceeded max wait time
+                if (Date.now() - startTime >= maxWaitMs) {
+                    console.log('[KefinTweaks Startup] Timeout waiting for user login');
+                    resolve(false);
+                    return;
+                }
+                
+                // Continue checking
+                setTimeout(checkAdmin, checkInterval);
+            };
+            
+            checkAdmin();
+        });
+    }
+
+    // Find plugin by name
+    async function findPlugin(pluginName) {
+        try {
+            if (!window.ApiClient || !window.ApiClient._serverAddress || !window.ApiClient.accessToken) {
+                throw new Error('ApiClient not available');
+            }
+
+            const server = ApiClient._serverAddress;
+            const token = ApiClient.accessToken();
+
+            const response = await fetch(`${server}/Plugins`, {
+                headers: {
+                    'X-Emby-Token': token
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const plugins = await response.json();
+            const pluginsList = Array.isArray(plugins) ? plugins : (plugins.Items || []);
+            
+            const plugin = pluginsList.find(p => p.Name === pluginName);
+            return plugin ? plugin.Id : null;
+        } catch (error) {
+            console.error(`[KefinTweaks Startup] Error finding plugin ${pluginName}:`, error);
+            return null;
+        }
+    }
+
+    // Get plugin configuration
+    async function getPluginConfig(pluginId) {
+        try {
+            if (!window.ApiClient || !window.ApiClient._serverAddress || !window.ApiClient.accessToken) {
+                throw new Error('ApiClient not available');
+            }
+
+            const server = ApiClient._serverAddress;
+            const token = ApiClient.accessToken();
+
+            const response = await fetch(`${server}/Plugins/${pluginId}/Configuration`, {
+                headers: {
+                    'X-Emby-Token': token
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            return await response.json();
+        } catch (error) {
+            console.error('[KefinTweaks Startup] Error getting plugin config:', error);
+            throw error;
+        }
+    }
+
+    // Save plugin configuration
+    async function savePluginConfig(pluginId, config) {
+        try {
+            if (!window.ApiClient || !window.ApiClient._serverAddress || !window.ApiClient.accessToken) {
+                throw new Error('ApiClient not available');
+            }
+
+            const server = ApiClient._serverAddress;
+            const token = ApiClient.accessToken();
+
+            const response = await fetch(`${server}/Plugins/${pluginId}/Configuration`, {
+                method: 'POST',
+                headers: {
+                    'X-Emby-Token': token,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(config)
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            return true;
+        } catch (error) {
+            console.error('[KefinTweaks Startup] Error saving plugin config:', error);
+            throw error;
+        }
+    }
+
+    // Ensure KefinTweaks-Config exists in JS Injector
+    async function ensureKefinTweaksConfig() {
+        try {
+            console.log('[KefinTweaks Startup] Ensuring KefinTweaks-Config exists in JS Injector...');
+            
+            const pluginId = await findPlugin('JavaScript Injector') || await findPlugin('JS Injector');
+            if (!pluginId) {
+                console.warn('[KefinTweaks Startup] JavaScript Injector plugin not found');
+                return false;
+            }
+
+            const injectorConfig = await getPluginConfig(pluginId);
+            
+            // Ensure CustomJavaScripts array exists
+            if (!injectorConfig.CustomJavaScripts) {
+                injectorConfig.CustomJavaScripts = [];
+            }
+
+            // Check if KefinTweaks-Config already exists
+            const existingScript = injectorConfig.CustomJavaScripts.find(
+                script => script.Name === 'KefinTweaks-Config'
+            );
+
+            if (existingScript) {
+                console.log('[KefinTweaks Startup] KefinTweaks-Config already exists in JS Injector');
+                return true;
+            }
+
+            // Load default config
+            let defaultConfig;
+            if (window.KefinTweaksDefaultConfig) {
+                defaultConfig = window.KefinTweaksDefaultConfig;
+            } else {
+                // Try to load it
+                try {
+                    const defaultConfigUrl = window.KefinTweaksConfig?.kefinTweaksRoot 
+                        ? `${window.KefinTweaksConfig.kefinTweaksRoot}kefinTweaks-default-config.js`
+                        : 'https://ranaldsgift.github.io/KefinTweaks/kefinTweaks-default-config.js';
+                    
+                    await new Promise((resolve, reject) => {
+                        const script = document.createElement('script');
+                        script.src = defaultConfigUrl;
+                        script.onload = () => resolve();
+                        script.onerror = () => reject(new Error('Failed to load default config'));
+                        document.head.appendChild(script);
+                    });
+                    
+                    defaultConfig = window.KefinTweaksDefaultConfig;
+                } catch (error) {
+                    console.error('[KefinTweaks Startup] Error loading default config:', error);
+                    // Create minimal config
+                    defaultConfig = {
+                        kefinTweaksRoot: 'https://ranaldsgift.github.io/KefinTweaks/',
+                        scriptRoot: 'https://ranaldsgift.github.io/KefinTweaks/scripts/',
+                        scripts: {},
+                        homeScreen: {},
+                        exclusiveElsewhere: {},
+                        search: {},
+                        skins: [],
+                        themes: [],
+                        customMenuLinks: []
+                    };
+                }
+            }
+
+            // Create the script content
+            const scriptContent = `// KefinTweaks Configuration
+// This file is automatically generated by KefinTweaks Configuration UI
+// Do not edit manually unless you know what you're doing
+
+window.KefinTweaksConfig = ${JSON.stringify(defaultConfig, null, 2)};`;
+
+            // Add new script
+            injectorConfig.CustomJavaScripts.push({
+                Name: 'KefinTweaks-Config',
+                Script: scriptContent,
+                Enabled: true,
+                RequiresAuthentication: false
+            });
+
+            // Save the configuration
+            await savePluginConfig(pluginId, injectorConfig);
+            console.log('[KefinTweaks Startup] KefinTweaks-Config added to JS Injector');
+            return true;
+        } catch (error) {
+            console.error('[KefinTweaks Startup] Error ensuring KefinTweaks-Config:', error);
+            return false;
+        }
+    }
+
+    // Ensure Watchlist tab exists in CustomTabs
+    async function ensureWatchlistTab() {
+        try {
+            // Check if Watchlist is enabled in the configuration
+            if (!window.KefinTweaksConfig.scripts.watchlist) {
+                console.log('[KefinTweaks Startup] Watchlist is disabled in configuration, skipping Watchlist tab check');
+                return true;
+            }
+
+            console.log('[KefinTweaks Startup] Ensuring Watchlist tab exists in CustomTabs...');
+            
+            const pluginId = await findPlugin('Custom Tabs');
+            if (!pluginId) {
+                console.warn('[KefinTweaks Startup] CustomTabs plugin not found');
+                return false;
+            }
+
+            // Get current CustomTabs config
+            const server = ApiClient._serverAddress;
+            const token = ApiClient.accessToken();
+            
+            const response = await fetch(`${server}/CustomTabs/Config`, {
+                headers: {
+                    'X-Emby-Token': token
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            let tabs = await response.json();
+            if (!Array.isArray(tabs)) {
+                tabs = [];
+            }
+
+            // Check if Watchlist tab exists
+            const watchlistTab = tabs.find(tab => tab.Title === 'Watchlist');
+            
+            if (watchlistTab) {
+                // Ensure ContentHtml is correct
+                if (watchlistTab.ContentHtml !== '<div class="sections watchlist"></div>') {
+                    watchlistTab.ContentHtml = '<div class="sections watchlist"></div>';
+                    // Update the tab in the array
+                    const index = tabs.findIndex(tab => tab.Title === 'Watchlist');
+                    tabs[index] = watchlistTab;
+                    
+                    // Save updated config
+                    await savePluginConfig(pluginId, { Tabs: tabs });
+                    console.log('[KefinTweaks Startup] Updated Watchlist tab ContentHtml');
+                } else {
+                    console.log('[KefinTweaks Startup] Watchlist tab already exists with correct ContentHtml');
+                }
+                return true;
+            }
+
+            // Add Watchlist tab
+            tabs.push({
+                Title: 'Watchlist',
+                ContentHtml: '<div class="sections watchlist"></div>'
+            });
+
+            // Save updated config
+            await savePluginConfig(pluginId, { Tabs: tabs });
+            console.log('[KefinTweaks Startup] Added Watchlist tab to CustomTabs');
+            return true;
+        } catch (error) {
+            console.error('[KefinTweaks Startup] Error ensuring Watchlist tab:', error);
+            return false;
+        }
+    }
+
+    // Startup task - runs only for admin users
+    async function startupTask() {
+        console.log('[KefinTweaks Startup] Starting startup task...');
+        
+        // Check if user is admin (wait up to 5s for login)
+        const isAdmin = await checkAdminWithTimeout(5000);
+        
+        if (!isAdmin) {
+            console.log('[KefinTweaks Startup] User is not admin or not logged in, skipping startup task');
+            return;
+        }
+
+        try {
+            // Task 1: Ensure KefinTweaks-Config exists in JS Injector
+            await ensureKefinTweaksConfig();
+            
+            // Task 2: Ensure Watchlist tab exists in CustomTabs
+            await ensureWatchlistTab();
+            
+            console.log('[KefinTweaks Startup] Startup task completed successfully');
+        } catch (error) {
+            console.error('[KefinTweaks Startup] Error in startup task:', error);
+        }
+    }
+
     // Start initialization when DOM is ready
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => {
             injectVersionBadgeCSS();
             initialize();
+            // Run startup task after a short delay to ensure ApiClient is ready
+            setTimeout(startupTask, 1000);
         });
     } else {
         injectVersionBadgeCSS();
         initialize();
+        // Run startup task after a short delay to ensure ApiClient is ready
+        setTimeout(startupTask, 1000);
     }
     
     console.log('[KefinTweaks Injector] Injector script loaded. Available at window.KefinTweaks');
