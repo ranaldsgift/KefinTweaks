@@ -770,6 +770,7 @@ window.KefinTweaksConfig = ${JSON.stringify(defaultConfig, null, 2)};`;
 
             // Save the configuration
             await savePluginConfig(pluginId, injectorConfig);
+            window.KefinTweaksConfig = defaultConfig;
             console.log('[KefinTweaks Startup] KefinTweaks-Config added to JS Injector');
             return true;
         } catch (error) {
@@ -781,6 +782,11 @@ window.KefinTweaksConfig = ${JSON.stringify(defaultConfig, null, 2)};`;
     // Ensure Watchlist tab exists in CustomTabs
     async function ensureWatchlistTab() {
         try {
+            if (!window.KefinTweaksConfig) {
+                console.log('[KefinTweaks Startup] KefinTweaksConfig not found, skipping Watchlist tab check');
+                return true;
+            }
+
             // Check if Watchlist is enabled in the configuration
             if (!window.KefinTweaksConfig.scripts.watchlist) {
                 console.log('[KefinTweaks Startup] Watchlist is disabled in configuration, skipping Watchlist tab check');
