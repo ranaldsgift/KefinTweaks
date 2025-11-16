@@ -1679,12 +1679,23 @@
         link.setAttribute('data-kefin-skin', 'true');
         link.setAttribute('data-skin', skinName);
         
-        // Insert after the cssTheme link to ensure skins take precedence over themes
-        const cssThemeLink = document.getElementById('cssTheme');
-        if (cssThemeLink && cssThemeLink.parentNode) {
-            cssThemeLink.parentNode.insertBefore(link, cssThemeLink.nextSibling);
+        // Find the insertion point: after the last skin link, or after cssTheme if no skin links exist
+        // This ensures CSS files are loaded in the order they appear in the config array
+        const skinLinks = document.querySelectorAll('link[data-kefin-skin="true"]');
+        let insertAfter = null;
+        
+        if (skinLinks.length > 0) {
+            // Insert after the last skin link to maintain order
+            insertAfter = skinLinks[skinLinks.length - 1];
         } else {
-            // Fallback to appending to head if cssTheme link not found
+            // No skin links yet, insert after cssTheme
+            insertAfter = document.getElementById('cssTheme');
+        }
+        
+        if (insertAfter && insertAfter.parentNode) {
+            insertAfter.parentNode.insertBefore(link, insertAfter.nextSibling);
+        } else {
+            // Fallback to appending to head if reference point not found
             document.getElementById('reactRoot').after(link);
         }
         
