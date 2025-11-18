@@ -77,9 +77,9 @@
 
     // config
     const CORE_TYPES = ['Movie', 'Series', 'Episode', 'Person'];
-    const MUSIC_TYPES = ['MusicAlbum', 'Audio', 'Artist', 'MusicVideo'];
+    const MUSIC_TYPES = ['MusicAlbum', 'Audio', 'MusicArtist', 'MusicVideo'];
     const BOOKS_TYPES = ['Book', 'AudioBook'];
-    const OTHER_TYPES = ['Playlist', 'Photo', 'PhotoAlbum', 'TvChannel', 'LiveTvProgram', 'BoxSet'];
+    const OTHER_TYPES = ['Playlist', 'Photo', 'PhotoAlbum', 'LiveTvChannel', 'LiveTvProgram', 'TvChannel', 'TvProgram', 'BoxSet'];
 
     // Cache for search results by search term and type
     const searchCache = new Map();
@@ -234,11 +234,13 @@
 
             const promises = typeGroups.map(type => {
                 let url;
-                if (type === 'Artist') {
+                const userId = ApiClient.getCurrentUserId();
+                const baseUrl = ApiClient.serverAddress();
+                if (type === 'MusicArtist') {
                     // Use dedicated Artists endpoint for better results
-                    const userId = ApiClient.getCurrentUserId();
-                    const baseUrl = ApiClient.serverAddress();
                     url = `${baseUrl}/Artists?limit=100&searchTerm=${encodeURIComponent(searchTerm)}&fields=PrimaryImageAspectRatio&fields=CanDelete&imageTypeLimit=1&userId=${userId}&enableTotalRecordCount=false`;
+                } else if (type === 'Person') {
+                    url = `${baseUrl}/Persons?limit=100&searchTerm=${encodeURIComponent(searchTerm)}&fields=PrimaryImageAspectRatio&fields=CanDelete&&imageTypeLimit=1&userId=${userId}&enableTotalRecordCount=false`;
                 } else {
                     url = buildSearchUrl(searchTerm, [type]);
                 }
@@ -264,9 +266,14 @@
                         // For Artists, use all items (they often don't have primary images)
                         // For other types, filter to show only those with images
                         let filteredItems;
-                        if (type === 'Artist') {
+                        if (type === 'MusicArtist') {
                             // Artists: show all items, they often don't have primary images
-                            filteredItems = r.Items;
+                            // Instead, sort the artists by IsFolder
+                            filteredItems = r.Items.sort((a, b) => {
+                                const aIsFolder = a.IsFolder ? 1 : 0;
+                                const bIsFolder = b.IsFolder ? 1 : 0;
+                                return bIsFolder - aIsFolder;
+                            });
                         } else {
                             // Other types: sort so items with images appear first
                             filteredItems = r.Items.sort((a, b) => {
@@ -305,7 +312,7 @@
             'Person': 'People',
             'MusicAlbum': 'Albums',
             'Audio': 'Songs',
-            'Artist': 'Artists',
+            'MusicArtist': 'Artists',
             'Playlist': 'Playlists',
             'Book': 'Books',
             'AudioBook': 'Audiobooks',
@@ -370,7 +377,7 @@
         frag.appendChild(dummySection);
         
         // Define the order to display sections
-        const sectionOrder = ['Movie', 'Series', 'Episode', 'Person', 'MusicAlbum', 'Audio', 'Artist', 'Playlist', 'Book', 'AudioBook', 'Photo', 'PhotoAlbum', 'TvChannel', 'LiveTvProgram', 'BoxSet'];
+        const sectionOrder = ['Movie', 'Series', 'Episode', 'Person', 'MusicArtist', 'MusicAlbum', 'Audio', 'Book', 'AudioBook', 'Photo', 'PhotoAlbum', 'BoxSet', 'Playlist', 'TvChannel', 'TvProgram', 'LiveTvChannel', 'LiveTvProgram'];
         
         sectionOrder.forEach((itemType) => {
             if (results.groupedItems[itemType] && results.groupedItems[itemType].length > 0) {
