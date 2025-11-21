@@ -236,7 +236,7 @@
 
         getWatchlistItems: async function(options = {}, useCache = false) {
             // First fetch the Library Items that contain items of the supported types from ApiClient.getJSON(ApiClient.getUrl("Library/MediaFolders"))
-            const libraryItems = await ApiClient.getJSON(ApiClient.getUrl("Library/MediaFolders"));
+            const libraryItems = await ApiClient.getItems();
             
             // We now want to include the library items with ColletionType "tvshows", or "movies"
             const supportedLibraryItems = libraryItems.Items.filter(item => item.CollectionType === 'tvshows' || item.CollectionType === 'movies');
