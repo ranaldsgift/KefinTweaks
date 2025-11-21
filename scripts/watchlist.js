@@ -6852,8 +6852,13 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			}
 		}
 		
-		// Add the watchlist button to the button container
-		buttonContainer.appendChild(watchlistButton);
+		// Add the watchlist button to the button container, right before the play state button if it exists
+		const playStateButton = buttonContainer.querySelector('button[is="emby-playstatebutton"]');
+		if (playStateButton) {
+			buttonContainer.insertBefore(watchlistButton, playStateButton);
+		} else {
+			buttonContainer.appendChild(watchlistButton);
+		}
 	}
 
 	// Function to process all existing overlay containers

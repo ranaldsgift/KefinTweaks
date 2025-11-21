@@ -401,6 +401,19 @@
             cardImageContainer.appendChild(iconSpan);
         }
 
+        if (item.UserData?.Played) {
+            const cardIndicators = document.createElement('div');
+            cardIndicators.className = 'cardIndicators';
+            const playedIndicator = document.createElement('div');
+            playedIndicator.className = 'playedIndicator indicator';
+            const playedIndicatorIcon = document.createElement('span');
+            playedIndicatorIcon.className = 'material-icons indicatorIcon check';
+            playedIndicatorIcon.setAttribute('aria-hidden', 'true');
+            playedIndicator.appendChild(playedIndicatorIcon);
+            cardIndicators.appendChild(playedIndicator);
+            cardImageContainer.appendChild(cardIndicators);
+        }
+
         // Card overlay container
         const cardOverlayContainer = document.createElement('div');
         cardOverlayContainer.className = 'cardOverlayContainer itemAction';
@@ -462,6 +475,19 @@
         favoriteIcon.setAttribute('aria-hidden', 'true');
         favoriteButton.appendChild(favoriteIcon);
         buttonContainer.appendChild(favoriteButton);
+
+        const moreButton = document.createElement('button');
+        moreButton.setAttribute('is', 'paper-icon-button-light');
+        moreButton.className = 'cardOverlayButton cardOverlayButton-hover itemAction paper-icon-button-light';
+        moreButton.setAttribute('data-action', 'menu');
+        moreButton.title = 'More';
+        const moreIcon = document.createElement('span');
+        moreIcon.className = 'material-icons cardOverlayButtonIcon cardOverlayButtonIcon-hover more_vert';
+        moreIcon.setAttribute('aria-hidden', 'true');
+        moreButton.appendChild(moreIcon);
+
+        buttonContainer.appendChild(moreButton);
+
 
         // Assemble overlay
         cardOverlayContainer.appendChild(overlayLink);
