@@ -8,6 +8,8 @@ There is no configuration required, but if you wish to customize some of the fea
 
 I think it's also worth mentioning that before the 1.0 release, you can expect to potentially encounter some issues or bugs. I try to address these as quickly as I can, and I appreciate your time for raising the issues in the first place!
 
+[![Home Screen Example](https://i.imgur.com/rCboFCB.jpeg)](https://streamable.com/ypnn6n)
+
 ## Table of Contents
 
 - [Installation](#installation)
