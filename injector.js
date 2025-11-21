@@ -6,7 +6,7 @@
     'use strict';
 
     console.log('[KefinTweaks Injector] Initializing...');
-    const versionNumber = "0.3.0";
+    const versionNumber = "0.3.1";
     
     // Configuration: Start with defaults, then merge user config
     // This allows new scripts to work out of the box without requiring config updates
@@ -62,10 +62,17 @@
             description: 'Adds skin selection dropdown to display preferences page and manages skin CSS loading'
         },
         {
-            name: 'cardBuilder',
-            script: 'cardBuilder.js',
+            name: 'apiHelper',
+            script: 'apiHelper.js',
             css: null,
             dependencies: [],
+            description: 'API helper functions for common Jellyfin operations'
+        },
+        {
+            name: 'cardBuilder',
+            script: 'cardBuilder.js',
+            css: 'cardBuilder.css',
+            dependencies: ['apiHelper'],
             description: 'Core card building functionality (required by other scripts)'
         },
         {
@@ -261,21 +268,39 @@
         document.head.appendChild(style);
     }
 
-    // Auto-enable dependencies for enabled scripts
+    // Auto-enable dependencies for enabled scripts (iteratively to handle transitive dependencies)
     function autoEnableDependencies() {
         let hasChanges = false;
+        let maxIterations = 10; // Prevent infinite loops
+        let iterations = 0;
         
-        SCRIPT_DEFINITIONS.forEach(script => {
-            if (ENABLED_SCRIPTS[script.name]) {
-                script.dependencies.forEach(dep => {
-                    if (!ENABLED_SCRIPTS[dep]) {
-                        ENABLED_SCRIPTS[dep] = true;
-                        hasChanges = true;
-                        console.log(`[KefinTweaks Injector] Auto-enabled dependency '${dep}' for '${script.name}'`);
-                    }
-                });
+        // Keep running until no more dependencies need to be enabled
+        while (iterations < maxIterations) {
+            let iterationChanges = false;
+            
+            SCRIPT_DEFINITIONS.forEach(script => {
+                if (ENABLED_SCRIPTS[script.name]) {
+                    script.dependencies.forEach(dep => {
+                        if (!ENABLED_SCRIPTS[dep]) {
+                            ENABLED_SCRIPTS[dep] = true;
+                            iterationChanges = true;
+                            hasChanges = true;
+                            console.log(`[KefinTweaks Injector] Auto-enabled dependency '${dep}' for '${script.name}'`);
+                        }
+                    });
+                }
+            });
+            
+            if (!iterationChanges) {
+                break; // No more dependencies to enable
             }
-        });
+            
+            iterations++;
+        }
+        
+        if (iterations >= maxIterations) {
+            console.warn('[KefinTweaks Injector] Reached max iterations while auto-enabling dependencies');
+        }
         
         return hasChanges;
     }

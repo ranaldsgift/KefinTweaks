@@ -32,6 +32,10 @@
     transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+.kefin-config-button:hover {
+    background-color: var(--jf-palette-action-hover);
+}
+
 .customMenuOptions {
     display: flex;
     flex-direction: column;
@@ -41,24 +45,139 @@
     order: 1;
 }
 
-a[href="#"].navMenuOption:has(.build) {
+.navMenuOption:has(.build) {
     order: 9999;
     margin-top: 2em !important;
     position: relative;
 }
 
-a[href="#"].navMenuOption:has(.build)::before {
+.navMenuOption:has(.build)>.material-icons {
+    position: relative;
+}
+
+.navMenuOption:has(.build)>.material-icons::after {
     content: 'KefinTweaks';
     position: absolute;
-    top: -1.5em;
-    left: 0;
+    top: -2.5em;
+    left: -1.25em;
+    font-family: 'Noto Sans';
+    font-size: 14.88px;
 }
 
 .listItemContent:has([data-skin-name]) {
     justify-content: space-between;
+}
+
+.listItemContent {
     width: 100%;
 }
 
 #kefinTweaksConfigModal .listItem {
     align-items: start;
+    overflow: visible;
+}
+
+#customSections_list .listItem {
+    overflow: visible;
+}
+
+/* Autocomplete suggestions styling */
+.autocomplete-suggestions {
+    background: #1a1a1a !important;
+    color: rgba(255,255,255,0.87) !important;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.5) !important;
+    opacity: 1 !important;
+    z-index: 10000 !important;
+}
+
+.autocomplete-suggestion {
+    color: rgba(255,255,255,0.87) !important;
+    background: transparent !important;
+}
+
+.autocomplete-suggestion:hover {
+    background: rgba(255,255,255,0.1) !important;
+}
+
+#kefinTweaksConfigModal .checkboxContainer, #kefinTweaksConfigModal .checkboxListContainer {
+    margin-bottom: 0 !important;
+}
+
+#kefinTweaksConfigModal .info-tooltip {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border: 1px solid rgba(255,255,255,0.4);
+    border-radius: 50%;
+    cursor: help;
+    color: rgba(255,255,255,0.8);
+    transition: border-color 0.15s ease, color 0.15s ease;
+    outline: none;
+    font-family: 'Material Icons';
+    font-style: normal;
+}
+
+#kefinTweaksConfigModal .info-tooltip:hover,
+#kefinTweaksConfigModal .info-tooltip:focus-visible {
+    border-color: rgba(255,255,255,0.8);
+    color: #ffffff;
+}
+
+#kefinTweaksConfigModal .info-tooltip::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 180%;
+    left: 50%;
+    transform: translate(-50%, 0);
+    background: rgba(0,0,0,0.9);
+    color: #fff;
+    padding: 0.4em 0.6em;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+    z-index: 20;
+    font-family: 'Noto Sans';
+}
+
+#kefinTweaksConfigModal .info-tooltip:hover::after,
+#kefinTweaksConfigModal .info-tooltip:focus-visible::after {
+    opacity: 1;
+    transform: translate(-50%, 6px);
+}
+
+details[open] summary.listItemBodyText::after {
+    content: '▲';
+}
+
+summary.listItemBodyText::after {
+    content: '▼';
+    position: absolute;
+    bottom: 0px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 0.8rem;
+}
+
+summary.listItemBodyText {
+    position: relative;
+}
+
+.kefin-config-button:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.preview-section-container .custom-scroller-container {
+    max-width: calc(100% - 4rem);
+}
+
+.navMenuOption:has(.build):hover:not(.navMenuOption-selected) {
+    transform: none !important;
+    margin-top: 2em !important;
 }

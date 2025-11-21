@@ -8,6 +8,24 @@
     console.log('[KefinTweaks Configuration] Initializing...');
 
     const MODAL_ID = 'kefinTweaksConfigModal';
+    let currentLoadedConfig = null;
+
+    const DISCOVERY_SECTION_DEFINITIONS = [
+        { key: 'spotlightGenre', label: 'Spotlight Sections (Genre)', defaultName: 'Spotlight' },
+        { key: 'spotlightNetwork', label: 'Spotlight Sections (Network)', defaultName: 'Spotlight' },
+        { key: 'genreMovies', label: 'Genre Movies', defaultName: '[Genre] Movies' },
+        { key: 'studioShows', label: 'Shows from [Studio]', defaultName: 'Shows from [Studio]' },
+        { key: 'collections', label: 'Collection Spotlight', defaultName: '[Collection Name]', extras: { minimumItems: 10 } },
+        { key: 'becauseYouWatched', label: 'Because you watched [Movie]', defaultName: 'Because you watched [Movie]' },
+        { key: 'becauseYouLiked', label: 'Because you liked [Movie]', defaultName: 'Because you liked [Movie]' },
+        { key: 'starringTopActor', label: 'Starring [Top Actor]', defaultName: 'Starring [Actor]' },
+        { key: 'directedByTopDirector', label: 'Directed by [Top Director]', defaultName: 'Directed by [Director]' },
+        { key: 'writtenByTopWriter', label: 'Written by [Top Writer]', defaultName: 'Written by [Writer]' },
+        { key: 'becauseYouRecentlyWatched', label: 'Because you recently watched [Movie]', defaultName: 'Because you recently watched [Movie]' },
+        { key: 'starringActorRecentlyWatched', label: 'Starring [Actor] because you recently watched [Movie]', defaultName: 'Starring [Actor] because you recently watched [Movie]' },
+        { key: 'directedByDirectorRecentlyWatched', label: 'Directed by [Director] because you recently watched [Movie]', defaultName: 'Directed by [Director] because you recently watched [Movie]' },
+        { key: 'writtenByWriterRecentlyWatched', label: 'Written by [Writer] because you recently watched [Movie]', defaultName: 'Written by [Writer] because you recently watched [Movie]' }
+    ];
 
     // Check if user is admin
     async function isAdmin() {
@@ -92,7 +110,14 @@
 
             // If no config found in JS Injector, load defaults
             console.log('[KefinTweaks Configuration] No config found in JS Injector, loading defaults');
-            const defaultConfig = await loadDefaultConfig();
+        const rawDefaultConfig = await loadDefaultConfig();
+        const defaultConfig = JSON.parse(JSON.stringify(rawDefaultConfig));
+
+        const currentConfigSource = currentLoadedConfig || window.KefinTweaksCurrentConfig || window.KefinTweaksConfig || {};
+        const currentKefinRoot = currentConfigSource.kefinTweaksRoot || defaultConfig.kefinTweaksRoot;
+        const currentScriptRoot = currentConfigSource.scriptRoot || defaultConfig.scriptRoot;
+        defaultConfig.kefinTweaksRoot = currentKefinRoot;
+        defaultConfig.scriptRoot = currentScriptRoot;
 
             // Save defaults to JS Injector for future use
             await saveConfigToJavaScriptInjector(defaultConfig);
@@ -166,6 +191,7 @@
             
             #${MODAL_ID} details summary {
                 user-select: none;
+                overflow: visible;
             }
             
             #${MODAL_ID} details summary:hover {
@@ -175,6 +201,116 @@
             #${MODAL_ID} pre {
                 white-space: pre-wrap;
                 word-wrap: break-word;
+            }
+            
+            /* Custom section collapsible styling */
+            #${MODAL_ID} .custom-section-summary {
+                position: relative;
+                list-style: none;
+            }
+            
+            #${MODAL_ID} .custom-section-summary::-webkit-details-marker {
+                display: none;
+            }
+            
+            #${MODAL_ID} .custom-section-summary::marker {
+                display: none;
+            }
+            
+            #${MODAL_ID} details[open] .custom-section-summary .material-icons {
+                transform: rotate(90deg);
+            }
+            
+            #${MODAL_ID} .custom-section-summary .material-icons {
+                transition: transform 0.2s ease;
+            }
+            
+            /* Recently released subsection styling */
+            #${MODAL_ID} .recently-released-subsection-summary {
+                position: relative;
+                list-style: none;
+            }
+            
+            #${MODAL_ID} .recently-released-subsection-summary::-webkit-details-marker {
+                display: none;
+            }
+            
+            #${MODAL_ID} .recently-released-subsection-summary::marker {
+                display: none;
+            }
+            
+            #${MODAL_ID} details[open] .recently-released-subsection-summary .material-icons {
+                transform: rotate(90deg);
+            }
+            
+            #${MODAL_ID} .recently-released-subsection-summary .material-icons {
+                transition: transform 0.2s ease;
+            }
+            
+            /* Seasonal season collapsible styling */
+            #${MODAL_ID} .seasonal-season-summary {
+                position: relative;
+                list-style: none;
+            }
+            
+            #${MODAL_ID} .seasonal-season-summary::-webkit-details-marker {
+                display: none;
+            }
+            
+            #${MODAL_ID} .seasonal-season-summary::marker {
+                display: none;
+            }
+            
+            #${MODAL_ID} details[open] .seasonal-season-summary .material-icons {
+                transform: rotate(90deg);
+            }
+            
+            #${MODAL_ID} .seasonal-season-summary .material-icons {
+                transition: transform 0.2s ease;
+            }
+            
+            /* Seasonal section collapsible styling (sections within seasons) */
+            #${MODAL_ID} .seasonal-section-summary {
+                position: relative;
+                list-style: none;
+            }
+            
+            #${MODAL_ID} .seasonal-section-summary::-webkit-details-marker {
+                display: none;
+            }
+            
+            #${MODAL_ID} .seasonal-section-summary::marker {
+                display: none;
+            }
+            
+            #${MODAL_ID} details[open] .seasonal-section-summary .material-icons {
+                transform: rotate(90deg);
+            }
+            
+            #${MODAL_ID} .seasonal-section-summary .material-icons {
+                transition: transform 0.2s ease;
+            }
+            
+            /* Discovery section type collapsible styling */
+            #${MODAL_ID} .discovery-section-type-summary {
+                position: relative;
+                list-style: none;
+            }
+            
+            #${MODAL_ID} .discovery-section-type-summary::-webkit-details-marker {
+                display: none;
+            }
+            
+            #${MODAL_ID} .discovery-section-type-summary::marker {
+                display: none;
+            }
+            
+            #${MODAL_ID} details[open] .discovery-section-type-summary .material-icons {
+                transform: rotate(90deg);
+            }
+            
+            #${MODAL_ID} .discovery-section-type-summary .material-icons {
+                transition: transform 0.2s ease;
             }
             
             /* Responsive design */
@@ -284,7 +420,7 @@
                         <h3 class="listItemBodyText" style="margin-bottom: 0.25em;">Script Root Configuration</h3>
                         <div class="listItemBodyText secondary">Configure where KefinTweaks scripts are loaded from</div>
                     </div>
-                        <button class="emby-button raised paper-icon-button-light" id="editScriptRootBtn" style="padding: 0.5em 1em;">
+                        <button class="emby-button raised paper-icon-button-light" id="editScriptRootBtn">
                             <span class="material-icons" aria-hidden="true">edit</span>
                         </button>
                 </div>
@@ -326,7 +462,7 @@
                         <div class="listItemBodyText secondary">Configure custom home screen sections and discovery features</div>
                     </div>
                 </div>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0.5em;">
+                <div style="display: grid; grid-template-columns: 1fr; gap: 0.5em;">
                     ${buildHomeScreenConfig(homeScreen)}
                 </div>
             </div>
@@ -361,7 +497,7 @@
                 <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
                     <div class="listItemContent">
                         <div class="listItemBodyText" style="margin-bottom: 0.5em;">Default Skin</div>
-                        <select id="defaultSkin" class="fld emby-select emby-select-withcolor" style="width: 100%; max-width: 400px;">
+                        <select id="defaultSkin" class="fld emby-select-withcolor emby-select emby-select-withcolor emby-select-withcolor" style="width: 100%; max-width: 400px;">
                             ${allSkinNames.map(name => `<option value="${name}" ${config.defaultSkin === name ? 'selected' : ''}>${name}</option>`).join('')}
                         </select>
                         <div class="listItemBodyText secondary" style="margin-top: 0.5em; font-size: 0.9em;">Select a default skin for all users</div>
@@ -526,9 +662,7 @@
                             <div class="listItemBodyText" style="font-weight: 500; font-size: 0.9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${skin.name}</div>
                             ${githubUrl ? `<a href="${githubUrl}" target="_blank" rel="noopener noreferrer" style="flex-shrink: 0; display: flex; align-items: center; color: inherit; text-decoration: none; opacity: 0.6; transition: opacity 0.2s; cursor: pointer;" title="View on GitHub" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.6'"><span class="material-icons" style="font-size: 1em;">info</span></a>` : ''}
                         </div>
-                        <label class="checkboxContainer" style="flex-shrink: 0; margin: 0;">
-                            <input type="checkbox" id="skin_${skin.name.replace(/[^a-zA-Z0-9]/g, '_')}" ${isEnabled ? 'checked' : ''} data-skin-name="${skin.name}">
-                        </label>
+                        ${buildJellyfinCheckbox(`skin_${skin.name.replace(/[^a-zA-Z0-9]/g, '_')}`, isEnabled, '', { 'data-skin-name': skin.name })}
                 </div>
             </div>
         `;
@@ -538,23 +672,23 @@
     // Build script toggle switches
     function buildScriptToggles(scripts) {
         const scriptNames = [
-            { key: 'homeScreen', label: 'Home Screen', desc: 'Custom home screen sections and discovery engine. These can be configured below.' },
-            { key: 'search', label: 'Search', desc: 'Search speed is improved by searching less content types by default. Provides options to specify which content type to search. Fully compatible with Jellysearch Search from Jellyfin Enhanced plugin.' },
             { key: 'watchlist', label: 'Watchlist', desc: 'Allows your users to add items to their Watchlist. The Watchlist page shows an overview of all items on a user\'s Watchlist, as well as their Series Progress and Movie History. It also includes a Statistics page with an overview of your user watched stats.' },
+            { key: 'homeScreen', label: 'Enhanced Home Screen', desc: 'Add custom home screen sections and a "discovery engine" to your Home Page. Create sections based on Genre, Tags, Playlists, Collections or Search Terms for specific Item Types. Use the "Spotlight" feature to highlight specific sections with an image carousel/slideshow.' },
+            { key: 'search', label: 'Enhanced Search', desc: 'Search speed is improved by searching less content types by default. Provides options to specify which content type to search. Fully compatible with both the Jellysearch Search from Jellyfin Enhanced plugin and the Meilisearch plugin.' },
+            { key: 'infiniteScroll', label: 'Infinite Scroll', desc: 'Adds infinite scrolling to the library pages for Movies and TV' },
+            { key: 'removeContinue', label: 'Remove Continue', desc: 'Adds the ability to remove items from the Continue Watching sections' },
+            { key: 'skinManager', label: 'Skin Manager', desc: 'Skin selection and management - adds skin dropdown to header and display preferences' },
             { key: 'headerTabs', label: 'Header Tabs', desc: 'Allows direct navigation to specific Tab sections of a given library page. Full support for default Jellyfin landing pages.' },
             { key: 'customMenuLinks', label: 'Custom Menu Links', desc: 'Add custom menu links to the left side navigation menu' },
             { key: 'breadcrumbs', label: 'Breadcrumbs', desc: 'Breadcrumb navigation for Movies, TV and Music. Allows quick navigation between Seasons/Episodes and Albums/Songs.' },
-            { key: 'playlist', label: 'Playlist', desc: 'Improved Playlist page navigation: Items only play when the Play button is pressed. Clicking an item navigates to the item\'s page.' },
-            { key: 'itemDetailsCollections', label: 'Item Details Collections', desc: 'Displays collections on item details pages (Included In section)' },
+            { key: 'playlist', label: 'Playlist UX', desc: 'Improved Playlist page navigation: Items only play when the Play button is pressed. Clicking an item navigates to the item\'s page.' },
+            { key: 'itemDetailsCollections', label: 'Collections on Details Page', desc: 'Displays collections on item details pages (Included In section)' },
             { key: 'flattenSingleSeasonShows', label: 'Flatten Single Season Shows', desc: 'Flattens single-season shows to display episodes directly on series page' },
-            { key: 'collections', label: 'Collections', desc: 'Collection sorting functionality on the Collection page' },
+            { key: 'collections', label: 'Collection Sorting', desc: 'Collection sorting functionality on the Collection page' },
+            { key: 'subtitleSearch', label: 'Subtitle Search', desc: 'Search and download subtitles directly from the video OSD' },
             { key: 'exclusiveElsewhere', label: 'Exclusive Elsewhere', desc: 'Custom branding when items aren\'t available on streaming services' },
             { key: 'backdropLeakFix', label: 'Backdrop Leak Fix', desc: 'Fixes memory leaks from backdrop images when tab isn\'t focused' },
-            { key: 'dashboardButtonFix', label: 'Dashboard Button Fix', desc: 'Improved back button behavior on dashboard - prevents navigating back to the new tab browser page' },
-            { key: 'infiniteScroll', label: 'Infinite Scroll', desc: 'Adds infinite scrolling to the library pages for Movies and TV' },
-            { key: 'removeContinue', label: 'Remove Continue', desc: 'Adds the ability to remove items from the Continue Watching sections' },
-            { key: 'subtitleSearch', label: 'Subtitle Search', desc: 'Search and download subtitles directly from the video OSD' },
-            { key: 'skinManager', label: 'Skin Manager', desc: 'Skin selection and management - adds skin dropdown to header and display preferences' }
+            { key: 'dashboardButtonFix', label: 'Dashboard Button Fix', desc: 'Improved back button behavior on dashboard - prevents navigating back to the new tab browser page' }
         ];
 
         return scriptNames.map(script => {
@@ -564,9 +698,7 @@
                     <div class="listItemContent">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75em;">
                             <div class="listItemBodyText" style="font-weight: 500;">${script.label}</div>
-                            <label class="checkboxContainer" style="flex-shrink: 0; margin: 0;">
-                                <input type="checkbox" id="script_${script.key}" ${isEnabled ? 'checked' : ''} data-script-key="${script.key}">
-                            </label>
+                            ${buildJellyfinCheckbox(`script_${script.key}`, isEnabled, '', { 'data-script-key': script.key })}
                         </div>
                         <div class="listItemBodyText secondary" style="font-size: 0.9em; line-height: 1.4; width: 100%;">${script.desc}</div>
                     </div>
@@ -575,136 +707,814 @@
         }).join('');
     }
 
-    // Build home screen configuration
-    function buildHomeScreenConfig(homeScreen) {
-        const exampleCustomSections = `[
-  {
-    "name": "My Favorite Movies",
-    "id": "acc84f03475eb51602b13cde158d21ad",
-    "maxItems": 20,
-    "order": 5
-  },
-  {
-    "name": "Action Collection",
-    "id": "bdd95f14586eb51703c24def269e32be",
-    "maxItems": 15,
-    "order": 10
-  }
-]`;
+    // Helper function to build Include Item Types badge field
+    function buildIncludeItemTypesField(prefix, sectionIndex, sanitizedPrefix, currentTypes, sourceType) {
+        // Available item types (excluding Collections and Playlists unless source type is Parent)
+        const availableTypes = ['Movie', 'Series', 'Season', 'Episode', 'MusicArtist', 'MusicAlbum', 'Audio', 'MusicVideo', 'Book'];
+        const parentOnlyTypes = ['BoxSet', 'Playlist']; // Only available when source type is Parent
+        
+        // All available types for this source type
+        const allAvailableTypes = sourceType === 'Parent' ? [...availableTypes, ...parentOnlyTypes] : availableTypes;
+        const selectionLabel = currentTypes.length ? `${currentTypes.length} selected` : 'Select item types';
+        
+        // Current types as badges
+        const badgesHtml = currentTypes.map(typeName => `
+            <span class="tag-badge" data-value="${typeName}" style="display: inline-flex; align-items: center; gap: 0.25em; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 0.25em 0.5em; margin: 0.25em; font-size: 0.9em;">
+                ${typeName}
+                <button type="button" class="tag-badge-remove" style="background: none; border: none; color: rgba(255,255,255,0.7); cursor: pointer; padding: 0; margin-left: 0.25em; font-size: 1.2em; line-height: 1; display: flex; align-items: center;" title="Remove">×</button>
+            </span>
+        `).join('');
+        
+        const dropdownOptions = allAvailableTypes.map(typeName => {
+            const isChecked = currentTypes.includes(typeName);
+            return `
+                <label class="includeItemTypes-option-label" style="display: flex; align-items: center; gap: 0.5em; padding: 0.35em 0; font-size: 0.9em;">
+                    <input type="checkbox" class="includeItemTypes-option" data-type="${typeName}" value="${typeName}" ${isChecked ? 'checked' : ''} style="accent-color: rgba(0,122,255,0.8);">
+                    <span>${typeName}</span>
+                </label>
+            `;
+        }).join('');
         
         return `
+            <div class="${prefix}_section_includeItemTypes_container" data-section-index="${sectionIndex}" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; position: static;">
+                <div style="position: relative;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5em;">
+                        <div class="listItemBodyText">Include Item Types</div>
+                        <button type="button" class="badge-clear-all" data-section-index="${sectionIndex}" data-field="includeItemTypes" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 0.25em 0.5em; color: rgba(255,255,255,0.87); cursor: pointer; font-size: 0.85em;" title="Clear All">Clear All</button>
+                    </div>
+                    <div class="tag-badge-container includeItemTypes-badge-container" data-section-index="${sectionIndex}" data-prefix="${prefix}" data-available-types="${allAvailableTypes.join(',')}" style="border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 0.5em; margin-bottom: 0.5em; background: rgba(0,0,0,0.2); display: flex; flex-direction: column; gap: 0.5em; position: relative;">
+                        <button type="button" class="includeItemTypes-dropdown-toggle" data-section-index="${sectionIndex}" style="display: inline-flex; align-items: center; justify-content: space-between; gap: 0.5em; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 0.35em 0.75em; color: rgba(255,255,255,0.87); cursor: pointer; font-size: 0.9em;">
+                            <span class="includeItemTypes-toggle-label">${selectionLabel}</span>
+                            <span class="material-icons" style="font-size: 1.1em;">arrow_drop_down</span>
+                        </button>
+                        <div class="includeItemTypes-dropdown" data-section-index="${sectionIndex}" style="display: none; position: absolute; top: 100%; left: 0; width: 100%; margin-top: 0.35em; z-index: 11000; background: rgba(26,26,26,0.98); border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; padding: 0.75em; box-shadow: 0 4px 16px rgba(0,0,0,0.4); max-height: 260px; overflow-y: auto;">
+                            <div style="display: flex; flex-direction: column; gap: 0.25em;">
+                                ${dropdownOptions}
+                            </div>
+                        </div>
+                        <input type="text" class="${prefix}_section_includeItemTypes fld emby-input includeItemTypes-input-proxy" data-section-index="${sectionIndex}" data-prefix="${prefix}" data-field="includeItemTypes" autocomplete="off" style="position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; pointer-events: none;">
+                        <div class="includeItemTypes-badges" style="flex: 1; min-height: 2.5em; min-width: 0; display: flex; flex-wrap: wrap; gap: 0.25em; align-items: flex-start; overflow-wrap: break-word;">
+                            <span class="includeItemTypes-empty" ${currentTypes.length ? 'hidden' : ''} style="opacity: 0.6; font-size: 0.9em; margin: 0.25em;">No item types selected</span>
+                            ${badgesHtml}
+                        </div>
+                    </div>
+                    <input type="hidden" class="${prefix}_section_includeItemTypes_hidden" data-section-index="${sectionIndex}" value="${currentTypes.join(', ')}">
+                </div>
+            </div>
+        `;
+    }
+
+    // Helper function to build Jellyfin-style checkbox
+    function buildJellyfinCheckbox(id, checked, label, dataAttributes = {}) {
+        const dataAttrs = Object.entries(dataAttributes).map(([key, value]) => `${key}="${value}"`).join(' ');
+        const checkedAttr = checked ? 'checked' : '';
+        return `
+            <div class="checkboxContainer">
+                <label class="emby-checkbox-label">
+                    <input is="emby-checkbox" type="checkbox" id="${id}" class="emby-checkbox" data-embycheckbox="true" ${checkedAttr} ${dataAttrs}>
+                    <span class="checkboxLabel">${label}</span>
+                    <span class="checkboxOutline">
+                        <span class="material-icons checkboxIcon checkboxIcon-checked check" aria-hidden="true"></span>
+                        <span class="material-icons checkboxIcon checkboxIcon-unchecked" aria-hidden="true"></span>
+                    </span>
+                </label>
+            </div>
+        `;
+    }
+
+    // Helper function to build a section UI (for nested sections in seasonal and custom sections)
+    function buildSectionUI(prefix, section, sectionIndex, isSeasonalNested = false) {
+        const sectionId = section.id || `${prefix}_section_${sectionIndex}`;
+        const enabled = section.enabled !== false;
+        const name = section.name || '';
+        const type = section.type || 'Genre';
+        const source = section.source || '';
+        const itemLimit = section.itemLimit || 16;
+        const sortOrder = section.sortOrder || 'Random';
+        const sortOrderDirection = section.sortOrderDirection || 'Ascending';
+        const cardFormat = section.cardFormat || 'Poster';
+        const order = section.order || 100;
+        const spotlightEnabled = section.spotlight === true;
+        const discoveryEnabled = section.discoveryEnabled === true;
+        const searchTerm = section.searchTerm || '';
+        const includeItemTypes = Array.isArray(section.includeItemTypes) ? section.includeItemTypes : (section.includeItemTypes ? section.includeItemTypes.split(',').map(s => s.trim()).filter(Boolean) : (type === 'Parent' ? [] : ['Movie']));
+        
+        // Determine source field based on type
+        let sourceFieldHtml = '';
+        if (type === 'Parent') {
+            // Parent type uses simple text input for parent IDs (comma-separated)
+            const parentIds = source || '';
+            sourceFieldHtml = `
+                <div class="${prefix}_section_source_container" data-section-index="${sectionIndex}" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; position: static;">
+                    <div style="position: relative;">
+                        <div class="listItemBodyText" style="margin-bottom: 0.5em;">Parent IDs (comma-separated, leave empty for "Any")</div>
+                        <input type="text" class="${prefix}_section_source fld emby-input" data-section-index="${sectionIndex}" data-prefix="${prefix}" data-type="${type}" value="${parentIds}" placeholder="Enter parent IDs (e.g., collection-id, playlist-id) or leave empty" style="width: 100%;">
+                        <input type="hidden" class="${prefix}_section_source_hidden" data-section-index="${sectionIndex}" value="${parentIds}">
+                    </div>
+                </div>
+            `;
+        } else if (type === 'Tag' || type === 'Genre' || type === 'Collection' || type === 'Playlist') {
+            // Parse existing source (comma-separated) into array
+            const sourceArray = source ? source.split(',').map(s => s.trim()).filter(Boolean) : [];
+            
+            // For Collections/Playlists, we'll show IDs initially and load names after
+            // For Tags/Genres, show names directly
+            let badgesHtml = '';
+            if (type === 'Tag' || type === 'Genre') {
+                badgesHtml = sourceArray.map(val => `
+                    <span class="tag-badge" data-value="${val}" style="display: inline-flex; align-items: center; gap: 0.25em; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 0.25em 0.5em; margin: 0.25em; font-size: 0.9em;">
+                        ${val}
+                        <button type="button" class="tag-badge-remove" style="background: none; border: none; color: rgba(255,255,255,0.7); cursor: pointer; padding: 0; margin-left: 0.25em; font-size: 1.2em; line-height: 1; display: flex; align-items: center;" title="Remove">×</button>
+                    </span>
+                `).join('');
+            } else {
+                // Collections/Playlists: display IDs initially, will be replaced with names after fetch
+                badgesHtml = sourceArray.map(id => `
+                    <span class="tag-badge" data-value="${id}" data-loading="true" style="display: inline-flex; align-items: center; gap: 0.25em; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 0.25em 0.5em; margin: 0.25em; font-size: 0.9em;">
+                        ${id}
+                        <button type="button" class="tag-badge-remove" style="background: none; border: none; color: rgba(255,255,255,0.7); cursor: pointer; padding: 0; margin-left: 0.25em; font-size: 1.2em; line-height: 1; display: flex; align-items: center;" title="Remove">×</button>
+                    </span>
+                `).join('');
+            }
+            
+            sourceFieldHtml = `
+                <div class="${prefix}_section_source_container" data-section-index="${sectionIndex}" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; position: static;">
+                    <div style="position: relative;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5em;">
+                            <div class="listItemBodyText">${type}</div>
+                            <button type="button" class="badge-clear-all" data-section-index="${sectionIndex}" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 0.25em 0.5em; color: rgba(255,255,255,0.87); cursor: pointer; font-size: 0.85em;" title="Clear All">Clear All</button>
+                        </div>
+                        <div class="tag-badge-container" data-section-index="${sectionIndex}" data-prefix="${prefix}" data-type="${type}" style="min-height: 2.5em; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 0.5em; margin-bottom: 0.5em; background: rgba(0,0,0,0.2); display: flex; gap: 0.5em; align-items: flex-start; overflow: hidden;">
+                            <input type="text" class="${prefix}_section_source fld emby-input autocomplete-input" data-section-index="${sectionIndex}" data-prefix="${prefix}" data-type="${type}" placeholder="Type to add ${type.toLowerCase()}..." autocomplete="off" style="flex: 0 0 auto; width: 120px; min-width: 200px; max-width: 120px; border: none; background: transparent; outline: none; color: rgba(255,255,255,0.87); padding: 0.25em;">
+                            <div style="flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 0.25em; align-items: flex-start; overflow-wrap: break-word;">
+                                ${badgesHtml}
+                            </div>
+                        </div>
+                        <input type="hidden" class="${prefix}_section_source_hidden" data-section-index="${sectionIndex}" value="${source}">
+                        <div class="autocomplete-suggestions" data-section-index="${sectionIndex}" style="display: none; position: absolute; z-index: 10000; background: #1a1a1a !important; color: rgba(255,255,255,0.87) !important; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; max-height: 200px; overflow-y: auto; margin-top: 2px; width: 100%; box-sizing: border-box; opacity: 1 !important; top: 100%; left: 0;"></div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Build section fields HTML for right column
+        const sanitizedSectionPrefix = `${prefix}_section_${sectionIndex.toString().replace(/[^a-zA-Z0-9]/g, '_')}`;
+        const spotlightCheckboxId = `${sanitizedSectionPrefix}_spotlight`;
+        const discoveryCheckboxId = `${sanitizedSectionPrefix}_discovery`;
+        const sectionFieldsHtml = createSectionConfiguration(
+            sanitizedSectionPrefix,
+            section,
+            {
+                includeName: true,
+                defaultName: name || 'Unnamed Section',
+                nameInputAttributes: {
+                    class: `${prefix}_section_name`,
+                    'data-section-index': sectionIndex,
+                    'data-prefix': prefix
+                }
+            }
+        );
+        
+        // For custom sections and seasonal nested sections, use the improved layout
+        const useImprovedLayout = prefix === 'customSection' || isSeasonalNested;
+        
+        // Build section content - improved layout for custom sections and seasonal nested sections
+        let sectionContent;
+        if (useImprovedLayout) {
+            // Custom sections: Row 1 (checkboxes + type), Row 2 (source), Row 3+ (remaining fields in 3 columns)
+            sectionContent = `
+                <!-- Row 1: Enabled, Spotlight, Discovery, Type -->
+                <div class="listItem" style="display: grid; grid-template-columns: auto auto auto 1fr; gap: 1em; align-items: end; margin: 0.75em 0; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
+                    <div>
+                        <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-bottom: 0.25em;">Enabled</div>
+                        ${buildJellyfinCheckbox(`${prefix}_section_enabled_${sectionIndex}`, enabled, '', { 'data-section-index': sectionIndex, 'data-prefix': prefix, 'class': `${prefix}_section_enabled` })}
+                    </div>
+                    <div>
+                        <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-bottom: 0.25em;">Spotlight</div>
+                        ${buildJellyfinCheckbox(spotlightCheckboxId, spotlightEnabled, 'Enable Spotlight', { 'data-section-index': sectionIndex, 'data-prefix': prefix, 'class': `${prefix}_section_spotlight` })}
+                    </div>
+                    <div>
+                        <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-bottom: 0.25em;">Discovery</div>
+                        ${buildJellyfinCheckbox(discoveryCheckboxId, discoveryEnabled, 'Enable as Discovery', { 'data-section-index': sectionIndex, 'data-prefix': prefix, 'class': `${prefix}_section_discovery` })}
+                    </div>
+                    <div>
+                        <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-bottom: 0.25em;">Type</div>
+                        <select class="${prefix}_section_type fld emby-select-withcolor emby-select" data-section-index="${sectionIndex}" data-prefix="${prefix}" data-is-seasonal="${isSeasonalNested}" style="width: 100%;">
+                            <option value="Tag" ${type === 'Tag' ? 'selected' : ''}>Tag</option>
+                            <option value="Genre" ${type === 'Genre' ? 'selected' : ''}>Genre</option>
+                            <option value="Playlist" ${type === 'Playlist' ? 'selected' : ''}>Playlist</option>
+                            <option value="Collection" ${type === 'Collection' ? 'selected' : ''}>Collection</option>
+                            <option value="Parent" ${type === 'Parent' ? 'selected' : ''}>Generic Query</option>
+                        </select>
+                    </div>
+                </div>
+                <!-- Row 2: Source picker (full width) -->
+                <div style="margin-bottom: 0.75em;">
+                    ${sourceFieldHtml}
+                </div>
+                <!-- Row 3+: Remaining fields in 3 columns -->
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75em;">
+                    ${sectionFieldsHtml}
+                    <!-- Search Term field -->
+                    <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
+                        <div class="listItemContent">
+                            <div class="listItemBodyText" style="margin-bottom: 0.5em;">Search Term</div>
+                            <input type="text" id="${sanitizedSectionPrefix}_searchTerm" class="fld emby-input" value="${searchTerm}" placeholder="Optional search filter" style="width: 100%;">
+                        </div>
+                    </div>
+                    <!-- Include Item Types field -->
+                    ${buildIncludeItemTypesField(prefix, sectionIndex, sanitizedSectionPrefix, includeItemTypes, type)}
+                </div>
+            `;
+        }
+        
+        // Wrap sections in collapsible details for both custom sections and seasonal nested sections
+        if (useImprovedLayout) {
+            // Determine summary class and name class based on prefix
+            const summaryClass = prefix === 'customSection' ? 'custom-section-summary' : 'seasonal-section-summary';
+            const nameClass = prefix === 'customSection' ? 'custom-section-name' : 'seasonal-section-name';
+            const enabledClass = prefix === 'customSection' ? 'custom-section-enabled-display' : 'seasonal-section-enabled-display';
+            const orderClass = prefix === 'customSection' ? 'custom-section-order' : 'seasonal-section-order';
+            const showPreviewButton = prefix === 'customSection' || prefix === 'seasonal_season';
+            const previewButtonHtml = showPreviewButton
+                ? `<button class="emby-button preview-section-btn" data-prefix="${prefix}" data-section-index="${sectionIndex}" style="padding: 0.5em 1em; font-size: 0.9em; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);">Preview</button>`
+                : '';
+            
+            return `
+                <details class="${prefix}_section_item" data-section-index="${sectionIndex}" data-section-id="${sectionId}" style="border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; padding: 0; margin-bottom: 0.75em; background: rgba(255,255,255,0.03);">
+                    <summary class="${summaryClass}" data-section-index="${sectionIndex}" style="display: flex; justify-content: space-between; align-items: center; padding: 1em; cursor: pointer; list-style: none; user-select: none;">
+                        <div class="listItemBodyText" style="font-weight: 500; display: flex; align-items: center; gap: 0.5em;">
+                            <span class="material-icons" style="font-size: 1.2em; transition: transform 0.2s;">chevron_right</span>
+                        <span class="${nameClass}" data-section-index="${sectionIndex}">${name || 'Unnamed Section'}</span>
+                        <span class="listItemBodyText secondary" style="font-size: 0.9em; font-weight: normal;">(<span class="${enabledClass}" data-section-index="${sectionIndex}">${enabled ? 'Enabled' : 'Disabled'}</span>, Order: <span class="${orderClass}" data-section-index="${sectionIndex}">${order}</span>)</span>
+                        </div>
+                        <div style="display: flex; gap: 0.5em;">
+                            ${previewButtonHtml}
+                            <button class="emby-button delete-section-btn" data-prefix="${prefix}" data-section-index="${sectionIndex}" data-is-seasonal="${isSeasonalNested}" style="padding: 0.5em 1em; font-size: 0.9em; background: rgba(255,0,0,0.2);">Delete</button>
+                        </div>
+                    </summary>
+                    <div style="padding: 0 1em 1em 1em; border-top: 1px solid rgba(255,255,255,0.1); margin-top: 0;">
+                        ${sectionContent}
+                    </div>
+                </details>
+            `;
+        } else {
+            // Fallback for any other section types (shouldn't happen in current code)
+            const showPreviewButton = prefix === 'customSection' || prefix === 'seasonal_season';
+            const previewButtonHtml = showPreviewButton
+                ? `<button class="emby-button preview-section-btn" data-prefix="${prefix}" data-section-index="${sectionIndex}" style="padding: 0.5em 1em; font-size: 0.9em; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);">Preview</button>`
+                : '';
+            return `
+                <div class="${prefix}_section_item" data-section-index="${sectionIndex}" data-section-id="${sectionId}" style="border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; padding: 1em; margin-bottom: 0.75em; background: rgba(255,255,255,0.03);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75em;">
+                        <div class="listItemBodyText" style="font-weight: 500;">${name || 'Unnamed Section'}</div>
+                        <div style="display: flex; gap: 0.5em;">
+                            ${previewButtonHtml}
+                            <button class="emby-button delete-section-btn" data-prefix="${prefix}" data-section-index="${sectionIndex}" data-is-seasonal="${isSeasonalNested}" style="padding: 0.5em 1em; font-size: 0.9em; background: rgba(255,0,0,0.2);">Delete</button>
+                        </div>
+                    </div>
+                    ${sectionContent}
+                </div>
+            `;
+        }
+    }
+
+    function mergeAttributes(defaultAttrs = {}, customAttrs = {}) {
+        const merged = { ...defaultAttrs };
+        if (customAttrs && typeof customAttrs === 'object') {
+            Object.entries(customAttrs).forEach(([key, value]) => {
+                if (value === undefined || value === null) {
+                    return;
+                }
+                if (key === 'class' && merged.class) {
+                    merged.class = `${merged.class} ${value}`.trim();
+                } else {
+                    merged[key] = value;
+                }
+            });
+        }
+        return merged;
+    }
+
+    function attributesToString(attrs = {}) {
+        return Object.entries(attrs)
+            .map(([key, value]) => {
+                if (value === undefined || value === null) return '';
+                return `${key}="${value}"`;
+            })
+            .filter(Boolean)
+            .join(' ');
+    }
+
+    function parseNumberOrFallback(value, fallback) {
+        if (value === null || value === undefined || value === '') {
+            return fallback;
+        }
+        const parsed = parseInt(value, 10);
+        return Number.isFinite(parsed) ? parsed : fallback;
+    }
+
+    function normalizeDiscoverySectionConfigEntry(rawValue, definition, discovery, legacyName = '') {
+        const defaultItemLimit = discovery.defaultItemLimit ?? 16;
+        const defaultSortOrder = discovery.defaultSortOrder ?? 'Random';
+        const defaultCardFormat = discovery.defaultCardFormat ?? 'Poster';
+        const defaults = {
+            enabled: true,
+            name: legacyName || definition.defaultName || '',
+            itemLimit: defaultItemLimit,
+            sortOrder: defaultSortOrder,
+            sortOrderDirection: 'Ascending',
+            cardFormat: defaultCardFormat
+        };
+
+        if (definition.extras?.minimumItems !== undefined) {
+            defaults.minimumItems = definition.extras.minimumItems;
+        }
+
+        let normalized = { ...defaults };
+
+        if (rawValue === false) {
+            normalized.enabled = false;
+        } else if (rawValue && typeof rawValue === 'object') {
+            normalized = { ...normalized, ...rawValue };
+        } else if (rawValue === true) {
+            normalized.enabled = true;
+        }
+
+        normalized.itemLimit = parseNumberOrFallback(normalized.itemLimit, defaultItemLimit);
+        normalized.sortOrder = normalized.sortOrder || defaultSortOrder;
+        normalized.sortOrderDirection = normalized.sortOrderDirection || 'Ascending';
+        normalized.cardFormat = normalized.cardFormat || defaultCardFormat;
+        normalized.name = normalized.name || definition.defaultName || '';
+
+        if (definition.extras?.minimumItems !== undefined) {
+            normalized.minimumItems = parseNumberOrFallback(
+                normalized.minimumItems,
+                definition.extras.minimumItems
+            );
+        }
+
+        return normalized;
+    }
+
+    function getNormalizedDiscoverySectionConfigs(discovery = {}) {
+        const sectionTypes = discovery.sectionTypes || {};
+        const legacyNames = discovery.sectionNames || {};
+        const normalized = {};
+
+        DISCOVERY_SECTION_DEFINITIONS.forEach(def => {
+            normalized[def.key] = normalizeDiscoverySectionConfigEntry(
+                sectionTypes[def.key],
+                def,
+                discovery,
+                legacyNames[def.key]
+            );
+        });
+
+        return normalized;
+    }
+
+    // Helper function to build section configuration fields (Name, Item Limit, Sort Order, Card Format, Order)
+    function createSectionConfiguration(prefix, config = {}, options = {}) {
+        const {
+            includeSortOrder = true,
+            includeOrder = true,
+            includeName = true,
+            defaultName = '',
+            nameLabel = 'Section Name',
+            nameInputAttributes = {},
+            includeCardFormat = true,
+            includeItemLimit = true
+        } = options;
+
+        const nameValue = config.name ?? defaultName ?? '';
+        const itemLimit = config.itemLimit ?? 16;
+        const sortOrder = config.sortOrder ?? 'Random';
+        const sortOrderDirection = config.sortOrderDirection ?? 'Ascending';
+        const cardFormat = config.cardFormat ?? 'Poster';
+        const order = config.order ?? 100;
+
+        let html = '';
+
+        if (includeName) {
+            const nameAttrs = mergeAttributes(
+                { id: `${prefix}_name`, class: 'fld emby-input' },
+                nameInputAttributes
+            );
+            html += `
             <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
                 <div class="listItemContent">
-                    <div class="listItemBodyText" style="margin-bottom: 0.5em;">Enable New and Trending</div>
-                    <label class="checkboxContainer">
-                        <input type="checkbox" id="homeScreen_enableNewAndTrending" ${homeScreen.enableNewAndTrending !== false ? 'checked' : ''}>
-                        <span>Enabled</span>
-                    </label>
+                    <div class="listItemBodyText" style="margin-bottom: 0.5em;">${nameLabel}</div>
+                    <input type="text" ${attributesToString(nameAttrs)} value="${nameValue}" placeholder="${defaultName || ''}" style="width: 100%; max-width: 250px;">
                 </div>
-            </div>
-            <div class="listItem" id="homeScreen_newMoviesContainer" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; ${homeScreen.enableNewAndTrending === false ? 'display: none;' : ''}">
+            </div>`;
+        }
+
+        if (includeCardFormat) {
+            html += `
+            <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
                 <div class="listItemContent">
-                    <div class="listItemBodyText" style="margin-bottom: 0.5em;">Enable New Movies</div>
-                    <label class="checkboxContainer">
-                        <input type="checkbox" id="homeScreen_enableNewMovies" ${homeScreen.enableNewMovies !== false ? 'checked' : ''}>
-                        <span>Enabled</span>
-                    </label>
+                    <div class="listItemBodyText" style="margin-bottom: 0.5em;">Card Format</div>
+                    <select id="${prefix}_cardFormat" class="fld emby-select-withcolor emby-select" style="width: 100%; max-width: 200px;">
+                        <option value="Random" ${cardFormat === 'Random' ? 'selected' : ''}>Random</option>
+                        <option value="Backdrop" ${cardFormat === 'Backdrop' ? 'selected' : ''}>Backdrop</option>
+                        <option value="Thumb" ${cardFormat === 'Thumb' ? 'selected' : ''}>Thumb</option>
+                        <option value="Poster" ${cardFormat === 'Poster' ? 'selected' : ''}>Poster</option>
+                    </select>
                 </div>
-            </div>
-            <div class="listItem" id="homeScreen_newEpisodesContainer" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; ${homeScreen.enableNewAndTrending === false ? 'display: none;' : ''}">
+            </div>`;
+        }
+
+        if (includeSortOrder) {
+            html += `
+            <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
                 <div class="listItemContent">
-                    <div class="listItemBodyText" style="margin-bottom: 0.5em;">Enable New Episodes</div>
-                    <label class="checkboxContainer">
-                        <input type="checkbox" id="homeScreen_enableNewEpisodes" ${homeScreen.enableNewEpisodes !== false ? 'checked' : ''}>
-                        <span>Enabled</span>
-                    </label>
-                </div>
-            </div>
-            <div class="listItem" id="homeScreen_trendingContainer" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; ${homeScreen.enableNewAndTrending === false ? 'display: none;' : ''}">
-                <div class="listItemContent">
-                    <div class="listItemBodyText" style="margin-bottom: 0.5em;">Enable Trending</div>
-                    <label class="checkboxContainer">
-                        <input type="checkbox" id="homeScreen_enableTrending" ${homeScreen.enableTrending === true ? 'checked' : ''} disabled>
-                        <span>Enabled</span>
-                    </label>
-                    <div class="listItemBodyText secondary" style="margin-top: 0.5em; font-size: 0.9em; font-style: italic; opacity: 0.7;">This feature is not yet implemented</div>
+                    <div class="listItemBodyText" style="margin-bottom: 0.5em;">Sort Order</div>
+                    <select id="${prefix}_sortOrder" class="fld emby-select-withcolor emby-select" style="width: 100%; max-width: 200px;">
+                        <option value="Random" ${sortOrder === 'Random' ? 'selected' : ''}>Random</option>
+                        <option value="ReleaseDate" ${sortOrder === 'ReleaseDate' ? 'selected' : ''}>Release Date</option>
+                        <option value="PremiereDate" ${sortOrder === 'PremiereDate' ? 'selected' : ''}>Premiere Date</option>
+                        <option value="CriticRating" ${sortOrder === 'CriticRating' ? 'selected' : ''}>Critic Rating</option>
+                        <option value="CommunityRating" ${sortOrder === 'CommunityRating' ? 'selected' : ''}>Community Rating</option>
+                        <option value="SortTitle" ${sortOrder === 'SortTitle' ? 'selected' : ''}>Sort Title</option>
+                        <option value="DateAdded" ${sortOrder === 'DateAdded' ? 'selected' : ''}>Date Added</option>
+                    </select>
                 </div>
             </div>
             <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
                 <div class="listItemContent">
-                    <div class="listItemBodyText" style="margin-bottom: 0.5em;">Enable Discovery</div>
-                    <label class="checkboxContainer">
-                        <input type="checkbox" id="homeScreen_enableDiscovery" ${homeScreen.enableDiscovery !== false ? 'checked' : ''}>
-                        <span>Enabled</span>
-                    </label>
+                    <div class="listItemBodyText" style="margin-bottom: 0.5em;">Sort Order Direction</div>
+                    <select id="${prefix}_sortOrderDirection" class="fld emby-select-withcolor emby-select" style="width: 100%; max-width: 200px;">
+                        <option value="Ascending" ${sortOrderDirection === 'Ascending' ? 'selected' : ''}>Ascending</option>
+                        <option value="Descending" ${sortOrderDirection === 'Descending' ? 'selected' : ''}>Descending</option>
+                    </select>
+                </div>
+            </div>`;
+        }
+
+        if (includeOrder) {
+            html += `
+            <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
+                <div class="listItemContent">
+                    <div class="listItemBodyText" style="margin-bottom: 0.5em; display: flex; align-items: center; gap: 0.4em; overflow: visible;">
+                        <span>Order</span>
+                        <span class="material-icons info info-tooltip" tabindex="0" role="note" data-tooltip="Lower numbers appear first" aria-label="Lower numbers appear first"></span>
+                    </div>
+                    <input type="number" id="${prefix}_order" class="fld emby-input" value="${order}" min="0" style="width: 100%; max-width: 200px;">
+                </div>
+            </div>`;
+        }
+
+        if (includeItemLimit) {
+            html += `
+                <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
+                    <div class="listItemContent">
+                        <div class="listItemBodyText" style="margin-bottom: 0.5em;">Item Limit</div>
+                        <input type="number" id="${prefix}_itemLimit" class="fld emby-input" value="${itemLimit}" min="1" style="width: 100%; max-width: 200px;">
+                    </div>
+                </div>`;
+        }
+
+        return html;
+    }
+
+    // Build home screen configuration
+    function buildHomeScreenConfig(homeScreen) {
+        const recentlyReleased = homeScreen.recentlyReleased || {};
+        const trending = homeScreen.trending || {};
+        const popularTVNetworks = homeScreen.popularTVNetworks || {};
+        const watchlist = homeScreen.watchlist || {};
+        const upcoming = homeScreen.upcoming || {};
+        const imdbTop250 = homeScreen.imdbTop250 || {};
+        const seasonal = homeScreen.seasonal || {};
+        const watchAgain = homeScreen.watchAgain || {};
+        const discovery = homeScreen.discovery || {};
+        const customSections = homeScreen.customSections || [];
+        const normalizedDiscoverySections = getNormalizedDiscoverySectionConfigs(discovery);
+        
+        // Build seasonal sections HTML
+        const seasonalSectionsHtml = (seasonal.seasons || []).map((season, seasonIndex) => {
+            const sections = season.sections || [];
+            const sectionsHtml = sections.map((section, sectionIndex) => {
+                return buildSectionUI('seasonal_season', section, `${seasonIndex}_${sectionIndex}`, true);
+            }).join('');
+        
+        const seasonOrder = season.order || 100;
+        return `
+            <details class="seasonal-season-item" data-season-index="${seasonIndex}" style="border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 0; margin-bottom: 1em; background: rgba(255,255,255,0.02);">
+                <summary class="seasonal-season-summary" data-season-index="${seasonIndex}" style="display: flex; justify-content: space-between; align-items: center; padding: 1em; cursor: pointer; list-style: none; user-select: none;">
+                    <div class="listItemBodyText" style="font-weight: 500; display: flex; align-items: center; gap: 0.5em;">
+                        <span class="material-icons" style="font-size: 1.2em; transition: transform 0.2s;">chevron_right</span>
+                        <span class="seasonal-season-name-display" data-season-index="${seasonIndex}">${season.name || 'Unnamed Season'}</span>
+                        <span class="listItemBodyText secondary" style="font-size: 0.9em; font-weight: normal;">(<span class="seasonal-season-enabled-display" data-season-index="${seasonIndex}">${season.enabled !== false ? 'Enabled' : 'Disabled'}</span>, Order: <span class="seasonal-season-order" data-season-index="${seasonIndex}">${seasonOrder}</span>)</span>
+                    </div>
+                    <div style="display: flex; gap: 0.5em;">
+                        <button class="emby-button" onclick="deleteSeasonalSeason(${seasonIndex})" style="padding: 0.5em 1em; font-size: 0.9em; background: rgba(255,0,0,0.2);">Delete</button>
+                    </div>
+                </summary>
+                <div style="padding: 0 1em 1em 1em; border-top: 1px solid rgba(255,255,255,0.1);">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75em; margin-bottom: 0.75em; margin-top: 0.75em;">
+                        <div>
+                            <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-bottom: 0.25em;">Enabled</div>
+                            ${buildJellyfinCheckbox(`seasonal-season-enabled-${seasonIndex}`, season.enabled !== false, 'Enabled', { 'data-index': seasonIndex, 'class': 'seasonal-season-enabled' })}
+                        </div>
+                        <div>
+                            <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-bottom: 0.25em;">Name</div>
+                            <input type="text" class="seasonal-season-name fld emby-input" data-index="${seasonIndex}" value="${season.name || ''}" style="width: 100%;">
+                        </div>
+                        <div>
+                            <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-bottom: 0.25em;">Start Date (MM-DD)</div>
+                            <input type="text" class="seasonal-season-startDate fld emby-input" data-index="${seasonIndex}" value="${season.startDate || ''}" placeholder="10-01" style="width: 100%;">
+                        </div>
+                        <div>
+                            <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-bottom: 0.25em;">End Date (MM-DD)</div>
+                            <input type="text" class="seasonal-season-endDate fld emby-input" data-index="${seasonIndex}" value="${season.endDate || ''}" placeholder="10-31" style="width: 100%;">
+                        </div>
+                        <div>
+                            <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-bottom: 0.25em; display: flex; align-items: center; gap: 0.4em;">Order</div>
+                            <input type="number" class="seasonal-season-order-input fld emby-input" data-index="${seasonIndex}" value="${seasonOrder}" min="0" style="width: 100%;">
+                        </div>
+                    </div>
+                    <div style="margin-top: 0.75em; margin-bottom: 0.75em;">
+                        <div class="listItemBodyText" style="font-weight: 500; margin-bottom: 0.5em;">Sections</div>
+                        <div class="seasonal_season_sections_list" data-season-index="${seasonIndex}">
+                            ${sectionsHtml}
+                        </div>
+                        <button type="button" class="emby-button raised add-section-to-seasonal-btn" data-season-index="${seasonIndex}" style="padding: 0.75em 1.5em; margin-top: 0.5em;">
+                            <span>Add Section</span>
+                        </button>
+                    </div>
+                </div>
+            </details>`;
+        }).join('');
+        
+        return `
+            <!-- Recently Released Sections -->
+            <details style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
+                <summary class="listItemBodyText" style="font-weight: 500; cursor: pointer; margin-bottom: 0.5em; display: flex; align-items: center; gap: 0.5em; border-radius: 0px !important;">
+                    ${buildJellyfinCheckbox('homeScreen_recentlyReleased_enabled', recentlyReleased.enabled !== false, 'Recently Released Sections')}
+                </summary>
+                <div style="padding: 0.75em 0 0 0;">
+                    <div id="homeScreen_recentlyReleased_container" style="${recentlyReleased.enabled === false ? 'display: none;' : ''}">
+                        <div style="display: grid; grid-template-columns: 1fr; gap: 0.75em; margin-bottom: 0.75em;">
+                            <details class="listItem" style="display: grid; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0; gap: 0.5em;">
+                                <summary class="recently-released-subsection-summary" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75em; cursor: pointer; list-style: none; user-select: none;">
+                                    <div class="listItemBodyText" style="font-weight: 500; display: flex; align-items: center; gap: 0.5em;">
+                                        <span class="material-icons" style="font-size: 1.2em; transition: transform 0.2s;">chevron_right</span>
+                                        <span>Recently Released Movies</span>
+                                        <span class="listItemBodyText secondary" style="font-size: 0.9em; font-weight: normal;">(<span class="recently-released-movies-enabled">${(recentlyReleased.movies || {}).enabled !== false ? 'Enabled' : 'Disabled'}</span>, Order: <span class="recently-released-movies-order">${(recentlyReleased.movies || {}).order || 30}</span>)</span>
+                                    </div>
+                                </summary>
+                                <div style="padding: 0 0.75em 0.75em 0.75em; border-top: 1px solid rgba(255,255,255,0.1);">
+                                    <div style="margin-top: 0.75em; margin-bottom: 0.75em;">
+                                        ${buildJellyfinCheckbox('homeScreen_recentlyReleased_movies_enabled', (recentlyReleased.movies || {}).enabled !== false, 'Enabled')}
+                                    </div>
+                                    <div class="listItemContent" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 0.75em;">
+                                        ${createSectionConfiguration('homeScreen_recentlyReleased_movies', recentlyReleased.movies || {}, { includeName: true, defaultName: 'Recently Released Movies', includeSortOrder: false, includeOrder: true })}
+                                    </div>
+                                </div>
+                            </details>
+                            <details class="listItem" style="display: grid; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0; gap: 0.5em;">
+                                <summary class="recently-released-subsection-summary" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75em; cursor: pointer; list-style: none; user-select: none;">
+                                    <div class="listItemBodyText" style="font-weight: 500; display: flex; align-items: center; gap: 0.5em;">
+                                        <span class="material-icons" style="font-size: 1.2em; transition: transform 0.2s;">chevron_right</span>
+                                        <span>Recently Aired Episodes</span>
+                                        <span class="listItemBodyText secondary" style="font-size: 0.9em; font-weight: normal;">(<span class="recently-released-episodes-enabled">${(recentlyReleased.episodes || {}).enabled !== false ? 'Enabled' : 'Disabled'}</span>, Order: <span class="recently-released-episodes-order">${(recentlyReleased.episodes || {}).order || 31}</span>)</span>
+                                    </div>
+                                </summary>
+                                <div style="padding: 0 0.75em 0.75em 0.75em; border-top: 1px solid rgba(255,255,255,0.1);">
+                                    <div style="margin-top: 0.75em; margin-bottom: 0.75em;">
+                                        ${buildJellyfinCheckbox('homeScreen_recentlyReleased_episodes_enabled', (recentlyReleased.episodes || {}).enabled !== false, 'Enabled')}
+                                    </div>
+                                    <div class="listItemContent" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 0.75em;">
+                                        ${createSectionConfiguration('homeScreen_recentlyReleased_episodes', recentlyReleased.episodes || {}, { includeName: true, defaultName: 'Recently Aired Episodes', includeSortOrder: false, includeOrder: true })}
+                                    </div>
+                                </div>
+                            </details>
+                        </div>
+                    </div>
+                </div>
+            </details>
+            
+            <!-- Trending Sections -->
+            <details style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em; display: none;">
+                <summary class="listItemBodyText" style="font-weight: 500; cursor: pointer; margin-bottom: 0.5em; display: flex; align-items: center; gap: 0.5em; border-radius: 0px !important;">
+                    ${buildJellyfinCheckbox('homeScreen_trending_enabled', trending.enabled === true, 'Trending Sections', { disabled: 'true' })}
+                    <span class="listItemBodyText secondary" style="font-size: 0.9em; font-weight: normal; margin-left: auto;">(Order: <span class="home-section-order" data-prefix="homeScreen_trending">${trending.order || 100}</span>)</span>
+                    <span class="listItemBodyText secondary" style="font-size: 0.85em; font-style: italic; opacity: 0.7;">Under development</span>
+                </summary>
+                <div style="padding: 0.75em 0 0 0;">
+                    <div id="homeScreen_trending_container" style="${trending.enabled !== true ? 'display: none;' : ''}">
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 0.75em;">
+                            ${createSectionConfiguration('homeScreen_trending', trending, { includeName: true, defaultName: 'Trending' })}
+                        </div>
+                    </div>
+                </div>
+            </details>
+            
+            <!-- Popular TV Networks Sections -->
+            <details style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
+                <summary class="listItemBodyText" style="font-weight: 500; cursor: pointer; margin-bottom: 0.5em; display: flex; align-items: center; gap: 0.5em; border-radius: 0px !important;">
+                    ${buildJellyfinCheckbox('homeScreen_popularTVNetworks_enabled', popularTVNetworks.enabled === true, 'Popular TV Networks Sections')}
+                    <span class="listItemBodyText secondary" style="font-size: 0.9em; font-weight: normal; margin-left: auto;">(Order: <span class="home-section-order" data-prefix="homeScreen_popularTVNetworks">${popularTVNetworks.order || 100}</span>)</span>
+                </summary>
+                <div style="padding: 0.75em 0 0 0;">
+                    <div id="homeScreen_popularTVNetworks_container" style="${popularTVNetworks.enabled !== true ? 'display: none;' : ''}">
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 0.75em;">
+                            ${createSectionConfiguration('homeScreen_popularTVNetworks', popularTVNetworks, { includeName: true, defaultName: 'Popular TV Networks' })}
+            <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
+                <div class="listItemContent">
+                                    <div class="listItemBodyText" style="margin-bottom: 0.5em;">Minimum Shows for Network to Appear</div>
+                                    <input type="number" id="homeScreen_popularTVNetworks_minimumShowsForNetwork" class="fld emby-input" value="${popularTVNetworks.minimumShowsForNetwork || 5}" min="1" style="width: 100%; max-width: 200px;">
                 </div>
             </div>
-            <div class="listItem" id="homeScreen_infiniteScrollContainer" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; ${homeScreen.enableDiscovery === false ? 'display: none;' : ''}">
+                </div>
+            </div>
+                </div>
+            </details>
+            
+            <!-- Watchlist -->
+            <details style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
+                <summary class="listItemBodyText" style="font-weight: 500; cursor: pointer; margin-bottom: 0.5em; display: flex; align-items: center; gap: 0.5em; border-radius: 0px !important;">
+                    ${buildJellyfinCheckbox('homeScreen_watchlist_enabled', watchlist.enabled === true, 'Watchlist')}
+                    <span class="listItemBodyText secondary" style="font-size: 0.9em; font-weight: normal; margin-left: auto;">(Order: <span class="home-section-order" data-prefix="homeScreen_watchlist">${watchlist.order || 100}</span>)</span>
+                </summary>
+                <div style="padding: 0.75em 0 0 0;">
+                    <div id="homeScreen_watchlist_container" style="${watchlist.enabled !== true ? 'display: none;' : ''}">
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 0.75em;">
+                            ${createSectionConfiguration('homeScreen_watchlist', watchlist, { includeName: true, defaultName: 'Watchlist' })}
+                        </div>
+                    </div>
+                </div>
+            </details>
+            
+            <!-- Upcoming -->
+            <details style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
+                <summary class="listItemBodyText" style="font-weight: 500; cursor: pointer; margin-bottom: 0.5em; display: flex; align-items: center; gap: 0.5em; border-radius: 0px !important;">
+                    ${buildJellyfinCheckbox('homeScreen_upcoming_enabled', upcoming.enabled !== false, 'Upcoming')}
+                    <span class="listItemBodyText secondary" style="font-size: 0.9em; font-weight: normal; margin-left: auto;">(Order: <span class="home-section-order" data-prefix="homeScreen_upcoming">${upcoming.order || 100}</span>)</span>
+                </summary>
+                <div style="padding: 0.75em 0 0 0;">
+                    <div id="homeScreen_upcoming_container" style="${upcoming.enabled === false ? 'display: none;' : ''}">
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 0.75em;">
+                            ${createSectionConfiguration('homeScreen_upcoming', upcoming, { includeName: true, defaultName: 'Upcoming', includeSortOrder: false })}
+                        </div>
+                    </div>
+                </div>
+            </details>
+            
+            <!-- IMDb Top 250 -->
+            <details style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
+                <summary class="listItemBodyText" style="font-weight: 500; cursor: pointer; margin-bottom: 0.5em; display: flex; align-items: center; gap: 0.5em; border-radius: 0px !important;">
+                    ${buildJellyfinCheckbox('homeScreen_imdbTop250_enabled', imdbTop250.enabled !== false, 'IMDb Top 250')}
+                    <span class="listItemBodyText secondary" style="font-size: 0.9em; font-weight: normal; margin-left: auto;">(Order: <span class="home-section-order" data-prefix="homeScreen_imdbTop250">${imdbTop250.order || 100}</span>)</span>
+                </summary>
+                <div style="padding: 0.75em 0 0 0;">
+                    <div id="homeScreen_imdbTop250_container" style="${imdbTop250.enabled === false ? 'display: none;' : ''}">
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 0.75em;">
+                            ${createSectionConfiguration('homeScreen_imdbTop250', imdbTop250, { includeName: true, defaultName: 'IMDb Top 250' })}
+                        </div>
+                    </div>
+                </div>
+            </details>
+            
+            <!-- Seasonal Sections -->
+            <details style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
+                <summary class="listItemBodyText" style="font-weight: 500; cursor: pointer; margin-bottom: 0.5em; display: flex; align-items: center; gap: 0.5em; border-radius: 0px !important;">
+                    ${buildJellyfinCheckbox('homeScreen_seasonal_enabled', seasonal.enabled !== false, 'Seasonal Sections')}
+                </summary>
+                <div style="padding: 0.75em 0 0 0;">
+                    <div id="homeScreen_seasonal_container" style="${seasonal.enabled === false ? 'display: none;' : ''}">
+                        <div id="homeScreen_seasonal_seasons_list" style="margin-bottom: 1em;">
+                            ${seasonalSectionsHtml}
+                        </div>
+                        <button class="emby-button raised" onclick="addNewSeasonalSeason()" style="padding: 0.75em 1.5em; margin-bottom: 1em;">
+                            <span>Add New Season</span>
+                        </button>
+                    </div>
+                </div>
+            </details>
+            
+            <!-- Watch Again -->
+            <details style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
+                <summary class="listItemBodyText" style="font-weight: 500; cursor: pointer; margin-bottom: 0.5em; display: flex; align-items: center; gap: 0.5em; border-radius: 0px !important;">
+                    ${buildJellyfinCheckbox('homeScreen_watchAgain_enabled', watchAgain.enabled === true, 'Watch Again')}
+                    <span class="listItemBodyText secondary" style="font-size: 0.9em; font-weight: normal; margin-left: auto;">(Order: <span class="home-section-order" data-prefix="homeScreen_watchAgain">${watchAgain.order || 100}</span>)</span>
+                </summary>
+                <div style="padding: 0.75em 0 0 0;">
+                    <div id="homeScreen_watchAgain_container" style="${watchAgain.enabled !== true ? 'display: none;' : ''}">
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 0.75em;">
+                            ${createSectionConfiguration('homeScreen_watchAgain', watchAgain, { includeName: true, defaultName: 'Watch Again' })}
+                        </div>
+                    </div>
+                </div>
+            </details>
+            
+            <!-- Discovery Sections -->
+            <details style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
+                <summary class="listItemBodyText" style="font-weight: 500; cursor: pointer; margin-bottom: 0.5em; display: flex; align-items: center; gap: 0.5em; border-radius: 0px !important;">
+                    ${buildJellyfinCheckbox('homeScreen_discovery_enabled', discovery.enabled !== false, 'Discovery Sections')}
+                </summary>
+                <div style="padding: 0.75em 0 0 0;">
+                    <div id="homeScreen_discovery_container" style="${discovery.enabled === false ? 'display: none;' : ''}">
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 0.75em; margin-bottom: 0.75em;">
+            <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
                 <div class="listItemContent">
-                    <div class="listItemBodyText" style="margin-bottom: 0.5em;">Enable Infinite Scroll</div>
-                    <label class="checkboxContainer">
-                        <input type="checkbox" id="homeScreen_enableInfiniteScroll" ${homeScreen.enableInfiniteScroll !== false ? 'checked' : ''}>
-                        <span>Enabled</span>
-                    </label>
+                                    <div class="listItemBodyText" style="margin-bottom: 0.5em;">Infinite Scroll / Load More Button</div>
+                                    ${buildJellyfinCheckbox('homeScreen_discovery_infiniteScroll', discovery.infiniteScroll !== false, 'Infinite Scroll')}
                 </div>
             </div>
             <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
                 <div class="listItemContent">
-                    <div class="listItemBodyText" style="margin-bottom: 0.5em;">Minimum People Appearances</div>
-                    <input type="number" id="homeScreen_minPeopleAppearances" class="fld emby-input" value="${homeScreen.minPeopleAppearances || 10}" min="1" style="width: 100%; max-width: 200px;">
-                    <div class="listItemBodyText secondary" style="margin-top: 0.5em; font-size: 0.9em;">Minimum movie appearances for people to be featured</div>
+                                    <div class="listItemBodyText" style="margin-bottom: 0.5em;">Randomize Section Order</div>
+                                    ${buildJellyfinCheckbox('homeScreen_discovery_randomizeOrder', discovery.randomizeOrder === true, 'Randomize Order')}
                 </div>
             </div>
             <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
                 <div class="listItemContent">
-                    <div class="listItemBodyText" style="margin-bottom: 0.5em;">Minimum Genre Movie Count</div>
-                    <input type="number" id="homeScreen_minGenreMovieCount" class="fld emby-input" value="${homeScreen.minGenreMovieCount || 50}" min="1" style="width: 100%; max-width: 200px;">
-                    <div class="listItemBodyText secondary" style="margin-top: 0.5em; font-size: 0.9em;">Minimum movie count for genres to be included</div>
+                                    <div class="listItemBodyText" style="margin-bottom: 0.5em;">Minimum Appearances for Top People</div>
+                                    <input type="number" id="homeScreen_discovery_minPeopleAppearances" class="fld emby-input" value="${discovery.minPeopleAppearances || 10}" min="1" style="width: 100%; max-width: 200px;">
                 </div>
             </div>
             <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
                 <div class="listItemContent">
-                    <div class="listItemBodyText" style="margin-bottom: 0.5em;">Minimum Shows For Network</div>
-                    <input type="number" id="homeScreen_minimumShowsForNetwork" class="fld emby-input" value="${homeScreen.minimumShowsForNetwork || 5}" min="1" style="width: 100%; max-width: 200px;">
-                    <div class="listItemBodyText secondary" style="margin-top: 0.5em; font-size: 0.9em;">Minimum show count for TV networks to be featured</div>
+                                    <div class="listItemBodyText" style="margin-bottom: 0.5em;">Minimum Movie count for Genres</div>
+                                    <input type="number" id="homeScreen_discovery_minGenreMovieCount" class="fld emby-input" value="${discovery.minGenreMovieCount || 50}" min="1" style="width: 100%; max-width: 200px;">
                 </div>
             </div>
             <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
                 <div class="listItemContent">
-                    <div class="listItemBodyText" style="margin-bottom: 0.5em;">Enable Watchlist</div>
-                    <label class="checkboxContainer">
-                        <input type="checkbox" id="homeScreen_enableWatchlist" ${homeScreen.enableWatchlist !== false ? 'checked' : ''}>
-                        <span>Enabled</span>
-                    </label>
+                                    <div class="listItemBodyText" style="margin-bottom: 0.5em;">Spotlight & Collection Spawn Chance</div>
+                                    <input type="number" id="homeScreen_discovery_spotlightDiscoveryChance" class="fld emby-input" value="${discovery.spotlightDiscoveryChance ?? 0.5}" min="0" max="1" step="0.01" style="width: 100%; max-width: 200px;">
+                                    <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-top: 0.25em;">0.0 = never, 1.0 = always</div>
                 </div>
             </div>
-            <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
-                <div class="listItemContent">
-                    <div class="listItemBodyText" style="margin-bottom: 0.5em;">Enable Seasonal</div>
-                    <label class="checkboxContainer">
-                        <input type="checkbox" id="homeScreen_enableSeasonal" ${homeScreen.enableSeasonal !== false ? 'checked' : ''}>
-                        <span>Enabled</span>
-                    </label>
+                            ${createSectionConfiguration('homeScreen_discovery', discovery, { includeName: false, includeOrder: false, includeCardFormat: false, includeSortOrder: false, includeItemLimit: false })}
+                        </div>
+                        <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 0.75em;">
+                            <div class="listItemContent">
+                                <div class="listItemBodyText" style="margin-bottom: 0.25em; font-weight: 500;">Discovery Sections</div>
+                                <div class="listItemBodyText secondary" style="font-size: 0.85em;">Section names support placeholders such as [Genre], [Director], [Writer], [Actor], [Movie], [Studio], [Collection Name]</div>
+                                <div style="display: grid; gap: 0.75em; margin-top: 0.75em;">
+                                    ${DISCOVERY_SECTION_DEFINITIONS.map(section => {
+                                        const sectionConfig = normalizedDiscoverySections[section.key];
+                                        const prefix = `homeScreen_discovery_sectionTypes_${section.key}`;
+                                        const configHtml = createSectionConfiguration(prefix, sectionConfig, { includeName: true, includeOrder: true, includeSortOrder: false, defaultName: section.defaultName });
+                                        const extraFields = section.extras?.minimumItems !== undefined
+                                            ? `
+                                                <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
+                                                    <div class="listItemContent">
+                                                        <div class="listItemBodyText" style="margin-bottom: 0.5em;">Minimum Items</div>
+                                                        <input type="number" id="${prefix}_minimumItems" class="fld emby-input" value="${sectionConfig.minimumItems ?? section.extras.minimumItems}" min="1" style="width: 100%; max-width: 200px;">
+                                                    </div>
+                                                </div>
+                                            `
+                                            : '';
+
+                                        const discoveryOrder = sectionConfig.order || 100;
+                                        return `
+                                            <details class="discovery-section-type-item" data-section-key="${section.key}" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0; margin-bottom: 0.75em; background: rgba(255,255,255,0.02);">
+                                                <summary class="discovery-section-type-summary" data-section-key="${section.key}" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75em; cursor: pointer; list-style: none; user-select: none;">
+                                                    <div class="listItemBodyText" style="font-weight: 500; display: flex; align-items: center; gap: 0.5em;">
+                                                        <span class="material-icons" style="font-size: 1.2em; transition: transform 0.2s;">chevron_right</span>
+                                                        <span>${section.label}</span>
+                                                        <span class="listItemBodyText secondary" style="font-size: 0.9em; font-weight: normal;">(<span class="discovery-section-type-enabled" data-section-key="${section.key}">${sectionConfig.enabled !== false ? 'Enabled' : 'Disabled'}</span>, Order: <span class="discovery-section-type-order" data-section-key="${section.key}">${discoveryOrder}</span>)</span>
+                                                    </div>
+                                                </summary>
+                                                <div style="padding: 0 0.75em 0.75em 0.75em; border-top: 1px solid rgba(255,255,255,0.1);">
+                                                    <div style="margin-top: 0.75em; margin-bottom: 0.75em;">
+                                                        ${buildJellyfinCheckbox(`${prefix}_enabled`, sectionConfig.enabled !== false, 'Enabled')}
+                                                    </div>
+                                                    <div style="display: flex; gap: 0.5em;">
+                                                        ${configHtml}
+                                                        ${extraFields}
+                                                    </div>
+                                                </div>
+                                            </details>
+                                        `;
+                                    }).join('')}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
+            </details>
+            
+            <!-- Custom Sections -->
+            <details style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
+                <summary class="listItemBodyText" style="font-weight: 500; cursor: pointer; margin-bottom: 0.5em;">Custom Sections</summary>
+                <div style="padding: 0.75em 0 0 0;">
+                    <div class="listItemBodyText" style="font-weight: 500; margin-bottom: 0.5em;">Sections</div>
+                    <div id="customSections_list" style="margin-bottom: 1em;">
+                        ${(customSections || []).map((section, index) => {
+                            return buildSectionUI('customSection', section, index, false);
+                        }).join('')}
+                    </div>
+                    <button type="button" class="emby-button raised add-custom-section-btn" style="padding: 0.75em 1.5em; margin-bottom: 1em;">
+                        <span>Add Section</span>
+                    </button>
             </div>
-            <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
-                <div class="listItemContent">
-                    <div class="listItemBodyText" style="margin-bottom: 0.5em;">Seasonal Item Limit</div>
-                    <input type="number" id="homeScreen_seasonalItemLimit" class="fld emby-input" value="${homeScreen.seasonalItemLimit || 16}" min="1" style="width: 100%; max-width: 200px;">
-                    <div class="listItemBodyText secondary" style="margin-top: 0.5em; font-size: 0.9em;">Maximum items to show in seasonal sections</div>
-                </div>
-            </div>
-            <div class="listItem" style="grid-column: 1 / -1; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
-                <div class="listItemContent">
-                    <div class="listItemBodyText" style="margin-bottom: 0.5em;">Custom Sections JSON</div>
-                    <div class="listItemBodyText secondary" style="margin-bottom: 0.75em; font-size: 0.9em;">Add custom playlist/collection-based sections. Get collection/playlist IDs from Jellyfin URLs.</div>
-                    <textarea id="homeScreen_customSections" class="fld emby-textarea" rows="12" placeholder='${exampleCustomSections}' style="width: 100%; font-family: monospace; font-size: 0.9em; line-height: 1.5;">${JSON.stringify(homeScreen.customSections || [], null, 2)}</textarea>
-                    <details style="margin-top: 0.75em;">
-                        <summary class="listItemBodyText secondary" style="font-size: 0.9em; color: #4a9eff;">View Example Format</summary>
-                        <pre style="background: rgba(0,0,0,0.3); padding: 1em; border-radius: 4px; margin-top: 0.5em; overflow-x: auto; font-size: 0.85em; line-height: 1.6;">${exampleCustomSections}</pre>
-                    </details>
-                </div>
-            </div>
+            </details>
         `;
     }
 
@@ -715,10 +1525,7 @@
                 <div class="listItemContent">
                     <div class="listItemBodyText" style="margin-bottom: 0.5em;">Hide Server Name</div>
                     <div class="listItemBodyText secondary" style="margin-bottom: 0.75em; font-size: 0.9em;">Set to true to hide server name, useful when you want to only show a logo or icon via CSS</div>
-                    <label class="checkboxContainer">
-                        <input type="checkbox" id="exclusiveElsewhere_hideServerName" ${exclusiveElsewhere.hideServerName === true ? 'checked' : ''}>
-                        <span>Enabled</span>
-                    </label>
+                    ${buildJellyfinCheckbox('exclusiveElsewhere_hideServerName', exclusiveElsewhere.hideServerName === true, 'Enabled')}
                 </div>
             </div>
         `;
@@ -731,10 +1538,7 @@
                 <div class="listItemContent">
                     <div class="listItemBodyText" style="margin-bottom: 0.5em;">Enable Jellyseerr</div>
                     <div class="listItemBodyText secondary" style="margin-bottom: 0.75em; font-size: 0.9em;">Enable Jellyseerr integration for request functionality</div>
-                    <label class="checkboxContainer">
-                        <input type="checkbox" id="search_enableJellyseerr" ${search.enableJellyseerr === true ? 'checked' : ''}>
-                        <span>Enabled</span>
-                    </label>
+                    ${buildJellyfinCheckbox('search_enableJellyseerr', search.enableJellyseerr === true, 'Enabled')}
                 </div>
             </div>
         `;
@@ -757,6 +1561,9 @@
             return;
         }
 
+        currentLoadedConfig = config;
+        window.KefinTweaksCurrentConfig = config;
+
         // Build the content (without title, as ModalSystem adds it)
         const content = document.createElement('div');
         content.className = 'modal-content-wrapper';
@@ -775,6 +1582,9 @@
         footer.innerHTML = `
             <button class="emby-button raised block button-submit" id="saveConfigBtn" style="padding: 0.75em 2em; font-size: 1em; font-weight: 500;">
                 <span>Save</span>
+            </button>
+            <button class="emby-button raised" id="resetConfigBtn" style="padding: 0.75em 2em; font-size: 1em;">
+                <span>Restore</span>
             </button>
             <button class="emby-button raised" id="exportConfigBtn" style="padding: 0.75em 2em; font-size: 1em;">
                 <span>Export</span>
@@ -830,43 +1640,1910 @@
 
         // No validation needed for default skin dropdown - it only allows valid options
 
-        // Home Screen: Toggle visibility of New Movies/Episodes/Trending based on New and Trending
-        const enableNewAndTrendingCheckbox = modalInstance.dialogContent.querySelector('#homeScreen_enableNewAndTrending');
-        if (enableNewAndTrendingCheckbox) {
-            const newMoviesContainer = modalInstance.dialogContent.querySelector('#homeScreen_newMoviesContainer');
-            const newEpisodesContainer = modalInstance.dialogContent.querySelector('#homeScreen_newEpisodesContainer');
-            const trendingContainer = modalInstance.dialogContent.querySelector('#homeScreen_trendingContainer');
+        // Helper function to toggle container visibility
+        function setupToggleVisibility(checkboxId, containerId) {
+            const checkbox = modalInstance.dialogContent.querySelector(checkboxId);
+            const container = modalInstance.dialogContent.querySelector(containerId);
+            if (checkbox && container) {
+                const toggle = () => {
+                    container.style.display = checkbox.checked ? '' : 'none';
+                };
+                checkbox.addEventListener('change', toggle);
+                // Prevent details from toggling when clicking checkbox
+                checkbox.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                });
+                toggle(); // Set initial state
+            }
+        }
+        
+        // Home Screen: Setup all visibility toggles
+        setupToggleVisibility('#homeScreen_recentlyReleased_enabled', '#homeScreen_recentlyReleased_container');
+        setupToggleVisibility('#homeScreen_trending_enabled', '#homeScreen_trending_container');
+        setupToggleVisibility('#homeScreen_popularTVNetworks_enabled', '#homeScreen_popularTVNetworks_container');
+        setupToggleVisibility('#homeScreen_watchlist_enabled', '#homeScreen_watchlist_container');
+        setupToggleVisibility('#homeScreen_upcoming_enabled', '#homeScreen_upcoming_container');
+        setupToggleVisibility('#homeScreen_imdbTop250_enabled', '#homeScreen_imdbTop250_container');
+        setupToggleVisibility('#homeScreen_seasonal_enabled', '#homeScreen_seasonal_container');
+        setupToggleVisibility('#homeScreen_watchAgain_enabled', '#homeScreen_watchAgain_container');
+        setupToggleVisibility('#homeScreen_discovery_enabled', '#homeScreen_discovery_container');
+        
+        // Setup event listeners for section management
+        // Add section to seasonal season
+        modalInstance.dialogContent.addEventListener('click', (e) => {
+            const addBtn = e.target.closest('.add-section-to-seasonal-btn');
+            if (addBtn) {
+                const seasonIndex = parseInt(addBtn.getAttribute('data-season-index'));
+                addSectionToSeasonalSeason(seasonIndex);
+            }
+        });
+        
+        // Add custom section
+        modalInstance.dialogContent.addEventListener('click', (e) => {
+            const addBtn = e.target.closest('.add-custom-section-btn');
+            if (addBtn) {
+                addCustomSection();
+            }
+        });
+        
+        // Delete section
+        modalInstance.dialogContent.addEventListener('click', (e) => {
+            const deleteBtn = e.target.closest('.delete-section-btn');
+            if (deleteBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                const prefix = deleteBtn.getAttribute('data-prefix');
+                const sectionIndexRaw = deleteBtn.getAttribute('data-section-index');
+                const isSeasonal = deleteBtn.getAttribute('data-is-seasonal') === 'true';
+                if (prefix && sectionIndexRaw !== null) {
+                    // For seasonal sections, sectionIndex is a compound string like "0_1", don't parse it
+                    const sectionIndex = isSeasonal || sectionIndexRaw.includes('_') ? sectionIndexRaw : parseInt(sectionIndexRaw);
+                    deleteSection(prefix, sectionIndex, isSeasonal);
+                }
+            }
+        });
+        
+        // Preview section
+        modalInstance.dialogContent.addEventListener('click', (e) => {
+            const previewBtn = e.target.closest('.preview-section-btn');
+            if (previewBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                const prefix = previewBtn.getAttribute('data-prefix');
+                const sectionIndexRaw = previewBtn.getAttribute('data-section-index');
+                if (prefix && sectionIndexRaw !== null) {
+                    // For seasonal sections, sectionIndex is a compound string like "0_1", don't parse it
+                    const isSeasonal = prefix === 'seasonal_season' || sectionIndexRaw.includes('_');
+                    const sectionIndex = isSeasonal ? sectionIndexRaw : parseInt(sectionIndexRaw, 10);
+                    previewSection(prefix, sectionIndex);
+                }
+            }
+        });
+        
+        // Type dropdown change
+        modalInstance.dialogContent.addEventListener('change', (e) => {
+            const typeSelect = e.target.closest(`[class*="_section_type"]`);
+            if (typeSelect && typeSelect.hasAttribute('data-prefix')) {
+                const prefix = typeSelect.getAttribute('data-prefix');
+                const sectionIndex = typeSelect.getAttribute('data-section-index');
+                const isSeasonal = typeSelect.getAttribute('data-is-seasonal') === 'true';
+                updateSectionSourceField(prefix, sectionIndex, isSeasonal);
+            }
+        });
+        
+        // Initialize autocomplete for all badge-based sections
+        setTimeout(async () => {
+            const badgeContainers = modalInstance.dialogContent.querySelectorAll('.tag-badge-container:not(.includeItemTypes-badge-container)');
+            for (const container of badgeContainers) {
+                const prefix = container.getAttribute('data-prefix');
+                const sectionIndex = container.getAttribute('data-section-index');
+                const type = container.getAttribute('data-type');
+                if (prefix && sectionIndex && type) {
+                    await setupBadgeAutocomplete(prefix, sectionIndex, type);
+                    if (type === 'Collection' || type === 'Playlist') {
+                        await loadBadgeNames(prefix, sectionIndex, type);
+                    }
+                }
+            }
             
-            const toggleNewMoviesEpisodesTrendingVisibility = () => {
-                const isEnabled = enableNewAndTrendingCheckbox.checked;
-                if (newMoviesContainer) {
-                    newMoviesContainer.style.display = isEnabled ? '' : 'none';
+            // Initialize autocomplete for Include Item Types fields
+            const includeItemTypesContainers = modalInstance.dialogContent.querySelectorAll('.includeItemTypes-badge-container');
+            for (const container of includeItemTypesContainers) {
+                const prefix = container.getAttribute('data-prefix');
+                const sectionIndex = container.getAttribute('data-section-index');
+                const availableTypes = container.getAttribute('data-available-types')?.split(',').filter(Boolean) || [];
+                if (prefix && sectionIndex) {
+                    setupIncludeItemTypesDropdown(prefix, sectionIndex, availableTypes);
                 }
-                if (newEpisodesContainer) {
-                    newEpisodesContainer.style.display = isEnabled ? '' : 'none';
+            }
+            
+            // Setup summary update listeners for existing custom sections
+            // Setup summary listeners for custom sections
+            const customSectionItems = modalInstance.dialogContent.querySelectorAll('.customSection_section_item');
+            customSectionItems.forEach(sectionItem => {
+                const sectionIndex = sectionItem.getAttribute('data-section-index');
+                if (sectionIndex !== null) {
+                    setupCustomSectionSummaryListeners(sectionItem, sectionIndex);
                 }
-                if (trendingContainer) {
-                    trendingContainer.style.display = isEnabled ? '' : 'none';
+            });
+            
+            // Setup summary listeners for seasonal nested sections
+            const seasonalSectionItems = modalInstance.dialogContent.querySelectorAll('.seasonal_season_section_item');
+            seasonalSectionItems.forEach(sectionItem => {
+                const sectionIndex = sectionItem.getAttribute('data-section-index');
+                if (sectionIndex !== null) {
+                    setupCustomSectionSummaryListeners(sectionItem, sectionIndex);
                 }
+            });
+            
+            // Setup order update listeners for home screen sections
+            setupHomeSectionOrderListeners();
+            
+            // Setup order update listeners for recently released subsections
+            setupRecentlyReleasedOrderListeners();
+            
+            // Setup order update listeners for seasonal seasons
+            setupSeasonalSeasonOrderListeners();
+            
+            // Setup order update listeners for discovery section types
+            setupDiscoverySectionTypeOrderListeners();
+            
+            // Setup name update listeners for seasonal seasons
+            setupSeasonalSeasonNameListeners();
+        }, 100);
+        
+        // Setup event listeners to update home section order displays
+        function setupHomeSectionOrderListeners() {
+            const orderSpans = modalInstance.dialogContent.querySelectorAll('.home-section-order');
+            orderSpans.forEach(span => {
+                const prefix = span.getAttribute('data-prefix');
+                if (prefix) {
+                    const orderInput = modalInstance.dialogContent.querySelector(`#${prefix}_order`);
+                    if (orderInput) {
+                        orderInput.addEventListener('input', () => {
+                            span.textContent = orderInput.value || '100';
+                        });
+                    }
+                }
+            });
+        }
+        
+        // Setup event listeners to update recently released subsection order displays
+        function setupRecentlyReleasedOrderListeners() {
+            const moviesOrderSpan = modalInstance.dialogContent.querySelector('.recently-released-movies-order');
+            const moviesOrderInput = modalInstance.dialogContent.querySelector('#homeScreen_recentlyReleased_movies_order');
+            if (moviesOrderSpan && moviesOrderInput) {
+                moviesOrderInput.addEventListener('input', () => {
+                    moviesOrderSpan.textContent = moviesOrderInput.value || '30';
+                });
+            }
+            
+            const episodesOrderSpan = modalInstance.dialogContent.querySelector('.recently-released-episodes-order');
+            const episodesOrderInput = modalInstance.dialogContent.querySelector('#homeScreen_recentlyReleased_episodes_order');
+            if (episodesOrderSpan && episodesOrderInput) {
+                episodesOrderInput.addEventListener('input', () => {
+                    episodesOrderSpan.textContent = episodesOrderInput.value || '31';
+                });
+            }
+            
+            // Setup enabled status listeners
+            const moviesEnabledSpan = modalInstance.dialogContent.querySelector('.recently-released-movies-enabled');
+            const moviesEnabledCheckbox = modalInstance.dialogContent.querySelector('#homeScreen_recentlyReleased_movies_enabled');
+            if (moviesEnabledSpan && moviesEnabledCheckbox) {
+                moviesEnabledCheckbox.addEventListener('change', () => {
+                    moviesEnabledSpan.textContent = moviesEnabledCheckbox.checked ? 'Enabled' : 'Disabled';
+                });
+            }
+            
+            const episodesEnabledSpan = modalInstance.dialogContent.querySelector('.recently-released-episodes-enabled');
+            const episodesEnabledCheckbox = modalInstance.dialogContent.querySelector('#homeScreen_recentlyReleased_episodes_enabled');
+            if (episodesEnabledSpan && episodesEnabledCheckbox) {
+                episodesEnabledCheckbox.addEventListener('change', () => {
+                    episodesEnabledSpan.textContent = episodesEnabledCheckbox.checked ? 'Enabled' : 'Disabled';
+                });
+            }
+        }
+        
+        // Setup event listeners to update seasonal season order displays
+        function setupSeasonalSeasonOrderListeners() {
+            const orderInputs = modalInstance.dialogContent.querySelectorAll('.seasonal-season-order-input');
+            orderInputs.forEach(input => {
+                const seasonIndex = input.getAttribute('data-index');
+                const orderSpan = modalInstance.dialogContent.querySelector(`.seasonal-season-order[data-season-index="${seasonIndex}"]`);
+                if (orderSpan) {
+                    input.addEventListener('input', () => {
+                        orderSpan.textContent = input.value || '100';
+                    });
+                }
+            });
+            
+            // Setup enabled status listeners
+            const enabledCheckboxes = modalInstance.dialogContent.querySelectorAll('.seasonal-season-enabled');
+            enabledCheckboxes.forEach(checkbox => {
+                const seasonIndex = checkbox.getAttribute('data-index');
+                const enabledSpan = modalInstance.dialogContent.querySelector(`.seasonal-season-enabled-display[data-season-index="${seasonIndex}"]`);
+                if (enabledSpan) {
+                    checkbox.addEventListener('change', () => {
+                        enabledSpan.textContent = checkbox.checked ? 'Enabled' : 'Disabled';
+                    });
+                }
+            });
+        }
+        
+        // Setup event listeners to update discovery section type order displays
+        function setupDiscoverySectionTypeOrderListeners() {
+            DISCOVERY_SECTION_DEFINITIONS.forEach(section => {
+                const prefix = `homeScreen_discovery_sectionTypes_${section.key}`;
+                const orderInput = modalInstance.dialogContent.querySelector(`#${prefix}_order`);
+                const orderSpan = modalInstance.dialogContent.querySelector(`.discovery-section-type-order[data-section-key="${section.key}"]`);
+                if (orderInput && orderSpan) {
+                    orderInput.addEventListener('input', () => {
+                        orderSpan.textContent = orderInput.value || '100';
+                    });
+                }
+                
+                // Setup enabled status listeners
+                const enabledCheckbox = modalInstance.dialogContent.querySelector(`#${prefix}_enabled`);
+                const enabledSpan = modalInstance.dialogContent.querySelector(`.discovery-section-type-enabled[data-section-key="${section.key}"]`);
+                if (enabledCheckbox && enabledSpan) {
+                    enabledCheckbox.addEventListener('change', () => {
+                        enabledSpan.textContent = enabledCheckbox.checked ? 'Enabled' : 'Disabled';
+                    });
+                }
+            });
+        }
+        
+        // Setup event listeners to update seasonal season name displays
+        function setupSeasonalSeasonNameListeners() {
+            const nameInputs = modalInstance.dialogContent.querySelectorAll('.seasonal-season-name');
+            nameInputs.forEach(input => {
+                const seasonIndex = input.getAttribute('data-index');
+                const nameSpan = modalInstance.dialogContent.querySelector(`.seasonal-season-name-display[data-season-index="${seasonIndex}"]`);
+                if (nameSpan) {
+                    input.addEventListener('input', () => {
+                        nameSpan.textContent = input.value || 'Unnamed Season';
+                    });
+                }
+            });
+        }
+        
+        // Section management functions
+        async function addSectionToSeasonalSeason(seasonIndex) {
+            const sectionsList = modalInstance.dialogContent.querySelector(`.seasonal_season_sections_list[data-season-index="${seasonIndex}"]`);
+            if (!sectionsList) return;
+            
+            const sectionIndex = sectionsList.querySelectorAll('.seasonal_season_section_item').length;
+            const fullIndex = `${seasonIndex}_${sectionIndex}`;
+            const newSection = {
+                id: `seasonal-${seasonIndex}-section-${sectionIndex}`,
+                enabled: true,
+                name: 'New Section',
+                type: 'Genre',
+                source: '',
+                itemLimit: 16,
+                sortOrder: 'Random',
+                sortOrderDirection: 'Ascending',
+                cardFormat: 'Poster',
+                order: 100
             };
             
-            enableNewAndTrendingCheckbox.addEventListener('change', toggleNewMoviesEpisodesTrendingVisibility);
+            const sectionHtml = buildSectionUI('seasonal_season', newSection, fullIndex, true);
+            sectionsList.insertAdjacentHTML('beforeend', sectionHtml);
+            
+            // Initialize the new section's source field
+            const newSectionItem = sectionsList.querySelector(`.seasonal_season_section_item[data-section-index="${fullIndex}"]`);
+            if (newSectionItem) {
+                // Setup summary listeners for the new section
+                setupCustomSectionSummaryListeners(newSectionItem, fullIndex);
+                
+                const typeSelect = newSectionItem.querySelector('.seasonal_season_section_type');
+                if (typeSelect) {
+                    const type = typeSelect.value;
+                    if (type === 'Parent') {
+                        // Setup Parent type input sync
+                        const parentInput = newSectionItem.querySelector(`.seasonal_season_section_source[data-section-index="${fullIndex}"]`);
+                        const parentHidden = newSectionItem.querySelector(`.seasonal_season_section_source_hidden[data-section-index="${fullIndex}"]`);
+                        if (parentInput && parentHidden) {
+                            parentInput.addEventListener('input', () => {
+                                parentHidden.value = parentInput.value;
+                            });
+                        }
+                    } else {
+                        await setupBadgeAutocomplete('seasonal_season', fullIndex, type);
+                        if (type === 'Collection' || type === 'Playlist') {
+                            await loadBadgeNames('seasonal_season', fullIndex, type);
+                        }
+                    }
+                }
+                
+                // Initialize Include Item Types autocomplete
+                const includeItemTypesContainer = newSectionItem.querySelector(`.includeItemTypes-badge-container[data-section-index="${fullIndex}"]`);
+                if (includeItemTypesContainer) {
+                    const availableTypes = includeItemTypesContainer.getAttribute('data-available-types')?.split(',').filter(Boolean) || [];
+                    setupIncludeItemTypesDropdown('seasonal_season', fullIndex, availableTypes);
+                }
+            }
+        };
+        
+        async function addCustomSection() {
+            const sectionsList = modalInstance.dialogContent.querySelector('#customSections_list');
+            if (!sectionsList) return;
+            
+            const sectionIndex = sectionsList.querySelectorAll('.customSection_section_item').length;
+            const newSection = {
+                id: `custom-section-${sectionIndex}`,
+                enabled: true,
+                name: 'New Custom Section',
+                type: 'Collection',
+                source: '',
+                itemLimit: 16,
+                sortOrder: 'Random',
+                sortOrderDirection: 'Ascending',
+                cardFormat: 'Poster',
+                order: 100,
+                spotlight: false,
+                discoveryEnabled: false
+            };
+            
+            const sectionHtml = buildSectionUI('customSection', newSection, sectionIndex, false);
+            sectionsList.insertAdjacentHTML('beforeend', sectionHtml);
+            
+            // Initialize the new section's source field
+            const newSectionItem = sectionsList.querySelector(`.customSection_section_item[data-section-index="${sectionIndex}"]`);
+            if (newSectionItem) {
+                const typeSelect = newSectionItem.querySelector('.customSection_section_type');
+                if (typeSelect) {
+                    const type = typeSelect.value;
+                    if (type === 'Parent') {
+                        // Setup Parent type input sync
+                        const parentInput = newSectionItem.querySelector(`.customSection_section_source[data-section-index="${sectionIndex}"]`);
+                        const parentHidden = newSectionItem.querySelector(`.customSection_section_source_hidden[data-section-index="${sectionIndex}"]`);
+                        if (parentInput && parentHidden) {
+                            parentInput.addEventListener('input', () => {
+                                parentHidden.value = parentInput.value;
+                            });
+                        }
+                    } else {
+                        await setupBadgeAutocomplete('customSection', sectionIndex, type);
+                        if (type === 'Collection' || type === 'Playlist') {
+                            await loadBadgeNames('customSection', sectionIndex, type);
+                        }
+                    }
+                }
+                // Setup summary update listeners for custom sections
+                setupCustomSectionSummaryListeners(newSectionItem, sectionIndex);
+                
+                // Initialize Include Item Types autocomplete
+                const includeItemTypesContainer = newSectionItem.querySelector(`.includeItemTypes-badge-container[data-section-index="${sectionIndex}"]`);
+                if (includeItemTypesContainer) {
+                    const availableTypes = includeItemTypesContainer.getAttribute('data-available-types')?.split(',').filter(Boolean) || [];
+                    setupIncludeItemTypesDropdown('customSection', sectionIndex, availableTypes);
+                }
+            }
+        };
+        
+        // Setup event listeners to update section summary when name/order changes
+        // Works for both custom sections and seasonal nested sections
+        function setupCustomSectionSummaryListeners(sectionItem, sectionIndex) {
+            const prefix = sectionItem.classList.contains('customSection_section_item') ? 'customSection' : 'seasonal_season';
+            const sanitizedIndex = sectionIndex.toString().replace(/[^a-zA-Z0-9]/g, '_');
+            
+            // Find inputs based on prefix
+            const nameInput = sectionItem.querySelector(`.${prefix}_section_name[data-section-index="${sectionIndex}"]`);
+            const orderInput = sectionItem.querySelector(`#${prefix}_section_${sanitizedIndex}_order`);
+            const enabledCheckbox = sectionItem.querySelector(`#${prefix}_section_enabled_${sanitizedIndex}`) || sectionItem.querySelector(`.${prefix}_section_enabled[data-section-index="${sectionIndex}"]`);
+            
+            // Find summary display spans based on prefix
+            const nameClass = prefix === 'customSection' ? 'custom-section-name' : 'seasonal-section-name';
+            const orderClass = prefix === 'customSection' ? 'custom-section-order' : 'seasonal-section-order';
+            const enabledClass = prefix === 'customSection' ? 'custom-section-enabled-display' : 'seasonal-section-enabled-display';
+            
+            const nameSpan = sectionItem.querySelector(`.${nameClass}[data-section-index="${sectionIndex}"]`);
+            const orderSpan = sectionItem.querySelector(`.${orderClass}[data-section-index="${sectionIndex}"]`);
+            const enabledSpan = sectionItem.querySelector(`.${enabledClass}[data-section-index="${sectionIndex}"]`);
+            
+            if (nameInput && nameSpan) {
+                nameInput.addEventListener('input', () => {
+                    nameSpan.textContent = nameInput.value || 'Unnamed Section';
+                });
+            }
+            
+            if (orderInput && orderSpan) {
+                orderInput.addEventListener('input', () => {
+                    orderSpan.textContent = orderInput.value || '100';
+                });
+            }
+            
+            if (enabledCheckbox && enabledSpan) {
+                enabledCheckbox.addEventListener('change', () => {
+                    enabledSpan.textContent = enabledCheckbox.checked ? 'Enabled' : 'Disabled';
+                });
+            }
         }
+        
+        function deleteSection(prefix, sectionIndex, isSeasonalNested) {
+            // Try both string and number comparison for data-section-index
+            const sectionItem = modalInstance.dialogContent.querySelector(
+                `.${prefix}_section_item[data-section-index="${sectionIndex}"], .${prefix}_section_item[data-section-index='${sectionIndex}']`
+            );
+            if (sectionItem && confirm('Are you sure you want to delete this section?')) {
+                sectionItem.remove();
+                
+                // For seasonal sections, sectionIndex is compound (e.g., "0_1"), need special handling
+                if (isSeasonalNested && typeof sectionIndex === 'string' && sectionIndex.includes('_')) {
+                    const [seasonIndex, deletedSectionIndex] = sectionIndex.split('_');
+                    const sectionsList = modalInstance.dialogContent.querySelector(`.seasonal_season_sections_list[data-season-index="${seasonIndex}"]`);
+                    if (sectionsList) {
+                        // Re-index only sections within the same season
+                        const remainingItems = Array.from(sectionsList.querySelectorAll(`.${prefix}_section_item`))
+                            .sort((a, b) => {
+                                const aIdx = a.getAttribute('data-section-index');
+                                const bIdx = b.getAttribute('data-section-index');
+                                if (!aIdx || !bIdx) return 0;
+                                // Extract section index part (after underscore)
+                                const aSectionIdx = aIdx.includes('_') ? parseInt(aIdx.split('_')[1]) : parseInt(aIdx);
+                                const bSectionIdx = bIdx.includes('_') ? parseInt(bIdx.split('_')[1]) : parseInt(bIdx);
+                                return aSectionIdx - bSectionIdx;
+                            });
+                        
+                        remainingItems.forEach((item, newSectionIndex) => {
+                            const newFullIndex = `${seasonIndex}_${newSectionIndex}`;
+                            const oldIndex = item.getAttribute('data-section-index');
+                            item.setAttribute('data-section-index', newFullIndex);
+                            
+                            // Update all inputs within this section
+                            item.querySelectorAll(`[data-section-index="${oldIndex}"]`).forEach(el => {
+                                el.setAttribute('data-section-index', newFullIndex);
+                            });
+                            
+                            // Update summary displays
+                            const summaryName = item.querySelector(`.seasonal-section-name[data-section-index="${oldIndex}"]`);
+                            if (summaryName) {
+                                summaryName.setAttribute('data-section-index', newFullIndex);
+                            }
+                            const summaryEnabled = item.querySelector(`.seasonal-section-enabled-display[data-section-index="${oldIndex}"]`);
+                            if (summaryEnabled) {
+                                summaryEnabled.setAttribute('data-section-index', newFullIndex);
+                            }
+                            const summaryOrder = item.querySelector(`.seasonal-section-order[data-section-index="${oldIndex}"]`);
+                            if (summaryOrder) {
+                                summaryOrder.setAttribute('data-section-index', newFullIndex);
+                            }
+                            
+                            // Update delete and preview button data attributes
+                            const deleteBtn = item.querySelector('.delete-section-btn');
+                            if (deleteBtn) {
+                                deleteBtn.setAttribute('data-section-index', newFullIndex);
+                            }
+                            const previewBtn = item.querySelector('.preview-section-btn');
+                            if (previewBtn) {
+                                previewBtn.setAttribute('data-section-index', newFullIndex);
+                            }
+                        });
+                    }
+                } else {
+                    // Regular custom sections - simple re-indexing
+                    const remainingItems = Array.from(modalInstance.dialogContent.querySelectorAll(`.${prefix}_section_item`))
+                        .sort((a, b) => {
+                            const aIndex = parseInt(a.getAttribute('data-section-index')) || 0;
+                            const bIndex = parseInt(b.getAttribute('data-section-index')) || 0;
+                            return aIndex - bIndex;
+                        });
+                    
+                    remainingItems.forEach((item, newIndex) => {
+                        const oldIndex = item.getAttribute('data-section-index');
+                        item.setAttribute('data-section-index', newIndex);
+                        
+                        // Update all inputs within this section
+                        item.querySelectorAll(`[data-section-index="${oldIndex}"]`).forEach(el => {
+                            el.setAttribute('data-section-index', newIndex);
+                        });
+                        
+                        // Update summary displays that reference section index
+                        const summaryName = item.querySelector(`.custom-section-name[data-section-index="${oldIndex}"]`);
+                        if (summaryName) {
+                            summaryName.setAttribute('data-section-index', newIndex);
+                        }
+                        const summaryEnabled = item.querySelector(`.custom-section-enabled-display[data-section-index="${oldIndex}"]`);
+                        if (summaryEnabled) {
+                            summaryEnabled.setAttribute('data-section-index', newIndex);
+                        }
+                        const summaryOrder = item.querySelector(`.custom-section-order[data-section-index="${oldIndex}"]`);
+                        if (summaryOrder) {
+                            summaryOrder.setAttribute('data-section-index', newIndex);
+                        }
+                        
+                        // Update delete button data attribute
+                        const deleteBtn = item.querySelector('.delete-section-btn');
+                        if (deleteBtn) {
+                            deleteBtn.setAttribute('data-section-index', newIndex);
+                        }
+                        const previewBtn = item.querySelector('.preview-section-btn');
+                        if (previewBtn) {
+                            previewBtn.setAttribute('data-section-index', newIndex);
+                        }
+                    });
+                }
+            }
+        };
+        
+        async function previewSection(prefix, sectionIndex) {
+            if (!window.ModalSystem) {
+                alert('Modal system not available. Please ensure modal.js is loaded.');
+                return;
+            }
+            
+            const sectionConfig = getSectionConfigFromUI(modalInstance.dialogContent, prefix, sectionIndex);
+            if (!sectionConfig) {
+                alert('Unable to build preview for this section. Please check the configuration values.');
+                return;
+            }
+            
+            const modalId = `sectionPreview_${prefix}_${sectionIndex}_${Date.now()}`;
+            const contentId = `${modalId}_content`;
+            
+            const previewModal = window.ModalSystem.create({
+                id: modalId,
+                title: `Preview: ${sectionConfig.name || 'Custom Section'}`,
+                content: `
+                    <div id="${contentId}" class="preview-section-container" style="min-height: 320px; display: flex; align-items: center; justify-content: center; padding: 1.5em;>
+                        <div style="opacity: 0.75;">Preparing preview...</div>
+                    </div>
+                `,
+                footer: `
+                    <button class="emby-button raised" id="${modalId}_closeBtn" style="padding: 0.75em 2em; font-size: 1em;">
+                        <span>Close</span>
+                    </button>
+                `,
+                closeOnBackdrop: true,
+                closeOnEscape: true,
+                size: 'large',
+                onOpen: async (previewInstance) => {
+                    previewInstance.dialogContent.style.width = '1400px';
 
-        // Home Screen: Toggle visibility of Infinite Scroll based on Discovery
-        const enableDiscoveryCheckbox = modalInstance.dialogContent.querySelector('#homeScreen_enableDiscovery');
-        if (enableDiscoveryCheckbox) {
-            const infiniteScrollContainer = modalInstance.dialogContent.querySelector('#homeScreen_infiniteScrollContainer');
+                    const closeBtn = previewInstance.dialogFooter?.querySelector(`#${modalId}_closeBtn`);
+                    if (closeBtn) {
+                        closeBtn.addEventListener('click', () => previewInstance.close());
+                    }
+                    
+                    const container = previewInstance.dialogContent.querySelector(`#${contentId}`);
+                    if (!container) {
+                        return;
+                    }
+                    
+                    container.innerHTML = `<div style="opacity: 0.75;">Loading preview...</div>`;
+                    
+                    try {
+                        const items = await fetchItemsForSectionPreview(sectionConfig);
+                        if (!items || items.length === 0) {
+                            container.innerHTML = `<div style="opacity: 0.75; text-align: center;">No items match this configuration yet.</div>`;
+                            return;
+                        }
+                        
+                        if (!window.cardBuilder) {
+                            container.innerHTML = `<div style="color: #ff6b6b; text-align: center;">Card builder utilities are not available.</div>`;
+                            return;
+                        }
+                        
+                        let previewElement = null;
+                        if (sectionConfig.spotlight && typeof window.cardBuilder.renderSpotlightSection === 'function') {
+                            previewElement = window.cardBuilder.renderSpotlightSection(items, sectionConfig.name || 'Preview', {
+                                autoPlay: false,
+                                showDots: true,
+                                showNavButtons: true,
+                                viewMoreUrl: null
+                            });
+                        } else if (typeof window.cardBuilder.renderCards === 'function') {
+                            previewElement = window.cardBuilder.renderCards(
+                                items,
+                                sectionConfig.name || 'Preview',
+                                null,
+                                true,
+                                sectionConfig.cardFormat || 'Poster',
+                                sectionConfig.sortOrder || 'Random',
+                                sectionConfig.sortOrderDirection || 'Ascending'
+                            );
+                        }
+                        
+                        container.innerHTML = '';
+                        if (previewElement) {
+                            container.appendChild(previewElement);
+                        } else {
+                            container.innerHTML = `<div style="opacity: 0.75; text-align: center;">Unable to render preview with the current configuration.</div>`;
+                        }
+                    } catch (error) {
+                        console.error('[KefinTweaks Configuration] Error rendering preview:', error);
+                        container.innerHTML = `<div style="color: #ff6b6b; text-align: center;">Failed to load preview: ${error?.message || error}</div>`;
+                    }
+                }
+            });
             
-            const toggleInfiniteScrollVisibility = () => {
-                const isEnabled = enableDiscoveryCheckbox.checked;
-                if (infiniteScrollContainer) {
-                    infiniteScrollContainer.style.display = isEnabled ? '' : 'none';
+            previewModal.open();
+        }
+        
+        async function updateSectionSourceField(prefix, sectionIndex, isSeasonalNested) {
+            const sectionItem = modalInstance.dialogContent.querySelector(`.${prefix}_section_item[data-section-index="${sectionIndex}"]`);
+            if (!sectionItem) {
+                console.warn(`[KefinTweaks Configuration] Section item not found for prefix: ${prefix}, index: ${sectionIndex}`);
+                return;
+            }
+            
+            const typeSelect = sectionItem.querySelector(`.${prefix}_section_type[data-section-index="${sectionIndex}"]`);
+            if (!typeSelect) {
+                console.warn(`[KefinTweaks Configuration] Type select not found for prefix: ${prefix}, index: ${sectionIndex}`);
+                return;
+            }
+            const type = typeSelect.value || 'Genre';
+            
+            // Find the source field container using the specific class
+            const sourceContainer = sectionItem.querySelector(`.${prefix}_section_source_container[data-section-index="${sectionIndex}"]`);
+            if (!sourceContainer) {
+                console.warn(`[KefinTweaks Configuration] Source container not found for prefix: ${prefix}, index: ${sectionIndex}`);
+                return;
+            }
+            
+            // Get current source value
+            const currentSourceInput = sectionItem.querySelector(`.${prefix}_section_source[data-section-index="${sectionIndex}"]`);
+            const badgeContainer = sourceContainer?.querySelector(`.tag-badge-container[data-section-index="${sectionIndex}"][data-type]`) || null;
+            let currentSource = '';
+            
+            if (badgeContainer) {
+                // Extract from existing badges
+                const badges = badgeContainer.querySelectorAll('.tag-badge');
+                currentSource = Array.from(badges).map(badge => badge.getAttribute('data-value')).filter(Boolean).join(', ');
+            } else if (currentSourceInput) {
+                // Extract from dropdown/input
+                currentSource = currentSourceInput.value || '';
+            }
+            
+            // Clear badges whenever the source type changes
+            // This ensures a clean state when switching between any types
+            const currentType = currentSourceInput?.dataset?.type || badgeContainer?.dataset?.type;
+            if (currentType && currentType !== type) {
+                currentSource = '';
+            }
+            
+            let newSourceHtml = '';
+            
+            if (type === 'Parent') {
+                // Parent type uses simple text input
+                newSourceHtml = `
+                    <div style="position: relative;">
+                        <div class="listItemBodyText" style="margin-bottom: 0.5em;">Parent IDs (comma-separated, leave empty for "Any")</div>
+                        <input type="text" class="${prefix}_section_source fld emby-input" data-section-index="${sectionIndex}" data-prefix="${prefix}" data-type="${type}" value="${currentSource}" placeholder="Enter parent IDs (e.g., collection-id, playlist-id) or leave empty" style="width: 100%;">
+                        <input type="hidden" class="${prefix}_section_source_hidden" data-section-index="${sectionIndex}" value="${currentSource}">
+                    </div>
+                `;
+            } else {
+                // Build new badge-based UI for other types
+                const sourceArray = currentSource ? currentSource.split(',').map(s => s.trim()).filter(Boolean) : [];
+                const badgesHtml = sourceArray.map(val => {
+                    if (type === 'Tag' || type === 'Genre') {
+                        return `<span class="tag-badge" data-value="${val}" style="display: inline-flex; align-items: center; gap: 0.25em; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 0.25em 0.5em; margin: 0.25em; font-size: 0.9em;">
+                            ${val}
+                            <button type="button" class="tag-badge-remove" style="background: none; border: none; color: rgba(255,255,255,0.7); cursor: pointer; padding: 0; margin-left: 0.25em; font-size: 1.2em; line-height: 1; display: flex; align-items: center;" title="Remove">×</button>
+                        </span>`;
+                    } else {
+                        return `<span class="tag-badge" data-value="${val}" data-loading="true" style="display: inline-flex; align-items: center; gap: 0.25em; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 0.25em 0.5em; margin: 0.25em; font-size: 0.9em;">
+                            ${val}
+                            <button type="button" class="tag-badge-remove" style="background: none; border: none; color: rgba(255,255,255,0.7); cursor: pointer; padding: 0; margin-left: 0.25em; font-size: 1.2em; line-height: 1; display: flex; align-items: center;" title="Remove">×</button>
+                        </span>`;
+                    }
+                }).join('');
+                
+                newSourceHtml = `
+                    <div style="position: relative;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5em;">
+                            <div class="listItemBodyText">${type}</div>
+                            <button type="button" class="badge-clear-all" data-section-index="${sectionIndex}" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 0.25em 0.5em; color: rgba(255,255,255,0.87); cursor: pointer; font-size: 0.85em;" title="Clear All">Clear All</button>
+                        </div>
+                        <div class="tag-badge-container" data-section-index="${sectionIndex}" data-prefix="${prefix}" data-type="${type}" style="min-height: 2.5em; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 0.5em; margin-bottom: 0.5em; background: rgba(0,0,0,0.2); display: flex; gap: 0.5em; align-items: flex-start; overflow: hidden;">
+                            <input type="text" class="${prefix}_section_source fld emby-input autocomplete-input" data-section-index="${sectionIndex}" data-prefix="${prefix}" data-type="${type}" placeholder="Type to add ${type.toLowerCase()}..." autocomplete="off" style="flex: 0 0 auto; width: 120px; min-width: 200px; max-width: 120px; border: none; background: transparent; outline: none; color: rgba(255,255,255,0.87); padding: 0.25em;">
+                            <div style="flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 0.25em; align-items: flex-start; overflow-wrap: break-word;">
+                                ${badgesHtml}
+                            </div>
+                        </div>
+                        <input type="hidden" class="${prefix}_section_source_hidden" data-section-index="${sectionIndex}" value="${currentSource}">
+                        <div class="autocomplete-suggestions" data-section-index="${sectionIndex}" style="display: none; position: absolute; z-index: 10000; background: #1a1a1a !important; color: rgba(255,255,255,0.87) !important; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; max-height: 200px; overflow-y: auto; margin-top: 2px; width: 100%; box-sizing: border-box; opacity: 1 !important; top: 100%; left: 0;"></div>
+                    </div>
+                `;
+            }
+            
+            sourceContainer.innerHTML = newSourceHtml;
+            
+            // Setup event listener for Parent type to sync input with hidden field
+            if (type === 'Parent') {
+                const parentInput = sourceContainer.querySelector(`.${prefix}_section_source[data-section-index="${sectionIndex}"]`);
+                const parentHidden = sourceContainer.querySelector(`.${prefix}_section_source_hidden[data-section-index="${sectionIndex}"]`);
+                if (parentInput && parentHidden) {
+                    parentInput.addEventListener('input', () => {
+                        parentHidden.value = parentInput.value;
+                    });
+                }
+            } else {
+                // Initialize autocomplete for other types
+                await setupBadgeAutocomplete(prefix, sectionIndex, type);
+                
+                // Load names for Collections/Playlists
+                if (type === 'Collection' || type === 'Playlist') {
+                    await loadBadgeNames(prefix, sectionIndex, type);
+                }
+            }
+            
+            // Update Include Item Types field to reflect available types based on source type
+            const includeItemTypesContainer = sectionItem.querySelector(`.${prefix}_section_includeItemTypes_container[data-section-index="${sectionIndex}"]`);
+            if (includeItemTypesContainer) {
+                const currentBadges = includeItemTypesContainer.querySelectorAll('.tag-badge');
+                const currentTypes = Array.from(currentBadges).map(badge => badge.getAttribute('data-value')).filter(Boolean);
+                const availableTypes = type === 'Parent' 
+                    ? ['Movie', 'Series', 'Season', 'Episode', 'MusicArtist', 'MusicAlbum', 'Audio', 'MusicVideo', 'Book', 'BoxSet', 'Playlist']
+                    : ['Movie', 'Series', 'Season', 'Episode', 'MusicArtist', 'MusicAlbum', 'Audio', 'MusicVideo', 'Book'];
+                
+                // Remove invalid types (types not available for current source type)
+                const validTypes = currentTypes.filter(t => availableTypes.includes(t));
+                
+                // Rebuild the Include Item Types field
+                const sanitizedPrefix = `${prefix}_section_${sectionIndex.toString().replace(/[^a-zA-Z0-9]/g, '_')}`;
+                const newIncludeItemTypesHtml = buildIncludeItemTypesField(prefix, sectionIndex, sanitizedPrefix, validTypes, type);
+                includeItemTypesContainer.outerHTML = newIncludeItemTypesHtml;
+                
+                // Re-initialize autocomplete for Include Item Types
+                const newContainer = sectionItem.querySelector(`.includeItemTypes-badge-container[data-section-index="${sectionIndex}"]`);
+                if (newContainer) {
+                    setupIncludeItemTypesDropdown(prefix, sectionIndex, availableTypes);
+                }
+            }
+        }
+        
+        // Generic badge management system
+        const BadgeSystem = {
+            /**
+             * Creates a badge element
+             * @param {string} value - The value to store (ID for collections/playlists, name for tags/genres)
+             * @param {string} displayText - The text to display
+             * @returns {HTMLElement} Badge element
+             */
+            createBadge(value, displayText) {
+                const badge = document.createElement('span');
+                badge.className = 'tag-badge';
+                badge.setAttribute('data-value', value);
+                badge.style.cssText = 'display: inline-flex; align-items: center; gap: 0.25em; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 0.25em 0.5em; margin: 0.25em; font-size: 0.9em;';
+                badge.innerHTML = `${displayText}<button type="button" class="tag-badge-remove" style="background: none; border: none; color: rgba(255,255,255,0.7); cursor: pointer; padding: 0; margin-left: 0.25em; font-size: 1.2em; line-height: 1; display: flex; align-items: center;" title="Remove">×</button>`;
+                return badge;
+            },
+            
+            /**
+             * Adds a badge to the container
+             */
+            addBadge(prefix, sectionIndex, value, displayText, badgeContainer, input, hiddenInput) {
+                // Check if badge already exists
+                const existingBadges = badgeContainer.querySelectorAll('.tag-badge');
+                const alreadyExists = Array.from(existingBadges).some(badge => 
+                    badge.getAttribute('data-value') === value
+                );
+                if (alreadyExists) return;
+                
+                // Find the badges wrapper div (sibling of the input in new layout, or container in old layout)
+                const badgesWrapper = input.nextElementSibling && input.nextElementSibling.matches('div') 
+                    ? input.nextElementSibling 
+                    : badgeContainer;
+                
+                const badge = this.createBadge(value, displayText);
+                badgesWrapper.appendChild(badge);
+                input.value = '';
+                this.updateHiddenInput(prefix, sectionIndex, badgeContainer, hiddenInput);
+            },
+            
+            /**
+             * Removes a badge from the container
+             */
+            removeBadge(prefix, sectionIndex, badge, badgeContainer, hiddenInput) {
+                badge.remove();
+                this.updateHiddenInput(prefix, sectionIndex, badgeContainer, hiddenInput);
+            },
+            
+            /**
+             * Removes all badges from the container
+             */
+            clearAll(prefix, sectionIndex, badgeContainer, hiddenInput) {
+                const badges = badgeContainer.querySelectorAll('.tag-badge');
+                badges.forEach(badge => badge.remove());
+                this.updateHiddenInput(prefix, sectionIndex, badgeContainer, hiddenInput);
+            },
+            
+            /**
+             * Updates hidden input from badges
+             */
+            updateHiddenInput(prefix, sectionIndex, badgeContainer, hiddenInput) {
+                const badges = badgeContainer.querySelectorAll('.tag-badge');
+                const values = Array.from(badges).map(badge => badge.getAttribute('data-value')).filter(Boolean);
+                if (hiddenInput) {
+                    hiddenInput.value = values.join(', ');
+                }
+            },
+            
+            /**
+             * Gets existing badge values (for deduplication)
+             */
+            getExistingBadges(badgeContainer) {
+                const badges = badgeContainer.querySelectorAll('.tag-badge');
+                return Array.from(badges).map(badge => badge.getAttribute('data-value').toLowerCase());
+            }
+        };
+        
+        // Generic autocomplete setup for badge-based inputs
+        // Supports: Tag, Genre, Collection, Playlist
+        async function setupBadgeAutocomplete(prefix, sectionIndex, type) {
+            const badgeContainer = modalInstance.dialogContent.querySelector(
+                `.tag-badge-container[data-section-index="${sectionIndex}"][data-type="${type}"]`
+            );
+            const input = modalInstance.dialogContent.querySelector(
+                `.${prefix}_section_source.autocomplete-input[data-section-index="${sectionIndex}"]`
+            );
+            const suggestionsDiv = modalInstance.dialogContent.querySelector(
+                `.autocomplete-suggestions[data-section-index="${sectionIndex}"]`
+            );
+            const hiddenInput = modalInstance.dialogContent.querySelector(
+                `.${prefix}_section_source_hidden[data-section-index="${sectionIndex}"]`
+            );
+            const clearAllBtn = modalInstance.dialogContent.querySelector(
+                `.badge-clear-all[data-section-index="${sectionIndex}"]`
+            );
+            
+            if (!badgeContainer || !input || !suggestionsDiv) return;
+            
+            // Setup badge remove handlers
+            badgeContainer.addEventListener('click', (e) => {
+                if (e.target.classList.contains('tag-badge-remove') || e.target.closest('.tag-badge-remove')) {
+                    const badge = e.target.closest('.tag-badge');
+                    if (badge) {
+                        BadgeSystem.removeBadge(prefix, sectionIndex, badge, badgeContainer, hiddenInput);
+                    }
+                }
+            });
+            
+            // Setup clear all button
+            if (clearAllBtn) {
+                clearAllBtn.addEventListener('click', () => {
+                    BadgeSystem.clearAll(prefix, sectionIndex, badgeContainer, hiddenInput);
+                });
+            }
+            
+            // Fetch available options based on type
+            let options = [];
+            try {
+                const userId = window.ApiClient.getCurrentUserId();
+                const serverAddress = window.ApiClient.serverAddress();
+                const token = window.ApiClient.accessToken();
+                
+                if (type === 'Tag' || type === 'Genre') {
+                    // Fetch Tags/Genres using Filters endpoint with caching
+                    const librariesData = await window.apiHelper.getItems({}, true, 300000);
+                    const libraries = librariesData.Items || [];
+                    const movieLibrary = libraries.find(lib => lib.CollectionType === 'movies');
+                    const parentId = movieLibrary ? movieLibrary.Id : null;
+                    const url = `${serverAddress}/Items/Filters?UserId=${userId}&IncludeItemTypes=Movie${parentId ? `&ParentId=${parentId}` : ''}`;
+                    const data = await window.apiHelper.getData(url, true, 300000);
+                    options = type === 'Tag' ? (data.Tags || []) : (data.Genres || []);
+                } else if (type === 'Collection' || type === 'Playlist') {
+                    // Fetch Collections/Playlists using getItems with caching
+                    const itemType = type === 'Playlist' ? 'Playlist' : 'BoxSet,CollectionFolder';
+                    const data = await window.apiHelper.getItems(
+                        {
+                            IncludeItemTypes: itemType,
+                            Recursive: true,
+                            Fields: 'ItemCounts'
+                        },
+                        true,
+                        300000
+                    );
+                    options = (data.Items || []).map(item => ({
+                        id: item.Id,
+                        name: item.Name
+                    }));
+                }
+            } catch (err) {
+                console.error('[KefinTweaks Configuration] Error fetching options:', err);
+            }
+            
+            let currentSuggestions = [];
+            let selectedIndex = -1;
+            
+            const getExistingBadges = () => BadgeSystem.getExistingBadges(badgeContainer);
+            
+            input.addEventListener('input', (e) => {
+                const value = e.target.value.trim();
+                if (value.length === 0) {
+                    suggestionsDiv.style.display = 'none';
+                    return;
+                }
+                
+                const existing = getExistingBadges();
+                
+                // Filter options based on type
+                if (type === 'Tag' || type === 'Genre') {
+                    currentSuggestions = options.filter(opt => 
+                        opt.toLowerCase().includes(value.toLowerCase()) &&
+                        !existing.includes(opt.toLowerCase())
+                    ).slice(0, 10);
+                } else {
+                    // Collections/Playlists: search by name, exclude by ID
+                    currentSuggestions = options.filter(opt => 
+                        opt.name.toLowerCase().includes(value.toLowerCase()) &&
+                        !existing.includes(opt.id.toLowerCase())
+                    ).slice(0, 10);
+                }
+                
+                if (currentSuggestions.length > 0) {
+                    suggestionsDiv.innerHTML = currentSuggestions.map((opt, idx) => {
+                        const display = type === 'Tag' || type === 'Genre' ? opt : opt.name;
+                        const dataValue = type === 'Tag' || type === 'Genre' ? opt : opt.id;
+                        return `<div class="autocomplete-suggestion" data-index="${idx}" data-value="${dataValue}" data-display="${display}" style="padding: 0.5em; cursor: pointer; border-left: 3px solid transparent;">${display}</div>`;
+                    }).join('');
+                    suggestionsDiv.style.display = 'block';
+                    selectedIndex = -1;
+                    // Set up mouse event handlers for each suggestion
+                    const suggestionItems = suggestionsDiv.querySelectorAll('.autocomplete-suggestion');
+                    suggestionItems.forEach((item, idx) => {
+                        item.addEventListener('mouseenter', () => {
+                            // Clear keyboard selection
+                            selectedIndex = -1;
+                            updateSuggestionHighlight();
+                            // Highlight hovered item
+                            item.style.background = 'rgba(255,255,255,0.1)';
+                        });
+                        item.addEventListener('mouseleave', () => {
+                            item.style.background = '';
+                        });
+                    });
+                } else {
+                    suggestionsDiv.style.display = 'none';
+                }
+            });
+            
+            // Handle suggestion clicks
+            suggestionsDiv.addEventListener('click', (e) => {
+                const suggestion = e.target.closest('.autocomplete-suggestion');
+                if (!suggestion) return;
+                
+                const selectedValue = suggestion.getAttribute('data-value');
+                const displayText = suggestion.getAttribute('data-display') || selectedValue;
+                
+                BadgeSystem.addBadge(prefix, sectionIndex, selectedValue, displayText, badgeContainer, input, hiddenInput);
+                suggestionsDiv.style.display = 'none';
+                selectedIndex = -1;
+                input.focus();
+            });
+            
+            // Function to show all available suggestions (excluding already selected)
+            function showAllSuggestions() {
+                const existing = getExistingBadges();
+                
+                // Filter options based on type, excluding already selected
+                if (type === 'Tag' || type === 'Genre') {
+                    currentSuggestions = options.filter(opt => 
+                        !existing.includes(opt.toLowerCase())
+                    ).slice(0, 30);
+                } else {
+                    // Collections/Playlists: exclude by ID
+                    currentSuggestions = options.filter(opt => 
+                        !existing.includes(opt.id.toLowerCase())
+                    ).slice(0, 30);
+                }
+                
+                if (currentSuggestions.length > 0) {
+                    suggestionsDiv.innerHTML = currentSuggestions.map((opt, idx) => {
+                        const display = type === 'Tag' || type === 'Genre' ? opt : opt.name;
+                        const dataValue = type === 'Tag' || type === 'Genre' ? opt : opt.id;
+                        return `<div class="autocomplete-suggestion" data-index="${idx}" data-value="${dataValue}" data-display="${display}" style="padding: 0.5em; cursor: pointer; border-left: 3px solid transparent;">${display}</div>`;
+                    }).join('');
+                    suggestionsDiv.style.display = 'block';
+                    selectedIndex = 0;
+                    updateSuggestionHighlight();
+                    // Set up mouse event handlers for each suggestion
+                    const suggestionItems = suggestionsDiv.querySelectorAll('.autocomplete-suggestion');
+                    suggestionItems.forEach((item, idx) => {
+                        item.addEventListener('mouseenter', () => {
+                            // Clear keyboard selection
+                            selectedIndex = -1;
+                            updateSuggestionHighlight();
+                            // Highlight hovered item
+                            item.style.background = 'rgba(255,255,255,0.1)';
+                        });
+                        item.addEventListener('mouseleave', () => {
+                            item.style.background = '';
+                        });
+                    });
+                } else {
+                    suggestionsDiv.style.display = 'none';
+                }
+            }
+            
+            // Handle keyboard navigation
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    // If input is empty and no suggestions shown, show all suggestions
+                    if (input.value.trim().length === 0 && suggestionsDiv.style.display === 'none') {
+                        showAllSuggestions();
+                        return;
+                    }
+                    // If suggestions are shown, navigate
+                    if (currentSuggestions.length > 0) {
+                        selectedIndex = Math.min(selectedIndex + 1, currentSuggestions.length - 1);
+                        updateSuggestionHighlight();
+                    }
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    if (currentSuggestions.length > 0) {
+                        selectedIndex = Math.max(selectedIndex - 1, -1);
+                        updateSuggestionHighlight();
+                        // If we go above the first item, hide suggestions
+                        if (selectedIndex < 0) {
+                            suggestionsDiv.style.display = 'none';
+                        }
+                    }
+                } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (selectedIndex >= 0 && currentSuggestions[selectedIndex]) {
+                        const selected = currentSuggestions[selectedIndex];
+                        const value = type === 'Tag' || type === 'Genre' ? selected : selected.id;
+                        const display = type === 'Tag' || type === 'Genre' ? selected : selected.name;
+                        BadgeSystem.addBadge(prefix, sectionIndex, value, display, badgeContainer, input, hiddenInput);
+                        suggestionsDiv.style.display = 'none';
+                        selectedIndex = -1;
+                    }
+                    // No free-form entry - require autocomplete selection
+                } else if (e.key === 'Escape') {
+                    suggestionsDiv.style.display = 'none';
+                    selectedIndex = -1;
+                } else if (e.key === 'Backspace' && input.value === '') {
+                    const badges = badgeContainer.querySelectorAll('.tag-badge');
+                    if (badges.length > 0) {
+                        const lastBadge = badges[badges.length - 1];
+                        BadgeSystem.removeBadge(prefix, sectionIndex, lastBadge, badgeContainer, hiddenInput);
+                    }
+                }
+            });
+            
+            function updateSuggestionHighlight() {
+                const items = suggestionsDiv.querySelectorAll('.autocomplete-suggestion');
+                items.forEach((item, idx) => {
+                    if (idx === selectedIndex) {
+                        item.style.background = 'rgba(0, 122, 255, 0.3)';
+                        item.style.borderLeft = '3px solid rgba(0, 122, 255, 0.8)';
+                        item.style.fontWeight = '500';
+                        // Scroll into view if needed
+                        item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                    } else {
+                        item.style.background = '';
+                        item.style.borderLeft = '3px solid transparent';
+                        item.style.fontWeight = '';
+                    }
+                });
+            }
+            
+            // Hide suggestions when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!badgeContainer.contains(e.target) && !suggestionsDiv.contains(e.target)) {
+                    suggestionsDiv.style.display = 'none';
+                }
+            });
+        }
+        
+        // Loads and updates badge display text for Collections/Playlists
+        // Replaces IDs with names after fetching from API
+        async function loadBadgeNames(prefix, sectionIndex, type) {
+            if (type !== 'Collection' && type !== 'Playlist') return;
+            
+            const badgeContainer = modalInstance.dialogContent.querySelector(
+                `.tag-badge-container[data-section-index="${sectionIndex}"][data-type="${type}"]`
+            );
+            if (!badgeContainer) return;
+            
+            const badges = badgeContainer.querySelectorAll('.tag-badge[data-loading="true"]');
+            if (badges.length === 0) return;
+            
+            try {
+                const itemType = type === 'Playlist' ? 'Playlist' : 'BoxSet,CollectionFolder';
+                const data = await window.apiHelper.getItems(
+                    {
+                        IncludeItemTypes: itemType,
+                        Recursive: true,
+                        Fields: 'ItemCounts'
+                    },
+                    true,
+                    300000
+                );
+                
+                const items = data.Items || [];
+                const itemMap = new Map(items.map(item => [item.Id, item]));
+                
+                badges.forEach(badge => {
+                    const id = badge.getAttribute('data-value');
+                    const item = itemMap.get(id);
+                    if (item) {
+                        const displayText = item.Name;
+                        badge.innerHTML = `${displayText}<button type="button" class="tag-badge-remove" style="background: none; border: none; color: rgba(255,255,255,0.7); cursor: pointer; padding: 0; margin-left: 0.25em; font-size: 1.2em; line-height: 1; display: flex; align-items: center;" title="Remove">×</button>`;
+                        badge.removeAttribute('data-loading');
+                    } else {
+                        // Item not found, keep ID display
+                        badge.removeAttribute('data-loading');
+                    }
+                });
+            } catch (err) {
+                console.error('[KefinTweaks Configuration] Error loading badge names:', err);
+                badges.forEach(badge => badge.removeAttribute('data-loading'));
+            }
+        }
+        
+        // Setup dropdown for Include Item Types field
+        function setupIncludeItemTypesDropdown(prefix, sectionIndex, availableTypes) {
+            const badgeContainer = modalInstance.dialogContent.querySelector(
+                `.includeItemTypes-badge-container[data-section-index="${sectionIndex}"]`
+            );
+            const toggleButton = badgeContainer?.querySelector('.includeItemTypes-dropdown-toggle');
+            const dropdown = badgeContainer?.querySelector('.includeItemTypes-dropdown');
+            const checkboxNodes = badgeContainer ? Array.from(badgeContainer.querySelectorAll('.includeItemTypes-option')) : [];
+            const proxyInput = modalInstance.dialogContent.querySelector(
+                `.${prefix}_section_includeItemTypes[data-section-index="${sectionIndex}"]`
+            );
+            const hiddenInput = modalInstance.dialogContent.querySelector(
+                `.${prefix}_section_includeItemTypes_hidden[data-section-index="${sectionIndex}"]`
+            );
+            const badgesWrapper = badgeContainer?.querySelector('.includeItemTypes-badges');
+            const emptyState = badgeContainer?.querySelector('.includeItemTypes-empty');
+            const clearAllBtn = modalInstance.dialogContent.querySelector(
+                `.badge-clear-all[data-section-index="${sectionIndex}"][data-field="includeItemTypes"]`
+            );
+            const allowedTypeSet = new Set((availableTypes || []).map(type => type.toLowerCase()));
+            
+            if (!badgeContainer || !dropdown || !proxyInput || !hiddenInput || !badgesWrapper) return;
+            
+            const closeDropdown = () => {
+                dropdown.style.display = 'none';
+                toggleButton?.setAttribute('aria-expanded', 'false');
+            };
+            
+            const openDropdown = () => {
+                dropdown.style.display = 'block';
+                toggleButton?.setAttribute('aria-expanded', 'true');
+            };
+            
+            toggleButton?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const isOpen = dropdown.style.display === 'block';
+                if (isOpen) {
+                    closeDropdown();
+                } else {
+                    openDropdown();
+                }
+            });
+            
+            document.addEventListener('click', (e) => {
+                if (!badgeContainer.contains(e.target)) {
+                    closeDropdown();
+                }
+            });
+            
+            const updateEmptyState = () => {
+                const hasBadges = badgesWrapper.querySelector('.tag-badge');
+                if (hasBadges) {
+                    emptyState?.setAttribute('hidden', 'true');
+                } else {
+                    emptyState?.removeAttribute('hidden');
                 }
             };
             
-            enableDiscoveryCheckbox.addEventListener('change', toggleInfiniteScrollVisibility);
+            // Setup badge remove handlers
+            badgeContainer.addEventListener('click', (e) => {
+                if (e.target.classList.contains('tag-badge-remove') || e.target.closest('.tag-badge-remove')) {
+                    const badge = e.target.closest('.tag-badge');
+                    if (badge) {
+                        const value = badge.getAttribute('data-value');
+                        const checkbox = checkboxNodes.find(cb => cb.value === value);
+                        if (checkbox) {
+                            checkbox.checked = false;
+                        }
+                        BadgeSystem.removeBadge(prefix, sectionIndex, badge, badgeContainer, hiddenInput);
+                        updateEmptyState();
+                        syncToggleLabel();
+                    }
+                }
+            });
+            
+            const syncToggleLabel = () => {
+                const count = badgesWrapper.querySelectorAll('.tag-badge').length;
+                if (toggleButton) {
+                    const textSpan = toggleButton.querySelector('.includeItemTypes-toggle-label');
+                    if (textSpan) {
+                        textSpan.textContent = count > 0 ? `${count} selected` : 'Select item types';
+                    }
+                }
+            };
+            
+            const handleCheckboxChange = (checkbox) => {
+                const value = checkbox.value;
+                if (!value || (allowedTypeSet.size && !allowedTypeSet.has(value.toLowerCase()))) return;
+                
+                if (checkbox.checked) {
+                    BadgeSystem.addBadge(prefix, sectionIndex, value, value, badgeContainer, proxyInput, hiddenInput);
+                } else {
+                    const badge = badgesWrapper.querySelector(`.tag-badge[data-value="${value}"]`);
+                    if (badge) {
+                        BadgeSystem.removeBadge(prefix, sectionIndex, badge, badgeContainer, hiddenInput);
+                    } else {
+                        BadgeSystem.updateHiddenInput(prefix, sectionIndex, badgeContainer, hiddenInput);
+                    }
+                }
+                updateEmptyState();
+                syncToggleLabel();
+            };
+            
+            checkboxNodes.forEach(checkbox => {
+                checkbox.addEventListener('change', () => handleCheckboxChange(checkbox));
+            });
+            
+            // Setup clear all button
+            if (clearAllBtn) {
+                clearAllBtn.addEventListener('click', () => {
+                    checkboxNodes.forEach(cb => {
+                        cb.checked = false;
+                    });
+                    BadgeSystem.clearAll(prefix, sectionIndex, badgeContainer, hiddenInput);
+                    updateEmptyState();
+                    syncToggleLabel();
+                });
+            }
+            
+            // Ensure badges match checked state on init
+            checkboxNodes.forEach(cb => {
+                if (cb.checked && !badgesWrapper.querySelector(`.tag-badge[data-value="${cb.value}"]`)) {
+                    BadgeSystem.addBadge(prefix, sectionIndex, cb.value, cb.value, badgeContainer, proxyInput, hiddenInput);
+                }
+            });
+            updateEmptyState();
+            syncToggleLabel();
         }
+        
+        // Seasonal season management functions (exposed globally for onclick handlers)
+        window.addNewSeasonalSeason = function() {
+            const seasonsList = modalInstance.dialogContent.querySelector('#homeScreen_seasonal_seasons_list');
+            if (!seasonsList) return;
+            
+            const newIndex = seasonsList.querySelectorAll('.seasonal-season-item').length;
+            const newSeason = {
+                id: `season-${newIndex}`,
+                enabled: true,
+                name: 'New Season',
+                startDate: '',
+                endDate: '',
+                order: 100,
+                sections: []
+            };
+            
+            const newSeasonHtml = `
+                <details class="seasonal-season-item" data-season-index="${newIndex}" style="border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 0; margin-bottom: 1em; background: rgba(255,255,255,0.02);">
+                    <summary class="seasonal-season-summary" data-season-index="${newIndex}" style="display: flex; justify-content: space-between; align-items: center; padding: 1em; cursor: pointer; list-style: none; user-select: none;">
+                        <div class="listItemBodyText" style="font-weight: 500; display: flex; align-items: center; gap: 0.5em;">
+                            <span class="material-icons" style="font-size: 1.2em; transition: transform 0.2s;">chevron_right</span>
+                        <span class="seasonal-season-name-display" data-season-index="${newIndex}">New Season</span>
+                        <span class="listItemBodyText secondary" style="font-size: 0.9em; font-weight: normal;">(<span class="seasonal-season-enabled-display" data-season-index="${newIndex}">Enabled</span>, Order: <span class="seasonal-season-order" data-season-index="${newIndex}">100</span>)</span>
+                        </div>
+                        <div style="display: flex; gap: 0.5em;">
+                            <button class="emby-button" onclick="deleteSeasonalSeason(${newIndex})" style="padding: 0.5em 1em; font-size: 0.9em; background: rgba(255,0,0,0.2);">Delete</button>
+                        </div>
+                    </summary>
+                    <div style="padding: 0 1em 1em 1em; border-top: 1px solid rgba(255,255,255,0.1);">
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75em; margin-bottom: 0.75em; margin-top: 0.75em;">
+                            <div>
+                                <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-bottom: 0.25em;">Enabled</div>
+                                ${buildJellyfinCheckbox(`seasonal-season-enabled-${newIndex}`, true, 'Enabled', { 'data-index': newIndex, 'class': 'seasonal-season-enabled' })}
+                            </div>
+                            <div>
+                                <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-bottom: 0.25em;">Name</div>
+                                <input type="text" class="seasonal-season-name fld emby-input" data-index="${newIndex}" value="" style="width: 100%;">
+                            </div>
+                            <div>
+                                <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-bottom: 0.25em;">Start Date (MM-DD)</div>
+                                <input type="text" class="seasonal-season-startDate fld emby-input" data-index="${newIndex}" value="" placeholder="10-01" style="width: 100%;">
+                            </div>
+                            <div>
+                                <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-bottom: 0.25em;">End Date (MM-DD)</div>
+                                <input type="text" class="seasonal-season-endDate fld emby-input" data-index="${newIndex}" value="" placeholder="10-31" style="width: 100%;">
+                            </div>
+                            <div>
+                                <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-bottom: 0.25em; display: flex; align-items: center; gap: 0.4em;">Order</div>
+                                <input type="number" class="seasonal-season-order-input fld emby-input" data-index="${newIndex}" value="100" min="0" style="width: 100%;">
+                            </div>
+                        </div>
+                        <div style="margin-top: 0.75em; margin-bottom: 0.75em;">
+                            <div class="listItemBodyText" style="font-weight: 500; margin-bottom: 0.5em;">Sections</div>
+                            <div class="seasonal_season_sections_list" data-season-index="${newIndex}">
+                            </div>
+                            <button type="button" class="emby-button raised add-section-to-seasonal-btn" data-season-index="${newIndex}" style="padding: 0.75em 1.5em; margin-top: 0.5em;">
+                                <span>Add Section</span>
+                            </button>
+                        </div>
+                    </div>
+                </details>
+            `;
+            seasonsList.insertAdjacentHTML('beforeend', newSeasonHtml);
+            
+            // Setup listeners for the new season
+            const newSeasonItem = seasonsList.querySelector(`.seasonal-season-item[data-season-index="${newIndex}"]`);
+            if (newSeasonItem) {
+                const nameInput = newSeasonItem.querySelector(`.seasonal-season-name[data-index="${newIndex}"]`);
+                const nameSpan = newSeasonItem.querySelector(`.seasonal-season-name-display[data-season-index="${newIndex}"]`);
+                const orderInput = newSeasonItem.querySelector(`.seasonal-season-order-input[data-index="${newIndex}"]`);
+                const orderSpan = newSeasonItem.querySelector(`.seasonal-season-order[data-season-index="${newIndex}"]`);
+                const enabledCheckbox = newSeasonItem.querySelector(`#seasonal-season-enabled-${newIndex}`) || newSeasonItem.querySelector(`.seasonal-season-enabled[data-index="${newIndex}"]`);
+                const enabledSpan = newSeasonItem.querySelector(`.seasonal-season-enabled-display[data-season-index="${newIndex}"]`);
+                
+                if (nameInput && nameSpan) {
+                    nameInput.addEventListener('input', () => {
+                        nameSpan.textContent = nameInput.value || 'Unnamed Season';
+                    });
+                }
+                
+                if (orderInput && orderSpan) {
+                    orderInput.addEventListener('input', () => {
+                        orderSpan.textContent = orderInput.value || '100';
+                    });
+                }
+                
+                if (enabledCheckbox && enabledSpan) {
+                    enabledCheckbox.addEventListener('change', () => {
+                        enabledSpan.textContent = enabledCheckbox.checked ? 'Enabled' : 'Disabled';
+                    });
+                }
+            }
+        };
+        
+        // Collection and Playlist picker functions
+        window.openCollectionPicker = async function(seasonIndex) {
+            if (!window.ModalSystem) {
+                alert('Modal system not available');
+                return;
+            }
+            
+            try {
+                // Fetch collections from server
+                const userId = window.ApiClient.getCurrentUserId();
+                const serverAddress = window.ApiClient.serverAddress();
+                const token = window.ApiClient.accessToken();
+                
+                const response = await fetch(`${serverAddress}/Users/${userId}/Items?IncludeItemTypes=BoxSet,CollectionFolder&Recursive=true&Fields=ItemCounts`, {
+                    headers: { 'X-Emby-Token': token }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                const collections = data.Items || [];
+                
+                // Get currently selected collections
+                const hiddenInput = modalInstance.dialogContent.querySelector(`.seasonal-season-collections[data-index="${seasonIndex}"]`);
+                const selectedIds = hiddenInput ? JSON.parse(hiddenInput.value || '[]') : [];
+                
+                // Create picker modal
+                let pickerModalInstanceRef = null;
+                const pickerModal = window.ModalSystem.create({
+                    id: 'collectionPickerModal',
+                    title: 'Select Collections',
+                    content: `
+                        <div style="max-height: 60vh; overflow-y: auto;">
+                            <div style="margin-bottom: 1em;">
+                                <input type="text" id="collectionPickerSearch" class="fld emby-input" placeholder="Search collections..." style="width: 100%;">
+                            </div>
+                            <div id="collectionPickerList" style="display: flex; flex-direction: column; gap: 0.5em;">
+                                ${collections.map(collection => {
+                                    const isSelected = selectedIds.includes(collection.Id);
+                                    return `
+                                        <label class="checkboxContainer" style="padding: 0.75em; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; cursor: pointer;">
+                                            <input type="checkbox" value="${collection.Id}" data-name="${collection.Name}" ${isSelected ? 'checked' : ''}>
+                                            <span>${collection.Name} (${collection.ChildCount || 0} items)</span>
+                                        </label>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </div>
+                    `,
+                    footer: `
+                        <button class="emby-button raised button-submit" id="collectionPickerConfirm" style="padding: 0.75em 2em;">
+                            <span>Confirm</span>
+                        </button>
+                        <button class="emby-button raised" id="collectionPickerCancel" style="padding: 0.75em 2em;">
+                            <span>Cancel</span>
+                        </button>
+                    `,
+                    closeOnBackdrop: true,
+                    closeOnEscape: true,
+                    onOpen: (pickerModalInstance) => {
+                        pickerModalInstanceRef = pickerModalInstance;
+                        
+                        // Set up search filter
+                        const searchInput = pickerModalInstance.dialogContent.querySelector('#collectionPickerSearch');
+                        if (searchInput) {
+                            searchInput.addEventListener('input', (e) => {
+                                const list = pickerModalInstance.dialogContent.querySelector('#collectionPickerList');
+                                const items = list.querySelectorAll('label');
+                                const term = e.target.value.toLowerCase();
+                                
+                                items.forEach(item => {
+                                    const name = item.querySelector('span').textContent.toLowerCase();
+                                    item.style.display = name.includes(term) ? '' : 'none';
+                                });
+                            });
+                        }
+                        
+                        const confirmBtn = pickerModalInstance.dialogFooter?.querySelector('#collectionPickerConfirm');
+                        const cancelBtn = pickerModalInstance.dialogFooter?.querySelector('#collectionPickerCancel');
+                        
+                        if (confirmBtn) {
+                            confirmBtn.addEventListener('click', () => {
+                                const checkboxes = pickerModalInstance.dialogContent.querySelectorAll('#collectionPickerList input[type="checkbox"]:checked');
+                                const selectedIds = Array.from(checkboxes).map(cb => cb.value);
+                                
+                                // Update hidden input
+                                if (hiddenInput) {
+                                    hiddenInput.value = JSON.stringify(selectedIds);
+                                    
+                                    // Update button text and selected count
+                                    const button = modalInstance.dialogContent.querySelector(`button[onclick="openCollectionPicker(${seasonIndex})"]`);
+                                    const selectedDiv = modalInstance.dialogContent.querySelector(`.seasonal-season-collections-selected[data-index="${seasonIndex}"]`);
+                                    
+                                    if (button) {
+                                        button.querySelector('span').textContent = `Select Collections (${selectedIds.length})`;
+                                    }
+                                    if (selectedDiv) {
+                                        selectedDiv.textContent = selectedIds.length > 0 ? `Selected: ${selectedIds.length} collection(s)` : 'No collections selected';
+                                    }
+                                }
+                                
+                                pickerModalInstance.close();
+                            });
+                        }
+                        
+                        if (cancelBtn) {
+                            cancelBtn.addEventListener('click', () => {
+                                pickerModalInstance.close();
+                            });
+                        }
+                    }
+                });
+                
+            } catch (error) {
+                console.error('[KefinTweaks Configuration] Error opening collection picker:', error);
+                alert('Error loading collections. Please try again.');
+            }
+        };
+        
+        window.openPlaylistPicker = async function(seasonIndex) {
+            if (!window.ModalSystem) {
+                alert('Modal system not available');
+                return;
+            }
+            
+            try {
+                // Fetch playlists from server
+                const userId = window.ApiClient.getCurrentUserId();
+                const serverAddress = window.ApiClient.serverAddress();
+                const token = window.ApiClient.accessToken();
+                
+                const response = await fetch(`${serverAddress}/Users/${userId}/Items?IncludeItemTypes=Playlist&Recursive=true&Fields=ItemCounts`, {
+                    headers: { 'X-Emby-Token': token }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                const playlists = data.Items || [];
+                
+                // Get currently selected playlists
+                const hiddenInput = modalInstance.dialogContent.querySelector(`.seasonal-season-playlists[data-index="${seasonIndex}"]`);
+                const selectedIds = hiddenInput ? JSON.parse(hiddenInput.value || '[]') : [];
+                
+                // Create picker modal
+                let pickerModalInstanceRef = null;
+                const pickerModal = window.ModalSystem.create({
+                    id: 'playlistPickerModal',
+                    title: 'Select Playlists',
+                    content: `
+                        <div style="max-height: 60vh; overflow-y: auto;">
+                            <div style="margin-bottom: 1em;">
+                                <input type="text" id="playlistPickerSearch" class="fld emby-input" placeholder="Search playlists..." style="width: 100%;">
+                            </div>
+                            <div id="playlistPickerList" style="display: flex; flex-direction: column; gap: 0.5em;">
+                                ${playlists.map(playlist => {
+                                    const isSelected = selectedIds.includes(playlist.Id);
+                                    return `
+                                        <label class="checkboxContainer" style="padding: 0.75em; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; cursor: pointer;">
+                                            <input type="checkbox" value="${playlist.Id}" data-name="${playlist.Name}" ${isSelected ? 'checked' : ''}>
+                                            <span>${playlist.Name} (${playlist.ChildCount || 0} items)</span>
+                                        </label>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </div>
+                    `,
+                    footer: `
+                        <button class="emby-button raised button-submit" id="playlistPickerConfirm" style="padding: 0.75em 2em;">
+                            <span>Confirm</span>
+                        </button>
+                        <button class="emby-button raised" id="playlistPickerCancel" style="padding: 0.75em 2em;">
+                            <span>Cancel</span>
+                        </button>
+                    `,
+                    closeOnBackdrop: true,
+                    closeOnEscape: true,
+                    onOpen: (pickerModalInstance) => {
+                        pickerModalInstanceRef = pickerModalInstance;
+                        
+                        // Set up search filter
+                        const searchInput = pickerModalInstance.dialogContent.querySelector('#playlistPickerSearch');
+                        if (searchInput) {
+                            searchInput.addEventListener('input', (e) => {
+                                const list = pickerModalInstance.dialogContent.querySelector('#playlistPickerList');
+                                const items = list.querySelectorAll('label');
+                                const term = e.target.value.toLowerCase();
+                                
+                                items.forEach(item => {
+                                    const name = item.querySelector('span').textContent.toLowerCase();
+                                    item.style.display = name.includes(term) ? '' : 'none';
+                                });
+                            });
+                        }
+                        
+                        const confirmBtn = pickerModalInstance.dialogFooter?.querySelector('#playlistPickerConfirm');
+                        const cancelBtn = pickerModalInstance.dialogFooter?.querySelector('#playlistPickerCancel');
+                        
+                        if (confirmBtn) {
+                            confirmBtn.addEventListener('click', () => {
+                                const checkboxes = pickerModalInstance.dialogContent.querySelectorAll('#playlistPickerList input[type="checkbox"]:checked');
+                                const selectedIds = Array.from(checkboxes).map(cb => cb.value);
+                                
+                                // Update hidden input
+                                if (hiddenInput) {
+                                    hiddenInput.value = JSON.stringify(selectedIds);
+                                    
+                                    // Update button text and selected count
+                                    const button = modalInstance.dialogContent.querySelector(`button[onclick="openPlaylistPicker(${seasonIndex})"]`);
+                                    const selectedDiv = modalInstance.dialogContent.querySelector(`.seasonal-season-playlists-selected[data-index="${seasonIndex}"]`);
+                                    
+                                    if (button) {
+                                        button.querySelector('span').textContent = `Select Playlists (${selectedIds.length})`;
+                                    }
+                                    if (selectedDiv) {
+                                        selectedDiv.textContent = selectedIds.length > 0 ? `Selected: ${selectedIds.length} playlist(s)` : 'No playlists selected';
+                                    }
+                                }
+                                
+                                pickerModalInstance.close();
+                            });
+                        }
+                        
+                        if (cancelBtn) {
+                            cancelBtn.addEventListener('click', () => {
+                                pickerModalInstance.close();
+                            });
+                        }
+                    }
+                });
+                
+            } catch (error) {
+                console.error('[KefinTweaks Configuration] Error opening playlist picker:', error);
+                alert('Error loading playlists. Please try again.');
+            }
+        };
+        
+        // Picker functions for sections (used in nested sections)
+        async function openCollectionPickerForSection(prefix, sectionIndex, isSeasonalNested) {
+            if (!window.ModalSystem) {
+                alert('Modal system not available');
+                return;
+            }
+            
+            try {
+                const userId = window.ApiClient.getCurrentUserId();
+                const serverAddress = window.ApiClient.serverAddress();
+                const token = window.ApiClient.accessToken();
+                
+                const response = await fetch(`${serverAddress}/Users/${userId}/Items?IncludeItemTypes=BoxSet,CollectionFolder&Recursive=true&Fields=ItemCounts`, {
+                    headers: { 'X-Emby-Token': token }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                const collections = data.Items || [];
+                
+                const sectionItem = modalInstance.dialogContent.querySelector(`.${prefix}_section_item[data-section-index="${sectionIndex}"]`);
+                const sourceInput = sectionItem?.querySelector(`.${prefix}_section_source[data-section-index="${sectionIndex}"]`);
+                const currentSource = sourceInput ? sourceInput.value : '';
+                const selectedId = currentSource || null;
+                
+                const pickerModal = window.ModalSystem.create({
+                    id: 'collectionPickerForSectionModal',
+                    title: 'Select Collection',
+                    content: `
+                        <div style="max-height: 60vh; overflow-y: auto;">
+                            <div style="margin-bottom: 1em;">
+                                <input type="text" id="collectionPickerForSectionSearch" class="fld emby-input" placeholder="Search collections..." style="width: 100%;">
+                            </div>
+                            <div id="collectionPickerForSectionList" style="display: flex; flex-direction: column; gap: 0.5em;">
+                                ${collections.map(collection => {
+                                    const isSelected = collection.Id === selectedId;
+                                    return `
+                                        <label class="checkboxContainer" style="padding: 0.75em; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; cursor: pointer;">
+                                            <input type="radio" name="collectionPickerForSection" value="${collection.Id}" ${isSelected ? 'checked' : ''}>
+                                            <span>${collection.Name} (${collection.ChildCount || 0} items)</span>
+                                        </label>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </div>
+                    `,
+                    footer: `
+                        <button class="emby-button raised" id="collectionPickerForSectionClear" style="padding: 0.75em 2em; margin-right: 0.5em;">
+                            <span>Clear</span>
+                        </button>
+                        <button class="emby-button raised button-submit" id="collectionPickerForSectionConfirm" style="padding: 0.75em 2em;">
+                            <span>Confirm</span>
+                        </button>
+                        <button class="emby-button raised" id="collectionPickerForSectionCancel" style="padding: 0.75em 2em;">
+                            <span>Cancel</span>
+                        </button>
+                    `,
+                    closeOnBackdrop: true,
+                    closeOnEscape: true,
+                    onOpen: (pickerModalInstance) => {
+                        const searchInput = pickerModalInstance.dialogContent.querySelector('#collectionPickerForSectionSearch');
+                        if (searchInput) {
+                            searchInput.addEventListener('input', (e) => {
+                                const list = pickerModalInstance.dialogContent.querySelector('#collectionPickerForSectionList');
+                                const items = list.querySelectorAll('label');
+                                const term = e.target.value.toLowerCase();
+                                items.forEach(item => {
+                                    const name = item.querySelector('span').textContent.toLowerCase();
+                                    item.style.display = name.includes(term) ? '' : 'none';
+                                });
+                            });
+                        }
+                        
+                        const confirmBtn = pickerModalInstance.dialogFooter?.querySelector('#collectionPickerForSectionConfirm');
+                        const clearBtn = pickerModalInstance.dialogFooter?.querySelector('#collectionPickerForSectionClear');
+                        const cancelBtn = pickerModalInstance.dialogFooter?.querySelector('#collectionPickerForSectionCancel');
+                        
+                        if (confirmBtn) {
+                            confirmBtn.addEventListener('click', () => {
+                                const selected = pickerModalInstance.dialogContent.querySelector('#collectionPickerForSectionList input[type="radio"]:checked');
+                                const selectedId = selected ? selected.value : '';
+                                
+                                if (sourceInput) {
+                                    sourceInput.value = selectedId;
+                                    
+                                    const button = sectionItem?.querySelector(`button[onclick*="openCollectionPickerForSection"]`);
+                                    const selectedDiv = sectionItem?.querySelector(`.${prefix}_section_collection_selected[data-section-index="${sectionIndex}"]`);
+                                    
+                                    if (button) {
+                                        button.querySelector('span').textContent = `Select Collection ${selectedId ? '(1)' : ''}`;
+                                    }
+                                    if (selectedDiv) {
+                                        selectedDiv.textContent = selectedId ? `Selected: 1 collection` : 'No collection selected';
+                                    }
+                                }
+                                
+                                pickerModalInstance.close();
+                            });
+                        }
+                        
+                        if (clearBtn) {
+                            clearBtn.addEventListener('click', () => {
+                                const radios = pickerModalInstance.dialogContent.querySelectorAll('#collectionPickerForSectionList input[type="radio"]');
+                                radios.forEach(radio => radio.checked = false);
+                                
+                                if (sourceInput) {
+                                    sourceInput.value = '';
+                                    
+                                    const button = sectionItem?.querySelector(`button[onclick*="openCollectionPickerForSection"]`);
+                                    const selectedDiv = sectionItem?.querySelector(`.${prefix}_section_collection_selected[data-section-index="${sectionIndex}"]`);
+                                    
+                                    if (button) {
+                                        button.querySelector('span').textContent = 'Select Collection';
+                                    }
+                                    if (selectedDiv) {
+                                        selectedDiv.textContent = 'No collection selected';
+                                    }
+                                }
+                                
+                                pickerModalInstance.close();
+                            });
+                        }
+                        
+                        if (cancelBtn) {
+                            cancelBtn.addEventListener('click', () => {
+                                pickerModalInstance.close();
+                            });
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error('[KefinTweaks Configuration] Error opening collection picker for section:', error);
+                alert('Error loading collections. Please try again.');
+            }
+        };
+        
+        async function openPlaylistPickerForSection(prefix, sectionIndex, isSeasonalNested) {
+            if (!window.ModalSystem) {
+                alert('Modal system not available');
+                return;
+            }
+            
+            try {
+                const userId = window.ApiClient.getCurrentUserId();
+                const serverAddress = window.ApiClient.serverAddress();
+                const token = window.ApiClient.accessToken();
+                
+                const response = await fetch(`${serverAddress}/Users/${userId}/Items?IncludeItemTypes=Playlist&Recursive=true&Fields=ItemCounts`, {
+                    headers: { 'X-Emby-Token': token }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                const playlists = data.Items || [];
+                
+                const sectionItem = modalInstance.dialogContent.querySelector(`.${prefix}_section_item[data-section-index="${sectionIndex}"]`);
+                const sourceInput = sectionItem?.querySelector(`.${prefix}_section_source[data-section-index="${sectionIndex}"]`);
+                const currentSource = sourceInput ? sourceInput.value : '';
+                const selectedId = currentSource || null;
+                
+                const pickerModal = window.ModalSystem.create({
+                    id: 'playlistPickerForSectionModal',
+                    title: 'Select Playlist',
+                    content: `
+                        <div style="max-height: 60vh; overflow-y: auto;">
+                            <div style="margin-bottom: 1em;">
+                                <input type="text" id="playlistPickerForSectionSearch" class="fld emby-input" placeholder="Search playlists..." style="width: 100%;">
+                            </div>
+                            <div id="playlistPickerForSectionList" style="display: flex; flex-direction: column; gap: 0.5em;">
+                                ${playlists.map(playlist => {
+                                    const isSelected = playlist.Id === selectedId;
+                                    return `
+                                        <label class="checkboxContainer" style="padding: 0.75em; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; cursor: pointer;">
+                                            <input type="radio" name="playlistPickerForSection" value="${playlist.Id}" ${isSelected ? 'checked' : ''}>
+                                            <span>${playlist.Name} (${playlist.ChildCount || 0} items)</span>
+                                        </label>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </div>
+                    `,
+                    footer: `
+                        <button class="emby-button raised" id="playlistPickerForSectionClear" style="padding: 0.75em 2em; margin-right: 0.5em;">
+                            <span>Clear</span>
+                        </button>
+                        <button class="emby-button raised button-submit" id="playlistPickerForSectionConfirm" style="padding: 0.75em 2em;">
+                            <span>Confirm</span>
+                        </button>
+                        <button class="emby-button raised" id="playlistPickerForSectionCancel" style="padding: 0.75em 2em;">
+                            <span>Cancel</span>
+                        </button>
+                    `,
+                    closeOnBackdrop: true,
+                    closeOnEscape: true,
+                    onOpen: (pickerModalInstance) => {
+                        const searchInput = pickerModalInstance.dialogContent.querySelector('#playlistPickerForSectionSearch');
+                        if (searchInput) {
+                            searchInput.addEventListener('input', (e) => {
+                                const list = pickerModalInstance.dialogContent.querySelector('#playlistPickerForSectionList');
+                                const items = list.querySelectorAll('label');
+                                const term = e.target.value.toLowerCase();
+                                items.forEach(item => {
+                                    const name = item.querySelector('span').textContent.toLowerCase();
+                                    item.style.display = name.includes(term) ? '' : 'none';
+                                });
+                            });
+                        }
+                        
+                        const confirmBtn = pickerModalInstance.dialogFooter?.querySelector('#playlistPickerForSectionConfirm');
+                        const clearBtn = pickerModalInstance.dialogFooter?.querySelector('#playlistPickerForSectionClear');
+                        const cancelBtn = pickerModalInstance.dialogFooter?.querySelector('#playlistPickerForSectionCancel');
+                        
+                        if (confirmBtn) {
+                            confirmBtn.addEventListener('click', () => {
+                                const selected = pickerModalInstance.dialogContent.querySelector('#playlistPickerForSectionList input[type="radio"]:checked');
+                                const selectedId = selected ? selected.value : '';
+                                
+                                if (sourceInput) {
+                                    sourceInput.value = selectedId;
+                                    
+                                    const button = sectionItem?.querySelector(`button[onclick*="openPlaylistPickerForSection"]`);
+                                    const selectedDiv = sectionItem?.querySelector(`.${prefix}_section_playlist_selected[data-section-index="${sectionIndex}"]`);
+                                    
+                                    if (button) {
+                                        button.querySelector('span').textContent = `Select Playlist ${selectedId ? '(1)' : ''}`;
+                                    }
+                                    if (selectedDiv) {
+                                        selectedDiv.textContent = selectedId ? `Selected: 1 playlist` : 'No playlist selected';
+                                    }
+                                }
+                                
+                                pickerModalInstance.close();
+                            });
+                        }
+                        
+                        if (clearBtn) {
+                            clearBtn.addEventListener('click', () => {
+                                const radios = pickerModalInstance.dialogContent.querySelectorAll('#playlistPickerForSectionList input[type="radio"]');
+                                radios.forEach(radio => radio.checked = false);
+                                
+                                if (sourceInput) {
+                                    sourceInput.value = '';
+                                    
+                                    const button = sectionItem?.querySelector(`button[onclick*="openPlaylistPickerForSection"]`);
+                                    const selectedDiv = sectionItem?.querySelector(`.${prefix}_section_playlist_selected[data-section-index="${sectionIndex}"]`);
+                                    
+                                    if (button) {
+                                        button.querySelector('span').textContent = 'Select Playlist';
+                                    }
+                                    if (selectedDiv) {
+                                        selectedDiv.textContent = 'No playlist selected';
+                                    }
+                                }
+                                
+                                pickerModalInstance.close();
+                            });
+                        }
+                        
+                        if (cancelBtn) {
+                            cancelBtn.addEventListener('click', () => {
+                                pickerModalInstance.close();
+                            });
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error('[KefinTweaks Configuration] Error opening playlist picker for section:', error);
+                alert('Error loading playlists. Please try again.');
+            }
+        };
+        
+        window.editSeasonalSeason = function(index) {
+            // For now, editing is done inline - this could open a modal in the future
+            console.log('Edit seasonal season', index);
+        };
+        
+        window.deleteSeasonalSeason = function(index) {
+            const seasonsList = modalInstance.dialogContent.querySelector('#homeScreen_seasonal_seasons_list');
+            if (!seasonsList) return;
+            
+            const seasonItem = seasonsList.querySelector(`.seasonal-season-item[data-season-index="${index}"]`);
+            if (seasonItem && confirm('Are you sure you want to delete this season?')) {
+                seasonItem.remove();
+                // Re-index remaining items
+                const remainingItems = seasonsList.querySelectorAll('.seasonal-season-item');
+                remainingItems.forEach((item, newIndex) => {
+                    item.setAttribute('data-season-index', newIndex);
+                    item.querySelectorAll('[data-index]').forEach(el => {
+                        el.setAttribute('data-index', newIndex);
+                    });
+                    const editBtn = item.querySelector('button[onclick*="editSeasonalSeason"]');
+                    const deleteBtn = item.querySelector('button[onclick*="deleteSeasonalSeason"]');
+                    if (editBtn) editBtn.setAttribute('onclick', `editSeasonalSeason(${newIndex})`);
+                    if (deleteBtn) deleteBtn.setAttribute('onclick', `deleteSeasonalSeason(${newIndex})`);
+                });
+            }
+        };
 
         // Toggle visibility of configuration sections based on script enable state
         const scriptCheckboxes = {
@@ -919,6 +3596,11 @@
         const saveBtn = modalInstance.dialogFooter?.querySelector('#saveConfigBtn');
         if (saveBtn) {
             saveBtn.addEventListener('click', () => handleSaveConfig(modalInstance));
+        }
+
+        const resetBtn = modalInstance.dialogFooter?.querySelector('#resetConfigBtn');
+        if (resetBtn) {
+            resetBtn.addEventListener('click', () => handleResetConfig(modalInstance));
         }
 
         // Export button handler
@@ -1268,6 +3950,186 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         }
     }
 
+    function getSectionConfigFromUI(rootElement, prefix, sectionIndex) {
+        const scope = rootElement || document;
+        const sectionItem = scope.querySelector(`.${prefix}_section_item[data-section-index="${sectionIndex}"]`);
+        if (!sectionItem) return null;
+        
+        const sanitizedIndex = sectionIndex.toString().replace(/[^a-zA-Z0-9]/g, '_');
+        const sectionIdAttr = sectionItem.getAttribute('data-section-id') || `${prefix}-section-${sanitizedIndex}`;
+        
+        const enabledCheckbox = sectionItem.querySelector(`#${prefix}_section_enabled_${sanitizedIndex}`) || sectionItem.querySelector(`.${prefix}_section_enabled[data-section-index="${sectionIndex}"]`);
+        const enabled = enabledCheckbox?.checked !== false;
+        const name = sectionItem.querySelector(`.${prefix}_section_name[data-section-index="${sectionIndex}"]`)?.value || '';
+        const type = sectionItem.querySelector(`.${prefix}_section_type[data-section-index="${sectionIndex}"]`)?.value || 'Genre';
+        
+        let source = '';
+        const sourceContainer = sectionItem.querySelector(`.${prefix}_section_source_container[data-section-index="${sectionIndex}"]`);
+        const badgeContainer = sourceContainer?.querySelector(`.tag-badge-container[data-section-index="${sectionIndex}"][data-type]`) || null;
+        if (badgeContainer) {
+            const badges = badgeContainer.querySelectorAll('.tag-badge');
+            source = Array.from(badges).map(badge => badge.getAttribute('data-value')).filter(Boolean).join(', ');
+        } else {
+            const sourceInput = sectionItem.querySelector(`.${prefix}_section_source[data-section-index="${sectionIndex}"]`);
+            source = sourceInput ? sourceInput.value : '';
+        }
+        
+        const itemLimit = parseInt(sectionItem.querySelector(`#${prefix}_section_${sanitizedIndex}_itemLimit`)?.value || '16', 10);
+        const sortOrder = sectionItem.querySelector(`#${prefix}_section_${sanitizedIndex}_sortOrder`)?.value || 'Random';
+        const sortOrderDirection = sectionItem.querySelector(`#${prefix}_section_${sanitizedIndex}_sortOrderDirection`)?.value || 'Ascending';
+        const cardFormat = sectionItem.querySelector(`#${prefix}_section_${sanitizedIndex}_cardFormat`)?.value || 'Poster';
+        const order = parseInt(sectionItem.querySelector(`#${prefix}_section_${sanitizedIndex}_order`)?.value || '100', 10);
+        const spotlightCheckbox = sectionItem.querySelector(`#${prefix}_section_${sanitizedIndex}_spotlight`) || sectionItem.querySelector(`.${prefix}_section_spotlight[data-section-index="${sectionIndex}"]`);
+        const discoveryCheckbox = sectionItem.querySelector(`#${prefix}_section_${sanitizedIndex}_discovery`) || sectionItem.querySelector(`.${prefix}_section_discovery[data-section-index="${sectionIndex}"]`);
+        const spotlight = spotlightCheckbox?.checked === true;
+        const discoveryEnabled = discoveryCheckbox?.checked === true;
+        const searchTerm = sectionItem.querySelector(`#${prefix}_section_${sanitizedIndex}_searchTerm`)?.value?.trim() || '';
+        
+        let includeItemTypes = [];
+        const includeItemTypesContainer = sectionItem.querySelector(`.includeItemTypes-badge-container[data-section-index="${sectionIndex}"]`);
+        if (includeItemTypesContainer) {
+            const badges = includeItemTypesContainer.querySelectorAll('.tag-badge');
+            includeItemTypes = Array.from(badges).map(badge => badge.getAttribute('data-value')).filter(Boolean);
+        }
+        if (includeItemTypes.length === 0 && type !== 'Parent') {
+            includeItemTypes = ['Movie'];
+        }
+        
+        return {
+            id: sectionIdAttr,
+            enabled: enabled,
+            name: name,
+            type: type,
+            source: source,
+            itemLimit: itemLimit,
+            sortOrder: sortOrder,
+            sortOrderDirection: sortOrderDirection,
+            cardFormat: cardFormat,
+            order: order,
+            spotlight: spotlight,
+            discoveryEnabled: discoveryEnabled,
+            searchTerm: searchTerm,
+            includeItemTypes: includeItemTypes
+        };
+    }
+    
+    async function fetchItemsForSectionPreview(sectionConfig) {
+        const apiClient = window.ApiClient;
+        if (!apiClient) {
+            throw new Error('ApiClient is not available');
+        }
+        
+        const userId = apiClient.getCurrentUserId();
+        const serverAddress = apiClient.serverAddress();
+        const token = apiClient.accessToken();
+        const type = sectionConfig.type || 'Genre';
+        const searchTerm = sectionConfig.searchTerm?.trim() || '';
+        const includeItemTypes = Array.isArray(sectionConfig.includeItemTypes) && sectionConfig.includeItemTypes.length > 0
+            ? sectionConfig.includeItemTypes.join(',')
+            : (sectionConfig.includeItemTypes || 'Movie');
+        const sortOrder = sectionConfig.sortOrder || 'Random';
+        const sortOrderDirection = sectionConfig.sortOrderDirection || 'Ascending';
+        const itemLimit = parseInt(sectionConfig.itemLimit, 10) || 16;
+        const sources = (sectionConfig.source || '').split(',').map(s => s.trim()).filter(Boolean);
+        const fields = 'PrimaryImageAspectRatio,DateCreated,Overview,ProductionYear,ImageTags,BackdropImageTags,ParentBackdropImageTags,ParentThumbImageTag,SeriesPrimaryImageTag';
+        const headers = { 'Authorization': `MediaBrowser Token="${token}"` };
+        
+        const dedupeAndLimit = (items = []) => {
+            let working = Array.isArray(items) ? [...items] : [];
+            if (sortOrder === 'Random') {
+                working.sort(() => Math.random() - 0.5);
+            } else if (window.cardBuilder?.sortItems) {
+                working = window.cardBuilder.sortItems(working, sortOrder, sortOrderDirection);
+            }
+            const seen = new Set();
+            const limited = [];
+            for (const item of working) {
+                if (!item || !item.Id || seen.has(item.Id)) continue;
+                seen.add(item.Id);
+                limited.push(item);
+                if (limited.length >= itemLimit) break;
+            }
+            return limited;
+        };
+        
+        const fetchJson = async (url) => {
+            const response = await fetch(url, { headers });
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            return response.json();
+        };
+        
+        try {
+            if (type === 'Genre' || type === 'Tag') {
+                if (sources.length === 0) {
+                    return [];
+                }
+                const paramName = type === 'Genre' ? 'Genres' : 'Tags';
+                const valueParam = sources.map(s => encodeURIComponent(s)).join('|');
+                const url = `${serverAddress}/Items?userId=${userId}&${paramName}=${valueParam}` +
+                    `&IncludeItemTypes=${encodeURIComponent(includeItemTypes)}` +
+                    `&Recursive=true&Fields=${encodeURIComponent(fields)}` +
+                    `&Limit=${itemLimit}&SortBy=${encodeURIComponent(sortOrder)}&SortOrder=${encodeURIComponent(sortOrderDirection)}` +
+                    (searchTerm ? `&SearchTerm=${encodeURIComponent(searchTerm)}` : '');
+                const data = await fetchJson(url);
+                return dedupeAndLimit(data.Items || []);
+            }
+            
+            if (type === 'Collection' || type === 'Playlist' || type === 'Parent') {
+                const existingIds = new Set();
+                let collected = [];
+                
+                const queryBase = {
+                    IncludeItemTypes: includeItemTypes,
+                    Recursive: true,
+                    Fields: fields,
+                    SortBy: sortOrder,
+                    SortOrder: sortOrderDirection
+                };
+                
+                const runQuery = async (params) => {
+                    const response = await apiClient.getItems(userId, params);
+                    if (response?.Items?.length) {
+                        response.Items.forEach(item => {
+                            if (item && item.Id && !existingIds.has(item.Id)) {
+                                existingIds.add(item.Id);
+                                collected.push(item);
+                            }
+                        });
+                    }
+                };
+                
+                if (type === 'Parent' && sources.length === 0) {
+                    const params = {
+                        ...queryBase,
+                        Limit: itemLimit * 2
+                    };
+                    if (searchTerm) params.SearchTerm = searchTerm;
+                    await runQuery(params);
+                } else {
+                    const multiplier = Math.max(1, sources.length);
+                    for (const parentId of sources) {
+                        const params = {
+                            ...queryBase,
+                            ParentId: parentId,
+                            Limit: itemLimit * multiplier
+                        };
+                        if (searchTerm) params.SearchTerm = searchTerm;
+                        await runQuery(params);
+                    }
+                }
+                
+                return dedupeAndLimit(collected);
+            }
+            
+            return [];
+        } catch (error) {
+            console.warn('[KefinTweaks Configuration] Preview fetch failed:', error);
+            throw error;
+        }
+    }
+    
     // Handle save configuration
     async function handleSaveConfig(modalInstance) {
         // Verify admin status before saving
@@ -1299,21 +4161,183 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             config.scripts[key] = checkbox.checked;
         });
 
+        // Helper function to get section config
+        function getSectionConfig(prefix, includeSortOrderOrOptions = true, includeOrderFlag = true) {
+            let includeSortOrder = true;
+            let includeOrder = true;
+            let includeName = false;
+            let defaultName = '';
+
+            if (typeof includeSortOrderOrOptions === 'object') {
+                const opts = includeSortOrderOrOptions || {};
+                includeSortOrder = opts.includeSortOrder !== undefined ? opts.includeSortOrder : true;
+                includeOrder = opts.includeOrder !== undefined ? opts.includeOrder : true;
+                includeName = opts.includeName === true;
+                defaultName = opts.defaultName || '';
+            } else {
+                includeSortOrder = includeSortOrderOrOptions !== false;
+                includeOrder = includeOrderFlag !== false;
+            }
+
+            const config = {
+                itemLimit: parseInt(document.getElementById(`${prefix}_itemLimit`)?.value || '16', 10)
+            };
+
+            if (includeName) {
+                config.name = document.getElementById(`${prefix}_name`)?.value || defaultName || '';
+            }
+
+            if (includeSortOrder) {
+                config.sortOrder = document.getElementById(`${prefix}_sortOrder`)?.value || 'Random';
+                config.sortOrderDirection = document.getElementById(`${prefix}_sortOrderDirection`)?.value || 'Ascending';
+            }
+
+            config.cardFormat = document.getElementById(`${prefix}_cardFormat`)?.value || 'Poster';
+
+            if (includeOrder) {
+                config.order = parseInt(document.getElementById(`${prefix}_order`)?.value || '100', 10);
+            }
+
+            return config;
+        }
+        
+        // Collect seasonal seasons
+        function getSeasonalSeasons() {
+            const seasons = [];
+            const seasonItems = modalInstance.dialogContent.querySelectorAll('.seasonal-season-item');
+            seasonItems.forEach((item, seasonIndex) => {
+                // Try to find checkbox by ID first, then fall back to class selector
+                const enabledCheckbox = item.querySelector(`#seasonal-season-enabled-${seasonIndex}`) || item.querySelector('.seasonal-season-enabled[data-index="${seasonIndex}"]');
+                const enabled = enabledCheckbox?.checked !== false;
+                const name = item.querySelector('.seasonal-season-name')?.value || '';
+                const startDate = item.querySelector('.seasonal-season-startDate')?.value || '';
+                const endDate = item.querySelector('.seasonal-season-endDate')?.value || '';
+                const orderInput = item.querySelector(`.seasonal-season-order-input[data-index="${seasonIndex}"]`);
+                const order = orderInput ? parseInt(orderInput.value || '100', 10) : 100;
+                
+                // Collect nested sections
+                const sectionsList = item.querySelector(`.seasonal_season_sections_list[data-season-index="${seasonIndex}"]`);
+                const sections = [];
+                if (sectionsList) {
+                    const sectionItems = sectionsList.querySelectorAll('.seasonal_season_section_item');
+                    sectionItems.forEach((sectionItem, sectionItemIndex) => {
+                        const fullIndex = `${seasonIndex}_${sectionItemIndex}`;
+                        const sectionConfig = getSectionConfigFromUI(modalInstance.dialogContent, 'seasonal_season', fullIndex);
+                        if (sectionConfig) {
+                            sections.push(sectionConfig);
+                        }
+                    });
+                }
+                
+                const seasonConfig = {
+                    id: name.toLowerCase().replace(/\s+/g, '-') || `season-${seasonIndex}`,
+                    name: name,
+                    enabled: enabled,
+                    startDate: startDate,
+                    endDate: endDate,
+                    order: order,
+                    sections: sections
+                };
+                seasons.push(seasonConfig);
+            });
+            return seasons;
+        }
+        
+        // Collect custom sections
+        function getCustomSections() {
+            const sectionsList = modalInstance.dialogContent.querySelector('#customSections_list');
+            const sections = [];
+            
+            if (!sectionsList) {
+                return sections;
+            }
+            
+            const sectionItems = sectionsList.querySelectorAll('.customSection_section_item');
+            sectionItems.forEach((sectionItem, index) => {
+                const sectionIndex = sectionItem.getAttribute('data-section-index') ?? index;
+                const sectionConfig = getSectionConfigFromUI(modalInstance.dialogContent, 'customSection', sectionIndex);
+                if (sectionConfig) {
+                    sections.push(sectionConfig);
+                }
+            });
+            
+            return sections;
+        }
+
         // Collect home screen config
         config.homeScreen = {
-            enableNewAndTrending: document.getElementById('homeScreen_enableNewAndTrending')?.checked !== false,
-            enableNewMovies: document.getElementById('homeScreen_enableNewMovies')?.checked !== false,
-            enableNewEpisodes: document.getElementById('homeScreen_enableNewEpisodes')?.checked !== false,
-            enableTrending: document.getElementById('homeScreen_enableTrending')?.checked === true,
-            enableDiscovery: document.getElementById('homeScreen_enableDiscovery')?.checked !== false,
-            enableInfiniteScroll: document.getElementById('homeScreen_enableInfiniteScroll')?.checked !== false,
-            minPeopleAppearances: parseInt(document.getElementById('homeScreen_minPeopleAppearances')?.value || '10'),
-            minGenreMovieCount: parseInt(document.getElementById('homeScreen_minGenreMovieCount')?.value || '50'),
-            minimumShowsForNetwork: parseInt(document.getElementById('homeScreen_minimumShowsForNetwork')?.value || '5'),
-            enableWatchlist: document.getElementById('homeScreen_enableWatchlist')?.checked !== false,
-            enableSeasonal: document.getElementById('homeScreen_enableSeasonal')?.checked !== false,
-            seasonalItemLimit: parseInt(document.getElementById('homeScreen_seasonalItemLimit')?.value || '16'),
-            customSections: parseJSONField('homeScreen_customSections', [])
+            defaultItemLimit: 16,
+            defaultSortOrder: 'Random',
+            defaultCardFormat: 'Poster',
+            recentlyReleased: {
+                enabled: document.getElementById('homeScreen_recentlyReleased_enabled')?.checked !== false,
+                movies: {
+                    enabled: document.getElementById('homeScreen_recentlyReleased_movies_enabled')?.checked !== false,
+                    ...getSectionConfig('homeScreen_recentlyReleased_movies', { includeName: true, defaultName: 'Recently Released Movies', includeSortOrder: false, includeOrder: true })
+                },
+                episodes: {
+                    enabled: document.getElementById('homeScreen_recentlyReleased_episodes_enabled')?.checked !== false,
+                    ...getSectionConfig('homeScreen_recentlyReleased_episodes', { includeName: true, defaultName: 'Recently Aired Episodes', includeSortOrder: false, includeOrder: true })
+                }
+            },
+            trending: {
+                enabled: document.getElementById('homeScreen_trending_enabled')?.checked === true,
+                ...getSectionConfig('homeScreen_trending', { includeName: true, defaultName: 'Trending' })
+            },
+            popularTVNetworks: {
+                enabled: document.getElementById('homeScreen_popularTVNetworks_enabled')?.checked === true,
+                minimumShowsForNetwork: parseInt(document.getElementById('homeScreen_popularTVNetworks_minimumShowsForNetwork')?.value || '5'),
+                ...getSectionConfig('homeScreen_popularTVNetworks', { includeName: true, defaultName: 'Popular TV Networks' })
+            },
+            watchlist: {
+                enabled: document.getElementById('homeScreen_watchlist_enabled')?.checked === true,
+                ...getSectionConfig('homeScreen_watchlist', { includeName: true, defaultName: 'Watchlist' })
+            },
+            watchAgain: {
+                enabled: document.getElementById('homeScreen_watchAgain_enabled')?.checked === true,
+                ...getSectionConfig('homeScreen_watchAgain', { includeName: true, defaultName: 'Watch Again' })
+            },
+            upcoming: {
+                enabled: document.getElementById('homeScreen_upcoming_enabled')?.checked !== false,
+                ...getSectionConfig('homeScreen_upcoming', { includeSortOrder: false, includeName: true, defaultName: 'Upcoming' })
+            },
+            imdbTop250: {
+                enabled: document.getElementById('homeScreen_imdbTop250_enabled')?.checked !== false,
+                ...getSectionConfig('homeScreen_imdbTop250', { includeName: true, defaultName: 'IMDb Top 250' })
+            },
+            seasonal: {
+                enabled: document.getElementById('homeScreen_seasonal_enabled')?.checked !== false,
+                defaultItemLimit: 16,
+                defaultSortOrder: 'Random',
+                defaultCardFormat: 'Poster',
+                seasons: getSeasonalSeasons()
+            },
+            discovery: {
+                enabled: document.getElementById('homeScreen_discovery_enabled')?.checked !== false,
+                infiniteScroll: document.getElementById('homeScreen_discovery_infiniteScroll')?.checked !== false,
+                randomizeOrder: document.getElementById('homeScreen_discovery_randomizeOrder')?.checked === true,
+                minPeopleAppearances: parseInt(document.getElementById('homeScreen_discovery_minPeopleAppearances')?.value || '10'),
+                minGenreMovieCount: parseInt(document.getElementById('homeScreen_discovery_minGenreMovieCount')?.value || '50'),
+                spotlightDiscoveryChance: parseFloat(document.getElementById('homeScreen_discovery_spotlightDiscoveryChance')?.value || '0.5'),
+                defaultItemLimit: parseInt(document.getElementById('homeScreen_discovery_itemLimit')?.value || '16'),
+                defaultSortOrder: document.getElementById('homeScreen_discovery_sortOrder')?.value || 'Random',
+                defaultCardFormat: document.getElementById('homeScreen_discovery_cardFormat')?.value || 'Poster',
+                sectionTypes: (() => {
+                    const sectionConfigs = {};
+                    DISCOVERY_SECTION_DEFINITIONS.forEach(section => {
+                        const prefix = `homeScreen_discovery_sectionTypes_${section.key}`;
+                        const collectedConfig = getSectionConfig(prefix, { includeName: true, includeOrder: true, includeSortOrder: false, defaultName: section.defaultName });
+                        collectedConfig.enabled = document.getElementById(`${prefix}_enabled`)?.checked !== false;
+                        if (section.extras?.minimumItems !== undefined) {
+                            const minimumValue = parseInt(document.getElementById(`${prefix}_minimumItems`)?.value || `${section.extras.minimumItems}`, 10);
+                            collectedConfig.minimumItems = Number.isFinite(minimumValue) ? minimumValue : section.extras.minimumItems;
+                        }
+                        sectionConfigs[section.key] = collectedConfig;
+                    });
+                    return sectionConfigs;
+                })()
+            },
+            customSections: getCustomSections()
         };
 
         // Collect exclusive elsewhere config
@@ -1402,6 +4426,48 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         }
     }
 
+    async function handleResetConfig(modalInstance) {
+        const userIsAdmin = await isAdmin();
+        if (!userIsAdmin) {
+            alert('You must be an administrator to reset configuration.');
+            return;
+        }
+
+        const confirmed = confirm('This will restore the KefinTweaks configuration to its defaults. It cannot be undone. Are you sure you want to continue?');
+        if (!confirmed) {
+            return;
+        }
+
+        try {
+            const defaultConfig = await loadDefaultConfig();
+
+            // Retain script URLs from existing config
+            const existingConfig = await getKefinTweaksConfig();
+            defaultConfig.kefinTweaksRoot = existingConfig.kefinTweaksRoot;
+            defaultConfig.scriptRoot = existingConfig.scriptRoot;
+
+            await saveConfigToJavaScriptInjector(defaultConfig);
+
+            if (window.KefinTweaksToaster && window.KefinTweaksToaster.toast) {
+                window.KefinTweaksToaster.toast('Configuration reset to defaults.');
+            } else {
+                alert('Configuration reset to defaults.');
+            }
+
+            if (modalInstance && typeof modalInstance.close === 'function') {
+                modalInstance.close();
+            }
+            openConfigurationModal();
+        } catch (error) {
+            console.error('[KefinTweaks Configuration] Error resetting config:', error);
+            if (window.KefinTweaksToaster && window.KefinTweaksToaster.toast) {
+                window.KefinTweaksToaster.toast(`Error resetting configuration: ${error.message}`, '5');
+            } else {
+                alert(`Error resetting configuration: ${error.message}`);
+            }
+        }
+    }
+
     // Helper to parse JSON fields safely
     function parseJSONField(fieldId, defaultValue) {
         try {
@@ -1419,14 +4485,12 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
 
     // Create configuration button for Administration section
     function createConfigButton() {
-        const button = document.createElement('a');
-        button.setAttribute('is', 'emby-linkbutton');
+        const button = document.createElement('div');
         button.style.display = 'block';
         button.style.padding = '0';
         button.style.margin = '0';
-        button.className = 'listItem-border emby-button';
+        button.className = 'listItem-border emby-button kefin-config-button';
         button.setAttribute('data-kefintweaks-config-button', 'true');
-        button.href = '#';
         button.onclick = (e) => {
             e.preventDefault();
             openConfigurationModal();

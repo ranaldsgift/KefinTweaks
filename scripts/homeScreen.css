@@ -125,3 +125,6 @@ div#discovery-loading-indicator:not(.show)::after {
 .editorsChoiceContainer {
     order: 1 !important;
 }
+.spotlight-section {
+    width: calc(100% - (2 * max(env(safe-area-inset-left),3.3%)));
+}

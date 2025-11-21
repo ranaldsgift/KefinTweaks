@@ -16,10 +16,15 @@ I think it's also worth mentioning that before the 1.0 release, you can expect t
 - [Configuration](#configuration)
 - [Features Overview](#features-overview)
   - [Data Caching](#data-caching)
-  - [Feature Requests Completed](#feature-requests-completed)
-  - [Feature Requests Planned](#feature-requests-planned)
+  - [Community Requests Progress](#community-request-progress)
+    - [Feature Requests Completed](#feature-requests-completed)
+    - [Feature Requests Planned](#feature-requests-planned)
   - [Core Features](#core-features)
     - [Watchlist](#watchlist)
+      - Watchlist Page
+      - Series Progress Page
+      - Movie History Page
+      - User Statistics Page
     - [Enhanced Home Screen](#enhanced-home-screen)
     - [Enhanced Search](#enhanced-search)
   - [UI Enhancements](#ui-enhancements)
@@ -42,7 +47,8 @@ I think it's also worth mentioning that before the 1.0 release, you can expect t
 - [Script Details](#script-details)
   - [Dependency Scripts](#dependency-scripts)
   - [Feature Scripts](#feature-scripts)
-- [Auto-Inject Dependencies](#auto-inject-dependencies)
+  - [Auto-Inject Dependencies](#auto-inject-dependencies)
+  - [Info For Developers](#info-for-developers)
 - [License](#license)
 - [Acknowledgments](#acknowledgments)
 - [Support](#support)
@@ -153,6 +159,9 @@ The features in KefinTweaks which use local data caching are listed below, along
 - Collections on Details Page  
   - **Collections** [24h]:  
   Sadly I know no way to retreive a list of Collections that an Item is a child of from the API directly. The Ancestors endpoint only returns the physical ancestors of an item. In order to be able to populate the "Included In" section, we fetch the children from every Collection in your library and add the Item ID of each child to the cache.
+  <hr>
+
+## Community Request Progress
 
 ### ✅ **Feature Requests Completed**
 
@@ -445,7 +454,7 @@ Coming soon...requires the [Updoot](https://github.com/BobHasNoSoul/jellyfin-upd
 | `deviceManager.js` | Device management with remove device functionality | `utils` |
 <br>
 
-## Auto-Inject Dependencies
+### Auto-Inject Dependencies
 
 KefinTweaks automatically enables required dependencies when you enable a script that needs them. For example:
 
@@ -454,17 +463,108 @@ KefinTweaks automatically enables required dependencies when you enable a script
 This ensures all scripts have their required dependencies without manual configuration.
 <hr>
 
+### Info for Developers
+
+This section will detail any information relevant for other developers who wish to take advatange of KefinTweaks features in their own projects:
+
+Currently the only functionality that can be very easily included by developers of other projects is the Watchlist functionality.
+
+The KefinTweaks Watchlist leverages the existing Jellyfin Item UserData field: "Likes". Here is how KefinTweaks handles the funcionality and how you can as well:
+
+- Add a section (on the home screen or elsewhere) which queries the Items endpoint with Likes=True
+- Add a Watchlist toggle button to all card overlays which toggles the UserData Likes value
+- Add a listener for PlaybackStopped to check if a Watchlisted item has been watched and automatically remove it from the Watchlist
+
+Even if you only implement the first bullet point and add a section for Watchlist items, KefinTweaks will automatically handle Watchlist syncing whenever the user connects with a KefinTweaks supported client.
+
+## Client Support
+
+KefinTweaks is a front end plugin that relies on the Jellyfin Web UI to function. This means that it will function wherever the Jellyfin Web UI is used, and won't function in any apps that don't use the Web UI.
+
+Here is a list of known supported clients:
+
+- Jellyfin Web - Works on any web browser
+- [Jellyfin Media Player](https://github.com/jellyfin/jellyfin-media-player)
+- [Jellyfin for Android](https://github.com/jellyfin/jellyfin-android)
+- [Jellyfin for iOS](https://github.com/jellyfin/jellyfin-ios)
+- [Jellyfin for WebOS](https://github.com/jellyfin/jellyfin-webos)
+- [Jellyfin for Tizen](https://github.com/jellyfin/jellyfin-tizen)
+<hr>
+
+## Changes to default Jellyfin functionality
+
+A few things to note about KefinTweaks functionality in general and how it interacts with the default Jellyfin functionality:
+
+### What functionality is additive?
+
+- Watchlist
+- Series Progress
+- Movie History
+- User Statistics
+- Enhanced Home Screen
+- Appearance/Skin Manager
+- Subtitle Search in Video OSD
+- Remove from Continue Watching
+- Breadcrumb Navigation
+- Custom Menu Links
+- Collections on Details Page
+
+## What functionality is modified?
+
+- Infinite Scroll for Library Pages
+  - Pagination controls are hidden in favor of infinite scrolling
+- Playlist Page UX
+  - Clicking playlist items navigates to the item page instead of playing the item
+  - A play button is added to each item on the Playlist page to allow the user to play the item directly
+- Flatten Single Season Shows
+  - The normal Seasons section is hidden for shows with only 1 season
+  - Episodes from the single season are displayed in a section with the Next Up item being the one focused
+- Background Leak Fix
+  - This removes extra backdrops from the DOM
+  - It fixes an issue which causes Jellyfin to endless add backdrop items to the DOM if the Jellyfin browser tab is not focused
+
+  
+### What functionality is overridden?
+
+- Search
+  - The default Jellyfin search is hidden in favor of the KefinTweaks search
+  - KefinTweaks blocks default Jellyfin search requests, and only performs its own search requests
+- Dashboard Button Fix
+  - This fix prevents the Back button in the Dashboad from navigating back to the "new tab" page in your browser
+<hr>
+
+## Design Philosophy
+
+The general design philosophy here is to utilize as much pre-existing Jellyfin functionality as possible in order to ensure long term compatibility, and also to potentially make it a bit easier for anyone interested in taking these ideas into the core Jellyfin projects. Even where functionality is being "overridden" we still typically utilize underlying Jellyfin functionality to achieve the results desired.
+
+The only real Plugin dependency that KefinTweaks has is JS Injector which is being used to both load the KefinTweaks scripts, and save configuration data on the server. Loading the scripts without JS Injector is very simple, but without another way of storing configuration data on the server, JS Injector is absolutely required if you wish to override any of the default configuration options in the UI.
+
+The main goal of this project is to push the limits of what is possible through a "front end plugin". All of the code in this project is executed by the client. This is quite unusual in terms of the typical Jellyfin plugin, but I hope it may be inspiring for other future creations down the road. I would also be very happy if the changes included here helped push forward the progress to get these changes implemented in the core Jellyfin project so that everyone can take advantage of them without needing a third party plugin.
+<hr>
+
+## AI Disclaimer
+
+To preface this, I want to say that historically, all of the community oriented projects I have worked on in the past have been composed nearly entirely by code that I have written myself. As new development tools have been released, I have tried to take advantage of them as much as possible in order to improve my own learning and to make my projects better. I understand that everyone has different personal feelings regarding the use of AI, so I wanted to leave a statement to make it clear about how I have chosen to use AI for this project in particular.
+
+I have started this project with a polar opposite approach from my past endeavors. With the rise of "vibe coding" I wanted to see what I could achieve using a similar philosophy. I understand the obvious short comings of using such a methodology, and I believe that in the majority of the situations it will be very detrimental in the long run. Where I can see this type of tool excelling, is the exact use case of KefinTweaks: mostly small self contained scripts which don't rely on any external pieces of logic. This is one of the main motivating factors that led me to believe I could achieve what I desire purely through "vibe coding".
+
+As it stands right now, and how I expect to proceed going forward, is to act in a role of "Project Manager" instead of "coder/developer". I don't blindly include every bit of code that is provided by my prompts. I make very thorough prompts that essentially provide very detailed documentation of the features to be implemented, in the same way a real project manager might provide this documentation to their team. I am not doing this for practice as I no longer professionally work in the design industry and have no plans to, but moreso just for fun and to see what the results are.
+
+The journey so far has been quite enjoyable. The scale of KefinTweaks has expanded a lot over time, so I do certainly have my concerns about the sustainability of this approach, but I plan to continue on like this unless I hit a roadblock. I hope that this choice will not deter you from trying this plugin, but I did want to make the use of AI clear as I understand that it is a hot issue in the industry and around the globe. My personal view is that AI should be used responsibly as a tool, just like any other tool. I think that AI has no place in replacing artists and other creative work that humans carry out.
+
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.  
 
 ## Acknowledgments
 
-- **Jellyfin Team**: For the amazing media server platform
+- **Jellyfin Team**: For the fantastic Jellyfin media server
 - **[n00bcodr](https://github.com/n00bcodr)**: For JellyfinEnhanced, the JS Injector Plugin and moral support
 - **[IAmParadox27](https://github.com/IAmParadox27)**: For the Custom Tabs Plugin
 - **[BobHasNoSoul](https://github.com/BobHasNoSoul)**: For the jellyfin-updoot functionality
-- **[The Jellyfin Community](https://discord.gg/v7P9CAvCKZhttps://discord.gg/v7P9CAvCKZ)**: For sharing knowledge and providing a welcoming enviornment to ask questions and learn 
+- **[The Jellyfin Community](https://discord.gg/v7P9CAvCKZhttps://discord.gg/v7P9CAvCKZ)**: For sharing knowledge and providing a welcoming environment to ask questions and learn 
+- **[movie-monk-b0t](https://github.com/movie-monk-b0t)**: For the IMDb Top 250 JSON data
 
 ## Support
 
@@ -478,11 +578,13 @@ This README and the inline comments in kefinTweaks.js and the other scripts is t
 ## Roadmap
 
 ### Planned Features
-- **Jellyfin 10.11 Support**:  
+- **Jellyfin 10.11 Support**  
+- **Additional options for User configuration in the Jellyfin UI**
 
 <hr>
 
 ### Version History
+- **v0.3.1**: New Home Screen Section feature: Spotlights! Improved Configuration UI.
 - **v0.3.0**: KefinTweaks configuration for admins in the Jellyfin UI!
 - **v0.2.4**: New Feature: Watchlist Export/Import
 - **v0.2.3**: New Feature: Collection Sorting, general fixes

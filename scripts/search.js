@@ -126,7 +126,6 @@
             .smart-search-input { width:100%; padding:8px; border-radius:4px; box-sizing:border-box; }
             .smart-search-buttons { display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; justify-content: center; }
             .smart-search-btn { padding:8px 12px; border:none; border-radius:4px; cursor:pointer; background:#444; color:#fff; }
-            .smart-search-btn.active { background:#673AB7; }
             .smart-search-results { margin-top:12px; }
             .smart-search-stats { color:#999; font-size:12px; margin-top:6px; display: none; }
             #persistent-toggle-btn { display:none; position:relative; padding:8px 12px; background:#00a4dc; color:#fff; border:none; border-radius:4px; cursor:pointer; }
@@ -452,7 +451,7 @@
             btnAll.textContent = 'All';
             const btnCore = document.createElement('button');
             btnCore.id = 'smart-search-core';
-            btnCore.className = 'smart-search-btn emby-button active';
+            btnCore.className = 'smart-search-btn emby-button raised button-submit active';
             btnCore.textContent = 'Movies/TV';
             const btnMusic = document.createElement('button');
             btnMusic.id = 'smart-search-music';
@@ -513,26 +512,26 @@
         // Function to update button states
         function updateButtonStates(activeType) {
             // Remove active class from all buttons
-            smartAllBtn.classList.remove('active');
-            smartCoreBtn.classList.remove('active');
-            smartMusicBtn.classList.remove('active');
-            smartBooksBtn.classList.remove('active');
+            smartAllBtn.classList.remove('active','button-submit','raised');
+            smartCoreBtn.classList.remove('active','button-submit','raised');
+            smartMusicBtn.classList.remove('active','button-submit','raised');
+            smartBooksBtn.classList.remove('active','button-submit','raised');
 
             if (smartRequestBtn) {
-                smartRequestBtn.classList.remove('active');
+                smartRequestBtn.classList.remove('active','button-submit','raised');
             }
             
             // Add active class to the selected button
             if (activeType === 'all') {
-                smartAllBtn.classList.add('active');
+                smartAllBtn.classList.add('active','button-submit','raised');
             } else if (activeType === 'videos') {
-                smartCoreBtn.classList.add('active');
+                smartCoreBtn.classList.add('active','button-submit','raised');
             } else if (activeType === 'music') {
-                smartMusicBtn.classList.add('active');
+                smartMusicBtn.classList.add('active','button-submit','raised');
             } else if (activeType === 'books') {
-                smartBooksBtn.classList.add('active');
+                smartBooksBtn.classList.add('active','button-submit','raised');
             } else if (activeType === 'request' && smartRequestBtn) {
-                smartRequestBtn.classList.add('active');
+                smartRequestBtn.classList.add('active','button-submit','raised');
             }
         }
 

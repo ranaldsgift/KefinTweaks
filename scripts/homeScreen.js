@@ -81,7 +81,7 @@
     
     // Create loading indicator element
     function createDiscoveryLoadingIndicator() {
-        let loadingDiv = document.getElementById('discovery-loading-indicator');
+        let loadingDiv = document.querySelector('.libraryPage:not(.hide) #discovery-loading-indicator');
         if (loadingDiv) {
             return loadingDiv;
         }
@@ -105,7 +105,7 @@
     
     // Show loading indicator
     function showDiscoveryLoadingIndicator() {
-        let loadingIndicator = document.getElementById('discovery-loading-indicator');
+        let loadingIndicator = document.querySelector('.libraryPage:not(.hide) #discovery-loading-indicator');
         
         if (!loadingIndicator) {
             createDiscoveryLoadingIndicator();
@@ -119,7 +119,7 @@
     
     // Hide loading indicator
     function hideDiscoveryLoadingIndicator() {
-        const loadingIndicator = document.getElementById('discovery-loading-indicator');
+        const loadingIndicator = document.querySelector('.libraryPage:not(.hide) #discovery-loading-indicator');
         if (loadingIndicator) {
             loadingIndicator.classList.remove('show');     
             loadingIndicator.style.visibility = 'hidden';
@@ -184,39 +184,634 @@
         WARN('KefinTweaksUtils not available, body class management may not work correctly');
     }
     
+    /**
+     * Migrates old homeScreen config format to new format
+     * Small, transparent function that runs automatically
+     */
+    function migrateHomeScreenConfig() {
+        if (!window.KefinTweaksConfig || !window.KefinTweaksConfig.homeScreen) {
+            return;
+        }
+        
+        const old = window.KefinTweaksConfig.homeScreen;
+        const migrated = {};
+        let needsMigration = false;
+        
+        // Check if old format exists (has enableNewAndTrending, etc.)
+        if (old.enableNewAndTrending !== undefined || old.enableNewMovies !== undefined) {
+            needsMigration = true;
+            
+            // Migrate recently released
+            migrated.recentlyReleased = {
+                enabled: old.enableNewAndTrending !== false,
+                order: 30,
+                movies: {
+                    enabled: old.enableNewMovies !== false,
+                    itemLimit: 16,
+                    sortOrder: "ReleaseDate",
+                    sortOrderDirection: "Descending",
+                    cardFormat: "Poster",
+                    order: 30
+                },
+                episodes: {
+                    enabled: old.enableNewEpisodes !== false,
+                    itemLimit: 16,
+                    sortOrder: "PremiereDate",
+                    sortOrderDirection: "Descending",
+                    cardFormat: "Backdrop",
+                    order: 31
+                }
+            };
+            
+            // Migrate trending
+            if (old.enableTrending !== undefined) {
+                migrated.trending = {
+                    enabled: old.enableTrending || false,
+                    itemLimit: 16,
+                    sortOrder: "Random",
+                    sortOrderDirection: "Ascending",
+                    cardFormat: "Poster",
+                    order: 32
+                };
+            }
+            
+            // Migrate popular TV networks
+            if (old.minimumShowsForNetwork !== undefined) {
+                migrated.popularTVNetworks = {
+                    enabled: false,
+                    minimumShowsForNetwork: old.minimumShowsForNetwork || 5,
+                    itemLimit: 16,
+                    sortOrder: "Random",
+                    sortOrderDirection: "Ascending",
+                    cardFormat: "Poster",
+                    order: 61
+                };
+            }
+            
+            // Migrate watchlist
+            if (old.enableWatchlist !== undefined) {
+                migrated.watchlist = {
+                    enabled: old.enableWatchlist || false,
+                    itemLimit: 16,
+                    sortOrder: "DateAdded",
+                    sortOrderDirection: "Descending",
+                    cardFormat: "Poster",
+                    order: 60
+                };
+            }
+            
+            // Migrate seasonal
+            if (old.enableSeasonal !== undefined) {
+                const seasons = [];
+                
+                // Check if old format has seasons array
+                if (old.seasonal && old.seasonal.seasons && Array.isArray(old.seasonal.seasons)) {
+                    // Migrate each season from old format to new format
+                    for (const oldSeason of old.seasonal.seasons) {
+                        const sections = [];
+                        
+                        // Migrate genres to Genre sections
+                        if (oldSeason.genres && Array.isArray(oldSeason.genres)) {
+                            for (const genre of oldSeason.genres) {
+                                sections.push({
+                                    id: `${oldSeason.id || 'season'}-genre-${genre.toLowerCase().replace(/\s+/g, '-')}`,
+                                    enabled: true,
+                                    name: `${genre} Movies`,
+                                    type: "Genre",
+                                    source: genre,
+                                    itemLimit: oldSeason.itemLimit || old.seasonalItemLimit || 16,
+                                    sortOrder: oldSeason.sortOrder || "Random",
+                                    sortOrderDirection: oldSeason.sortOrderDirection || "Ascending",
+                                    cardFormat: oldSeason.cardFormat || "Poster",
+                                    order: sections.length + 50
+                                });
+                            }
+                        }
+                        
+                        // Migrate tags to Tag sections
+                        if (oldSeason.tags && Array.isArray(oldSeason.tags)) {
+                            for (const tag of oldSeason.tags) {
+                                sections.push({
+                                    id: `${oldSeason.id || 'season'}-tag-${tag.toLowerCase().replace(/\s+/g, '-')}`,
+                                    enabled: true,
+                                    name: `${tag} Movies`,
+                                    type: "Tag",
+                                    source: tag,
+                                    itemLimit: oldSeason.itemLimit || old.seasonalItemLimit || 16,
+                                    sortOrder: oldSeason.sortOrder || "Random",
+                                    sortOrderDirection: oldSeason.sortOrderDirection || "Ascending",
+                                    cardFormat: oldSeason.cardFormat || "Poster",
+                                    order: sections.length + 50
+                                });
+                            }
+                        }
+                        
+                        // Migrate collections to Collection sections
+                        if (oldSeason.collections && Array.isArray(oldSeason.collections)) {
+                            for (const collectionId of oldSeason.collections) {
+                                sections.push({
+                                    id: `${oldSeason.id || 'season'}-collection-${collectionId}`,
+                                    enabled: true,
+                                    name: "Collection",
+                                    type: "Collection",
+                                    source: collectionId,
+                                    itemLimit: oldSeason.itemLimit || old.seasonalItemLimit || 16,
+                                    sortOrder: oldSeason.sortOrder || "Random",
+                                    sortOrderDirection: oldSeason.sortOrderDirection || "Ascending",
+                                    cardFormat: oldSeason.cardFormat || "Poster",
+                                    order: sections.length + 50
+                                });
+                            }
+                        }
+                        
+                        // Migrate playlists to Playlist sections
+                        if (oldSeason.playlists && Array.isArray(oldSeason.playlists)) {
+                            for (const playlistId of oldSeason.playlists) {
+                                sections.push({
+                                    id: `${oldSeason.id || 'season'}-playlist-${playlistId}`,
+                                    enabled: true,
+                                    name: "Playlist",
+                                    type: "Playlist",
+                                    source: playlistId,
+                                    itemLimit: oldSeason.itemLimit || old.seasonalItemLimit || 16,
+                                    sortOrder: oldSeason.sortOrder || "Random",
+                                    sortOrderDirection: oldSeason.sortOrderDirection || "Ascending",
+                                    cardFormat: oldSeason.cardFormat || "Poster",
+                                    order: sections.length + 50
+                                });
+                            }
+                        }
+                        
+                        // If no sections were created, create a default one from genres if available
+                        if (sections.length === 0 && oldSeason.genres && oldSeason.genres.length > 0) {
+                            sections.push({
+                                id: `${oldSeason.id || 'season'}-default`,
+                                enabled: true,
+                                name: oldSeason.name || "Seasonal Movies",
+                                type: "Genre",
+                                source: oldSeason.genres.join(', '),
+                                itemLimit: oldSeason.itemLimit || old.seasonalItemLimit || 16,
+                                sortOrder: oldSeason.sortOrder || "Random",
+                                sortOrderDirection: oldSeason.sortOrderDirection || "Ascending",
+                                cardFormat: oldSeason.cardFormat || "Poster",
+                                order: 50
+                            });
+                        }
+                        
+                        seasons.push({
+                            id: oldSeason.id || "halloween",
+                            name: oldSeason.name || "Halloween",
+                            enabled: oldSeason.enabled !== false,
+                            startDate: oldSeason.startDate || "10-01",
+                            endDate: oldSeason.endDate || "10-31",
+                            sections: sections
+                        });
+                    }
+                } else {
+                    // Default migration: create Halloween and Christmas seasons
+                    seasons.push({
+                        id: "halloween",
+                        name: "Halloween",
+                        enabled: true,
+                        startDate: "10-01",
+                        endDate: "10-31",
+                        sections: [
+                            {
+                                id: "halloween-horror",
+                                enabled: true,
+                                name: "Horror Movies",
+                                type: "Genre",
+                                source: "Horror",
+                                itemLimit: old.seasonalItemLimit || 16,
+                                sortOrder: "Random",
+                                sortOrderDirection: "Ascending",
+                                cardFormat: "Poster",
+                                order: 50
+                            },
+                            {
+                                id: "halloween-thriller",
+                                enabled: true,
+                                name: "Thriller Movies",
+                                type: "Genre",
+                                source: "Thriller",
+                                itemLimit: old.seasonalItemLimit || 16,
+                                sortOrder: "Random",
+                                sortOrderDirection: "Ascending",
+                                cardFormat: "Poster",
+                                order: 51
+                            }
+                        ]
+                    });
+                    seasons.push({
+                        id: "christmas",
+                        name: "Christmas",
+                        enabled: true,
+                        startDate: "12-01",
+                        endDate: "12-31",
+                        sections: [
+                            {
+                                id: "christmas-genre",
+                                enabled: true,
+                                name: "Christmas Movies",
+                                type: "Genre",
+                                source: "Christmas",
+                                itemLimit: old.seasonalItemLimit || 16,
+                                sortOrder: "Random",
+                                sortOrderDirection: "Ascending",
+                                cardFormat: "Poster",
+                                order: 60
+                            },
+                            {
+                                id: "christmas-family",
+                                enabled: true,
+                                name: "Family Movies",
+                                type: "Genre",
+                                source: "Family",
+                                itemLimit: old.seasonalItemLimit || 16,
+                                sortOrder: "Random",
+                                sortOrderDirection: "Ascending",
+                                cardFormat: "Poster",
+                                order: 61
+                            }
+                        ]
+                    });
+                }
+                
+                migrated.seasonal = {
+                    enabled: old.enableSeasonal !== false,
+                    defaultItemLimit: old.seasonalItemLimit || 16,
+                    defaultSortOrder: "Random",
+                    defaultCardFormat: "Poster",
+                    seasons: seasons
+                };
+            }
+            
+            // Migrate existing seasonal config if it's in new format but old structure
+            if (old.seasonal && old.seasonal.seasons && Array.isArray(old.seasonal.seasons)) {
+                const needsRestructure = old.seasonal.seasons.some(season => 
+                    season.genres || season.tags || season.collections || season.playlists
+                );
+                
+                if (needsRestructure && !migrated.seasonal) {
+                    // Already handled above, but ensure we don't lose it
+                    migrated.seasonal = migrated.seasonal || {
+                        enabled: old.seasonal.enabled !== false,
+                        defaultItemLimit: old.seasonal.defaultItemLimit || 16,
+                        defaultSortOrder: old.seasonal.defaultSortOrder || "Random",
+                        defaultCardFormat: old.seasonal.defaultCardFormat || "Poster",
+                        seasons: []
+                    };
+                }
+            }
+            
+            // Migrate discovery
+            if (old.enableDiscovery !== undefined || old.minPeopleAppearances !== undefined) {
+                migrated.discovery = {
+                    enabled: old.enableDiscovery !== false,
+                    infiniteScroll: old.enableInfiniteScroll !== false,
+                    minPeopleAppearances: old.minPeopleAppearances || 10,
+                    minGenreMovieCount: old.minGenreMovieCount || 50,
+                    defaultItemLimit: 16,
+                    defaultSortOrder: "Random",
+                    defaultCardFormat: "Poster",
+                    sectionTypes: {
+                        spotlightGenre: true,
+                        spotlightNetwork: true,
+                        genreMovies: true,
+                        studioShows: true,
+                        collections: {
+                            enabled: true,
+                            minimumItems: 10,
+                            itemLimit: null,
+                            sortOrder: null,
+                            sortOrderDirection: null,
+                            cardFormat: null
+                        },
+                        becauseYouWatched: true,
+                        becauseYouLiked: true,
+                        starringTopActor: true,
+                        directedByTopDirector: true,
+                        writtenByTopWriter: true,
+                        becauseYouRecentlyWatched: true,
+                        starringActorRecentlyWatched: true,
+                        directedByDirectorRecentlyWatched: true,
+                        writtenByWriterRecentlyWatched: true
+                    }
+                };
+            }
+            
+            // Migrate custom sections
+            if (old.customSections && Array.isArray(old.customSections)) {
+                migrated.customSections = old.customSections.map(section => {
+                    // If already in new format (has type and source), keep as is
+                    if (section.type && section.source !== undefined) {
+                        return section;
+                    }
+                    
+                    // Migrate from old format (sourceId) to new format
+                    const sourceId = section.sourceId || section.id;
+                    if (!sourceId) {
+                        return section; // Can't migrate without sourceId
+                    }
+                    
+                    // Try to determine type from existing data or default to Collection
+                    let type = section.type || 'Collection';
+                    let source = section.source || sourceId;
+                    
+                    // If no type specified, we'll auto-detect in renderCustomSection
+                    // But for migration, default to Collection
+                    return {
+                        id: section.id || `custom-${Math.random().toString(36).substr(2, 9)}`,
+                        enabled: section.enabled !== false,
+                        name: section.name || 'Custom Section',
+                        type: type,
+                        source: source,
+                        itemLimit: section.itemLimit || 16,
+                        sortOrder: section.sortOrder || 'Random',
+                        sortOrderDirection: section.sortOrderDirection || 'Ascending',
+                        cardFormat: section.cardFormat || 'Poster',
+                        order: section.order || 100,
+                        spotlight: section.spotlight === true,
+                        discoveryEnabled: section.discoveryEnabled === true
+                    };
+                });
+            }
+            
+            // Add new sections that didn't exist in old format (use defaults if not already present)
+            // These sections are new and won't be in old configs, so we add them with default values
+            if (!window.KefinTweaksConfig.homeScreen.upcoming) {
+                migrated.upcoming = {
+                    enabled: true,
+                    itemLimit: 48,
+                    cardFormat: "Thumb",
+                    order: 20
+                };
+            }
+            
+            if (!window.KefinTweaksConfig.homeScreen.imdbTop250) {
+                migrated.imdbTop250 = {
+                    enabled: true,
+                    itemLimit: 16,
+                    sortOrder: "Random",
+                    sortOrderDirection: "Ascending",
+                    cardFormat: "Poster",
+                    order: 21
+                };
+            }
+            
+            if (!window.KefinTweaksConfig.homeScreen.watchAgain) {
+                migrated.watchAgain = {
+                    enabled: false,
+                    itemLimit: 16,
+                    sortOrder: "Random",
+                    sortOrderDirection: "Ascending",
+                    cardFormat: "Poster",
+                    order: 62
+                };
+            }
+            
+            // Merge migrated config with existing (new format takes precedence)
+            window.KefinTweaksConfig.homeScreen = {
+                ...migrated,
+                ...window.KefinTweaksConfig.homeScreen
+            };
+            
+            LOG('Migrated homeScreen config from old format to new format');
+            
+            // Save migrated config back to JS Injector plugin (async, don't block)
+            if (window.KefinTweaksUtils && window.KefinTweaksUtils.saveConfigToJavaScriptInjector) {
+                window.KefinTweaksUtils.saveConfigToJavaScriptInjector().catch(err => {
+                    ERR('Failed to save migrated config to JS Injector:', err);
+                });
+            } else {
+                WARN('KefinTweaksUtils.saveConfigToJavaScriptInjector not available, config migration not persisted');
+            }
+        }
+    }
+    
+    // Run migration before reading config
+    migrateHomeScreenConfig();
+    
+    // Read new config structure
+    const homeScreenConfig = window.KefinTweaksConfig?.homeScreen || {};
+    const defaultItemLimit = homeScreenConfig.defaultItemLimit || 16;
+    const defaultSortOrder = homeScreenConfig.defaultSortOrder || 'Random';
+    const defaultCardFormat = homeScreenConfig.defaultCardFormat || 'Poster';
+    
+    // Spotlight configuration
+    const spotlightConfig = homeScreenConfig.spotlight || {};
+    const spotlightAutoPlay = spotlightConfig.autoPlay || true;
+    const spotlightInterval = spotlightConfig.interval || 5000;
+    const spotlightShowDots = spotlightConfig.showDots || true;
+    const spotlightShowNavButtons = spotlightConfig.showNavButtons || true;
+    const spotlightShowClearArt = spotlightConfig.showClearArt || true;
+    
     // Custom home sections configuration
-    // Read from centralized config or use defaults
-    // name: The name of the section that will appear on the home screen
-    // id: The ID of the playlist that will be used to fetch the items for the section
-    // maxItems: The maximum number of items to display in the section
-    // order: The flex order of the section on the home screen (requires css to take advantage of this)
-    const customHomeSections = window.KefinTweaksConfig?.homeScreen?.customSections || [];
+    const customHomeSections = homeScreenConfig.customSections || [];
 
-    // New and Trending sections configuration
-    const enableNewAndTrending = window.KefinTweaksConfig?.homeScreen?.enableNewAndTrending !== false; // Default to true
-    const enableNewMovies = window.KefinTweaksConfig?.homeScreen?.enableNewMovies !== false; // Default to true
-    const enableNewEpisodes = window.KefinTweaksConfig?.homeScreen?.enableNewEpisodes !== false; // Default to true
-    const enableTrending = window.KefinTweaksConfig?.homeScreen?.enableTrending || false; // Default to false (stubs for now)
+    // Recently Released sections configuration
+    const recentlyReleasedConfig = homeScreenConfig.recentlyReleased || {};
+    const enableNewAndTrending = recentlyReleasedConfig.enabled !== false;
+    const newMoviesConfig = recentlyReleasedConfig.movies || {};
+    const enableNewMovies = newMoviesConfig.enabled !== false;
+    const newEpisodesConfig = recentlyReleasedConfig.episodes || {};
+    const enableNewEpisodes = newEpisodesConfig.enabled !== false;
     
-    // Discovery sections configuration
-    const enableWatchlist = window.KefinTweaksConfig?.homeScreen?.enableWatchlist || false;
-    const enableDiscovery = window.KefinTweaksConfig?.homeScreen?.enableDiscovery || false;
-    const enableSeasonal = window.KefinTweaksConfig?.homeScreen?.enableSeasonal || false;
+    // Trending sections configuration
+    const trendingConfig = homeScreenConfig.trending || {};
+    const enableTrending = trendingConfig.enabled || false;
     
-    // People and genre configuration
-    const minPeopleAppearances = window.KefinTweaksConfig?.homeScreen?.minPeopleAppearances || 10;
-    const minGenreMovieCount = window.KefinTweaksConfig?.homeScreen?.minGenreMovieCount || 50;
-    const minimumShowsForNetwork = window.KefinTweaksConfig?.homeScreen?.minimumShowsForNetwork || 5;
-    const enableInfiniteScroll = window.KefinTweaksConfig?.homeScreen?.enableInfiniteScroll !== false; // Default to true
+    // Popular TV Networks configuration
+    const popularTVNetworksConfig = homeScreenConfig.popularTVNetworks || {};
+    const minimumShowsForNetwork = popularTVNetworksConfig.minimumShowsForNetwork || 5;
+    
+    // Watchlist configuration
+    const watchlistConfig = homeScreenConfig.watchlist || {};
+    const enableWatchlist = watchlistConfig.enabled || false;
+    
+    // Watch Again configuration
+    const watchAgainConfig = homeScreenConfig.watchAgain || {};
+    const enableWatchAgain = watchAgainConfig.enabled || false;
+    
+    // Upcoming configuration
+    const upcomingConfig = homeScreenConfig.upcoming || {};
+    const enableUpcoming = upcomingConfig.enabled !== false;
+    
+    // IMDb Top 250 configuration
+    const imdbTop250Config = homeScreenConfig.imdbTop250 || {};
+    const enableImdbTop250 = imdbTop250Config.enabled !== false;
     
     // Seasonal configuration
-    const SEASONAL_ITEM_LIMIT = window.KefinTweaksConfig?.homeScreen?.seasonalItemLimit || 16;
-    const SEASONAL_ORDER = window.KefinTweaksConfig?.homeScreen?.seasonalOrder || 50;
-    const DISCOVERY_ORDER = window.KefinTweaksConfig?.homeScreen?.discoveryOrder || 1000;
-    const WATCHLIST_ORDER = window.KefinTweaksConfig?.homeScreen?.watchlistOrder || 60;
-    const POPULAR_TV_NETWORKS_ORDER = window.KefinTweaksConfig?.homeScreen?.popularTVNetworksOrder || 61;
-    const NEW_MOVIES_ORDER = window.KefinTweaksConfig?.homeScreen?.newMoviesOrder || 30;
-    const NEW_EPISODES_ORDER = window.KefinTweaksConfig?.homeScreen?.newEpisodesOrder || 31;
+    const seasonalConfig = homeScreenConfig.seasonal || {};
+    const enableSeasonal = seasonalConfig.enabled !== false;
+    const SEASONAL_ITEM_LIMIT = seasonalConfig.defaultItemLimit || 16;
+    
+    // Discovery sections configuration
+    const discoveryConfig = homeScreenConfig.discovery || {};
+    const enableDiscovery = discoveryConfig.enabled !== false;
+    const enableInfiniteScroll = discoveryConfig.infiniteScroll !== false;
+    const minPeopleAppearances = discoveryConfig.minPeopleAppearances || 10;
+    const minGenreMovieCount = discoveryConfig.minGenreMovieCount || 50;
+    const DISCOVERY_ORDER = 1000; // Discovery sections use dynamic ordering
+
+    const DISCOVERY_SECTION_DEFINITIONS = [
+        { key: 'spotlightGenre', defaultName: 'Spotlight' },
+        { key: 'spotlightNetwork', defaultName: 'Spotlight' },
+        { key: 'genreMovies', defaultName: '[Genre] Movies' },
+        { key: 'studioShows', defaultName: 'Shows from [Studio]' },
+        { key: 'collections', defaultName: '[Collection Name]', minimumItems: 10 },
+        { key: 'becauseYouWatched', defaultName: 'Because you watched [Movie]' },
+        { key: 'becauseYouLiked', defaultName: 'Because you liked [Movie]' },
+        { key: 'starringTopActor', defaultName: 'Starring [Actor]' },
+        { key: 'directedByTopDirector', defaultName: 'Directed by [Director]' },
+        { key: 'writtenByTopWriter', defaultName: 'Written by [Writer]' },
+        { key: 'becauseYouRecentlyWatched', defaultName: 'Because you recently watched [Movie]' },
+        { key: 'starringActorRecentlyWatched', defaultName: 'Starring [Actor] because you recently watched [Movie]' },
+        { key: 'directedByDirectorRecentlyWatched', defaultName: 'Directed by [Director] because you recently watched [Movie]' },
+        { key: 'writtenByWriterRecentlyWatched', defaultName: 'Written by [Writer] because you recently watched [Movie]' }
+    ];
+
+    const discoverySectionDefinitionMap = DISCOVERY_SECTION_DEFINITIONS.reduce((map, definition) => {
+        map[definition.key] = definition;
+        return map;
+    }, {});
+
+    const discoverySectionTypeMap = {
+        'genre': 'genreMovies',
+        'director': 'directedByTopDirector',
+        'writer': 'writtenByTopWriter',
+        'actor': 'starringTopActor',
+        'watched': 'becauseYouWatched',
+        'liked': 'becauseYouLiked',
+        'studio': 'studioShows',
+        'watched-recent': 'becauseYouRecentlyWatched',
+        'actor-recent': 'starringActorRecentlyWatched',
+        'director-recent': 'directedByDirectorRecentlyWatched',
+        'writer-recent': 'writtenByWriterRecentlyWatched',
+        'spotlight-genre': 'spotlightGenre',
+        'spotlight-network': 'spotlightNetwork',
+        'collection': 'collections'
+    };
+
+    const discoverySectionSettingsCache = {};
+
+    let collectionsData = null;
+    async function getCollectionsData() {
+        if (collectionsData !== null) {
+            return collectionsData;
+        }
+
+        collectionsData = await ApiClient.getItems(ApiClient.getCurrentUserId(), {
+            IncludeItemTypes: 'BoxSet',
+            Recursive: true,
+            Fields: 'RecursiveItemCount,ChildCount'
+        });
+        return collectionsData;
+    }
+
+    if (!discoveryConfig.sectionTypes) {
+        discoveryConfig.sectionTypes = {};
+    }
+
+    if (discoveryConfig.collectionSection) {
+        const legacySection = discoveryConfig.collectionSection;
+        const existingCollectionEntry = discoveryConfig.sectionTypes.collections;
+        if (!existingCollectionEntry || typeof existingCollectionEntry !== 'object') {
+            discoveryConfig.sectionTypes.collections = {
+                enabled: legacySection.enabled !== false,
+                name: legacySection.name || discoveryConfig.sectionNames?.collections || '[Collection Name]',
+                minimumItems: legacySection.minimumItems ?? 10,
+                itemLimit: legacySection.itemLimit ?? null,
+                sortOrder: legacySection.sortOrder ?? null,
+                sortOrderDirection: legacySection.sortOrderDirection ?? null,
+                cardFormat: legacySection.cardFormat ?? null,
+                order: legacySection.order ?? 50
+            };
+        } else if (legacySection.minimumItems !== undefined && existingCollectionEntry.minimumItems === undefined) {
+            existingCollectionEntry.minimumItems = legacySection.minimumItems;
+        }
+        delete discoveryConfig.collectionSection;
+    }
+
+    function parseDiscoveryNumber(value, fallback) {
+        if (value === null || value === undefined || value === '') {
+            return fallback;
+        }
+        const parsed = parseInt(value, 10);
+        return Number.isFinite(parsed) ? parsed : fallback;
+    }
+
+    function getDiscoverySectionKeyFromType(sectionType) {
+        return discoverySectionTypeMap[sectionType] || null;
+    }
+
+    function getDiscoverySectionSettings(sectionKey) {
+        if (!sectionKey) return null;
+        if (discoverySectionSettingsCache[sectionKey]) {
+            return discoverySectionSettingsCache[sectionKey];
+        }
+
+        const definition = discoverySectionDefinitionMap[sectionKey] || {};
+        const rawConfig = discoveryConfig.sectionTypes?.[sectionKey];
+        const legacyNames = discoveryConfig.sectionNames || {};
+
+        const defaultItemLimitForDiscovery = discoveryConfig.defaultItemLimit ?? defaultItemLimit;
+        const defaultSortOrderForDiscovery = discoveryConfig.defaultSortOrder ?? defaultSortOrder;
+        const defaultCardFormatForDiscovery = discoveryConfig.defaultCardFormat ?? defaultCardFormat;
+
+        let normalized = {
+            enabled: true,
+            name: legacyNames[sectionKey] || definition.defaultName || '',
+            itemLimit: defaultItemLimitForDiscovery,
+            sortOrder: defaultSortOrderForDiscovery,
+            sortOrderDirection: 'Ascending',
+            cardFormat: defaultCardFormatForDiscovery
+        };
+
+        if (definition.minimumItems !== undefined) {
+            normalized.minimumItems = definition.minimumItems;
+        }
+
+        if (rawConfig === false) {
+            normalized.enabled = false;
+        } else if (rawConfig && typeof rawConfig === 'object') {
+            normalized = { ...normalized, ...rawConfig };
+        } else if (rawConfig === true) {
+            normalized.enabled = true;
+        }
+
+        normalized.name = normalized.name || definition.defaultName || '';
+        normalized.itemLimit = parseDiscoveryNumber(normalized.itemLimit, defaultItemLimitForDiscovery);
+        normalized.sortOrder = normalized.sortOrder || defaultSortOrderForDiscovery;
+        normalized.sortOrderDirection = normalized.sortOrderDirection || 'Ascending';
+        normalized.cardFormat = normalized.cardFormat || defaultCardFormatForDiscovery;
+        if (normalized.minimumItems !== undefined) {
+            normalized.minimumItems = parseDiscoveryNumber(normalized.minimumItems, definition.minimumItems ?? 10);
+        }
+
+        discoverySectionSettingsCache[sectionKey] = normalized;
+        return normalized;
+    }
+
+    function applyDiscoverySectionOrdering(items, sectionConfig) {
+        if (!Array.isArray(items)) return [];
+        const sortOrder = sectionConfig?.sortOrder || discoveryConfig.defaultSortOrder || defaultSortOrder;
+        const sortDirection = sectionConfig?.sortOrderDirection || 'Ascending';
+        let sortedItems = items;
+
+        if (sortOrder === 'Random') {
+            sortedItems = [...items].sort(() => Math.random() - 0.5);
+        } else if (window.cardBuilder && typeof window.cardBuilder.sortItems === 'function') {
+            sortedItems = window.cardBuilder.sortItems(items, sortOrder, sortDirection);
+        }
+
+        const limit = parseDiscoveryNumber(
+            sectionConfig?.itemLimit,
+            discoveryConfig.defaultItemLimit ?? defaultItemLimit
+        );
+
+        return sortedItems.slice(0, limit);
+    }
 
     // Processing flag to prevent parallel execution
     let isProcessing = false;
@@ -246,6 +841,12 @@
     let renderedWriters = new Set(); // Track rendered writer IDs
     let renderedStudios = new Set(); // Track rendered studio IDs
     let renderedWatchedMovies = new Set(); // Track rendered watched movie IDs for "Because you watched" sections
+    let renderedGenres = new Set(); // Track rendered genre IDs for spotlight sections
+    let renderedNetworks = new Set(); // Track rendered network IDs for spotlight sections
+    let renderedCollections = new Set(); // Track rendered collection IDs
+    let renderedCustomDiscoverySections = new Set(); // Track custom sections used in discovery
+    let cachedQualifyingGenres = null; // Cache qualifying genres to avoid refetching
+    let isCachingQualifyingGenres = false; // Prevent parallel caching
     let renderedFavoriteMovies = new Set(); // Track rendered favorite movie IDs
     let renderedStarringWatchedMovies = new Set(); // Track movies used for "Starring X since you watched Y" sections
     let renderedDirectedWatchedMovies = new Set(); // Track movies used for "Directed by X since you watched Y" sections
@@ -297,17 +898,23 @@
         }
     }
 
+    function buildParams(params) {
+        return Object.entries(params)
+            .map(([key, value]) => `${key}=${value}`)
+            .join('&');
+    }
+
     /**
      * Fetches playlist data from Jellyfin API
      * @param {string} playlistId - The playlist ID to fetch
      * @returns {Promise<Object>} - Playlist data with ItemIds array
      */
-    async function fetchPlaylistData(playlistId) {
+    async function fetchPlaylistData(playlistId, params = {}) {
         const apiClient = window.ApiClient;
         const serverUrl = apiClient.serverAddress();
         const token = apiClient.accessToken();
         
-        const url = `${serverUrl}/Playlists/${playlistId}`;
+        const url = `${serverUrl}/Playlists/${playlistId}/Items?${buildParams(params)}`;
         
         try {
             const response = await fetch(url, {
@@ -339,7 +946,7 @@
         const token = apiClient.accessToken();
         const userId = apiClient.getCurrentUserId();
         
-        const url = `${serverUrl}/Users/${userId}/Items?ParentId=${collectionId}&Fields=ItemCounts%2CPrimaryImageAspectRatio%2CCanDelete%2CMediaSourceCount`;
+        const url = `${serverUrl}/Users/${userId}/Items?ParentId=${collectionId}&Fields=ItemCounts%2CPrimaryImageAspectRatio%2CCanDelete%2CMediaSourceCount%2COverview%2CTaglines`;
         
         try {
             const response = await fetch(url, {
@@ -380,6 +987,287 @@
     }
 
     /**
+     * Fetches genre items from Jellyfin API
+     * @param {string} genreId - The genre ID
+     * @returns {Promise<Array>} - Array of item IDs
+     */
+    async function fetchGenreItems(genreId) {
+        const apiClient = window.ApiClient;
+        const serverUrl = apiClient.serverAddress();
+        const token = apiClient.accessToken();
+        const userId = apiClient.getCurrentUserId();
+        
+        // First get genre name
+        const genreData = await fetchItemData(genreId);
+        if (!genreData) return [];
+        
+        const genreName = genreData.Name;
+        
+        const url = `${serverUrl}/Items?userId=${userId}&Genres=${encodeURIComponent(genreName)}&Recursive=true&Fields=ItemCounts`;
+        
+        try {
+            const response = await fetch(url, {
+                headers: { "Authorization": `MediaBrowser Token="${token}"` }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            return { Items: data.Items || [] };
+        } catch (err) {
+            ERR(`Failed to fetch genre items for ${genreName}:`, err);
+            return { Items: [] };
+        }
+    }
+
+    /**
+     * Fetches studio items from Jellyfin API
+     * @param {string} studioId - The studio ID
+     * @returns {Promise<Array>} - Array of item IDs
+     */
+    async function fetchStudioItems(studioId) {
+        const apiClient = window.ApiClient;
+        const serverUrl = apiClient.serverAddress();
+        const token = apiClient.accessToken();
+        const userId = apiClient.getCurrentUserId();
+        
+        const url = `${serverUrl}/Items?userId=${userId}&StudioIds=${studioId}&IncludeItemTypes=Series&Recursive=true&Fields=ItemCounts`;
+        
+        try {
+            const response = await fetch(url, {
+                headers: { "Authorization": `MediaBrowser Token="${token}"` }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            return { Items: data.Items || [] };
+        } catch (err) {
+            ERR(`Failed to fetch studio items for ${studioId}:`, err);
+            return { Items: [] };
+        }
+    }
+
+    async function loadItemsForSectionConfig(sectionConfig) {
+        const apiClient = window.ApiClient;
+        const serverAddress = apiClient.serverAddress();
+        const token = apiClient.accessToken();
+        const userId = apiClient.getCurrentUserId();
+        const type = sectionConfig.type || 'Genre';
+        const source = sectionConfig.source || '';
+        const searchTerm = sectionConfig.searchTerm || '';
+        const includeItemTypes = Array.isArray(sectionConfig.includeItemTypes) && sectionConfig.includeItemTypes.length > 0 
+            ? sectionConfig.includeItemTypes.join(',') 
+            : (sectionConfig.includeItemTypes || 'Movie');
+        const sortOrder = sectionConfig.sortOrder || defaultSortOrder;
+        const sortOrderDirection = sectionConfig.sortOrderDirection || 'Ascending';
+        const itemLimit = sectionConfig.itemLimit || defaultItemLimit;
+        let allItems = [];
+
+        const sources = source.split(',').map(s => s.trim()).filter(Boolean);
+        // For Parent type, empty sources is valid (means "Any")
+        if (sources.length === 0 && type !== 'Parent') {
+            return allItems;
+        }
+
+        try {
+            // Build common query parameters
+            const commonParams = {
+                userId: userId,
+                IncludeItemTypes: includeItemTypes,
+                Recursive: true,
+                Fields: 'PrimaryImageAspectRatio,DateCreated,Overview,ProductionYear',
+                Limit: itemLimit,
+                SortBy: sortOrder,
+                SortOrder: sortOrderDirection
+            };
+
+            // Add search term if provided
+            if (searchTerm) {
+                commonParams.SearchTerm = searchTerm;
+            }
+
+            if (type === 'Genre') {
+                // Combine all genres into a single query
+                const genresParam = sources.map(s => encodeURIComponent(s)).join('|');
+
+                const options = {
+                    Genres: genresParam,
+                    ...commonParams
+                }
+
+                const data = await window.apiHelper.getItems(options, true);
+                allItems = data.Items || [];
+            } else if (type === 'Tag') {
+                // Combine all tags into a single query
+                const tagsParam = sources.map(s => encodeURIComponent(s)).join(',');
+
+                const options = {
+                    Tags: tagsParam,
+                    ...commonParams
+                }
+
+                const data = await window.apiHelper.getItems(options, true);
+                allItems = data.Items || [];
+            } else if (type === 'Collection') {
+                // For collections, we need to query each collection separately as they use ParentId
+                // But we can still use a single approach by collecting all items first
+                const existingIds = new Set();
+                for (const collectionId of sources) {
+                    try {
+                        const queryParams = {
+                            ParentId: collectionId,
+                            IncludeItemTypes: includeItemTypes,
+                            Fields: 'ItemCounts,Overview,Taglines',
+                            Limit: itemLimit * sources.length, // Get more items to account for filtering
+                            SortBy: sortOrder,
+                            SortOrder: sortOrderDirection
+                        };
+                        
+                        if (searchTerm) {
+                            queryParams.SearchTerm = searchTerm;
+                        }
+
+                        const collectionData = await window.apiHelper.getItems(queryParams, true);
+                        if (collectionData.Items && collectionData.Items.length > 0) {
+                            collectionData.Items.forEach(item => {
+                                if (item && item.Id && !existingIds.has(item.Id)) {
+                                    allItems.push(item);
+                                    existingIds.add(item.Id);
+                                }
+                            });
+                        }
+                    } catch (err) {
+                        WARN(`Error fetching collection ${collectionId}:`, err);
+                    }
+                }
+                
+                // Apply sorting and limit after collecting all items
+                if (sortOrder === 'Random') {
+                    allItems.sort(() => Math.random() - 0.5);
+                } else if (window.cardBuilder && typeof window.cardBuilder.sortItems === 'function') {
+                    allItems = window.cardBuilder.sortItems(allItems, sortOrder, sortOrderDirection);
+                }
+                allItems = allItems.slice(0, itemLimit);
+            } else if (type === 'Playlist') {
+                // For playlists, similar to collections - query each separately
+                const existingIds = new Set();
+                for (const playlistId of sources) {
+                    try {
+                        const queryParams = {
+                            ParentId: playlistId,
+                            IncludeItemTypes: includeItemTypes,
+                            Fields: 'Overview,Taglines',
+                            Limit: itemLimit * sources.length, // Get more items to account for filtering
+                            SortBy: sortOrder,
+                            SortOrder: sortOrderDirection
+                        };
+                        
+                        if (searchTerm) {
+                            queryParams.SearchTerm = searchTerm;
+                        }
+
+                        const playlistData = await window.apiHelper.getItems(queryParams, true);
+                        if (playlistData.Items && playlistData.Items.length > 0) {
+                            playlistData.Items.forEach(item => {
+                                if (item && item.Id && !existingIds.has(item.Id)) {
+                                    allItems.push(item);
+                                    existingIds.add(item.Id);
+                                }
+                            });
+                        }
+                    } catch (err) {
+                        WARN(`Error fetching playlist ${playlistId}:`, err);
+                    }
+                }
+                
+                // Apply sorting and limit after collecting all items
+                if (sortOrder === 'Random') {
+                    allItems.sort(() => Math.random() - 0.5);
+                } else if (window.cardBuilder && typeof window.cardBuilder.sortItems === 'function') {
+                    allItems = window.cardBuilder.sortItems(allItems, sortOrder, sortOrderDirection);
+                }
+                allItems = allItems.slice(0, itemLimit);
+            } else if (type === 'Parent') {
+                // Parent type: query with ParentId(s) or without if source is empty ("Any")
+                const existingIds = new Set();
+                
+                if (sources.length === 0) {
+                    // No parent IDs specified - query all items (no ParentId filter)
+                    try {
+                        const queryParams = {
+                            IncludeItemTypes: includeItemTypes,
+                            Recursive: true,
+                            Fields: 'PrimaryImageAspectRatio,DateCreated,Overview,ProductionYear',
+                            Limit: itemLimit,
+                            SortBy: sortOrder,
+                            SortOrder: sortOrderDirection
+                        };
+                        
+                        if (searchTerm) {
+                            queryParams.SearchTerm = searchTerm;
+                        }
+                        
+                        const response = await window.apiHelper.getItems(queryParams, true);
+                        if (response.Items && response.Items.length > 0) {
+                            allItems = response.Items;
+                        }
+                    } catch (err) {
+                        WARN(`Error fetching items (Parent type, no ParentId):`, err);
+                    }
+                } else {
+                    // Query each parent ID separately
+                    for (const parentId of sources) {
+                        try {
+                            const queryParams = {
+                                ParentId: parentId,
+                                IncludeItemTypes: includeItemTypes,
+                                Recursive: true,
+                                Fields: 'PrimaryImageAspectRatio,DateCreated,Overview,ProductionYear',
+                                Limit: itemLimit * sources.length,
+                                SortBy: sortOrder,
+                                SortOrder: sortOrderDirection
+                            };
+                            
+                            if (searchTerm) {
+                                queryParams.SearchTerm = searchTerm;
+                            }
+                            
+                            const parentData = await window.apiHelper.getItems(queryParams, true);
+                            if (parentData.Items && parentData.Items.length > 0) {
+                                parentData.Items.forEach(item => {
+                                    if (item && item.Id && !existingIds.has(item.Id)) {
+                                        allItems.push(item);
+                                        existingIds.add(item.Id);
+                                    }
+                                });
+                            }
+                        } catch (err) {
+                            WARN(`Error fetching items for parent ${parentId}:`, err);
+                        }
+                    }
+                    
+                    // Apply sorting and limit after collecting all items
+                    if (sortOrder === 'Random') {
+                        allItems.sort(() => Math.random() - 0.5);
+                    } else if (window.cardBuilder && typeof window.cardBuilder.sortItems === 'function') {
+                        allItems = window.cardBuilder.sortItems(allItems, sortOrder, sortOrderDirection);
+                    }
+                    allItems = allItems.slice(0, itemLimit);
+                }
+            }
+        } catch (err) {
+            WARN('Error loading items for section config:', err);
+        }
+
+        return allItems;
+    }
+
+    /**
      * Renders a custom home section
      * @param {Object} section - Section configuration object
      * @param {HTMLElement} container - Container to append the section to
@@ -387,68 +1275,68 @@
      */
     async function renderCustomSection(section, container) {
         try {
-            // First, fetch item data to determine type
-            const itemData = await fetchItemData(section.id);
-            if (!itemData) {
-                ERR(`Failed to fetch item data for section ${section.name}`);
+            // Support new structure (type + source) and legacy structure (sourceId)
+            const type = section.type;
+            const source = section.source || section.sourceId || section.id;
+            
+            if (!source) {
+                ERR(`No source provided for section ${section.name}`);
                 return false;
             }
             
-            let itemIds = [];
-            let itemType = itemData.Type;
-            
-            // Handle different item types
-            if (itemType === 'Playlist') {
-                // Fetch playlist data
-                const playlistData = await fetchPlaylistData(section.id);
-                itemIds = playlistData.ItemIds || [];
-            } else if (itemType === 'BoxSet') {
-                // Fetch collection data
-                const collectionData = await fetchCollectionData(section.id);
-                itemIds = (collectionData.Items || []).map(item => item.Id);
-            } else {
-                ERR(`Unsupported item type ${itemType} for section ${section.name}`);
-                return false;
-            }
-            
-            // Limit to maxItems
-            const limitedItemIds = itemIds.slice(0, section.maxItems);
-            
-            if (limitedItemIds.length === 0) {
-                return false;
-            }
-            
-            // Generate view more URL
-            const viewMoreUrl = generateViewMoreUrl(section.id, itemType);
-            
-            // Check if cardBuilder is available
-            if (typeof window.cardBuilder === 'undefined' || !window.cardBuilder.renderCardsFromIds) {
-                WARN("cardBuilder not available, skipping section:", section.name);
-                return false;
-            }
-            
-            // Render the scrollable container
-            const scrollableContainer = await window.cardBuilder.renderCardsFromIds(
-                limitedItemIds,
-                section.name ?? itemData.Name,
-                viewMoreUrl,
-                true
-            );
-            
-            // Add data attribute to track rendered sections
-            scrollableContainer.setAttribute('data-custom-section-id', section.id);
-            scrollableContainer.setAttribute('data-custom-section-name', section.name);
-            scrollableContainer.setAttribute('data-custom-section-type', itemType);
+            const sortOrder = section.sortOrder ?? defaultSortOrder;
+            const sortOrderDirection = section.sortOrderDirection ?? 'Ascending';
+            const cardFormat = section.cardFormat ?? defaultCardFormat;
+            const order = section.order ?? 100;
+            const useSpotlight = section.spotlight === true;
 
-            if (section.order) {
-                scrollableContainer.style.order = section.order;
+            let viewMoreUrl = null;
+            switch (type) {
+                case 'Genre':
+                    viewMoreUrl = `#/list.html?genreId=${source}&serverId=${ApiClient.serverId()}`;
+                    break;
+                case 'Studio':
+                    viewMoreUrl = `#/list.html?studioId=${source}&serverId=${ApiClient.serverId()}`;
+                    break;
+                case 'Playlist':
+                case 'BoxSet':
+                    viewMoreUrl = `#/details?id=${source}&serverId=${ApiClient.serverId()}`;
+                    break;
+                case 'Parent':
+                    viewMoreUrl = `#/list.html?parentId=${source}&serverId=${ApiClient.serverId()}`;
+                    break;
+                default:
+                    viewMoreUrl = null;
+                    break;
             }
             
-            // Append to container
-            container.appendChild(scrollableContainer);
+            // If new structure with type, use renderSection helper
+            if (useSpotlight && window.cardBuilder.renderSpotlightSection) {
+                const items = await loadItemsForSectionConfig(section);
+                
+                const spotlightContainer = window.cardBuilder.renderSpotlightSection(
+                    items,
+                    section.name ?? 'Spotlight',
+                    {
+                        autoPlay: spotlightAutoPlay,
+                        interval: spotlightInterval,
+                        showDots: spotlightShowDots,
+                        showNavButtons: spotlightShowNavButtons,
+                        showClearArt: spotlightShowClearArt,
+                        viewMoreUrl: viewMoreUrl
+                    }
+                );
+                
+                spotlightContainer.setAttribute('data-custom-section-id', section.id || source);
+                spotlightContainer.setAttribute('data-custom-section-name', section.name);
+                spotlightContainer.setAttribute('data-custom-section-type', type);
+                spotlightContainer.style.order = order;
+                
+                container.appendChild(spotlightContainer);
+                return true;
+            }
             
-            return true;
-            
+            return await renderSection(section, container, 'custom');            
         } catch (err) {
             ERR(`Error rendering section ${section.name}:`, err);
             return false;
@@ -462,6 +1350,10 @@
     async function renderAllCustomSections(container) {
         const results = await Promise.all(
             customHomeSections.map(section => {
+                if (section.discoveryEnabled ) {
+                    return false;
+                }
+
                 // Check if section is already on the page
                 const sectionContainer = container.querySelector(`[data-custom-section-id="${section.id}"]`);
                 if (sectionContainer) {
@@ -524,15 +1416,6 @@
         if (enableNewEpisodes && !newEpisodesContainer) {
             sectionsToRender.push(renderNewEpisodesSection(container));
         }
-        
-        // Add trending sections if enabled (stubs for now)
-/*         const trendingMoviesContainer = container.querySelector('[data-custom-section-id="trending-movies"]');
-        const trendingSeriesContainer = container.querySelector('[data-custom-section-id="trending-series"]');
-
-        if (enableTrending && !trendingMoviesContainer && !trendingSeriesContainer) {
-            sectionsToRender.push(renderTrendingMoviesSection(container));
-            sectionsToRender.push(renderTrendingSeriesSection(container));
-        } */
         
         if (sectionsToRender.length === 0) {
             return;
@@ -1310,22 +2193,13 @@
      * Gets watchlist data from localStorageCache
      * @returns {Array} - Combined watchlist items (movies + series)
      */
-    function getWatchlistData() {
-        if (typeof window.LocalStorageCache === 'undefined') {
-            WARN('LocalStorageCache not available');
-            return [];
-        }
+    async function getWatchlistData() {
+        const watchlistData = await window.apiHelper.getWatchlistItems({ IncludeItemTypes: 'Movie,Series,Season,Episode' }, true);
         
-        const cache = new window.LocalStorageCache();
-        const movies = cache.get('watchlist_movies') || [];
-        const series = cache.get('watchlist_series') || [];
-        const seasons = cache.get('watchlist_seasons') || [];   
-        const episodes = cache.get('watchlist_episodes') || [];
-        
-        return [...movies, ...series, ...seasons, ...episodes].sort((a, b) => {
+        return watchlistData.Items.sort((a, b) => {
             const dateA = new Date(a.PremiereDate || 0);
             const dateB = new Date(b.PremiereDate || 0);
-            return dateB - dateA;
+            return dateB - dateA;    
         });
     }
 
@@ -1680,32 +2554,23 @@
      */
     async function fetchNewMovies() {
         const apiClient = window.ApiClient;
-        const serverUrl = apiClient.serverAddress();
-        const token = apiClient.accessToken();
-        const userId = apiClient.getCurrentUserId();
         
         const today = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
         const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]; // Format: YYYY-MM-DD
-        const url = `${serverUrl}/Items?IncludeItemTypes=Movie&SortBy=DateCreated&SortOrder=Descending&Limit=16&Fields=PremiereDate&Recursive=true&MinPremiereDate=${monthAgo}&MaxPremiereDate=${today}&userId=${userId}`;
-        
-        try {
-            const response = await fetch(url, {
-                headers: {
-                    'X-Emby-Token': token
-                }
-            });
-            
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            
-            const data = await response.json();
-            return data.Items || [];
-            
-        } catch (err) {
-            ERR('Failed to fetch new movies:', err);
-            return [];
+
+        const options = {
+            IncludeItemTypes: 'Movie',
+            SortBy: 'DateCreated',
+            SortOrder: 'Descending',
+            Limit: 16,
+            Fields: 'PremiereDate',
+            Recursive: true,
+            MinPremiereDate: monthAgo,
+            MaxPremiereDate: today
         }
+
+        const data = await window.apiHelper.getItems(options, true);
+        return data.Items || [];
     }
 
     /**
@@ -1716,48 +2581,32 @@
      */
     async function fetchNewEpisodes() {
         const apiClient = window.ApiClient;
-        const serverUrl = apiClient.serverAddress();
-        const token = apiClient.accessToken();
-        const userId = apiClient.getCurrentUserId();
         
         // Compute ISO date range for the last 7 days
         const now = new Date();
-        const maxDate = now.toISOString();
-        const minDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
-        
-        const url = `${serverUrl}/Items?IncludeItemTypes=Episode` +
-                    `&LocationTypes=FileSystem` +
-                    `&Recursive=true` +
-                    `&SortBy=PremiereDate&SortOrder=Descending` +
-                    `&MinPremiereDate=${encodeURIComponent(minDate)}` +
-                    `&MaxPremiereDate=${encodeURIComponent(maxDate)}` +
-                    `&Limit=100` +
-                    `&Fields=PremiereDate,SeriesName,ParentIndexNumber,IndexNumber,ProviderIds,Path` +
-                    `&userId=${userId}`;
-        
-        try {
-            const response = await fetch(url, {
-                headers: { 'X-Emby-Token': token }
-            });
-            
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            
-            const data = await response.json();
-            const episodes = data.Items || [];
-            
-            // Deduplicate episodes from the same series that aired on the same date
-            const deduplicatedEpisodes = deduplicateEpisodesBySeriesAndDate(episodes);
-            
-            LOG(`Fetched ${episodes.length} episodes, deduplicated to ${deduplicatedEpisodes.length} episodes`);
-            
-            return deduplicatedEpisodes;
-            
-        } catch (err) {
-            ERR('Failed to fetch new episodes:', err);
-            return [];
+        const maxDate = now.toISOString().split('T')[0];
+        const minDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+        const options = {
+            IncludeItemTypes: 'Episode',
+            LocationTypes: 'FileSystem',
+            Recursive: true,
+            SortBy: 'PremiereDate',
+            SortOrder: 'Descending',
+            MinPremiereDate: minDate,
+            MaxPremiereDate: maxDate,
+            Limit: 100,
+            Fields: 'PremiereDate,SeriesName,ParentIndexNumber,IndexNumber,ProviderIds,Path'
         }
+
+        const data = await window.apiHelper.getItems(options, true);
+        const episodes = data.Items || [];
+        
+        // Deduplicate episodes from the same series that aired on the same date
+        const deduplicatedEpisodes = deduplicateEpisodesBySeriesAndDate(episodes);
+        
+        LOG(`Fetched ${episodes.length} episodes, deduplicated to ${deduplicatedEpisodes.length} episodes`);
+        return deduplicatedEpisodes;
     }
 
     /**
@@ -1792,16 +2641,27 @@
                 // Only one episode for this series/date, keep it
                 deduplicatedEpisodes.push(episodeGroup[0]);
             } else {
-                // Multiple episodes for this series/date, find the one with lowest index number
+                // Multiple episodes for this series/date, find the one with lowest ParentIndexNumber and IndexNumber
                 const episodeWithLowestIndex = episodeGroup.reduce((lowest, current) => {
-                    const currentIndex = current.IndexNumber || 999999;
-                    const lowestIndex = lowest.IndexNumber || 999999;
-                    return currentIndex < lowestIndex ? current : lowest;
+                    const currentParentIndex = current.ParentIndexNumber ?? 999999;
+                    const lowestParentIndex = lowest.ParentIndexNumber ?? 999999;
+                    const currentIndex = current.IndexNumber ?? 999999;
+                    const lowestIndex = lowest.IndexNumber ?? 999999;
+                    
+                    // First compare by ParentIndexNumber (season number)
+                    if (currentParentIndex < lowestParentIndex) {
+                        return current;
+                    } else if (currentParentIndex > lowestParentIndex) {
+                        return lowest;
+                    } else {
+                        // Same season, compare by IndexNumber (episode number)
+                        return currentIndex < lowestIndex ? current : lowest;
+                    }
                 });
                 
                 deduplicatedEpisodes.push(episodeWithLowestIndex);
                 
-                LOG(`Deduplicated ${episodeGroup.length} episodes from "${episodeGroup[0].SeriesName}" on ${episodeGroup[0].PremiereDate}, kept episode ${episodeWithLowestIndex.IndexNumber}`);
+                LOG(`Deduplicated ${episodeGroup.length} episodes from "${episodeGroup[0].SeriesName}" on ${episodeGroup[0].PremiereDate}, kept S${episodeWithLowestIndex.ParentIndexNumber ?? '?'}E${episodeWithLowestIndex.IndexNumber ?? '?'}`);
             }
         });
         
@@ -1818,7 +2678,7 @@
             const movies = await fetchNewMovies();
             
             if (movies.length === 0) {
-                return false;
+                return false; // Auto-hide empty sections
             }
             
             // Check if cardBuilder is available
@@ -1827,18 +2687,32 @@
                 return false;
             }
             
+            // Get config values
+            const itemLimit = newMoviesConfig.itemLimit ?? defaultItemLimit;
+            const sortOrder = newMoviesConfig.sortOrder ?? defaultSortOrder;
+            const sortOrderDirection = newMoviesConfig.sortOrderDirection ?? 'Descending';
+            const cardFormat = newMoviesConfig.cardFormat ?? defaultCardFormat;
+            const order = newMoviesConfig.order ?? 30;
+            const sectionName = newMoviesConfig.name || 'Recently Released Movies';
+            
+            // Apply limit
+            const limitedMovies = movies.slice(0, itemLimit);
+            
             // Render the scrollable container
             const scrollableContainer = window.cardBuilder.renderCards(
-                movies,
-                'Recently Released Movies',
+                limitedMovies,
+                sectionName,
                 null,
-                true
+                true,
+                cardFormat,
+                sortOrder,
+                sortOrderDirection
             );
             
             // Add data attributes to track rendered sections
             scrollableContainer.setAttribute('data-custom-section-id', 'new-movies');
-            scrollableContainer.setAttribute('data-custom-section-name', 'New Movies');
-            scrollableContainer.style.order = NEW_MOVIES_ORDER;
+            scrollableContainer.setAttribute('data-custom-section-name', sectionName);
+            scrollableContainer.style.order = order;
             
             // Append to container
             container.appendChild(scrollableContainer);
@@ -1861,7 +2735,7 @@
             const episodes = await fetchNewEpisodes();
             
             if (episodes.length === 0) {
-                return false;
+                return false; // Auto-hide empty sections
             }
             
             // Check if cardBuilder is available
@@ -1870,18 +2744,33 @@
                 return false;
             }
             
+            // Get config values
+            const itemLimit = newEpisodesConfig.itemLimit ?? defaultItemLimit;
+            const sortOrder = newEpisodesConfig.sortOrder ?? defaultSortOrder;
+            const sortOrderDirection = newEpisodesConfig.sortOrderDirection ?? 'Descending';
+            const cardFormat = newEpisodesConfig.cardFormat ?? defaultCardFormat;
+            const order = newEpisodesConfig.order ?? 31;
+            const sectionName = newEpisodesConfig.name || 'Recently Aired Episodes';
+            
+            // Apply limit
+            const limitedEpisodes = episodes.slice(0, itemLimit);
+            const viewMoreUrl = `#/tv.html?collectionType=tvshows&tab=2`;
+            
             // Render the scrollable container
             const scrollableContainer = window.cardBuilder.renderCards(
-                episodes,
-                'Recently Aired Episodes',
-                null,
-                true
+                limitedEpisodes,
+                sectionName,
+                viewMoreUrl,
+                true,
+                cardFormat,
+                sortOrder,
+                sortOrderDirection
             );
             
             // Add data attributes to track rendered sections
             scrollableContainer.setAttribute('data-custom-section-id', 'new-episodes');
-            scrollableContainer.setAttribute('data-custom-section-name', 'New Episodes');
-            scrollableContainer.style.order = NEW_EPISODES_ORDER;
+            scrollableContainer.setAttribute('data-custom-section-name', sectionName);
+            scrollableContainer.style.order = order;
             
             // Append to container
             container.appendChild(scrollableContainer);
@@ -1899,7 +2788,7 @@
      * @param {HTMLElement} container - Container to append the section to
      * @returns {boolean} - Success status
      */
-    function renderWatchlistSection(container) {
+    async function renderWatchlistSection(container) {
         try {
             // Check if section is already on the page
             const sectionContainer = container.querySelector('[data-custom-section-id="watchlist"]');
@@ -1908,18 +2797,34 @@
                 return false;
             }
 
-            const watchlistItems = getWatchlistData();
+            const watchlistItems = await getWatchlistData();
             
             if (watchlistItems.length === 0) {
-                return false;
+                return false; // Auto-hide empty sections
             }
             
-            // Get 16 random items from watchlist
-            const shuffled = [...watchlistItems].sort(() => Math.random() - 0.5);
-            const limitedItems = shuffled.slice(0, 16);
+            // Get config values
+            const itemLimit = watchlistConfig.itemLimit ?? defaultItemLimit;
+            const sortOrder = watchlistConfig.sortOrder ?? defaultSortOrder;
+            const sortOrderDirection = watchlistConfig.sortOrderDirection ?? 'Descending';
+            const cardFormat = watchlistConfig.cardFormat ?? defaultCardFormat;
+            const order = watchlistConfig.order ?? 60;
+            const sectionName = watchlistConfig.name || 'Watchlist';
+            
+            // Apply sorting and limit
+            let sortedItems = watchlistItems;
+            if (sortOrder === 'Random') {
+                sortedItems = [...watchlistItems].sort(() => Math.random() - 0.5);
+            } else {
+                // Use cardBuilder sort helper if available
+                if (window.cardBuilder && typeof window.cardBuilder.sortItems === 'function') {
+                    sortedItems = window.cardBuilder.sortItems(watchlistItems, sortOrder, sortOrderDirection);
+                }
+            }
+            const limitedItems = sortedItems.slice(0, itemLimit);
             
             if (limitedItems.length === 0) {
-                return false;
+                return false; // Auto-hide empty sections
             }
             
             // Check if cardBuilder is available
@@ -1931,16 +2836,18 @@
             // Render the scrollable container with function-based navigation
             const scrollableContainer = window.cardBuilder.renderCards(
                 limitedItems,
-                'My Watchlist',
+                sectionName,
                 getWatchlistUrl(),
                 true,
-                'portrait'
+                cardFormat,
+                sortOrder,
+                sortOrderDirection
             );
             
             // Add data attribute to track rendered sections
             scrollableContainer.setAttribute('data-custom-section-id', 'watchlist');
-            scrollableContainer.setAttribute('data-custom-section-name', 'Your Watchlist');
-            scrollableContainer.style.order = WATCHLIST_ORDER;
+            scrollableContainer.setAttribute('data-custom-section-name', sectionName);
+            scrollableContainer.style.order = order;
             
             // Append to container
             container.appendChild(scrollableContainer);
@@ -1949,6 +2856,351 @@
             
         } catch (err) {
             ERR('Error rendering watchlist section:', err);
+            return false;
+        }
+    }
+
+    /**
+     * Formats air date for display
+     * @param {string} premiereDate - ISO date string
+     * @returns {string} - Formatted date string (MM/DD/YYYY)
+     */
+    function formatAirDate(premiereDate) {
+        if (!premiereDate) return '';
+        try {
+            const date = new Date(premiereDate);
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const year = date.getFullYear();
+            return `${month}/${day}/${year}`;
+        } catch (e) {
+            return '';
+        }
+    }
+
+    /**
+     * Renders Upcoming section (upcoming TV episodes)
+     * @param {HTMLElement} container - Container to append the section to
+     * @returns {Promise<boolean>} - Success status
+     */
+    async function renderUpcomingSection(container) {
+        try {
+            if (!enableUpcoming) {
+                return false;
+            }
+            
+            // Check if section is already on the page
+            const sectionContainer = container.querySelector('[data-custom-section-id="upcoming"]');
+            if (sectionContainer) {
+                LOG('Upcoming section already on the page, skipping...');
+                return false;
+            }
+            
+            const userId = ApiClient.getCurrentUserId();
+            const serverAddress = ApiClient.serverAddress();
+            const itemLimit = upcomingConfig.itemLimit || 48;
+            const cardFormat = upcomingConfig.cardFormat || 'Backdrop';
+            const order = upcomingConfig.order || 20;
+            const sectionName = upcomingConfig.name || 'Upcoming';
+
+            // Get the parent id from the root libraryies with CollectionType: "tvshows"
+            const libraries = await ApiClient.getItems();
+            const parentIds = libraries.Items.filter(lib => lib.CollectionType === 'tvshows')?.map(lib => lib.Id);
+
+            const url = `${serverAddress}/Shows/Upcoming?Limit=${itemLimit}&Fields=AirTime,SeriesName,ParentIndexNumber,IndexNumber&UserId=${userId}&ImageTypeLimit=1&EnableImageTypes=Primary,Backdrop,Banner,Thumb&EnableTotalRecordCount=false&ParentIds=${parentIds.join(',')}`;
+
+            const data = await window.apiHelper.getData(url, true);
+            let episodes = data.Items || [];
+            
+            // Filter out episodes that have already aired (before today)
+            const today = new Date();
+            today.setHours(0, 0, 0, 0); // Set to start of today
+            
+            episodes = episodes.filter(ep => {
+                if (!ep.PremiereDate) return false;
+                const airDate = new Date(ep.PremiereDate);
+                airDate.setHours(0, 0, 0, 0); // Set to start of air date
+                return airDate >= today; // Only include today and future dates
+            });
+            
+            // Deduplicate episodes from the same series that air on the same date
+            // Keeps only the episode with the lowest ParentIndexNumber and IndexNumber
+            episodes = deduplicateEpisodesBySeriesAndDate(episodes);
+            
+            if (episodes.length === 0) {
+                return false; // Auto-hide empty sections after deduplication
+            }
+            
+            // Format air dates for display
+            episodes.forEach(ep => {
+                ep._displayAirDate = formatAirDate(ep.PremiereDate);
+            });
+            
+            // Check if cardBuilder is available
+            if (typeof window.cardBuilder === 'undefined' || !window.cardBuilder.renderCards) {
+                WARN("cardBuilder not available, skipping Upcoming section");
+                return false;
+            }
+
+            const viewMoreUrl = `#/tv.html?collectionType=tvshows&tab=2`;
+            const itemsContainer = window.cardBuilder.renderCards(episodes, sectionName, viewMoreUrl, true, cardFormat);
+            
+            itemsContainer.setAttribute('data-custom-section-id', 'upcoming');
+            itemsContainer.setAttribute('data-custom-section-name', sectionName);
+            itemsContainer.style.order = order;
+            
+            container.appendChild(itemsContainer);
+            
+            return true;
+            
+        } catch (err) {
+            ERR('Error rendering Upcoming section:', err);
+            return false;
+        }
+    }
+
+    /**
+     * Caches IMDb IDs in localStorage
+     * @param {Array<string>} imdbIds - Array of IMDb IDs
+     */
+    function cacheImdbIds(imdbIds) {
+        try {
+            localStorage.setItem('kefinTweaks_imdbIds', JSON.stringify({ 
+                ids: imdbIds, 
+                timestamp: Date.now() 
+            }));
+        } catch (err) {
+            WARN('Failed to cache IMDb IDs:', err);
+        }
+    }
+
+    /**
+     * Gets cached IMDb IDs from localStorage
+     * @returns {Object|null} - Cached data with ids and timestamp
+     */
+    function getCachedImdbIds() {
+        try {
+            const cached = localStorage.getItem('kefinTweaks_imdbIds');
+            return cached ? JSON.parse(cached) : null;
+        } catch (err) {
+            WARN('Failed to get cached IMDb IDs:', err);
+            return null;
+        }
+    }
+
+    /**
+     * Checks if cache is expired (older than 24 hours)
+     * @param {number} timestamp - Cache timestamp
+     * @param {number} maxAge - Max age in milliseconds (default: 24 hours)
+     * @returns {boolean} - True if expired
+     */
+    function isCacheExpired(timestamp, maxAge = 24 * 60 * 60 * 1000) {
+        return !timestamp || (Date.now() - timestamp) > maxAge;
+    }
+
+    /**
+     * Renders IMDb Top 250 section
+     * @param {HTMLElement} container - Container to append the section to
+     * @returns {Promise<boolean>} - Success status
+     */
+    async function renderImdbTop250Section(container) {
+        try {
+            if (!enableImdbTop250) {
+                return false;
+            }
+            
+            // Check if section is already on the page
+            const sectionContainer = container.querySelector('[data-custom-section-id="imdb-top250"]');
+            if (sectionContainer) {
+                LOG('IMDb Top 250 section already on the page, skipping...');
+                return false;
+            }
+            
+            const itemLimit = imdbTop250Config.itemLimit ?? defaultItemLimit;
+            const sortOrder = imdbTop250Config.sortOrder ?? 'Random';
+            const sortOrderDirection = imdbTop250Config.sortOrderDirection ?? 'Ascending';
+            const cardFormat = imdbTop250Config.cardFormat ?? defaultCardFormat;
+            const order = imdbTop250Config.order ?? 21;
+            const sectionName = imdbTop250Config.name || 'IMDb Top 250';
+            
+            // Get cached IMDb IDs (refresh daily)
+            let cachedData = getCachedImdbIds();
+            let imdbIds = null;
+            
+            if (!cachedData || isCacheExpired(cachedData.timestamp, 24 * 60 * 60 * 1000)) {
+                // Fetch Top 250 list
+                const top250Response = await fetch('https://raw.githubusercontent.com/theapache64/top250/master/top250_min.json');
+                if (!top250Response.ok) {
+                    throw new Error(`Failed to fetch IMDb Top 250: ${top250Response.statusText}`);
+                }
+                
+                const top250 = await top250Response.json();
+                
+                // Extract IMDb IDs
+                imdbIds = top250.map(entry => {
+                    const match = entry.imdb_url?.match(/\/title\/(tt\d+)\//);
+                    return match ? match[1] : null;
+                }).filter(Boolean);
+                
+                // Cache IDs
+                cacheImdbIds(imdbIds);
+            } else {
+                imdbIds = cachedData.ids;
+            }
+            
+            if (!imdbIds || imdbIds.length === 0) {
+                WARN('No IMDb IDs available');
+                return false;
+            }
+            
+            // Fetch all movies and match by IMDb ID
+            const userId = ApiClient.getCurrentUserId();
+            const allMoviesResponse = await ApiClient.getItems(userId, {
+                IncludeItemTypes: 'Movie',
+                Recursive: true,
+                Fields: 'ProviderIds'
+            });
+            
+            const allMovies = allMoviesResponse.Items || [];
+            const matchedMovies = [];
+            
+            for (const imdbId of imdbIds) {
+                const movie = allMovies.find(m => m.ProviderIds?.Imdb === imdbId);
+                if (movie) {
+                    matchedMovies.push(movie);
+                }
+            }
+            
+            if (matchedMovies.length === 0) {
+                return false; // Auto-hide empty sections
+            }
+            
+            // Apply sort order (Random only, no rank data available)
+            let sortedMovies = matchedMovies;
+            if (sortOrder === 'Random') {
+                sortedMovies = [...matchedMovies].sort(() => Math.random() - 0.5);
+            }
+            
+            // Apply limit
+            const limited = sortedMovies.slice(0, itemLimit);
+            
+            if (limited.length === 0) {
+                return false; // Auto-hide empty sections
+            }
+            
+            // Check if cardBuilder is available
+            if (typeof window.cardBuilder === 'undefined' || !window.cardBuilder.renderCards) {
+                WARN("cardBuilder not available, skipping IMDb Top 250 section");
+                return false;
+            }
+            
+            const scrollableContainer = window.cardBuilder.renderCards(
+                limited,
+                sectionName,
+                null,
+                true,
+                cardFormat,
+                sortOrder,
+                sortOrderDirection
+            );
+            
+            scrollableContainer.setAttribute('data-custom-section-id', 'imdb-top250');
+            scrollableContainer.setAttribute('data-custom-section-name', sectionName);
+            scrollableContainer.style.order = order;
+            
+            container.appendChild(scrollableContainer);
+            
+            return true;
+            
+        } catch (err) {
+            ERR('Error rendering IMDb Top 250 section:', err);
+            return false;
+        }
+    }
+
+    /**
+     * Renders Watch Again section (random watched movies)
+     * @param {HTMLElement} container - Container to append the section to
+     * @returns {Promise<boolean>} - Success status
+     */
+    async function renderWatchAgainSection(container) {
+        try {
+            if (!enableWatchAgain) {
+                return false;
+            }
+            
+            // Check if section is already on the page
+            const sectionContainer = container.querySelector('[data-custom-section-id="watch-again"]');
+            if (sectionContainer) {
+                LOG('Watch Again section already on the page, skipping...');
+                return false;
+            }
+            
+            const userId = ApiClient.getCurrentUserId();
+            const itemLimit = watchAgainConfig.itemLimit ?? defaultItemLimit;
+            const sortOrder = watchAgainConfig.sortOrder ?? 'Random';
+            const sortOrderDirection = watchAgainConfig.sortOrderDirection ?? 'Ascending';
+            const cardFormat = watchAgainConfig.cardFormat ?? defaultCardFormat;
+            const order = watchAgainConfig.order ?? 62;
+            const sectionName = watchAgainConfig.name || 'Watch Again';
+            
+            // Fetch watched movies
+            const watchedMoviesResponse = await ApiClient.getItems(userId, {
+                IncludeItemTypes: 'Movie',
+                Filters: 'IsPlayed',
+                SortBy: 'Random',
+                Recursive: true,
+                Limit: itemLimit
+            });
+            
+            const watchedMovies = watchedMoviesResponse.Items || [];
+            
+            if (watchedMovies.length === 0) {
+                return false; // Auto-hide empty sections
+            }
+            
+            // Apply sort order
+            let sortedMovies = watchedMovies;
+            if (sortOrder !== 'Random') {
+                // Use cardBuilder sort if available
+                if (window.cardBuilder && typeof window.cardBuilder.sortItems === 'function') {
+                    sortedMovies = window.cardBuilder.sortItems(watchedMovies, sortOrder, sortOrderDirection);
+                }
+            }
+            
+            // Apply limit
+            const limited = sortedMovies.slice(0, itemLimit);
+            
+            if (limited.length === 0) {
+                return false; // Auto-hide empty sections
+            }
+            
+            // Check if cardBuilder is available
+            if (typeof window.cardBuilder === 'undefined' || !window.cardBuilder.renderCards) {
+                WARN("cardBuilder not available, skipping Watch Again section");
+                return false;
+            }
+            
+            const scrollableContainer = window.cardBuilder.renderCards(
+                limited,
+                sectionName,
+                null,
+                true,
+                cardFormat,
+                sortOrder,
+                sortOrderDirection
+            );
+            
+            scrollableContainer.setAttribute('data-custom-section-id', 'watch-again');
+            scrollableContainer.setAttribute('data-custom-section-name', sectionName);
+            scrollableContainer.style.order = order;
+            
+            container.appendChild(scrollableContainer);
+            
+            return true;
+            
+        } catch (err) {
+            ERR('Error rendering Watch Again section:', err);
             return false;
         }
     }
@@ -1970,18 +3222,33 @@
             let networks = await getPopularTVNetworks();
             
             if (networks.length === 0) {
-                return false;
+                return false; // Auto-hide empty sections
             }
 
             // Remove any networks without Thumb images
             networks = networks.filter(network => network.ImageTags?.Thumb);
             
-            // Shuffle and take 16 random networks
-            const shuffled = [...networks].sort(() => Math.random() - 0.5);
-            const limitedNetworks = shuffled.slice(0, 16);
+            // Get config values
+            const itemLimit = popularTVNetworksConfig.itemLimit ?? defaultItemLimit;
+            const sortOrder = popularTVNetworksConfig.sortOrder ?? defaultSortOrder;
+            const sortOrderDirection = popularTVNetworksConfig.sortOrderDirection ?? 'Ascending';
+            const cardFormat = popularTVNetworksConfig.cardFormat ?? defaultCardFormat;
+            const order = popularTVNetworksConfig.order ?? 61;
+            const sectionName = popularTVNetworksConfig.name || 'Popular TV Networks';
+            
+            // Apply sort order
+            let sortedNetworks = networks;
+            if (sortOrder === 'Random') {
+                sortedNetworks = [...networks].sort(() => Math.random() - 0.5);
+            } else if (window.cardBuilder && typeof window.cardBuilder.sortItems === 'function') {
+                sortedNetworks = window.cardBuilder.sortItems(networks, sortOrder, sortOrderDirection);
+            }
+            
+            // Apply limit
+            const limitedNetworks = sortedNetworks.slice(0, itemLimit);
             
             if (limitedNetworks.length === 0) {
-                return false;
+                return false; // Auto-hide empty sections
             }
             
             // Check if cardBuilder is available
@@ -1993,16 +3260,18 @@
             // Render the scrollable container with the network/studio items
             const scrollableContainer = window.cardBuilder.renderCards(
                 limitedNetworks,
-                'Popular TV Networks',
+                sectionName,
                 null,
                 true,
-                'backdrop'
+                cardFormat,
+                sortOrder,
+                sortOrderDirection
             );
             
             // Add data attribute to track rendered sections
             scrollableContainer.setAttribute('data-custom-section-id', 'popular-tv-networks');
-            scrollableContainer.setAttribute('data-custom-section-name', 'Popular TV Networks');
-            scrollableContainer.style.order = POPULAR_TV_NETWORKS_ORDER;
+            scrollableContainer.setAttribute('data-custom-section-name', sectionName);
+            scrollableContainer.style.order = order;
             
             // Append to container
             container.appendChild(scrollableContainer);
@@ -2049,17 +3318,39 @@
     async function generateDiscoveryGroup() {
         try {
             LOG('Generating single discovery group...');
+
+            const spotlightChance = discoveryConfig.spotlightDiscoveryChance ?? 0.5;
+
+            let renderGenresSpotlight = false;
+            let renderNetworksSpotlight = false;
+            let renderCollectionsSpotlight = false;
+
+            if (Math.random() < spotlightChance) {
+                // Randomly pick one of the spotlight sections to render
+                const spotlightSections = ['spotlight-genre', 'spotlight-network', 'spotlight-collection'];
+                const selectedSpotlightSection = spotlightSections[Math.floor(Math.random() * spotlightSections.length)];
+                renderGenresSpotlight = selectedSpotlightSection === 'spotlight-genre';
+                renderNetworksSpotlight = selectedSpotlightSection === 'spotlight-network';
+                renderCollectionsSpotlight = selectedSpotlightSection === 'spotlight-collection';
+            }
             
             // Run all async operations in parallel for maximum speed
             const preloadPromises = [
                 // 1. [Genre] Movies
                 (async () => {
+                    const sectionConfig = getDiscoverySectionSettings('genreMovies');
+                    if (!sectionConfig || !sectionConfig.enabled) return null;
                     const randomGenre = await getRandomGenre();
                     if (randomGenre) {
-                        const genreData = await preloadGenreSection(randomGenre);
+                        const genreData = await preloadGenreSection(
+                            randomGenre,
+                            sectionConfig.itemLimit ?? (discoveryConfig.defaultItemLimit ?? defaultItemLimit)
+                        );
                         if (genreData) {
                             return {
                                 type: 'genre',
+                                sectionKey: 'genreMovies',
+                                config: sectionConfig,
                                 data: randomGenre,
                                 items: genreData.items,
                                 viewMoreUrl: genreData.viewMoreUrl
@@ -2071,15 +3362,19 @@
                 
                 // 2. Directed by [Director] (use cached items directly)
                 (async () => {
+                    const sectionConfig = getDiscoverySectionSettings('directedByTopDirector');
+                    if (!sectionConfig || !sectionConfig.enabled) return null;
                     if (moviesTopPeople && moviesTopPeople.directors.length > 0) {
                         const randomDirector = getRandomItem(moviesTopPeople.directors, renderedDirectors);
                         if (randomDirector && randomDirector.items && randomDirector.items.length > 0) {
-                            // Use cached items directly - no need to fetch from API
-                            const shuffledItems = shuffleArray(randomDirector.items).slice(0, 16);
+                            const limit = sectionConfig.itemLimit ?? (discoveryConfig.defaultItemLimit ?? defaultItemLimit);
+                            const shuffledItems = shuffleArray(randomDirector.items).slice(0, limit);
                             
                             if (shuffledItems && shuffledItems.length > 0) {
                                 return {
                                     type: 'director',
+                                    sectionKey: 'directedByTopDirector',
+                                    config: sectionConfig,
                                     data: randomDirector,
                                     items: shuffledItems,
                                     viewMoreUrl: `#/details?id=${randomDirector.id}&serverId=${ApiClient.serverId()}`
@@ -2092,15 +3387,19 @@
                 
                 // 3. Written by [Writer] (use cached items directly)
                 (async () => {
+                    const sectionConfig = getDiscoverySectionSettings('writtenByTopWriter');
+                    if (!sectionConfig || !sectionConfig.enabled) return null;
                     if (moviesTopPeople && moviesTopPeople.writers.length > 0) {
                         const randomWriter = getRandomItem(moviesTopPeople.writers, renderedWriters);
                         if (randomWriter && randomWriter.items && randomWriter.items.length > 0) {
-                            // Use cached items directly - no need to fetch from API
-                            const shuffledItems = shuffleArray(randomWriter.items).slice(0, 16);
+                            const limit = sectionConfig.itemLimit ?? (discoveryConfig.defaultItemLimit ?? defaultItemLimit);
+                            const shuffledItems = shuffleArray(randomWriter.items).slice(0, limit);
                             
                             if (shuffledItems && shuffledItems.length > 0) {
                                 return {
                                     type: 'writer',
+                                    sectionKey: 'writtenByTopWriter',
+                                    config: sectionConfig,
                                     data: randomWriter,
                                     items: shuffledItems,
                                     viewMoreUrl: `#/details?id=${randomWriter.id}&serverId=${ApiClient.serverId()}`
@@ -2113,15 +3412,19 @@
                 
                 // 4. Starring [Actor] (use cached items directly)
                 (async () => {
+                    const sectionConfig = getDiscoverySectionSettings('starringTopActor');
+                    if (!sectionConfig || !sectionConfig.enabled) return null;
                     if (moviesTopPeople && moviesTopPeople.actors.length > 0) {
                         const randomActor = getRandomItem(moviesTopPeople.actors, renderedActors);
                         if (randomActor && randomActor.items && randomActor.items.length > 0) {
-                            // Use cached items directly - no need to fetch from API
-                            const shuffledItems = shuffleArray(randomActor.items).slice(0, 16);
+                            const limit = sectionConfig.itemLimit ?? (discoveryConfig.defaultItemLimit ?? defaultItemLimit);
+                            const shuffledItems = shuffleArray(randomActor.items).slice(0, limit);
                             
                             if (shuffledItems && shuffledItems.length > 0) {
                                 return {
                                     type: 'actor',
+                                    sectionKey: 'starringTopActor',
+                                    config: sectionConfig,
                                     data: randomActor,
                                     items: shuffledItems,
                                     viewMoreUrl: `#/details?id=${randomActor.id}&serverId=${ApiClient.serverId()}`
@@ -2134,12 +3437,19 @@
                 
                 // 5. Because you watched [Movie]
                 (async () => {
+                    const sectionConfig = getDiscoverySectionSettings('becauseYouWatched');
+                    if (!sectionConfig || !sectionConfig.enabled) return null;
                     const randomWatchedMovie = getRandomWatchedMovie();
                     if (randomWatchedMovie) {
-                        const watchedData = await preloadBecauseYouWatchedSection(randomWatchedMovie);
+                        const watchedData = await preloadBecauseYouWatchedSection(
+                            randomWatchedMovie,
+                            sectionConfig.itemLimit ?? (discoveryConfig.defaultItemLimit ?? defaultItemLimit)
+                        );
                         if (watchedData) {
                             return {
                                 type: 'watched',
+                                sectionKey: 'becauseYouWatched',
+                                config: sectionConfig,
                                 data: randomWatchedMovie,
                                 items: watchedData.items
                             };
@@ -2150,12 +3460,19 @@
                 
                 // 6. Because you liked [Movie]
                 (async () => {
+                    const sectionConfig = getDiscoverySectionSettings('becauseYouLiked');
+                    if (!sectionConfig || !sectionConfig.enabled) return null;
                     const randomLikedMovie = await getRandomFavoriteMovie();
                     if (randomLikedMovie) {
-                        const likedData = await preloadBecauseYouLikedSection(randomLikedMovie);
+                        const likedData = await preloadBecauseYouLikedSection(
+                            randomLikedMovie,
+                            sectionConfig.itemLimit ?? (discoveryConfig.defaultItemLimit ?? defaultItemLimit)
+                        );
                         if (likedData) {
                             return {
                                 type: 'liked',
+                                sectionKey: 'becauseYouLiked',
+                                config: sectionConfig,
                                 data: randomLikedMovie,
                                 items: likedData.items
                             };
@@ -2166,6 +3483,8 @@
                 
                 // 7. Shows from [Studio Name]
                 (async () => {
+                    const sectionConfig = getDiscoverySectionSettings('studioShows');
+                    if (!sectionConfig || !sectionConfig.enabled) return null;
                     const networks = await getPopularTVNetworks();
                     if (networks && networks.length > 0) {
                         // Filter out already rendered studios
@@ -2176,19 +3495,23 @@
                         if (availableNetworks.length > 0) {
                             const randomNetwork = availableNetworks[Math.floor(Math.random() * availableNetworks.length)];
                             const items = await fetchItemsByStudio(randomNetwork.Id);
+                            const viewMoreUrl = `#/list.html?studioId=${randomNetwork.Id}&serverId=${ApiClient.serverId()}`;
                             
                             if (items && items.length > 0) {
-                                // Track rendered studio
                                 renderedStudios.add(randomNetwork.Id);
                                 
-                                // Shuffle and limit
-                                const shuffled = [...items].sort(() => Math.random() - 0.5);
-                                const limitedItems = shuffled.slice(0, 16);
+                                const orderedItems = applyDiscoverySectionOrdering(items, sectionConfig);
+                                if (orderedItems.length === 0) {
+                                    return null;
+                                }
                                 
                                 return {
                                     type: 'studio',
+                                    sectionKey: 'studioShows',
+                                    config: sectionConfig,
                                     data: randomNetwork,
-                                    items: limitedItems
+                                    items: orderedItems,
+                                    viewMoreUrl: viewMoreUrl
                                 };
                             }
                         }
@@ -2198,12 +3521,19 @@
                 
                 // 8. Because you recently watched [Movie Name]
                 (async () => {
+                    const sectionConfig = getDiscoverySectionSettings('becauseYouRecentlyWatched');
+                    if (!sectionConfig || !sectionConfig.enabled) return null;
                     const randomRecentMovie = getRandomRecentlyWatchedMovie();
                     if (randomRecentMovie) {
-                        const watchedData = await preloadBecauseYouWatchedSection(randomRecentMovie);
+                        const watchedData = await preloadBecauseYouWatchedSection(
+                            randomRecentMovie,
+                            sectionConfig.itemLimit ?? (discoveryConfig.defaultItemLimit ?? defaultItemLimit)
+                        );
                         if (watchedData) {
                             return {
                                 type: 'watched-recent',
+                                sectionKey: 'becauseYouRecentlyWatched',
+                                config: sectionConfig,
                                 data: randomRecentMovie,
                                 items: watchedData.items
                             };
@@ -2214,6 +3544,8 @@
                 
                 // 9. Starring [Actor Name] since you recently watched [Movie Name]
                 (async () => {
+                    const sectionConfig = getDiscoverySectionSettings('starringActorRecentlyWatched');
+                    if (!sectionConfig || !sectionConfig.enabled) return null;
                     const recentMovie = getRandomRecentlyWatchedMovie(renderedStarringWatchedMovies);
                     if (!recentMovie) return null;
                     
@@ -2251,16 +3583,17 @@
                             .filter(item => item.Id !== recentMovie.Id);
                         
                         if (filteredItems.length > 0) {
-                            // Limit to 16
-                            const limitedItems = filteredItems.slice(0, 16);
-                            
+                            const orderedItems = applyDiscoverySectionOrdering(filteredItems, sectionConfig);
+                            if (orderedItems.length === 0) return null;
                             return {
                                 type: 'actor-recent',
+                                sectionKey: 'starringActorRecentlyWatched',
+                                config: sectionConfig,
                                 data: {
                                     person: selectedActor,
                                     movie: recentMovie
                                 },
-                                items: limitedItems,
+                                items: orderedItems,
                                 viewMoreUrl: `#/details?id=${selectedActor.Id}&serverId=${ApiClient.serverId()}`
                             };
                         }
@@ -2273,6 +3606,8 @@
                 
                 // 10. Directed by [Director Name] since you recently watched [Movie Name]
                 (async () => {
+                    const sectionConfig = getDiscoverySectionSettings('directedByDirectorRecentlyWatched');
+                    if (!sectionConfig || !sectionConfig.enabled) return null;
                     const recentMovie = getRandomRecentlyWatchedMovie(renderedDirectedWatchedMovies);
                     if (!recentMovie) return null;
                     
@@ -2313,19 +3648,20 @@
                             .filter(item => item.Id !== recentMovie.Id);
                         
                         if (filteredItems.length > 0) {
-                            // Track rendered director
                             renderedDirectors.add(selectedDirector.Name);
                             
-                            // Limit to 16
-                            const limitedItems = filteredItems.slice(0, 16);
+                            const orderedItems = applyDiscoverySectionOrdering(filteredItems, sectionConfig);
+                            if (orderedItems.length === 0) return null;
                             
                             return {
                                 type: 'director-recent',
+                                sectionKey: 'directedByDirectorRecentlyWatched',
+                                config: sectionConfig,
                                 data: {
                                     person: selectedDirector,
                                     movie: recentMovie
                                 },
-                                items: limitedItems,
+                                items: orderedItems,
                                 viewMoreUrl: `#/details?id=${selectedDirector.Id}&serverId=${ApiClient.serverId()}`
                             };
                         }
@@ -2338,6 +3674,8 @@
                 
                 // 11. Written by [Writer Name] since you recently watched [Movie Name]
                 (async () => {
+                    const sectionConfig = getDiscoverySectionSettings('writtenByWriterRecentlyWatched');
+                    if (!sectionConfig || !sectionConfig.enabled) return null;
                     const recentMovie = getRandomRecentlyWatchedMovie(renderedWrittenWatchedMovies);
                     if (!recentMovie) return null;
                     
@@ -2378,19 +3716,20 @@
                             .filter(item => item.Id !== recentMovie.Id);
                         
                         if (filteredItems.length > 0) {
-                            // Track rendered writer
                             renderedWriters.add(selectedWriter.Name);
                             
-                            // Limit to 16
-                            const limitedItems = filteredItems.slice(0, 16);
+                            const orderedItems = applyDiscoverySectionOrdering(filteredItems, sectionConfig);
+                            if (orderedItems.length === 0) return null;
                             
                             return {
                                 type: 'writer-recent',
+                                sectionKey: 'writtenByWriterRecentlyWatched',
+                                config: sectionConfig,
                                 data: {
                                     person: selectedWriter,
                                     movie: recentMovie
                                 },
-                                items: limitedItems,
+                                items: orderedItems,
                                 viewMoreUrl: `#/details?id=${selectedWriter.Id}&serverId=${ApiClient.serverId()}`
                             };
                         }
@@ -2399,6 +3738,206 @@
                     }
                     
                     return null;
+                })(),
+                
+                // 12. Spotlight: Top Rated from [Genre]
+                (async () => {
+                    if (!renderGenresSpotlight) return null;
+                    const sectionConfig = getDiscoverySectionSettings('spotlightGenre');
+                    if (!sectionConfig || !sectionConfig.enabled) return null;
+                    
+                    try {
+                        // Get qualifying genres (cached)
+                        const allQualifyingGenres = await getQualifyingGenres();
+                        if (allQualifyingGenres.length === 0) return null;
+                        
+                        // Filter out already rendered genres
+                        const availableGenres = allQualifyingGenres.filter(genre => 
+                            !renderedGenres.has(genre.Id)
+                        );
+                        
+                        if (availableGenres.length === 0) return null;
+                        
+                        // Pick random genre
+                        const selectedGenre = availableGenres[Math.floor(Math.random() * availableGenres.length)];
+                        
+                        const itemLimit = sectionConfig.itemLimit ?? (discoveryConfig.defaultItemLimit ?? defaultItemLimit);
+                        const moviesResponse = await ApiClient.getItems(ApiClient.getCurrentUserId(), {
+                            Genres: selectedGenre.Name,
+                            IncludeItemTypes: 'Movie',
+                            Recursive: true,
+                            SortBy: 'CommunityRating',
+                            SortOrder: 'Descending',
+                            Limit: itemLimit,
+                            Fields: 'BackdropImageTags,ImageTags,People,Genres,Overview,Taglines,ProductionYear,RecursiveItemCount,ChildCount'
+                        });
+                        
+                        const movies = moviesResponse.Items || [];
+                        if (movies.length === 0) return null;
+                        
+                        // Track rendered genre
+                        renderedGenres.add(selectedGenre.Id);
+                        
+                        return {
+                            type: 'spotlight-genre',
+                            sectionKey: 'spotlightGenre',
+                            config: sectionConfig,
+                            data: selectedGenre,
+                            items: movies,
+                            viewMoreUrl: `${ApiClient.serverAddress()}/web/#/list.html?genreId=${selectedGenre.Id}&serverId=${ApiClient.serverId()}`
+                        };
+                    } catch (err) {
+                        ERR('Error generating spotlight genre section:', err);
+                        return null;
+                    }
+                })(),
+                
+                // 13. Spotlight: Top Rated from [TV Network]
+                (async () => {
+                    if (!renderNetworksSpotlight) return null;
+                    const sectionConfig = getDiscoverySectionSettings('spotlightNetwork');
+                    if (!sectionConfig || !sectionConfig.enabled) return null;
+                    
+                    try {
+                        // Get popular TV networks
+                        const networks = await getPopularTVNetworks();
+                        if (networks.length === 0) return null;
+                        
+                        // Filter out already rendered networks
+                        const availableNetworks = networks.filter(network => 
+                            network.Id && !renderedNetworks.has(network.Id)
+                        );
+                        
+                        if (availableNetworks.length === 0) return null;
+                        
+                        // Pick random network
+                        const selectedNetwork = availableNetworks[Math.floor(Math.random() * availableNetworks.length)];
+                        
+                        const itemLimit = sectionConfig.itemLimit ?? (discoveryConfig.defaultItemLimit ?? defaultItemLimit);
+                        const showsResponse = await ApiClient.getItems(ApiClient.getCurrentUserId(), {
+                            StudioIds: selectedNetwork.Id,
+                            IncludeItemTypes: 'Series',
+                            Recursive: true,
+                            SortBy: 'CommunityRating',
+                            SortOrder: 'Descending',
+                            Limit: itemLimit,
+                            Fields: 'BackdropImageTags,ImageTags,People,Genres,Overview,Taglines,ProductionYear,RecursiveItemCount,ChildCount'
+                        });
+                        
+                        const shows = showsResponse.Items || [];
+                        if (shows.length === 0) return null;
+                        
+                        // Track rendered network
+                        renderedNetworks.add(selectedNetwork.Id);
+                        
+                        return {
+                            type: 'spotlight-network',
+                            sectionKey: 'spotlightNetwork',
+                            config: sectionConfig,
+                            data: selectedNetwork,
+                            items: shows,
+                            viewMoreUrl: `${ApiClient.serverAddress()}/web/#/list.html?studioId=${selectedNetwork.Id}&serverId=${ApiClient.serverId()}`
+                        };
+                    } catch (err) {
+                        ERR('Error generating spotlight network section:', err);
+                        return null;
+                    }
+                })(),
+                
+                // 14. Collection section
+                (async () => {
+                    if (!renderCollectionsSpotlight) return null;
+                    const sectionConfig = getDiscoverySectionSettings('collections');
+                    if (!sectionConfig || !sectionConfig.enabled) return null;
+                    
+                    try {
+                        const minItems = sectionConfig.minimumItems ?? 10;
+                        const userId = ApiClient.getCurrentUserId();
+                        
+                        const itemLimit = sectionConfig.itemLimit ?? (discoveryConfig.defaultItemLimit ?? defaultItemLimit);
+                        const sortOrder = sectionConfig.sortOrder ?? discoveryConfig.defaultSortOrder ?? defaultSortOrder;
+                        const sortOrderDirection = sectionConfig.sortOrderDirection ?? 'Ascending';
+                        
+                        // Fetch all collections (BoxSet items) with total record count
+                        const collectionsData = await getCollectionsData();
+                        if (!collectionsData) return null;
+                        
+                        // Filter by minimum item count using TotalRecordCount and exclude already rendered
+                        const qualifyingCollections = collectionsData.Items.filter(collection => {
+                            // Skip if already rendered
+                            if (renderedCollections.has(collection.Id)) return false;
+                            
+                            // Check if collection has enough items using TotalRecordCount
+                            // TotalRecordCount is available when EnableTotalRecordCount=true
+                            const itemCount = collection.TotalRecordCount ?? collection.RecursiveChildCount ?? collection.ChildCount ?? 0;
+                            return itemCount >= minItems;
+                        });
+                        
+                        if (qualifyingCollections.length === 0) return null;
+                        
+                        // Randomly select one collection
+                        const selectedCollection = qualifyingCollections[Math.floor(Math.random() * qualifyingCollections.length)];
+                        
+                        // Now fetch the items for the selected collection
+                        const itemsData = await fetchCollectionData(selectedCollection.Id);
+                        const items = itemsData.Items || [];
+                        
+                        if (items.length === 0) return null;
+                        
+                        // Apply sort order
+                        let sortedItems = items;
+                        if (sortOrder === 'Random') {
+                            sortedItems = [...items].sort(() => Math.random() - 0.5);
+                        } else if (window.cardBuilder && typeof window.cardBuilder.sortItems === 'function') {
+                            sortedItems = window.cardBuilder.sortItems(items, sortOrder, sortOrderDirection);
+                        }
+                        
+                        // Apply limit
+                        const limited = sortedItems.slice(0, itemLimit);
+                        if (limited.length === 0) return null;
+                        
+                        // Track rendered collection
+                        renderedCollections.add(selectedCollection.Id);
+                        
+                        return {
+                            type: 'collection',
+                            sectionKey: 'collections',
+                            config: sectionConfig,
+                            data: selectedCollection,
+                            items: limited,
+                            viewMoreUrl: `/web/#/collection.html?id=${selectedCollection.Id}`,
+                            sortOrder: sortOrder,
+                            sortOrderDirection: sortOrderDirection,
+                            cardFormat: sectionConfig.cardFormat ?? discoveryConfig.defaultCardFormat ?? defaultCardFormat
+                        };
+                    } catch (err) {
+                        ERR('Error generating collection section:', err);
+                        return null;
+                    }
+                })(),
+
+                // 15. Custom discovery section
+                (async () => {
+                    const eligibleCustomSections = (customHomeSections || []).filter(section => section.enabled !== false && section.discoveryEnabled === true);
+                    if (eligibleCustomSections.length === 0) return null;
+
+                    let availableSections = eligibleCustomSections.filter(section => section.id && !renderedCustomDiscoverySections.has(section.id));
+                    if (availableSections.length === 0) {
+                        LOG('No eligible custom sections for discovery group remaining');
+                        return null;
+                    }
+
+                    const selectedSection = availableSections[Math.floor(Math.random() * availableSections.length)];
+                    if (!selectedSection) return null;
+
+                    if (selectedSection.id) {
+                        renderedCustomDiscoverySections.add(selectedSection.id);
+                    }
+
+                    return {
+                        type: 'custom-discovery',
+                        data: { ...selectedSection }
+                    };
                 })()
             ];
             
@@ -2406,7 +3945,17 @@
             const preloadResults = await Promise.all(preloadPromises);
             
             // Filter out null results and collect valid sections
-            const sections = preloadResults.filter(section => section !== null);
+            let sections = preloadResults.filter(section => section !== null);
+            
+            if (discoveryConfig.randomizeOrder) {
+                sections = shuffleArray(sections);
+            } else {
+                sections.sort((a, b) => {
+                    const orderA = typeof a?.order === 'number' ? a.order : DISCOVERY_ORDER;
+                    const orderB = typeof b?.order === 'number' ? b.order : DISCOVERY_ORDER;
+                    return orderA - orderB;
+                });
+            }
             
             LOG(`Generated discovery group with ${sections.length} sections`);
             return sections;
@@ -2480,7 +4029,7 @@
      * Manages the UI state (handlers and button visibility) based on buffer content
      */
     async function manageDiscoveryUIState() {
-        const homeSectionsContainer = document.querySelector('.homeSectionsContainer');
+        const homeSectionsContainer = document.querySelector('.libraryPage:not(.hide) .homeSectionsContainer');
         
         if (discoveryBuffer.length > 0) {
             // Buffer has content - set up handlers
@@ -2614,7 +4163,7 @@
                     const groupToRender = discoveryBuffer.shift();
                     if (groupToRender && groupToRender.length > 0) {
                         // Remove loading indicator from DOM before rendering sections to prevent scroll jump
-                        const loadingIndicator = document.getElementById('discovery-loading-indicator');
+                        const loadingIndicator = document.querySelector('.libraryPage:not(.hide) #discovery-loading-indicator');
                         let loadingIndicatorClone = null;
                         if (loadingIndicator && loadingIndicator.parentNode) {
                             loadingIndicatorClone = loadingIndicator.cloneNode(true);
@@ -2624,6 +4173,7 @@
                         
                         let renderedCount = 0;
                         
+                        // Render sections from the group (including spotlight and collection sections via generateDiscoveryGroup)
                         for (const sectionData of groupToRender) {
                             try {
                                 const success = await renderDiscoverySection(sectionData, container);
@@ -2689,7 +4239,7 @@
         try {
             LOG('Discover More button clicked');
             
-            const homeSectionsContainer = document.querySelector('.homeSectionsContainer');
+            const homeSectionsContainer = document.querySelector('.libraryPage:not(.hide) .homeSectionsContainer');
             if (homeSectionsContainer) {
                 await renderNextDiscoveryGroup(homeSectionsContainer, loadMoreButton);
             } else {
@@ -2767,7 +4317,7 @@
         
         // Remove loading indicator from DOM before revealing sections to prevent scroll jump
         // We'll re-add it at the end after sections are revealed
-        const loadingIndicator = document.getElementById('discovery-loading-indicator');
+        const loadingIndicator = document.querySelector('.libraryPage:not(.hide) #discovery-loading-indicator');
         let loadingIndicatorClone = null;
         if (loadingIndicator && loadingIndicator.parentNode) {
             loadingIndicatorClone = loadingIndicator.cloneNode(true);
@@ -2821,7 +4371,7 @@
      * @param {Object} genre - Genre object
      * @returns {Promise<Object|null>} - Genre data with items and viewMoreUrl
      */
-    async function preloadGenreSection(genre) {
+    async function preloadGenreSection(genre, limit = 16) {
         try {
             const apiClient = window.ApiClient;
             const serverUrl = apiClient.serverAddress();
@@ -2829,7 +4379,7 @@
             const userId = apiClient.getCurrentUserId();
             const serverId = apiClient.serverId();
             
-            const url = `${serverUrl}/Items?userId=${userId}&Genres=${encodeURIComponent(genre.Name)}&IncludeItemTypes=Movie&Recursive=true&SortBy=Random&Limit=16`;
+            const url = `${serverUrl}/Items?userId=${userId}&Genres=${encodeURIComponent(genre.Name)}&IncludeItemTypes=Movie&Recursive=true&SortBy=Random&Limit=${limit}`;
             
             const response = await fetch(url, {
                 headers: {
@@ -2865,13 +4415,13 @@
      * @param {Object} movie - Movie object
      * @returns {Promise<Object|null>} - Similar content data
      */
-    async function preloadBecauseYouWatchedSection(movie) {
+    async function preloadBecauseYouWatchedSection(movie, limit = 16) {
         try {
             const items = await fetchSimilarContent(movie.Id, 'Movie');
             if (items.length === 0) return null;
             
             return {
-                items: items.slice(0, 16),
+                items: items.slice(0, limit),
                 hasFullItems: true
             };
             
@@ -2886,13 +4436,13 @@
      * @param {Object} movie - Movie object
      * @returns {Promise<Object|null>} - Similar content data
      */
-    async function preloadBecauseYouLikedSection(movie) {
+    async function preloadBecauseYouLikedSection(movie, limit = 16) {
         try {
             const items = await fetchSimilarContent(movie.Id, 'Movie');
             if (items.length === 0) return null;
             
             return {
-                items: items.slice(0, 16),
+                items: items.slice(0, limit),
                 hasFullItems: true
             };
             
@@ -2915,70 +4465,256 @@
             let viewMoreUrl = null;
             let sectionId = '';
             let order = DISCOVERY_ORDER + renderedSections.size;
+            let sectionConfig = null;
+            let sectionKey = null;
+
+            if (typeof sectionData === 'object' && sectionData.type === 'custom-discovery') {
+                const baseSection = sectionData.data || {};
+                const clonedSection = JSON.parse(JSON.stringify(baseSection));
+                const uniqueSuffix = `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+                clonedSection.id = `${clonedSection.id || clonedSection.name || 'custom'}-discovery-${uniqueSuffix}`;
+                clonedSection.order = DISCOVERY_ORDER + renderedSections.size;
+                const success = await renderCustomSection(clonedSection, container);
+                if (success) {
+                    renderedSections.add(clonedSection.id);
+                }
+                return success;
+            }
             
             // Handle preloaded section data
             if (typeof sectionData === 'object' && sectionData.type) {
                 if (!sectionData.items || sectionData.items.length === 0) return false;
                 
+                sectionKey = sectionData.sectionKey || getDiscoverySectionKeyFromType(sectionData.type);
+                sectionConfig = sectionData.config || getDiscoverySectionSettings(sectionKey);
+                if (!sectionConfig || sectionConfig.enabled === false) return false;
                 items = sectionData.items;
                 viewMoreUrl = sectionData.viewMoreUrl || null;
+                items = applyDiscoverySectionOrdering(items, sectionConfig);
+                if (!items || items.length === 0) return false;
+                
+                // Helper function to format section names with placeholders
+                function formatSectionName(template, replacements) {
+                    let name = template;
+                    for (const [key, value] of Object.entries(replacements)) {
+                        name = name.replace(new RegExp(`\\[${key}\\]`, 'gi'), value || '');
+                    }
+                    return name;
+                }
                 
                 switch (sectionData.type) {
                     case 'genre':
-                        sectionName = `${sectionData.data.Name} Movies`;
+                        const genreTemplate = sectionConfig?.name || '[Genre] Movies';
+                        sectionName = formatSectionName(genreTemplate, { Genre: sectionData.data.Name });
                         sectionId = `genre-${sectionData.data.Name.toLowerCase()}`;
                         break;
                     case 'director':
-                        sectionName = `Directed by ${sectionData.data.name}`;
+                        const directorTemplate = sectionConfig?.name || 'Directed by [Director]';
+                        sectionName = formatSectionName(directorTemplate, { Director: sectionData.data.name });
                         sectionId = `director-${sectionData.data.name.toLowerCase().replace(/\s+/g, '-')}`;
                         break;
                     case 'writer':
-                        sectionName = `Written by ${sectionData.data.name}`;
+                        const writerTemplate = sectionConfig?.name || 'Written by [Writer]';
+                        sectionName = formatSectionName(writerTemplate, { Writer: sectionData.data.name });
                         sectionId = `writer-${sectionData.data.name.toLowerCase().replace(/\s+/g, '-')}`;
                         break;
                     case 'actor':
-                        sectionName = `Starring ${sectionData.data.name}`;
+                        const actorTemplate = sectionConfig?.name || 'Starring [Actor]';
+                        sectionName = formatSectionName(actorTemplate, { Actor: sectionData.data.name });
                         sectionId = `actor-${sectionData.data.name.toLowerCase().replace(/\s+/g, '-')}`;
                         break;
                     case 'watched':
-                        sectionName = `Because you watched ${sectionData.data.Name} ${sectionData.data.ProductionYear ? `(${sectionData.data.ProductionYear})` : ''}`;
+                        const watchedTemplate = sectionConfig?.name || 'Because you watched [Movie]';
+                        const watchedMovieName = `${sectionData.data.Name}${sectionData.data.ProductionYear ? ` (${sectionData.data.ProductionYear})` : ''}`;
+                        sectionName = formatSectionName(watchedTemplate, { Movie: watchedMovieName });
                         sectionId = `watched-${sectionData.data.Id}`;
                         break;
                     case 'liked':
-                        sectionName = `Because you liked ${sectionData.data.Name} ${sectionData.data.ProductionYear ? `(${sectionData.data.ProductionYear})` : ''}`;
+                        const likedTemplate = sectionConfig?.name || 'Because you liked [Movie]';
+                        const likedMovieName = `${sectionData.data.Name}${sectionData.data.ProductionYear ? ` (${sectionData.data.ProductionYear})` : ''}`;
+                        sectionName = formatSectionName(likedTemplate, { Movie: likedMovieName });
                         sectionId = `liked-${sectionData.data.Id}`;
                         break;
                     case 'studio':
-                        sectionName = `Shows from ${sectionData.data.Name}`;
+                        const studioTemplate = sectionConfig?.name || 'Shows from [Studio]';
+                        sectionName = formatSectionName(studioTemplate, { Studio: sectionData.data.Name });
                         sectionId = `studio-${sectionData.data.Id}`;
                         break;
                     case 'watched-recent':
-                        sectionName = `Because you recently watched ${sectionData.data.Name} ${sectionData.data.ProductionYear ? `(${sectionData.data.ProductionYear})` : ''}`;
+                        const watchedRecentTemplate = sectionConfig?.name || 'Because you recently watched [Movie]';
+                        const watchedRecentMovieName = `${sectionData.data.Name}${sectionData.data.ProductionYear ? ` (${sectionData.data.ProductionYear})` : ''}`;
+                        sectionName = formatSectionName(watchedRecentTemplate, { Movie: watchedRecentMovieName });
                         sectionId = `watched-recent-${sectionData.data.Id}`;
                         break;
                     case 'actor-recent':
-                        sectionName = `Starring ${sectionData.data.person.Name} since you recently watched ${sectionData.data.movie.Name} ${sectionData.data.movie.ProductionYear ? `(${sectionData.data.movie.ProductionYear})` : ''}`;
+                        const actorRecentTemplate = sectionConfig?.name || 'Starring [Actor] because you recently watched [Movie]';
+                        const actorRecentMovieName = `${sectionData.data.movie.Name}${sectionData.data.movie.ProductionYear ? ` (${sectionData.data.movie.ProductionYear})` : ''}`;
+                        sectionName = formatSectionName(actorRecentTemplate, { 
+                            Actor: sectionData.data.person.Name, 
+                            Movie: actorRecentMovieName 
+                        });
                         sectionId = `actor-recent-${sectionData.data.person.Id}-${sectionData.data.movie.Id}`;
                         break;
                     case 'director-recent':
-                        sectionName = `Directed by ${sectionData.data.person.Name} since you recently watched ${sectionData.data.movie.Name} ${sectionData.data.movie.ProductionYear ? `(${sectionData.data.movie.ProductionYear})` : ''}`;
+                        const directorRecentTemplate = sectionConfig?.name || 'Directed by [Director] because you recently watched [Movie]';
+                        const directorRecentMovieName = `${sectionData.data.movie.Name}${sectionData.data.movie.ProductionYear ? ` (${sectionData.data.movie.ProductionYear})` : ''}`;
+                        sectionName = formatSectionName(directorRecentTemplate, { 
+                            Director: sectionData.data.person.Name, 
+                            Movie: directorRecentMovieName 
+                        });
                         sectionId = `director-recent-${sectionData.data.person.Id}-${sectionData.data.movie.Id}`;
                         break;
                     case 'writer-recent':
-                        sectionName = `Written by ${sectionData.data.person.Name} since you recently watched ${sectionData.data.movie.Name} ${sectionData.data.movie.ProductionYear ? `(${sectionData.data.movie.ProductionYear})` : ''}`;
+                        const writerRecentTemplate = sectionConfig?.name || 'Written by [Writer] because you recently watched [Movie]';
+                        const writerRecentMovieName = `${sectionData.data.movie.Name}${sectionData.data.movie.ProductionYear ? ` (${sectionData.data.movie.ProductionYear})` : ''}`;
+                        sectionName = formatSectionName(writerRecentTemplate, { 
+                            Writer: sectionData.data.person.Name, 
+                            Movie: writerRecentMovieName 
+                        });
                         sectionId = `writer-recent-${sectionData.data.person.Id}-${sectionData.data.movie.Id}`;
                         break;
+                    case 'spotlight-genre':
+                        // Handle spotlight genre section - render as spotlight
+                        if (!window.cardBuilder || !window.cardBuilder.renderSpotlightSection) {
+                            WARN("cardBuilder.renderSpotlightSection not available");
+                            return false;
+                        }
+                        const spotlightGenreTemplate = sectionConfig?.name || 'Spotlight';
+                        sectionName = formatSectionName(spotlightGenreTemplate, { Genre: sectionData.data.Name });
+                        sectionId = `spotlight-genre-${sectionData.data.Id}`;
+                        const spotlightGenreContainer = window.cardBuilder.renderSpotlightSection(
+                            items,
+                            sectionName,
+                            {
+                                autoPlay: true,
+                                interval: 5000,
+                                showDots: true,
+                                showNavButtons: true,
+                                showClearArt: true
+                            },
+                        );
+                        spotlightGenreContainer.setAttribute('data-custom-section-id', sectionId);
+                        spotlightGenreContainer.setAttribute('data-custom-section-name', sectionName);
+                        spotlightGenreContainer.style.order = order;
+                        container.appendChild(spotlightGenreContainer);
+                        renderedSections.add(sectionId);
+                        return true;
+                    case 'spotlight-network':
+                        // Handle spotlight network section - render as spotlight
+                        if (!window.cardBuilder || !window.cardBuilder.renderSpotlightSection) {
+                            WARN("cardBuilder.renderSpotlightSection not available");
+                            return false;
+                        }
+                        const spotlightNetworkTemplate = sectionConfig?.name || 'Spotlight';
+                        sectionName = formatSectionName(spotlightNetworkTemplate, { Studio: sectionData.data.Name });
+                        sectionId = `spotlight-network-${sectionData.data.Id}`;
+                        const spotlightNetworkContainer = window.cardBuilder.renderSpotlightSection(
+                            items,
+                            sectionName,
+                            {
+                                autoPlay: true,
+                                interval: 5000,
+                                showDots: true,
+                                showNavButtons: true,
+                                showClearArt: true
+                            }
+                        );
+                        spotlightNetworkContainer.setAttribute('data-custom-section-id', sectionId);
+                        spotlightNetworkContainer.setAttribute('data-custom-section-name', sectionName);
+                        spotlightNetworkContainer.style.order = order;
+                        container.appendChild(spotlightNetworkContainer);
+                        renderedSections.add(sectionId);
+                        return true;
+                    case 'collection':
+                        // Handle collection section - use provided config
+                        const collectionTemplate = sectionConfig?.name || '[Collection Name]';
+                        sectionName = formatSectionName(collectionTemplate, { 'Collection Name': sectionData.data.Name || 'Collection' });
+                        sectionId = `collection-${sectionData.data.Id}`;
+                        const collectionItemLimit = sectionConfig?.itemLimit ?? (discoveryConfig.defaultItemLimit ?? defaultItemLimit);
+                        const collectionSortOrder = sectionConfig?.sortOrder ?? discoveryConfig.defaultSortOrder ?? defaultSortOrder;
+                        const collectionSortOrderDirection = sectionConfig?.sortOrderDirection ?? 'Ascending';
+                        const collectionCardFormat = sectionConfig?.cardFormat ?? discoveryConfig.defaultCardFormat ?? defaultCardFormat;
+                        
+                        // Apply sort order if needed
+                        let collectionItems = items;
+                        if (collectionSortOrder === 'Random') {
+                            collectionItems = [...items].sort(() => Math.random() - 0.5);
+                        } else if (window.cardBuilder && typeof window.cardBuilder.sortItems === 'function') {
+                            collectionItems = window.cardBuilder.sortItems(items, collectionSortOrder, collectionSortOrderDirection);
+                        }
+                        
+                        // Apply limit
+                        const limitedCollectionItems = collectionItems.slice(0, collectionItemLimit);
+                        if (limitedCollectionItems.length === 0) {
+                            return false;
+                        }
+
+                        let collectionContainer = null;
+
+                        if (window.cardBuilder && window.cardBuilder.renderSpotlightSection) {
+                            collectionContainer = window.cardBuilder.renderSpotlightSection(
+                                limitedCollectionItems,
+                                sectionName,
+                                {
+                                    autoPlay: true,
+                                    interval: 5000,
+                                    showDots: true,
+                                    showNavButtons: true,
+                                    showClearArt: true
+                                }
+                            );
+                        }
+                        
+                        if (!collectionContainer && window.cardBuilder && window.cardBuilder.renderCards) {
+                            collectionContainer = window.cardBuilder.renderCards(
+                                limitedCollectionItems,
+                                sectionName,
+                                sectionData.viewMoreUrl || `/web/#/collection.html?id=${sectionData.data.Id}`,
+                                true,
+                                collectionCardFormat,
+                                collectionSortOrder,
+                                collectionSortOrderDirection
+                            );
+                        }
+                        
+                        collectionContainer.setAttribute('data-custom-section-id', sectionId);
+                        collectionContainer.setAttribute('data-custom-section-name', sectionName);
+                        collectionContainer.style.order = order;
+                        container.appendChild(collectionContainer);
+                        renderedSections.add(sectionId);
+                        return true;
                     default:
                         return false;
+                }
+            } else if (typeof sectionData === 'string') {
+                sectionKey = getDiscoverySectionKeyFromType(sectionData);
+                sectionConfig = getDiscoverySectionSettings(sectionKey);
+                if (!sectionConfig || sectionConfig.enabled === false) {
+                    return false;
+                }
+                if (items && items.length > 0) {
+                    items = applyDiscoverySectionOrdering(items, sectionConfig);
+                }
+                if (!sectionName) {
+                    sectionName = sectionConfig.name || sectionName;
                 }
             }        
             
             if (items.length === 0) {
-                return false;
+                return false; // Auto-hide empty sections
             }
             
-            // Limit to 16 items
-            const limitedItems = items.slice(0, 16);
+            const activeSectionConfig = sectionConfig || (sectionKey ? getDiscoverySectionSettings(sectionKey) : null);
+            const itemLimit = activeSectionConfig?.itemLimit ?? (discoveryConfig.defaultItemLimit ?? defaultItemLimit);
+            const sortOrder = activeSectionConfig?.sortOrder ?? discoveryConfig.defaultSortOrder ?? defaultSortOrder;
+            const sortOrderDirection = activeSectionConfig?.sortOrderDirection ?? 'Ascending';
+            const cardFormat = activeSectionConfig?.cardFormat ?? discoveryConfig.defaultCardFormat ?? defaultCardFormat;
+            
+            const limitedItems = activeSectionConfig ? items : items.slice(0, itemLimit);
+            
+            if (limitedItems.length === 0) {
+                return false; // Auto-hide empty sections
+            }
             
             // Check if cardBuilder is available
             if (typeof window.cardBuilder === 'undefined') {
@@ -2996,14 +4732,30 @@
                     WARN("cardBuilder.renderCards not available, skipping discovery section");
                     return false;
                 }
-                scrollableContainer = window.cardBuilder.renderCards(limitedItems, sectionName, viewMoreUrl, true);
+                scrollableContainer = window.cardBuilder.renderCards(
+                    limitedItems, 
+                    sectionName, 
+                    viewMoreUrl, 
+                    true,
+                    cardFormat,
+                    sortOrder,
+                    sortOrderDirection
+                );
             } else {
                 // Use renderCardsFromIds for ID arrays
                 if (!window.cardBuilder.renderCardsFromIds) {
                     WARN("cardBuilder.renderCardsFromIds not available, skipping discovery section");
                     return false;
                 }
-                scrollableContainer = await window.cardBuilder.renderCardsFromIds(limitedItems, sectionName, viewMoreUrl, true);
+                scrollableContainer = await window.cardBuilder.renderCardsFromIds(
+                    limitedItems, 
+                    sectionName, 
+                    viewMoreUrl, 
+                    true,
+                    cardFormat,
+                    sortOrder,
+                    sortOrderDirection
+                );
             }
             
             // Add data attributes to track rendered sections
@@ -3036,6 +4788,8 @@
         const homePage = document.querySelector('.homePage:not(.hide)');
 
         if (!homePage || homePage.dataset.discoveryReady === 'true') {
+            LOG('Home page not found or already discovery ready, skipping...');
+            LOG('homePage:', homePage);
             return;
         }
 
@@ -3054,7 +4808,7 @@
      */
     function removeScrollBasedLoading() {
         // Fade out message for "loading more"
-        const loadingIndicator = document.querySelector('#discovery-loading-indicator');
+        const loadingIndicator = document.querySelector('.libraryPage:not(.hide) #discovery-loading-indicator');
 
         if (discoveryScrollHandler) {
             window.removeEventListener('scroll', discoveryScrollHandler);
@@ -3284,6 +5038,68 @@
      * Gets a random genre that hasn't been rendered yet
      * @returns {Promise<Object|null>} - Random genre or null
      */
+    /**
+     * Gets qualifying genres (genres with enough movies) with caching
+     * @returns {Promise<Array>} Array of qualifying genre objects
+     */
+    async function getQualifyingGenres() {
+        // Return cached if available
+        if (cachedQualifyingGenres !== null) {
+            return cachedQualifyingGenres;
+        }
+        
+        // Prevent parallel caching
+        if (isCachingQualifyingGenres) {
+            // Wait for the other call to complete
+            while (isCachingQualifyingGenres) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            return cachedQualifyingGenres || [];
+        }
+        
+        isCachingQualifyingGenres = true;
+        
+        try {
+            LOG('Fetching and caching qualifying genres...');
+            
+            // Get all genres
+            const serverAddress = ApiClient.serverAddress();
+            const token = ApiClient.accessToken();
+            const genresResponse = await fetch(`${serverAddress}/Genres?IncludeItemTypes=Movie`, {
+                headers: { "Authorization": `MediaBrowser Token="${token}"` }
+            });
+            
+            if (!genresResponse.ok) {
+                ERR(`Failed to fetch genres: ${genresResponse.statusText}`);
+                isCachingQualifyingGenres = false;
+                return [];
+            }
+            
+            const genresData = await genresResponse.json();
+            const genres = genresData.Items || [];
+            const qualifyingGenres = [];
+            
+            // Check each genre to see if it has enough movies
+            for (const genre of genres) {
+                if (genre.MovieCount < minGenreMovieCount) continue;
+                qualifyingGenres.push(genre);
+            }
+            
+            // Cache the results
+            cachedQualifyingGenres = qualifyingGenres;
+            LOG(`Cached ${qualifyingGenres.length} qualifying genres`);
+            console.log(qualifyingGenres);
+            
+            return qualifyingGenres;
+        } catch (err) {
+            ERR('Error fetching qualifying genres:', err);
+            isCachingQualifyingGenres = false;
+            return [];
+        } finally {
+            isCachingQualifyingGenres = false;
+        }
+    }
+
     async function getRandomGenre() {
         const cache = new window.LocalStorageCache();
         let movieGenres = cache.get('movieGenres');
@@ -3528,30 +5344,188 @@
     }
 
     /**
-     * Renders all seasonal sections based on current date
+     * Checks if current date is within a seasonal period
+     * @param {string} startDate - Start date in MM-DD format
+     * @param {string} endDate - End date in MM-DD format
+     * @returns {boolean} - True if within period
+     */
+    function isInSeasonalPeriod(startDate, endDate) {
+        const now = new Date();
+        const currentMonth = now.getMonth() + 1; // 1-12
+        const currentDay = now.getDate();
+        
+        const [startMonth, startDay] = startDate.split('-').map(Number);
+        const [endMonth, endDay] = endDate.split('-').map(Number);
+        
+        const currentDateNum = currentMonth * 100 + currentDay;
+        const startDateNum = startMonth * 100 + startDay;
+        const endDateNum = endMonth * 100 + endDay;
+        
+        if (startDateNum <= endDateNum) {
+            // Normal range (e.g., 10-01 to 10-31)
+            return currentDateNum >= startDateNum && currentDateNum <= endDateNum;
+        } else {
+            // Wraps around year (e.g., 12-01 to 01-31)
+            return currentDateNum >= startDateNum || currentDateNum <= endDateNum;
+        }
+    }
+
+    /**
+     * Renders a seasonal section based on config
+     * @param {Object} seasonConfig - Season configuration
+     * @param {HTMLElement} container - Container to append section to
+     * @returns {Promise<boolean>} - Success status
+     */
+    /**
+     * Renders a single section (used by both seasonal and custom sections)
+     * @param {Object} sectionConfig - Section configuration
+     * @param {HTMLElement} container - Container to append the section to
+     * @param {string} sectionIdPrefix - Prefix for section ID
+     * @returns {Promise<boolean>} - Success status
+     */
+    async function renderSection(sectionConfig, container, sectionIdPrefix) {
+        try {
+            if (!sectionConfig.enabled) {
+                return false;
+            }
+            
+            const sectionId = `${sectionIdPrefix}-${sectionConfig.id}`;
+            if (container.querySelector(`[data-custom-section-id="${sectionId}"]`)) {
+                return false;
+            }
+            
+            // Get config values
+            const itemLimit = sectionConfig.itemLimit ?? seasonalConfig?.defaultItemLimit ?? defaultItemLimit;
+            const sortOrder = sectionConfig.sortOrder ?? seasonalConfig?.defaultSortOrder ?? defaultSortOrder;
+            const sortOrderDirection = sectionConfig.sortOrderDirection ?? 'Ascending';
+            const cardFormat = sectionConfig.cardFormat ?? seasonalConfig?.defaultCardFormat ?? defaultCardFormat;
+            const order = sectionConfig.order ?? 100;
+            
+            const allItems = await loadItemsForSectionConfig(sectionConfig, itemLimit);
+            if (!allItems || allItems.length === 0) {
+                return false; // Auto-hide empty sections
+            }
+            
+            // Apply sort order
+            let sortedItems = allItems;
+            if (sortOrder === 'Random') {
+                sortedItems = [...allItems].sort(() => Math.random() - 0.5);
+            } else if (window.cardBuilder && typeof window.cardBuilder.sortItems === 'function') {
+                sortedItems = window.cardBuilder.sortItems(allItems, sortOrder, sortOrderDirection);
+            }
+            
+            // Apply limit
+            const limited = sortedItems.slice(0, itemLimit);
+            
+            if (limited.length === 0) {
+                return false; // Auto-hide empty sections
+            }
+
+            const type = sectionConfig.type;
+            const source = sectionConfig.source;
+            let viewMoreUrl = null;
+            switch (type) {
+                case 'Genre':
+                    viewMoreUrl = `#/list.html?genreId=${source}&serverId=${ApiClient.serverId()}`;
+                    break;
+                case 'Studio':
+                    viewMoreUrl = `#/list.html?studioId=${source}&serverId=${ApiClient.serverId()}`;
+                    break;
+                case 'Playlist':
+                case 'BoxSet':
+                    viewMoreUrl = `#/details?id=${source}&serverId=${ApiClient.serverId()}`;
+                    break;
+                case 'Parent':
+                    viewMoreUrl = `#/list.html?parentId=${source}&serverId=${ApiClient.serverId()}`;
+                    break;
+                default:
+                    viewMoreUrl = null;
+                    break;
+            }
+            
+            if (!window.cardBuilder || !window.cardBuilder.renderCards) {
+                WARN("cardBuilder.renderCards not available");
+                return false;
+            }
+            
+            const section = window.cardBuilder.renderCards(
+                limited,
+                sectionConfig.name,
+                viewMoreUrl,
+                true,
+                cardFormat,
+                sortOrder,
+                sortOrderDirection
+            );
+            
+            section.setAttribute('data-custom-section-id', sectionId);
+            section.setAttribute('data-custom-section-name', sectionConfig.name);
+            section.style.order = order;
+            
+            container.appendChild(section);
+            
+            return true;
+        } catch (err) {
+            ERR(`Error rendering section ${sectionConfig.name}:`, err);
+            return false;
+        }
+    }
+
+    /**
+     * Renders a seasonal section (which contains nested sections)
+     * @param {Object} seasonConfig - Seasonal section configuration
+     * @param {HTMLElement} container - Container to append sections to
+     * @returns {Promise<boolean>} - Success status
+     */
+    async function renderSeasonalSection(seasonConfig, container) {
+        try {
+            if (!seasonConfig.enabled) {
+                return false;
+            }
+            
+            // Check if in seasonal period
+            if (!isInSeasonalPeriod(seasonConfig.startDate, seasonConfig.endDate)) {
+                return false;
+            }
+            
+            // Render each nested section
+            const sections = seasonConfig.sections || [];
+            let anyRendered = false;
+            
+            for (const section of sections) {
+                if (section.enabled) {
+                    const rendered = await renderSection(section, container, `seasonal-${seasonConfig.id}`);
+                    if (rendered) {
+                        anyRendered = true;
+                    }
+                }
+            }
+            
+            return anyRendered;
+        } catch (err) {
+            ERR(`Error rendering seasonal section ${seasonConfig.name}:`, err);
+            return false;
+        }
+    }
+
+    /**
+     * Renders all seasonal sections based on current date and config
      * @param {HTMLElement} container - Container to append sections to
      */
     async function renderAllSeasonalSections(container) {
+        const seasons = seasonalConfig.seasons || [];
         const sectionsToRender = [];
         
-        // Add Halloween sections if in Halloween period
+        // Render each configured season if it's in its period
+        for (const season of seasons) {
+            if (season.enabled && isInSeasonalPeriod(season.startDate, season.endDate)) {
+                sectionsToRender.push(renderSeasonalSection(season, container));
+            }
+        }
+        
+        // Also render legacy Halloween sections for backward compatibility
         if (isHalloweenPeriod()) {
             sectionsToRender.push(renderAllHalloweenSections(container));
-        }
-        
-        // Add Christmas sections if in Christmas period
-        if (isChristmasPeriod()) {
-            sectionsToRender.push(renderAllChristmasSections(container));
-        }
-        
-        // Add New Years sections if in New Years period
-        if (isNewYearsPeriod()) {
-            sectionsToRender.push(renderAllNewYearsSections(container));
-        }
-        
-        // Add Valentine's Day sections if in Valentine's Day period
-        if (isValentinesPeriod()) {
-            sectionsToRender.push(renderAllValentinesSections(container));
         }
         
         if (sectionsToRender.length === 0) {
@@ -3561,7 +5535,7 @@
         
         const results = await Promise.all(sectionsToRender);
         const successCount = results.filter(Boolean).length;
-        LOG(`Rendered ${successCount}/${sectionsToRender.length} seasonal section groups`);
+        LOG(`Rendered ${successCount}/${sectionsToRender.length} seasonal sections`);
     }
 
     /************ Home Screen Observer ************/
@@ -3569,12 +5543,7 @@
     /**
      * Checks if custom sections are already rendered and renders them if not
      */
-    async function checkAndRenderCustomSections() {
-        // Check if already processing to prevent parallel execution
-        if (isProcessing) {
-            return;
-        }
-        
+    async function checkAndRenderCustomSections() {        
         // Try to find the home sections container with retry logic
         // Retry every 100ms for up to 3 seconds
         let homeSectionsContainer = null;
@@ -3592,6 +5561,12 @@
         
         if (!homeSectionsContainer) {
             LOG('Home sections container not found after 3 seconds');
+            return;
+        }
+
+        // Check if already processing to prevent parallel execution
+        if (isProcessing && homeSectionsContainer.dataset.customSectionsRendered === 'true') {
+            LOG('Already processing, skipping...');
             return;
         }
         
@@ -3613,9 +5588,22 @@
             let initPromises = [];
 
             // Add people cache and preloading if discovery is enabled
+            LOG('Checking Discovery section');
             if (enableDiscovery) {
                 initPromises.push(initializePeopleCache());
                 initPromises.push(preloadNextSections());
+            }
+
+            // Add Upcoming section (always rendered when enabled)
+            LOG('Checking Upcoming section');
+            if (enableUpcoming) {
+                LOG('Rendering Upcoming section');
+                initPromises.push(renderUpcomingSection(homeSectionsContainer));
+            }
+
+            // Add IMDb Top 250 section (always rendered when enabled)
+            if (enableImdbTop250) {
+                initPromises.push(renderImdbTop250Section(homeSectionsContainer));
             }
 
             // Add custom sections if enabled
@@ -3637,8 +5625,16 @@
             if (enableWatchlist) {
                 initPromises.push(renderWatchlistSection(homeSectionsContainer));
             }
+
+            // Add Watch Again section if enabled
+            if (enableWatchAgain) {
+                initPromises.push(renderWatchAgainSection(homeSectionsContainer));
+            }
             
-            initPromises.push(renderPopularTVNetworksSection(homeSectionsContainer));
+            // Add popular TV networks section if enabled
+            if (popularTVNetworksConfig.enabled) {
+                initPromises.push(renderPopularTVNetworksSection(homeSectionsContainer));
+            }
             
             // Wait for all parallel operations to complete
             await Promise.all(initPromises);

@@ -325,6 +325,195 @@
     }
 
     /**
+     * Waits for user to be logged in
+     * @param {number} maxWaitMs - Maximum time to wait in milliseconds (default: 10000 = 10 seconds)
+     * @param {number} checkInterval - Interval between checks in milliseconds (default: 500)
+     * @returns {Promise<boolean>} - True if logged in, false if timeout
+     */
+    async function waitForLogin(maxWaitMs = 10000, checkInterval = 500) {
+        const startTime = Date.now();
+        
+        while (Date.now() - startTime < maxWaitMs) {
+            if (window.ApiClient && 
+                window.ApiClient._loggedIn && 
+                window.ApiClient.accessToken && 
+                window.ApiClient.serverAddress) {
+                try {
+                    const token = window.ApiClient.accessToken();
+                    if (token) {
+                        LOG('User is logged in');
+                        return true;
+                    }
+                } catch (e) {
+                    // Token not available yet
+                }
+            }
+            
+            await new Promise(resolve => setTimeout(resolve, checkInterval));
+        }
+        
+        WARN('Timeout waiting for user login');
+        return false;
+    }
+
+    /**
+     * Saves the current KefinTweaksConfig back to JS Injector plugin
+     * @param {Object} config - Optional config object to save. If not provided, uses window.KefinTweaksConfig
+     * @param {Object} options - Options for saving
+     * @param {boolean} options.waitForLogin - Whether to wait for login if not logged in (default: true)
+     * @param {number} options.loginWaitTime - Maximum time to wait for login in ms (default: 10000)
+     * @returns {Promise<boolean>} - Success status
+     */
+    async function saveConfigToJavaScriptInjector(config = null, options = {}) {
+        try {
+            const { waitForLogin: shouldWaitForLogin = true, loginWaitTime = 10000 } = options;
+            
+            // Check if ApiClient is available
+            if (!window.ApiClient) {
+                if (shouldWaitForLogin) {
+                    LOG('ApiClient not available, waiting for initialization...');
+                    const loggedIn = await waitForLogin(loginWaitTime);
+                    if (!loggedIn) {
+                        WARN('ApiClient not available after waiting, cannot save config');
+                        return false;
+                    }
+                } else {
+                    throw new Error('ApiClient not available');
+                }
+            }
+            
+            // Check if user is logged in
+            const isLoggedIn = window.ApiClient._loggedIn && 
+                               window.ApiClient.accessToken && 
+                               window.ApiClient.serverAddress;
+            
+            if (!isLoggedIn) {
+                if (shouldWaitForLogin) {
+                    LOG('User not logged in, waiting for login...');
+                    const loggedIn = await waitForLogin(loginWaitTime);
+                    if (!loggedIn) {
+                        WARN('User not logged in after waiting, cannot save config');
+                        return false;
+                    }
+                } else {
+                    throw new Error('User not logged in');
+                }
+            }
+            
+            // Use provided config or fall back to window.KefinTweaksConfig
+            const configToSave = config || window.KefinTweaksConfig;
+            if (!configToSave) {
+                throw new Error('No config provided and window.KefinTweaksConfig is not available');
+            }
+            
+            // Find JavaScript Injector plugin
+            const server = window.ApiClient.serverAddress();
+            const token = window.ApiClient.accessToken();
+            
+            if (!server || !token) {
+                throw new Error('Server address or access token not available');
+            }
+            
+            let pluginsResponse = await fetch(`${server}/Plugins`, {
+                headers: { 'X-Emby-Token': token }
+            });
+            
+            // Handle 401 Unauthorized - retry once after waiting if waitForLogin is enabled
+            if (pluginsResponse.status === 401 && shouldWaitForLogin) {
+                WARN('Received 401 Unauthorized, waiting for login and retrying...');
+                const loggedIn = await waitForLogin(5000); // Wait up to 5 more seconds
+                if (loggedIn) {
+                    // Retry with fresh token
+                    const freshToken = window.ApiClient.accessToken();
+                    pluginsResponse = await fetch(`${server}/Plugins`, {
+                        headers: { 'X-Emby-Token': freshToken }
+                    });
+                }
+            }
+            
+            if (!pluginsResponse.ok) {
+                if (pluginsResponse.status === 401) {
+                    throw new Error('Unauthorized - user may not be logged in or session expired');
+                }
+                throw new Error(`Failed to get plugins: ${pluginsResponse.status} ${pluginsResponse.statusText}`);
+            }
+            
+            const pluginsData = await pluginsResponse.json();
+            const pluginsList = Array.isArray(pluginsData) ? pluginsData : (pluginsData.Items || []);
+            
+            const plugin = pluginsList.find(p => p.Name === 'JavaScript Injector' || p.Name === 'JS Injector');
+            if (!plugin) {
+                WARN('JavaScript Injector plugin not found, cannot save config');
+                return false;
+            }
+            
+            const pluginId = plugin.Id;
+            
+            // Get current injector config
+            const configUrl = `${server}/Plugins/${pluginId}/Configuration`;
+            const configResponse = await fetch(configUrl, {
+                headers: { 'X-Emby-Token': token }
+            });
+            
+            if (!configResponse.ok) {
+                throw new Error(`Failed to get plugin config: ${configResponse.statusText}`);
+            }
+            
+            const injectorConfig = await configResponse.json();
+            
+            // Ensure CustomJavaScripts array exists
+            if (!injectorConfig.CustomJavaScripts) {
+                injectorConfig.CustomJavaScripts = [];
+            }
+            
+            // Create the script content
+            const scriptContent = `// KefinTweaks Configuration
+// This file is automatically generated by KefinTweaks Configuration UI
+// Do not edit manually unless you know what you're doing
+
+window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
+            
+            // Find or create KefinTweaks-Config script
+            const existingScriptIndex = injectorConfig.CustomJavaScripts.findIndex(
+                script => script.Name === 'KefinTweaks-Config'
+            );
+            
+            if (existingScriptIndex !== -1) {
+                // Update existing script
+                injectorConfig.CustomJavaScripts[existingScriptIndex].Script = scriptContent;
+            } else {
+                // Add new script
+                injectorConfig.CustomJavaScripts.push({
+                    Name: 'KefinTweaks-Config',
+                    Script: scriptContent,
+                    Enabled: true,
+                    RequiresAuthentication: false
+                });
+            }
+            
+            // Save the updated configuration
+            const saveResponse = await fetch(configUrl, {
+                method: 'POST',
+                headers: {
+                    'X-Emby-Token': token,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(injectorConfig)
+            });
+            
+            if (!saveResponse.ok) {
+                throw new Error(`Failed to save plugin config: ${saveResponse.statusText}`);
+            }
+            
+            LOG('Successfully saved config to JS Injector plugin');
+            return true;
+        } catch (err) {
+            ERR('Error saving config to JS Injector:', err);
+            return false;
+        }
+    }
+
+    /**
      * Add the link to the existing container
      * @param {Element} container - The custom menu options container
      * @param {string} name - Display name for the menu item
@@ -387,7 +576,8 @@
         getCurrentView,
         getHandlerCount,
         clearHandlers,
-        addCustomMenuLink
+        addCustomMenuLink,
+        saveConfigToJavaScriptInjector
     };
     
     LOG('Initialized successfully');

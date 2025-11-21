@@ -1082,26 +1082,6 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	document.head.appendChild(style);
 	LOG('Custom watchlist icon CSS added');
 
-	/************ Helpers ************/
-
-	async function fetchLikedItems(type) {
-		const apiClient = window.ApiClient;
-		const userId = apiClient.getCurrentUserId();
-		const serverUrl = apiClient.serverAddress();
-		const token = apiClient.accessToken();
-
-		const url = `${serverUrl}/Items?Filters=Likes&IncludeItemTypes=${type}&UserId=${userId}&Recursive=true&ImageTypeLimit=1&EnableImageTypes=Primary,Backdrop,Thumb`;
-
-		try {
-			const res = await fetch(url, { headers: { "Authorization": `MediaBrowser Token=\"${token}\"` } });
-			const data = await res.json();
-			return data.Items || [];
-		} catch (err) {
-			ERR("Failed to fetch liked items for type:", type, err);
-			return [];
-		}
-	}
-
 	/************ Progress Tab Functions ************/
 
 	// Generic cache factory function
@@ -2281,14 +2261,14 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		// Check localStorage cache first
 		const userId = window.ApiClient.getCurrentUserId();
 		const cachedData = localStorageCache.get(`watchlist_${section}`);
-		if (cachedData) {
+		if (cachedData && false) {
 			LOG(`Using localStorage cache for watchlist ${section}`);
 			watchlistCache[section].data = cachedData;
 			return;
 		}
 		
 		try {
-			const items = await fetchLikedItems(type);
+			const items = watchlistCache[section].data;
 			
 			// Sort items by release date descending (newest first)
 			const sortedItems = items.sort((a, b) => {
@@ -2298,7 +2278,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			});
 			
 			// Store in cache
-			watchlistCache[section].data = sortedItems;
+			//watchlistCache[section].data = sortedItems;
 			
 			// Store in localStorage for next time (optimized)
 			const optimizedData = optimizeWatchlistDataForStorage(sortedItems);
@@ -2334,6 +2314,17 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		renderWatchlistContent();
 		
 		try {
+			// Fetch watchlist data
+			const watchlistData = await window.apiHelper.getWatchlistItems({ IncludeItemTypes: 'Movie,Series,Season,Episode' });
+			localStorageCache.set('watchlist_movies', watchlistData.Items.filter(item => item.Type === 'Movie'));
+			localStorageCache.set('watchlist_series', watchlistData.Items.filter(item => item.Type === 'Series'));
+			localStorageCache.set('watchlist_seasons', watchlistData.Items.filter(item => item.Type === 'Season'));
+			localStorageCache.set('watchlist_episodes', watchlistData.Items.filter(item => item.Type === 'Episode'));
+			watchlistCache.movies.data = watchlistData.Items.filter(item => item.Type === 'Movie');
+			watchlistCache.series.data = watchlistData.Items.filter(item => item.Type === 'Series');
+			watchlistCache.seasons.data = watchlistData.Items.filter(item => item.Type === 'Season');
+			watchlistCache.episodes.data = watchlistData.Items.filter(item => item.Type === 'Episode');
+
 			// Initialize all watchlist sections in parallel
 			await Promise.all([
 				initWatchlistSection('movies', 'Movie'),
@@ -2399,7 +2390,6 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		// Wait for progress and history, then init statistics
 		await Promise.all([watchlistPromise, progressPromise, historyPromise]);
 		await initStatisticsTab();
-		
 		LOG('All tabs initialized');
 	}
 
@@ -2626,7 +2616,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			// Debug logging to verify we're getting the right data
 			LOG(`Series: ${series.Name}, Aired Episodes: ${totalEpisodes}, Watched: ${watchedCount}, Remaining: ${remainingCount}`);
 
-			if (totalEpisodes === 0) return null;
+			if (totalEpisodes === 0 || watchedCount === 0) return null;
 
 			// Calculate total runtime from available episodes (only those with actual files)
 			const availableEpisodes = episodes.filter(ep => ep.RunTimeTicks && ep.RunTimeTicks > 0);
@@ -2705,19 +2695,6 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			hour: 'numeric',
 			minute: '2-digit',
 			hour12: true
-		});
-	}
-
-	// Play movie function
-	function playMovie(movieId) {
-		LOG(`Playing movie: ${movieId}`);
-		const apiClient = window.ApiClient;
-		const userId = apiClient.getCurrentUserId();
-		
-		// Use Jellyfin's built-in play functionality
-		apiClient.play({ 
-			Ids: [movieId], 
-			UserId: userId 
 		});
 	}
 
@@ -3712,62 +3689,58 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			{ type: 'Episode', section: 'episodes' }
 		];
 
-		for (const { type, section } of types) {
+		
+		const watchlistData = await window.apiHelper.getWatchlistItems({ IncludeItemTypes: 'Movie,Series,Season,Episode', Fields: 'ProviderIds,SeriesName,ParentId' }, false);
+		const items = watchlistData.Items;
+
+		for (const item of items) {
 			try {
-				// Fetch from server with Fields to get SeriesName for episodes/seasons
-				const url = `${serverUrl}/Items?Filters=Likes&IncludeItemTypes=${type}&UserId=${userId}&Recursive=true&Fields=ProviderIds,SeriesName,ParentId&ImageTypeLimit=1&EnableImageTypes=Primary,Backdrop,Thumb`;
-				const res = await fetch(url, { headers: { "Authorization": `MediaBrowser Token=\"${token}\"` } });
-				const data = await res.json();
-				const items = data.Items || [];
+				const exportItem = {
+					status: true,
+					Name: item.Name,
+					Type: item.Type // Add Type field for efficient import
+				};
 
-				for (const item of items) {
-					const exportItem = {
-						status: true,
-						Name: item.Name,
-						Type: type // Add Type field for efficient import
-					};
+				// Add provider IDs (only if they exist)
+				if (item.ProviderIds) {
+					if (item.ProviderIds.Imdb) exportItem.Imdb = item.ProviderIds.Imdb;
+					if (item.ProviderIds.Tmdb) exportItem.Tmdb = item.ProviderIds.Tmdb;
+					if (item.ProviderIds.Tvdb) exportItem.Tvdb = item.ProviderIds.Tvdb;
+				}
 
-					// Add provider IDs (only if they exist)
-					if (item.ProviderIds) {
-						if (item.ProviderIds.Imdb) exportItem.Imdb = item.ProviderIds.Imdb;
-						if (item.ProviderIds.Tmdb) exportItem.Tmdb = item.ProviderIds.Tmdb;
-						if (item.ProviderIds.Tvdb) exportItem.Tvdb = item.ProviderIds.Tvdb;
+				// For episodes, add SeriesName and SeasonName
+				if (item.Type === 'Episode') {
+					if (item.SeriesName) {
+						exportItem.SeriesName = item.SeriesName;
 					}
-
-					// For episodes, add SeriesName and SeasonName
-					if (type === 'Episode') {
-						if (item.SeriesName) {
-							exportItem.SeriesName = item.SeriesName;
-						}
-						// Get SeasonName from parent season
-						if (item.ParentId) {
-							try {
-								const seasonUrl = `${serverUrl}/Items/${item.ParentId}?UserId=${userId}&Fields=Name`;
-								const seasonRes = await fetch(seasonUrl, { headers: { "Authorization": `MediaBrowser Token=\"${token}\"` } });
-								const seasonData = await seasonRes.json();
-								if (seasonData.Name) {
-									exportItem.SeasonName = seasonData.Name;
-								}
-							} catch (err) {
-								WARN('Failed to fetch season name for episode:', err);
+					// Get SeasonName from parent season
+					if (item.ParentId) {
+						try {
+							const seasonUrl = `${serverUrl}/Items/${item.ParentId}?UserId=${userId}&Fields=Name`;
+							const seasonRes = await fetch(seasonUrl, { headers: { "Authorization": `MediaBrowser Token=\"${token}\"` } });
+							const seasonData = await seasonRes.json();
+							if (seasonData.Name) {
+								exportItem.SeasonName = seasonData.Name;
 							}
+						} catch (err) {
+							WARN('Failed to fetch season name for episode:', err);
 						}
-					}
-
-					// For seasons, add SeriesName
-					if (type === 'Season') {
-						if (item.SeriesName) {
-							exportItem.SeriesName = item.SeriesName;
-						}
-					}
-
-					// Only add if at least one provider ID exists
-					if (exportItem.Imdb || exportItem.Tmdb || exportItem.Tvdb) {
-						exportData.push(exportItem);
 					}
 				}
+
+				// For seasons, add SeriesName
+				if (item.Type === 'Season') {
+					if (item.SeriesName) {
+						exportItem.SeriesName = item.SeriesName;
+					}
+				}
+
+				// Only add if at least one provider ID exists
+				if (exportItem.Imdb || exportItem.Tmdb || exportItem.Tvdb) {
+					exportData.push(exportItem);
+				}
 			} catch (err) {
-				ERR(`Failed to fetch ${type} items:`, err);
+				ERR(`Failed to export item:`, err);
 			}
 		}
 
@@ -4152,15 +4125,22 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				// Hook into onmessage
 				socket.onmessage = function(event) {
 					try {
+						LOG('WebSocket message received:', event);
+						// Pass it through so Jellyfin still works normally
+						if (originalHandler) {
+							originalHandler.call(this, event);
+						}
+						
 						// Parse the WebSocket message data
 						// The event might have event.Data or event.data depending on implementation
-						const messageData = event.Data || event.data;
+/* 						const messageData = event.Data || event.data;
 						if (!messageData) {
 							// If no data, just pass through to original handler
 							if (originalHandler) originalHandler.call(this, event);
 							return;
-						}
+						} */
 
+						const messageData = event.Data || event.data;
 						const data = typeof messageData === 'string' ? JSON.parse(messageData) : messageData;
 
 						// Check if this is a UserDataChanged message
@@ -4177,11 +4157,6 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 					} catch (err) {
 						// Log parse errors but don't break the original handler
 						WARN('WebSocket message parse error:', err);
-					}
-
-					// Pass it through so Jellyfin still works normally
-					if (originalHandler) {
-						originalHandler.call(this, event);
 					}
 				};
 
@@ -7505,7 +7480,6 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 
     // Expose functions to global scope for onclick handlers
     window.toggleMovieFavorite = toggleMovieFavorite;
-    window.playMovie = playMovie;
 
     LOG('Initialized successfully');
 })();
