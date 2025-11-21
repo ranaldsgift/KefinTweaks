@@ -474,7 +474,7 @@ Currently the only functionality that can be very easily included by developers 
 
 The KefinTweaks Watchlist leverages the existing Jellyfin Item UserData field: "Likes". Here is how KefinTweaks handles the funcionality and how you can as well:
 
-- Add a section (on the home screen or elsewhere) which queries the Items endpoint with Likes=True
+- Add a section (on the home screen or elsewhere) which queries the Items endpoint with `Filters=Likes`
 - Add a Watchlist toggle button to all card overlays which toggles the UserData Likes value
 - Add a listener for PlaybackStopped to check if a Watchlisted item has been watched and automatically remove it from the Watchlist
 
