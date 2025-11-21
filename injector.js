@@ -821,7 +821,10 @@ window.KefinTweaksConfig = ${JSON.stringify(defaultConfig, null, 2)};`;
                     return false;
                 }
                 const config = await getPluginConfig(pluginId);
-                const tabs = config.Tabs.filter(tab => tab.Title !== 'Watchlist');
+
+                // Filter based on the ContentHtml including div class=\"sections watchlist\"
+                let tabs = config.Tabs.filter(tab => tab.ContentHtml !== '<div class="sections watchlist"></div>');
+
                 await savePluginConfig(pluginId, { Tabs: tabs });
                 console.log('[KefinTweaks Startup] Removed Watchlist tab from CustomTabs');
                 return true;
@@ -854,23 +857,11 @@ window.KefinTweaksConfig = ${JSON.stringify(defaultConfig, null, 2)};`;
                 tabs = [];
             }
 
-            // Check if Watchlist tab exists
-            const watchlistTab = tabs.find(tab => tab.Title === 'Watchlist');
+            // Find watchlist tab by checking if the ContentHtml includes div class=\"sections watchlist\"
+            const watchlistTab = tabs.find(tab => tab.ContentHtml === '<div class="sections watchlist"></div>');
             
             if (watchlistTab) {
-                // Ensure ContentHtml is correct
-                if (watchlistTab.ContentHtml !== '<div class="sections watchlist"></div>') {
-                    watchlistTab.ContentHtml = '<div class="sections watchlist"></div>';
-                    // Update the tab in the array
-                    const index = tabs.findIndex(tab => tab.Title === 'Watchlist');
-                    tabs[index] = watchlistTab;
-                    
-                    // Save updated config
-                    await savePluginConfig(pluginId, { Tabs: tabs });
-                    console.log('[KefinTweaks Startup] Updated Watchlist tab ContentHtml');
-                } else {
-                    console.log('[KefinTweaks Startup] Watchlist tab already exists with correct ContentHtml');
-                }
+                console.log('[KefinTweaks Startup] Watchlist tab already exists with correct ContentHtml');
                 return true;
             }
 
