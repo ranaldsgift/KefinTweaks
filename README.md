@@ -512,7 +512,7 @@ A few things to note about KefinTweaks functionality in general and how it inter
 - Custom Menu Links
 - Collections on Details Page
 
-## What functionality is modified?
+### What functionality is modified?
 
 - Infinite Scroll for Library Pages
   - Pagination controls are hidden in favor of infinite scrolling
