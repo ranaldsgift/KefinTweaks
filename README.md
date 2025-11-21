@@ -23,10 +23,11 @@ I think it's also worth mentioning that before the 1.0 release, you can expect t
     - [Feature Requests Planned](#feature-requests-planned)
   - [Core Features](#core-features)
     - [Watchlist](#watchlist)
-      - Watchlist Page
-      - Series Progress Page
-      - Movie History Page
-      - User Statistics Page
+      - [Watchlist Page](#watchlist-page)
+      - [Series Progress Page](#series-progress)
+      - [Movie History Page](#movie-history)
+      - [User Statistics Page](#statistics)
+      - [Export/Import](#exportimport)
     - [Enhanced Home Screen](#enhanced-home-screen)
     - [Enhanced Search](#enhanced-search)
   - [UI Enhancements](#ui-enhancements)
@@ -191,8 +192,8 @@ The features in KefinTweaks which use local data caching are listed below, along
 
 ### Core Features
 
-#### **Watchlist**
-- **Watchlist**:  
+## **Watchlist**
+### **Watchlist Page**:  
 Tired of forgetting everything you wanted to watch? Add movies, series, seasons, and episodes to your Watchlist!  
 
 <div align="center">
@@ -200,7 +201,7 @@ Tired of forgetting everything you wanted to watch? Add movies, series, seasons,
 </div>  
 <br/>  
 
-- **Series Progress**:  
+### **Series Progress**:  
 An overview of every series you've ever started watching with functionality to filter, sort and mark items as watched.  
 
 <div align="center">
@@ -208,7 +209,7 @@ An overview of every series you've ever started watching with functionality to f
 </div>  
 <br/>  
 
-- **Movie History**:  
+### **Movie History**:  
 An overview of every movie you've ever watched with functionality to filter, sort and mark items as favorites.  
 
 <div align="center">
@@ -216,14 +217,14 @@ An overview of every movie you've ever watched with functionality to filter, sor
 </div>  
 <br/>  
 
-- **Statistics**:  
+### **Statistics**:  
 A summary of your watched items by the numbers. See how many movies, shows or episodes you have watched.  
 
 <div align="center">
   <img src="pages/images/statistics.png" alt="statistics" style="max-width: 100%; height: auto;"/>
 </div>
 
-- **Export/Import**:  
+### **Export/Import**:  
 Export your Watchlist to JSON which can later be imported using the Watchlist Import feature. You can use this feature to make bulk changes to your Watchlist if you need to.
 
 <table align="center" style="width: 100%;">
