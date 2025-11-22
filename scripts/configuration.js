@@ -2514,16 +2514,10 @@
             try {
                 const userId = window.ApiClient.getCurrentUserId();
                 const serverAddress = window.ApiClient.serverAddress();
-                const token = window.ApiClient.accessToken();
                 
                 if (type === 'Tag' || type === 'Genre') {
-                    // Fetch Tags/Genres using Filters endpoint with caching
-                    const librariesData = await window.apiHelper.getItems({}, true, 300000);
-                    const libraries = librariesData.Items || [];
-                    const movieLibrary = libraries.find(lib => lib.CollectionType === 'movies');
-                    const parentId = movieLibrary ? movieLibrary.Id : null;
-                    const url = `${serverAddress}/Items/Filters?UserId=${userId}&IncludeItemTypes=Movie${parentId ? `&ParentId=${parentId}` : ''}`;
-                    const data = await window.apiHelper.getData(url, true, 300000);
+                    const url = `${serverAddress}/Items/Filters?UserId=${userId}&IncludeItemTypes=Movie`;
+                    const data = await window.apiHelper.getData(url, true);
                     options = type === 'Tag' ? (data.Tags || []) : (data.Genres || []);
                 } else if (type === 'Collection' || type === 'Playlist') {
                     // Fetch Collections/Playlists using getItems with caching
