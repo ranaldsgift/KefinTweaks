@@ -5442,27 +5442,48 @@
                     viewMoreUrl = null;
                     break;
             }
-            
-            if (!window.cardBuilder || !window.cardBuilder.renderCards) {
-                WARN("cardBuilder.renderCards not available");
-                return false;
+
+            let cardContainer = null;
+
+            if (sectionConfig.spotlight === true) {
+                if (!window.cardBuilder || !window.cardBuilder.renderSpotlightSection) {
+                    WARN("cardBuilder.renderSpotlightSection not available");
+                    return false;
+                }
+
+                cardContainer = window.cardBuilder.renderSpotlightSection(
+                    limited,
+                    sectionConfig.name,
+                    {
+                        autoPlay: true,
+                        interval: 5000,
+                        showDots: true,
+                        showNavButtons: true,
+                        showClearArt: true
+                    }
+                );
+            } else {            
+                if (!window.cardBuilder || !window.cardBuilder.renderCards) {
+                    WARN("cardBuilder.renderCards not available");
+                    return false;
+                }
+                
+                cardContainer = window.cardBuilder.renderCards(
+                    limited,
+                    sectionConfig.name,
+                    viewMoreUrl,
+                    true,
+                    cardFormat,
+                    sortOrder,
+                    sortOrderDirection
+                );
             }
             
-            const section = window.cardBuilder.renderCards(
-                limited,
-                sectionConfig.name,
-                viewMoreUrl,
-                true,
-                cardFormat,
-                sortOrder,
-                sortOrderDirection
-            );
+            cardContainer.setAttribute('data-custom-section-id', sectionId);
+            cardContainer.setAttribute('data-custom-section-name', sectionConfig.name);
+            cardContainer.style.order = order;
             
-            section.setAttribute('data-custom-section-id', sectionId);
-            section.setAttribute('data-custom-section-name', sectionConfig.name);
-            section.style.order = order;
-            
-            container.appendChild(section);
+            container.appendChild(cardContainer);
             
             return true;
         } catch (err) {
@@ -5521,11 +5542,6 @@
             if (season.enabled && isInSeasonalPeriod(season.startDate, season.endDate)) {
                 sectionsToRender.push(renderSeasonalSection(season, container));
             }
-        }
-        
-        // Also render legacy Halloween sections for backward compatibility
-        if (isHalloweenPeriod()) {
-            sectionsToRender.push(renderAllHalloweenSections(container));
         }
         
         if (sectionsToRender.length === 0) {
