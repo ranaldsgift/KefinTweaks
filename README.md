@@ -19,8 +19,8 @@ I think it's also worth mentioning that before the 1.0 release, you can expect t
 - [Features Overview](#features-overview)
   - [Data Caching](#data-caching)
   - [Community Requests Progress](#community-request-progress)
-    - [Feature Requests Completed](#feature-requests-completed)
-    - [Feature Requests Planned](#feature-requests-planned)
+    - [Feature Requests Completed](#-feature-requests-completed)
+    - [Feature Requests Planned](#-feature-requests-planned)
   - [Core Features](#core-features)
     - [Watchlist](#watchlist)
       - [Watchlist Page](#watchlist-page)
@@ -52,6 +52,10 @@ I think it's also worth mentioning that before the 1.0 release, you can expect t
   - [Feature Scripts](#feature-scripts)
   - [Auto-Inject Dependencies](#auto-inject-dependencies)
   - [Info For Developers](#info-for-developers)
+- [Client Support](#client-support)
+- [Changes to default Jellyfin functionality](#changes-to-default-jellyfin-functionality)
+- [Design Philosophy](#design-philosophy)
+- [AI Disclaimer](#ai-disclaimer)
 - [License](#license)
 - [Acknowledgments](#acknowledgments)
 - [Support](#support)
@@ -156,7 +160,7 @@ The features in KefinTweaks which use local data caching are listed below, along
   In order to populate the "Top People" in your movie library, we fetch the Person data for every movie in your library. We build a list of all the People who appear in at least X number of items based on their type (Actor/Director/Writer). This is an expensive operation, and is longer as the size of your library grows.
 - Watchlist
   - **Watchlist Items** [5m]:  
-  This is mostly done to provide a more responsive UX, as typically the API call to retreive these items should not be very expensive. The Watchlist cache is also updated any time there is a change to an item's Play State or Watchlist status.
+  These items are only cached after they are fetched on first page load. This means every time you refresh the page we fetch this data from the server and then in most situations will simply re-use that data until it expires 5 minutes later, or when the user manually refreshes the page.
   - **Series Progress and Movie History** [24h]:  
   These are both more expensive operations, especially if you have watched a very high number of Movies or Shows. It's not practical to fetch this data on demand so we cache it to improve UX.
 - Collections on Details Page  
@@ -463,8 +467,7 @@ KefinTweaks automatically enables required dependencies when you enable a script
 
 - Enabling `watchlist` automatically enables `cardBuilder`, `localStorageCache`, `modal`, and `utils`
 
-This ensures all scripts have their required dependencies without manual configuration.
-<hr>
+This ensures all scripts have their required dependencies without manual configuration.  
 
 ### Info for Developers
 
@@ -478,7 +481,8 @@ The KefinTweaks Watchlist leverages the existing Jellyfin Item UserData field: "
 - Add a Watchlist toggle button to all card overlays which toggles the UserData Likes value
 - Add a listener for PlaybackStopped to check if a Watchlisted item has been watched and automatically remove it from the Watchlist
 
-Even if you only implement the first bullet point and add a section for Watchlist items, KefinTweaks will automatically handle Watchlist syncing whenever the user connects with a KefinTweaks supported client.
+Even if you only implement the first bullet point and add a section for Watchlist items, KefinTweaks will automatically handle Watchlist syncing whenever the user connects with a KefinTweaks supported client.  
+<hr>
 
 ## Client Support
 
