@@ -17,6 +17,7 @@ Note: The Slideshow at the top of the Home Screen in the video below is from the
 - [Installation](#installation)
   - [Prerequisites](#prerequisites)
   - [Setup Instructions](#setup-instructions)
+  - [Alternate Installation Options](#alternate-installation-options)
 - [Configuration](#configuration)
 - [Features Overview](#features-overview)
   - [Data Caching](#data-caching)
@@ -94,6 +95,24 @@ document.head.appendChild(script);
 </div>  
 <br/>  
 <hr>
+
+### Alternate Installation Options
+
+Some people may prefer to not include these scripts from a remote source and rather host them locally or at some other location and pull them from there. This is supported and easily achievable just follow these steps:
+
+1. Download your prefered release, extract it and move the files to your preferred hosting location.
+2. Modify the line below in your JS Injector script for KefinTweaks:  
+```script.src = `https://ranaldsgift.github.io/KefinTweaks/injector.js?v=${new Date().getTime()}`;```  
+  - Replace the `https://ranaldsgift.github.io/KefinTweaks/injector.js` with the location you've chosen to host the scripts.
+  - Optionally remove the `?v=${new Date().getTime()}` if you prefer the script to not auto-refresh when you make local changes.
+![KefinTweaks script include](https://i.imgur.com/n2h0eux.png)
+3. Copy the contents of [kefintweaks-default-config.js](https://raw.githubusercontent.com/ranaldsgift/KefinTweaks/refs/heads/main/kefinTweaks-default-config.js) into JS Injector by adding a new script or updating the existing one.
+  ![KefinTweaks-Config](https://i.imgur.com/OkoD2UJ.png)
+  - Ensure the name is "KefinTweaks-Config"
+4. Update the "kefinTweaksRoot" and the "scriptRoot" values in the KefinTweaks-Config in JS Injector so that they reflect the locations you've chosen to host the scripts.
+5. Save your changes!
+
+Also, it's probably worth noting that you should be able to include the scripts in your jelly-web folder and access it from `/web/KefinTweaks` if you like.
 
 ## Configuration
 
