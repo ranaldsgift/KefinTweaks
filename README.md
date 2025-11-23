@@ -76,7 +76,7 @@ Note: The Slideshow at the top of the Home Screen in the video below is from the
 
 0. **Install the Prerequisites listed above**  
 1. **Add a new script to your JS Injector Plugin**
-2. **Copy the the code below, paste it into the new script, save your changes and refresh the page**
+2. **Copy the code below, paste it into the new script, save your changes and refresh the page**
 
 ```javascript
 const script = document.createElement("script");
