@@ -129,11 +129,12 @@
         }
 
         // Find the #childrenCollapsible div
-        const childrenCollapsible = detailPageContent.querySelector('#childrenCollapsible');
+        let childrenCollapsible = detailPageContent.querySelector('#childrenCollapsible');
         if (!childrenCollapsible) {
             WARN('#childrenCollapsible not found');
             return;
         }
+
 
         try {
             // Get the season ID from the first episode's ParentId
@@ -214,9 +215,16 @@
             // Prepend the Season 1 section right before #childrenCollapsible
             childrenCollapsible.parentNode.insertBefore(seasonSection, childrenCollapsible);
 
+            let childrenItemsContainer = childrenCollapsible.querySelector('.itemsContainer');
+
+            if (!childrenItemsContainer || childrenItemsContainer.children.length === 0) {
+                // Check for 10.11.X children container
+                childrenCollapsible = activePage.querySelector('#listChildrenCollapsible');
+                childrenItemsContainer = childrenCollapsible ? childrenCollapsible.querySelector('.itemsContainer') : null;
+            }
+
             // Check if childrenCollapsible has only one child in its itemsContainer, and hide it if so
-            const childrenItemsContainer = childrenCollapsible.querySelector('.itemsContainer');
-            if (childrenItemsContainer) {
+            if (childrenItemsContainer && childrenItemsContainer.children.length === 1) {
                 LOG('childrenCollapsible contains only one child, hiding it');
                 childrenCollapsible.style.display = 'none';
             }
