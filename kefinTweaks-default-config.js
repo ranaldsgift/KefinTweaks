@@ -1,6 +1,5 @@
 window.KefinTweaksDefaultConfig = {
-  "kefinTweaksRoot": "https://ranaldsgift.github.io/KefinTweaks/",
-  "scriptRoot": "https://ranaldsgift.github.io/KefinTweaks/scripts/",
+  "kefinTweaksRoot": "",
   "scripts": {
     "homeScreen": true,
     "search": true,

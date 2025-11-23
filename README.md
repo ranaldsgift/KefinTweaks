@@ -10,14 +10,13 @@ I think it's also worth mentioning that before the 1.0 release, you can expect t
 
 Note: The Slideshow at the top of the Home Screen in the video below is from the [MediaBar](https://github.com/IAmParadox27/jellyfin-plugin-media-bar) plugin by [IAmParadox27](https://github.com/IAmParadox27) and [MakD](https://github.com/MakD).
 
-[![Home Screen Example](https://i.imgur.com/rCboFCB.jpeg)](https://streamable.com/ypnn6n)
+[![Home Screen Example](https://i.imgur.com/rCboFCB.jpeg)](https://youtu.be/4ikW4CFSn3I)
 
 ## Table of Contents
 
 - [Installation](#installation)
   - [Prerequisites](#prerequisites)
   - [Setup Instructions](#setup-instructions)
-  - [Alternate Installation Options](#alternate-installation-options)
 - [Configuration](#configuration)
 - [Features Overview](#features-overview)
   - [Data Caching](#data-caching)
@@ -76,43 +75,28 @@ Note: The Slideshow at the top of the Home Screen in the video below is from the
 
 ### Setup Instructions
 
-0a. **Install Prerequisites listed above**  
-0b. **If you are using JellyfinEnhanced, you MUST disable the "Watchlist" feature from the plugin settings**
+0. **Install the Prerequisites listed above**  
 1. **Add a new script to your JS Injector Plugin**
-2. **Copy the the code below and paste it into the new script:**
+2. **Copy the the code below, paste it into the new script, save your changes and refresh the page**
 
 ```javascript
 const script = document.createElement("script");
-script.src = `https://ranaldsgift.github.io/KefinTweaks/injector.js?v=${new Date().getTime()}`;
+script.src = `https://cdn.jsdelivr.net/gh/ranaldsgift/KefinTweaks/kefinTweaks-plugin.js`;
 script.async = true;
 document.head.appendChild(script);
 ```
 
-3. **Save your changes**
+If you are hosting the script yourself, replace the `https://cdn.jsdelivr.net/gh/ranaldsgift` with your hosted location. You should be able to include the scripts in your jelly-web folder and access it from `/web/KefinTweaks` if you like.
+
+3. **Navigate to the Plugins page and click on KefinTweaks**
+4. **Choose your preferred plugin version, or specify a custom source if you are self hosting the scripts**
+5. **Press Install! KefinTweaks will automatically load without refreshing the page**
 
 <div align="center">
-  <img src="pages/images/injector.png" alt="injector" style="max-width: 100%; height: auto;"/>
-</div>  
+  <img src="pages/images/plugin-install.gif" alt="injector" style="max-width: 100%; height: auto;"/>
+</div> 
 <br/>  
 <hr>
-
-### Alternate Installation Options
-
-Some people may prefer to not include these scripts from a remote source and rather host them locally or at some other location and pull them from there. This is supported and easily achievable just follow these steps:
-
-1. Download your prefered release, extract it and move the files to your preferred hosting location.
-2. Modify the line below in your JS Injector script for KefinTweaks:  
-```script.src = `https://ranaldsgift.github.io/KefinTweaks/injector.js?v=${new Date().getTime()}`;```  
-  - Replace the `https://ranaldsgift.github.io/KefinTweaks/injector.js` with the location you've chosen to host the scripts.
-  - Optionally remove the `?v=${new Date().getTime()}` if you prefer the script to not auto-refresh when you make local changes.
-![KefinTweaks script include](https://i.imgur.com/n2h0eux.png)
-3. Copy the contents of [kefintweaks-default-config.js](https://raw.githubusercontent.com/ranaldsgift/KefinTweaks/refs/heads/main/kefinTweaks-default-config.js) into JS Injector by adding a new script or updating the existing one.
-  ![KefinTweaks-Config](https://i.imgur.com/OkoD2UJ.png)
-  - Ensure the name is "KefinTweaks-Config"
-4. Update the "kefinTweaksRoot" and the "scriptRoot" values in the KefinTweaks-Config in JS Injector so that they reflect the locations you've chosen to host the scripts.
-5. Save your changes!
-
-Also, it's probably worth noting that you should be able to include the scripts in your jelly-web folder and access it from `/web/KefinTweaks` if you like.
 
 ## Configuration
 
@@ -122,9 +106,9 @@ KefinTweaks includes a comprehensive configuration interface accessible to admin
 
 The configuration interface can be accessed in multiple ways:
 
-1. **From User Preferences**: Navigate to your User Preferences page and find the "Administration" section. Click the "Configure KefinTweaks" button.
-2. **From Dashboard**: In the Dashboard side menu, find the "KefinTweaks" button under the Plugins section.
-3. **From Left Navigation Menu**: A "Configure" link will appear in the left navigation menu beneath a KefinTweaks heading.
+1. **From Dashboard**: In the Dashboard side menu, find the "KefinTweaks" button under the Plugins section.
+2. **From Left Navigation Menu**: A "Configure" link will appear in the left navigation menu beneath a KefinTweaks heading.
+3. **From User Preferences**: Navigate to your User Preferences page and find the "Administration" section. Click the "Configure KefinTweaks" button.
 
 ### Configuration Features
 
@@ -162,6 +146,19 @@ On first load, KefinTweaks automatically:
 
 These tasks only run for administrator users and happen automatically in the background.
 <hr>
+
+## Uninstallation
+
+1. **Navigate to the Plugins page and click on KefinTweaks**
+2. **Press Uninstall and click to confirm**
+
+<div align="center">
+  <img src="pages/images/plugin-uninstall.gif" alt="injector" style="max-width: 100%; height: auto;"/>
+</div> 
+<br/>  
+<hr>
+
+
 
 ## Features Overview
 
@@ -612,6 +609,7 @@ This README and the inline comments in kefinTweaks.js and the other scripts is t
 <hr>
 
 ### Version History
+- **v0.3.2**: Add proper installation and uninstallation support from the Plugins page. New feature: Playlist sorting.
 - **v0.3.1**: New Home Screen Section feature: Spotlights! Improved Configuration UI.
 - **v0.3.0**: KefinTweaks configuration for admins in the Jellyfin UI!
 - **v0.2.4**: New Feature: Watchlist Export/Import

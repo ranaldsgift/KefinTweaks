@@ -6,7 +6,7 @@
     'use strict';
 
     console.log('[KefinTweaks Injector] Initializing...');
-    const versionNumber = "0.3.1";
+    const versionNumber = "0.3.2";
     
     // Configuration: Start with defaults, then merge user config
     // This allows new scripts to work out of the box without requiring config updates
@@ -198,8 +198,8 @@
             name: 'playlist',
             script: 'playlist.js',
             css: null,
-            dependencies: ['cardBuilder', 'utils'],
-            description: 'Modifies playlist view page behavior to navigate to item details instead of playing, and adds play button to playlist items'
+            dependencies: ['cardBuilder', 'utils', 'modal'],
+            description: 'Modifies playlist view page behavior to navigate to item details instead of playing, adds play button to playlist items, and adds sorting functionality'
         },
         {
             name: 'itemDetailsCollections',
@@ -227,25 +227,6 @@
     // Use this for development
     //const urlSuffix = '';
     const urlSuffix = `?v=${new Date().getTime()}`;
-    
-    // Fetch version date from GitHub releases API
-    async function fetchVersionDate(version) {
-        try {
-            const response = await fetch(`https://api.github.com/repos/ranaldsgift/KefinTweaks/releases/tags/v${version}`);
-            if (!response.ok) {
-                // Try latest release if tag doesn't exist
-                const latestResponse = await fetch(`https://api.github.com/repos/ranaldsgift/KefinTweaks/releases/latest`);
-                if (!latestResponse.ok) throw new Error('Failed to fetch release data');
-                const data = await latestResponse.json();
-                return new Date(data.published_at);
-            }
-            const data = await response.json();
-            return new Date(data.published_at);
-        } catch (error) {
-            console.warn('[KefinTweaks Injector] Failed to fetch version date from GitHub:', error);
-            return null;
-        }
-    }
 
     // Inject dashboard drawer version badge CSS using dynamic version number
     function injectVersionBadgeCSS() {
@@ -336,21 +317,32 @@
     
     // Get the root path for scripts from configuration
     function getScriptRoot() {
-        const configScriptRoot = window.KefinTweaksConfig?.scriptRoot;
-
-        // Handle legacy configuration pointing to the root directory
-        if (configScriptRoot === 'https://ranaldsgift.github.io/KefinTweaks/') {
-            return 'https://ranaldsgift.github.io/KefinTweaks/scripts/';
+        const kefinTweaksRoot = window.KefinTweaksConfig?.kefinTweaksRoot;
+        
+        // If kefinTweaksRoot is not set or empty, return null (scripts should not load)
+        if (!kefinTweaksRoot || kefinTweaksRoot === '') {
+            console.warn('[KefinTweaks Injector] kefinTweaksRoot is not configured');
+            return null;
         }
-
-        return window.KefinTweaksConfig?.scriptRoot || 'https://ranaldsgift.github.io/KefinTweaks/scripts/';
+        
+        // Ensure root ends with /
+        const root = kefinTweaksRoot.endsWith('/') ? kefinTweaksRoot : kefinTweaksRoot + '/';
+        
+        // Return scripts path
+        return root + 'scripts/';
     }
     
     // Load a CSS file
     function loadCSS(filename) {
         return new Promise((resolve, reject) => {
+            const scriptRoot = getScriptRoot();
+            if (!scriptRoot) {
+                reject(new Error('kefinTweaksRoot is not configured'));
+                return;
+            }
+            
             // Check if CSS is already loaded (match by root and filename, ignore suffix)
-            const existingLink = document.querySelector(`link[href*="${getScriptRoot()}${filename}"]`);
+            const existingLink = document.querySelector(`link[href*="${scriptRoot}${filename}"]`);
             if (existingLink) {
                 console.log(`[KefinTweaks Injector] CSS already loaded: ${filename}`);
                 resolve();
@@ -360,7 +352,7 @@
             const link = document.createElement('link');
             link.rel = 'stylesheet';
             link.type = 'text/css';
-            link.href = `${getScriptRoot()}${filename}${urlSuffix}`;
+            link.href = `${scriptRoot}${filename}${urlSuffix}`;
             
             link.onload = () => {
                 console.log(`[KefinTweaks Injector] CSS loaded: ${filename}`);
@@ -379,8 +371,14 @@
     // Load a JavaScript file
     function loadScript(filename) {
         return new Promise((resolve, reject) => {
+            const scriptRoot = getScriptRoot();
+            if (!scriptRoot) {
+                reject(new Error('kefinTweaksRoot is not configured'));
+                return;
+            }
+            
             // Check if script is already loaded
-            const existingScript = document.querySelector(`script[src*="${getScriptRoot()}${filename}"]`);
+            const existingScript = document.querySelector(`script[src*="${scriptRoot}${filename}"]`);
             if (existingScript) {
                 console.log(`[KefinTweaks Injector] Script already loaded: ${filename}`);
                 resolve();
@@ -388,7 +386,7 @@
             }
             
             const script = document.createElement('script');
-            script.src = `${getScriptRoot()}${filename}${urlSuffix}`;
+            script.src = `${scriptRoot}${filename}${urlSuffix}`;
             script.async = true;
             
             script.onload = () => {
@@ -438,8 +436,13 @@
     
     // Load a single script (assumes dependencies are already loaded)
     async function loadScriptSync(scriptDef) {
+        const scriptRoot = getScriptRoot();
+        if (!scriptRoot) {
+            throw new Error('kefinTweaksRoot is not configured');
+        }
+        
         // Check if already loaded (match by root and filename, ignore suffix)
-        const isAlreadyLoaded = document.querySelector(`script[src*="${getScriptRoot()}${scriptDef.script}"]`);
+        const isAlreadyLoaded = document.querySelector(`script[src*="${scriptRoot}${scriptDef.script}"]`);
         if (isAlreadyLoaded) {
             console.log(`[KefinTweaks Injector] Script already loaded: ${scriptDef.name}`);
             return;
@@ -459,6 +462,13 @@
     // Main initialization function
     async function initialize() {
         console.log(`[KefinTweaks Injector] Starting KefinTweaks v${versionNumber} initialization...`);
+        
+        // Check if kefinTweaksRoot is configured
+        const scriptRoot = getScriptRoot();
+        if (!scriptRoot) {
+            console.log('[KefinTweaks Injector] kefinTweaksRoot is not configured. Please configure KefinTweaks using the installer before scripts can be loaded.');
+            return;
+        }
         
         // Validate configuration
         if (!validateConfiguration()) {
@@ -713,96 +723,6 @@
         }
     }
 
-    // Ensure KefinTweaks-Config exists in JS Injector
-    async function ensureKefinTweaksConfig() {
-        try {
-            console.log('[KefinTweaks Startup] Ensuring KefinTweaks-Config exists in JS Injector...');
-            
-            const pluginId = await findPlugin('JavaScript Injector') || await findPlugin('JS Injector');
-            if (!pluginId) {
-                console.warn('[KefinTweaks Startup] JavaScript Injector plugin not found');
-                return false;
-            }
-
-            const injectorConfig = await getPluginConfig(pluginId);
-            
-            // Ensure CustomJavaScripts array exists
-            if (!injectorConfig.CustomJavaScripts) {
-                injectorConfig.CustomJavaScripts = [];
-            }
-
-            // Check if KefinTweaks-Config already exists
-            const existingScript = injectorConfig.CustomJavaScripts.find(
-                script => script.Name === 'KefinTweaks-Config'
-            );
-
-            if (existingScript) {
-                console.log('[KefinTweaks Startup] KefinTweaks-Config already exists in JS Injector');
-                return true;
-            }
-
-            // Load default config
-            let defaultConfig;
-            if (window.KefinTweaksDefaultConfig) {
-                defaultConfig = window.KefinTweaksDefaultConfig;
-            } else {
-                // Try to load it
-                try {
-                    const defaultConfigUrl = window.KefinTweaksConfig?.kefinTweaksRoot 
-                        ? `${window.KefinTweaksConfig.kefinTweaksRoot}kefinTweaks-default-config.js`
-                        : 'https://ranaldsgift.github.io/KefinTweaks/kefinTweaks-default-config.js';
-                    
-                    await new Promise((resolve, reject) => {
-                        const script = document.createElement('script');
-                        script.src = defaultConfigUrl;
-                        script.onload = () => resolve();
-                        script.onerror = () => reject(new Error('Failed to load default config'));
-                        document.head.appendChild(script);
-                    });
-                    
-                    defaultConfig = window.KefinTweaksDefaultConfig;
-                } catch (error) {
-                    console.error('[KefinTweaks Startup] Error loading default config:', error);
-                    // Create minimal config
-                    defaultConfig = {
-                        kefinTweaksRoot: 'https://ranaldsgift.github.io/KefinTweaks/',
-                        scriptRoot: 'https://ranaldsgift.github.io/KefinTweaks/scripts/',
-                        scripts: {},
-                        homeScreen: {},
-                        exclusiveElsewhere: {},
-                        search: {},
-                        skins: [],
-                        themes: [],
-                        customMenuLinks: []
-                    };
-                }
-            }
-
-            // Create the script content
-            const scriptContent = `// KefinTweaks Configuration
-// This file is automatically generated by KefinTweaks Configuration UI
-// Do not edit manually unless you know what you're doing
-
-window.KefinTweaksConfig = ${JSON.stringify(defaultConfig, null, 2)};`;
-
-            // Add new script
-            injectorConfig.CustomJavaScripts.push({
-                Name: 'KefinTweaks-Config',
-                Script: scriptContent,
-                Enabled: true,
-                RequiresAuthentication: false
-            });
-
-            // Save the configuration
-            await savePluginConfig(pluginId, injectorConfig);
-            window.KefinTweaksConfig = defaultConfig;
-            console.log('[KefinTweaks Startup] KefinTweaks-Config added to JS Injector');
-            return true;
-        } catch (error) {
-            console.error('[KefinTweaks Startup] Error ensuring KefinTweaks-Config:', error);
-            return false;
-        }
-    }
 
     // Ensure Watchlist tab exists in CustomTabs
     async function ensureWatchlistTab() {
@@ -885,6 +805,12 @@ window.KefinTweaksConfig = ${JSON.stringify(defaultConfig, null, 2)};`;
     async function startupTask() {
         console.log('[KefinTweaks Startup] Starting startup task...');
         
+        // Check if kefinTweaksRoot is configured - startup tasks only run after installation
+        if (!window.KefinTweaksConfig?.kefinTweaksRoot || window.KefinTweaksConfig.kefinTweaksRoot === '') {
+            console.log('[KefinTweaks Startup] kefinTweaksRoot is not configured, skipping startup tasks');
+            return;
+        }
+        
         // Check if user is admin (wait up to 5s for login)
         const isAdmin = await checkAdminWithTimeout(5000);
         
@@ -894,10 +820,7 @@ window.KefinTweaksConfig = ${JSON.stringify(defaultConfig, null, 2)};`;
         }
 
         try {
-            // Task 1: Ensure KefinTweaks-Config exists in JS Injector
-            await ensureKefinTweaksConfig();
-            
-            // Task 2: Ensure Watchlist tab exists in CustomTabs
+            // Task: Ensure Watchlist tab exists in CustomTabs
             await ensureWatchlistTab();
             
             console.log('[KefinTweaks Startup] Startup task completed successfully');

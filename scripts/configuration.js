@@ -45,8 +45,12 @@
         return new Promise((resolve, reject) => {
             try {
                 const defaultConfigUrl = window.KefinTweaksConfig?.kefinTweaksRoot 
-                    ? `${window.KefinTweaksConfig.kefinTweaksRoot}kefinTweaks-default-config.js`
-                    : 'https://ranaldsgift.github.io/KefinTweaks/kefinTweaks-default-config.js';
+                    ? `${window.KefinTweaksConfig.kefinTweaksRoot}kefinTweaks-default-config.js`;
+
+                if (!defaultConfigUrl) {
+                    reject(new Error('No default config URL found'));
+                    return;
+                }
                 
                 // Check if already loaded
                 if (window.KefinTweaksDefaultConfig) {
@@ -115,9 +119,8 @@
 
         const currentConfigSource = currentLoadedConfig || window.KefinTweaksCurrentConfig || window.KefinTweaksConfig || {};
         const currentKefinRoot = currentConfigSource.kefinTweaksRoot || defaultConfig.kefinTweaksRoot;
-        const currentScriptRoot = currentConfigSource.scriptRoot || defaultConfig.scriptRoot;
         defaultConfig.kefinTweaksRoot = currentKefinRoot;
-        defaultConfig.scriptRoot = currentScriptRoot;
+        // Note: scriptRoot is no longer used - scripts are loaded from kefinTweaksRoot + '/scripts/'
 
             // Save defaults to JS Injector for future use
             await saveConfigToJavaScriptInjector(defaultConfig);
@@ -132,8 +135,7 @@
                 console.error('[KefinTweaks Configuration] Error loading default config as fallback:', fallbackError);
                 // Return empty config structure as last resort
                 return {
-                    kefinTweaksRoot: 'https://ranaldsgift.github.io/KefinTweaks/',
-                    scriptRoot: 'https://ranaldsgift.github.io/KefinTweaks/scripts/',
+                    kefinTweaksRoot: '',
                     scripts: {},
                     homeScreen: {},
                     exclusiveElsewhere: {},
@@ -361,10 +363,10 @@
 
             const modal = window.ModalSystem.create({
                 id: 'scriptRootEditConfirmation',
-                title: 'Edit Script Root URLs',
+                title: 'Edit KefinTweaks Root URL',
                 content: `
                     <div class="listItemBodyText" style="margin-bottom: 1em; max-width: 600px;">
-                        Editing the Root URLs is useful if you are hosting the scripts yourself or if you want to use a specific KefinTweaks version. There is no validation done for the URLs provided for these settings so please ensure they are valid. In any case, you can easily revert these settings.
+                        Editing the Root URL is useful if you are hosting the scripts yourself or if you want to use a specific KefinTweaks version. Scripts will be loaded from this root URL + '/scripts/'. There is no validation done for the URL provided so please ensure it is valid. In any case, you can easily revert this setting.
                     </div>
                 `,
                 footer: `
@@ -417,8 +419,8 @@
                 <div class="listItem" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 1em; margin-bottom: 1em;">
                     <div class="listItemContent" style="display: flex; justify-content: space-between; align-items: center;">
                         <div>
-                        <h3 class="listItemBodyText" style="margin-bottom: 0.25em;">Script Root Configuration</h3>
-                        <div class="listItemBodyText secondary">Configure where KefinTweaks scripts are loaded from</div>
+                        <h3 class="listItemBodyText" style="margin-bottom: 0.25em;">KefinTweaks Root Configuration</h3>
+                        <div class="listItemBodyText secondary">Configure where KefinTweaks scripts are loaded from. Scripts will be loaded from this root URL + '/scripts/'</div>
                     </div>
                         <button class="emby-button raised paper-icon-button-light" id="editScriptRootBtn">
                             <span class="material-icons" aria-hidden="true">edit</span>
@@ -429,17 +431,10 @@
                 <div class="listItem">
                     <div class="listItemContent">
                         <div class="listItemBodyText" style="margin-bottom: 0.5em;">KefinTweaks Root URL</div>
-                            <input type="text" id="kefinTweaksRoot" class="fld emby-input" value="${config.kefinTweaksRoot || ''}" placeholder="https://ranaldsgift.github.io/KefinTweaks/" style="width: 100%; max-width: 600px;">
-                        <div class="listItemBodyText secondary" style="margin-top: 0.5em; font-size: 0.9em;">Base URL for KefinTweaks resources</div>
+                            <input type="text" id="kefinTweaksRoot" class="fld emby-input" value="${config.kefinTweaksRoot || ''}" placeholder="https://cdn.jsdelivr.net/gh/ranaldsgift/KefinTweaks@latest/" style="width: 100%; max-width: 600px;">
+                        <div class="listItemBodyText secondary" style="margin-top: 0.5em; font-size: 0.9em;">Base URL for KefinTweaks resources. Scripts will be loaded from this URL + '/scripts/'</div>
                     </div>
                 </div>
-                <div class="listItem">
-                    <div class="listItemContent">
-                        <div class="listItemBodyText" style="margin-bottom: 0.5em;">Script Root URL</div>
-                            <input type="text" id="scriptRoot" class="fld emby-input" value="${config.scriptRoot || ''}" placeholder="https://ranaldsgift.github.io/KefinTweaks/scripts/" style="width: 100%; max-width: 600px;">
-                        <div class="listItemBodyText secondary" style="margin-top: 0.5em; font-size: 0.9em;">URL where individual script files are located</div>
-                        </div>
-                    </div>
                 </div>
             </div>
 
@@ -4138,7 +4133,6 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         // Collect all form values
         const config = {
             kefinTweaksRoot: document.getElementById('kefinTweaksRoot')?.value || '',
-            scriptRoot: document.getElementById('scriptRoot')?.value || '',
             scripts: {},
             homeScreen: {},
             exclusiveElsewhere: {},
@@ -4148,6 +4142,11 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             themes: [],
             customMenuLinks: []
         };
+        
+        // Remove scriptRoot if it exists (legacy field, no longer used)
+        if (config.scriptRoot) {
+            delete config.scriptRoot;
+        }
 
         // Collect script toggles
         document.querySelectorAll('[data-script-key]').forEach(checkbox => {
@@ -4435,10 +4434,10 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         try {
             const defaultConfig = await loadDefaultConfig();
 
-            // Retain script URLs from existing config
+            // Retain kefinTweaksRoot from existing config
             const existingConfig = await getKefinTweaksConfig();
             defaultConfig.kefinTweaksRoot = existingConfig.kefinTweaksRoot;
-            defaultConfig.scriptRoot = existingConfig.scriptRoot;
+            // Note: scriptRoot is no longer used - scripts are loaded from kefinTweaksRoot + '/scripts/'
 
             await saveConfigToJavaScriptInjector(defaultConfig);
 
