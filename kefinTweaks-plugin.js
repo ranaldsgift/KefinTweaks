@@ -479,7 +479,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             // Initial installation message with support information
             content.innerHTML = `
                 <p>Thanks for installing KefinTweaks.</p>
-                <p>KefinTweaks is not maintained by the Jellyfin team, and as a result you are encouraged to seek support from me directly. Sadly, there is no place suitable for discussion of plugins built by community members or fan-made projects in the official <a href="https://discord.gg/v7P9CAvCKZ" target="_blank" style="color: #00a4dc; text-decoration: underline;">Jellyfin Discord</a>, so please visit the Jellyfin Community Discord to find me (username: HighImKevin) and other users who would be happy to help you out. Please also feel free to report bugs and request features from the <a href="https://github.com/ranaldsgift/KefinTweaks/issues" target="_blank" style="color: #00a4dc; text-decoration: underline;">Issues</a> page. The strength of this plugin relies on awesome community members like you, so thanks for using KefinTweaks!</p>
+                <p>KefinTweaks is not maintained by the Jellyfin team, and as a result you are encouraged to seek support from me directly. Sadly, there is no place suitable for discussion of plugins built by community members or fan-made projects in the official Jellyfin Discord, so please visit the <a href="https://discord.gg/v7P9CAvCKZ" target="_blank" style="color: #00a4dc; text-decoration: underline;">Jellyfin Community Discord</a> to find me (username: HighImKevin) and other users who would be happy to help you out. Please also feel free to report bugs and request features from the <a href="https://github.com/ranaldsgift/KefinTweaks/issues" target="_blank" style="color: #00a4dc; text-decoration: underline;">Issues</a> page. The strength of this plugin relies on awesome community members like you, so thanks for using KefinTweaks!</p>
             `;
         } else {
             // Update message with refresh instruction
@@ -1101,20 +1101,6 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                 }
             }
 
-/*             if (img) {
-                const iconDiv = document.createElement('div');
-                iconDiv.className = 'cardImage flex align-items-center justify-content-center defaultCardBackground defaultCardBackground5';
-                
-                const iconSpan = document.createElement('span');
-                iconSpan.className = 'cardImageIcon material-icons extension';
-                iconSpan.setAttribute('aria-hidden', 'true');
-                
-                iconDiv.appendChild(iconSpan);
-                
-                // Replace the img with the icon div
-                img.parentNode.replaceChild(iconDiv, img);
-            } */
-
             // Find and replace the anchor/link with a button that opens the modal
             // For Material-UI cards, the anchor might be structured differently
             let anchorElement = null;
@@ -1202,7 +1188,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                     img.style.display = 'flex';
                 }
 
-                const defaultCardBackground = card.querySelector('.defaultCardBackground');
+                let defaultCardBackground = card.querySelector('.defaultCardBackground') ?? card.querySelector('.MuiCardMedia-root');
                 
                 if (img && defaultCardBackground) {
                     // Replace the defaultCardBackground with the img
