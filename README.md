@@ -81,12 +81,12 @@ Note: The Slideshow at the top of the Home Screen in the video below is from the
 
 ```javascript
 const script = document.createElement("script");
-script.src = `https://cdn.jsdelivr.net/gh/ranaldsgift/KefinTweaks/kefinTweaks-plugin.js`;
+script.src = `https://cdn.jsdelivr.net/gh/ranaldsgift/KefinTweaks@main/kefinTweaks-plugin.js`;
 script.async = true;
 document.head.appendChild(script);
 ```
 
-If you are hosting the script yourself, replace the `https://cdn.jsdelivr.net/gh/ranaldsgift` with your hosted location. You should be able to include the scripts in your jelly-web folder and access it from `/web/KefinTweaks` if you like.
+If you are hosting the script yourself, replace the `https://cdn.jsdelivr.net/gh/ranaldsgift/KefinTweaks@main/` with your hosted location + `/KefinTweaks/`. You should be able to include the scripts in your jelly-web folder and access it from `/web/KefinTweaks` if you like.
 
 3. **Navigate to the Plugins page and click on KefinTweaks**
 4. **Choose your preferred plugin version, or specify a custom source if you are self hosting the scripts**
