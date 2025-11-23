@@ -45,7 +45,7 @@
         return new Promise((resolve, reject) => {
             try {
                 const defaultConfigUrl = window.KefinTweaksConfig?.kefinTweaksRoot 
-                    ? `${window.KefinTweaksConfig.kefinTweaksRoot}kefinTweaks-default-config.js`;
+                    ? `${window.KefinTweaksConfig.kefinTweaksRoot}/kefinTweaks-default-config.js` : null;
 
                 if (!defaultConfigUrl) {
                     reject(new Error('No default config URL found'));

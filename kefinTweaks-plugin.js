@@ -1188,7 +1188,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                     img = document.createElement('div');
                     img.className = 'defaultCardBackground';
                     // give the gradient some color
-                    img.style.background = 'url(https://raw.githubusercontent.com/ranaldsgift/KefinTweaks/refs/heads/main/KefinTweaks/pages/images/logo.png), linear-gradient(to bottom, #202020, #101010)';
+                    img.style.background = 'url(https://raw.githubusercontent.com/ranaldsgift/KefinTweaks/refs/heads/main/logo.png), linear-gradient(to bottom, #202020, #101010)';
                     img.style.backgroundSize = 'contain';
                     img.style.backgroundPosition = 'center';
                     img.style.backgroundRepeat = 'no-repeat';

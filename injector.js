@@ -778,7 +778,7 @@
             }
 
             // Find watchlist tab by checking if the ContentHtml includes div class=\"sections watchlist\"
-            const watchlistTab = tabs.find(tab => tab.ContentHtml === '<div class="sections watchlist"></div>');
+            const watchlistTab = tabs.find(tab => tab.ContentHtml.includes('sections watchlist'));
             
             if (watchlistTab) {
                 console.log('[KefinTweaks Startup] Watchlist tab already exists with correct ContentHtml');
