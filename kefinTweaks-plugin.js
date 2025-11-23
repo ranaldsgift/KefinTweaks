@@ -95,7 +95,11 @@
 
     // Get KefinTweaks config from JS Injector
     async function getKefinTweaksConfig() {
-        try {
+        try {            
+            if (window.KefinTweaksConfig) {
+                return window.KefinTweaksConfig;
+            }
+
             const pluginId = await findJavaScriptInjectorPlugin();
 
             if (!pluginId) {
@@ -1270,6 +1274,9 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                     return;
                 }
             }
+
+            // Check if there is a valid config with a root url already, and load the injector if so
+            checkAndLoadInjector();
 
             // Check if user is admin
             const userIsAdmin = await isAdmin();

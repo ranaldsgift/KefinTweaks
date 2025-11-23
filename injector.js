@@ -6,7 +6,7 @@
     'use strict';
 
     console.log('[KefinTweaks Injector] Initializing...');
-    const versionNumber = "0.3.2";
+    const versionNumber = "0.3.3";
     
     // Configuration: Start with defaults, then merge user config
     // This allows new scripts to work out of the box without requiring config updates

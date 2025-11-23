@@ -70,8 +70,7 @@ Note: The Slideshow at the top of the Home Screen in the video below is from the
 ### Prerequisites
 - Jellyfin 10.10.7 or earlier (10.11.X is untested and "unsupported" but may be mostly functional)
 - [JS Injector](https://github.com/n00bcodr/Jellyfin-JavaScript-Injector) plugin installed and configured
-- [Custom Tabs](https://github.com/IAmParadox27/jellyfin-plugin-custom-tabs) plugin for watchlist functionality
-- [JellyfinEnhanced](https://github.com/n00bcodr/Jellyfin-Enhanced) plugin for Jellyseerr search functionality and ExclusiveElsewhere
+- Only required for Watchlist: [Custom Tabs](https://github.com/IAmParadox27/jellyfin-plugin-custom-tabs) plugin
 
 ### Setup Instructions
 
@@ -303,7 +302,7 @@ Dedicated watchlist section on home screen
 Defaults to searching in Movies/TV/People as most searches are for these items. Options to search specific categories or all categories like the default Jellyfin search functionality.  
 
 - **Jellyseerr Support**:  
-Zero-config support for Jellyseerr results if [JellyfinEnhanced](https://github.com/n00bcodr/Jellyfin-Enhanced) is installed  
+If you have [JellyfinEnhanced](https://github.com/n00bcodr/Jellyfin-Enhanced) installed, the Jellyseerr search results will appear in the KefinTweaks enhanced search. There is also a button that lets users search specifically for Requests.
 
 - **Meilisearch Support**:  
 Zero-config support for searching with the [Meilisearch](https://github.com/arnesacnussem/jellyfin-plugin-meilisearch) plugin  
@@ -609,6 +608,7 @@ This README and the inline comments in kefinTweaks.js and the other scripts is t
 <hr>
 
 ### Version History
+- **v0.3.3**: Important fix for a bug preventing the plugin from running on non-admin accounts
 - **v0.3.2**: Add proper installation and uninstallation support from the Plugins page. New feature: Playlist sorting.
 - **v0.3.1**: New Home Screen Section feature: Spotlights! Improved Configuration UI.
 - **v0.3.0**: KefinTweaks configuration for admins in the Jellyfin UI!
