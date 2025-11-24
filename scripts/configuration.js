@@ -4656,7 +4656,8 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             'Configure',
             'build',
             configUrl,
-            false
+            false,
+            '.adminMenuOptions'
         );
 
         if (success) {

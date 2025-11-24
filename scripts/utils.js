@@ -283,12 +283,13 @@
      * @param {string} icon - Material icon name
      * @param {string} url - URL to navigate to
      * @param {boolean} openInNewTab - Whether to open in new tab (default: false)
+     * @param {string} containerSelector - CSS selector for the container to add the link to (default: '.customMenuOptions')
      * @returns {Promise<boolean>} - True if successfully added, false otherwise
      */
-    function addCustomMenuLink(name, icon, url, openInNewTab = false) {
+    function addCustomMenuLink(name, icon, url, openInNewTab = false, containerSelector = '.customMenuOptions') {
         return new Promise((resolve) => {
             // Check if menu container already exists
-            const existingContainer = document.querySelector('.customMenuOptions');
+            const existingContainer = document.querySelector(containerSelector);
             if (existingContainer) {
                 const success = addLinkToContainer(existingContainer, name, icon, url, openInNewTab);
                 resolve(success);
@@ -303,8 +304,8 @@
                     mutation.addedNodes.forEach(node => {
                         if (node.nodeType === Node.ELEMENT_NODE) {
                             // Check if the added node is the menu or contains it
-                            if (node.matches?.('.customMenuOptions') || node.querySelector?.('.customMenuOptions')) {
-                                const container = node.matches?.('.customMenuOptions') ? node : node.querySelector('.customMenuOptions');
+                            if (node.matches?.(containerSelector) || node.querySelector?.(containerSelector)) {
+                                const container = node.matches?.(containerSelector) ? node : node.querySelector(containerSelector);
                                 LOG(`Custom menu container detected, adding link: ${name}`);
                                 observer.disconnect();
                                 

@@ -47,7 +47,7 @@
 
 .navMenuOption:has(.build) {
     order: 9999;
-    margin-top: 2em !important;
+    margin-top: 3em !important;
     position: relative;
 }
 
@@ -179,5 +179,5 @@ summary.listItemBodyText {
 
 .navMenuOption:has(.build):hover:not(.navMenuOption-selected) {
     transform: none !important;
-    margin-top: 2em !important;
+    margin-top: 3em !important;
 }
