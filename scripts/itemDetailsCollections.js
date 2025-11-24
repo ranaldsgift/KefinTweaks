@@ -10,12 +10,10 @@
     const ERR = (...args) => console.error('[KefinTweaks ItemDetailsCollections]', ...args);
 
     const CACHE_NAME = 'collections';
-    const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
-
-    const POLL_INTERVAL = 1000; // 1 second
+    const CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
     // Populate collections cache
-    async function populateCollectionsCache() {
+    async function populateCollectionsCache(invalidate = false) {
         // Check if user is logged in and poll for 5 seconds if not
         if (ApiClient._loggedIn === false) {
             return;
@@ -30,7 +28,7 @@
         const cache = new window.IndexedDBCache('kefinTweaks_', CACHE_TTL);
         
         // Check if cache is valid
-        if (await cache.isCacheValid(CACHE_NAME)) {
+        if (!invalidate && await cache.isCacheValid(CACHE_NAME)) {
             LOG('Collections cache is still valid');
             return;
         }
@@ -38,18 +36,48 @@
         LOG('Populating collections cache...');
         
         try {
+
             const allCollections = await ApiClient.getItems(ApiClient.getCurrentUserId(), {
                 IncludeItemTypes: 'BoxSet,CollectionFolder',
                 Recursive: true
             });
 
+            // Fetch all collection items in parallel
+            const collectionPromises = allCollections.Items.map(coll => 
+                ApiClient.getItems(ApiClient.getCurrentUserId(), {
+                    ParentId: coll.Id,
+                }).then(items => ({
+                    collection: coll,
+                    items: items
+                }))
+            );
+
+            // Check if cache already contains data
+            // If so, process the cache refresh in parallel and return the currently cached data instead of waiting
+            // If no cache exists, wait for all fetches to complete
+            const currentCacheData = await cache.get(CACHE_NAME);
+
+            if (currentCacheData && currentCacheData.length > 0) {
+                // Refreshing the cache Collections cache in the background
+                LOG('Refreshing collections cache in the background');
+                Promise.all(collectionPromises);
+                return;
+            }
+
+            // Setup performance timer
+            const startTime = performance.now();
+
+            // Wait for all fetches to complete
+            const collectionResults = await Promise.all(collectionPromises);
+            
+            const endTime = performance.now();
+            const duration = endTime - startTime;
+            LOG(`Collections cache populated in ${duration.toFixed(2)}ms`);
+
             const cacheData = [];
 
-            for (const coll of allCollections.Items) {
-                const items = await ApiClient.getItems(ApiClient.getCurrentUserId(), {
-                    ParentId: coll.Id,
-                });
-
+            // Process all results
+            for (const { collection: coll, items } of collectionResults) {
                 // Store collection item data needed for renderCards
                 const collectionItemData = {
                     Id: coll.Id,
@@ -236,6 +264,9 @@
             }
             return;
         }
+
+        // Forcefully populate the collections cache
+        populateCollectionsCache(true);
 
         // Initialize collections hook
         initializeCollectionsHook();
