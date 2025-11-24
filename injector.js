@@ -8,6 +8,9 @@
     console.log('[KefinTweaks Injector] Initializing...');
     const versionNumber = "0.3.3";
     
+    // Cache for resolved root URL (to avoid multiple API calls)
+    let resolvedRootCache = null;
+    
     // Configuration: Start with defaults, then merge user config
     // This allows new scripts to work out of the box without requiring config updates
     const ENABLED_SCRIPTS = {
@@ -315,8 +318,61 @@
         return true;
     }
     
+    // Resolve @latest or @main to actual version/commit hash
+    async function resolveRootVersion(root) {
+        // Check if root contains @latest or @main
+        const latestMatch = root.match(/@latest(\/|$)/);
+        const mainMatch = root.match(/@main(\/|$)/);
+        
+        if (latestMatch) {
+            // Fetch the latest release version number
+            try {
+                const response = await fetch('https://api.github.com/repos/ranaldsgift/KefinTweaks/releases/latest');
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data && data.tag_name) {
+                        const versionTag = data.tag_name.startsWith('v') ? data.tag_name : 'v' + data.tag_name;
+                        return root.replace('@latest', versionTag);
+                    } else {
+                        console.warn('[KefinTweaks Injector] Could not fetch latest version, using @latest');
+                        return root;
+                    }
+                } else {
+                    console.warn('[KefinTweaks Injector] Failed to fetch latest version, using @latest');
+                    return root;
+                }
+            } catch (error) {
+                console.warn('[KefinTweaks Injector] Error fetching latest version:', error);
+                return root;
+            }
+        } else if (mainMatch) {
+            // Fetch the latest commit hash from the main branch
+            try {
+                const response = await fetch('https://api.github.com/repos/ranaldsgift/KefinTweaks/commits/main');
+                if (response.ok) {
+                    const commit = await response.json();
+                    if (commit && commit.sha) {
+                        return root.replace('@main', commit.sha);
+                    } else {
+                        console.warn('[KefinTweaks Injector] Could not fetch commit hash, using @main');
+                        return root;
+                    }
+                } else {
+                    console.warn('[KefinTweaks Injector] Failed to fetch commit hash, using @main');
+                    return root;
+                }
+            } catch (error) {
+                console.warn('[KefinTweaks Injector] Error fetching commit hash:', error);
+                return root;
+            }
+        }
+        
+        // No resolution needed
+        return root;
+    }
+    
     // Get the root path for scripts from configuration
-    function getScriptRoot() {
+    async function getScriptRoot() {
         const kefinTweaksRoot = window.KefinTweaksConfig?.kefinTweaksRoot;
         
         // If kefinTweaksRoot is not set or empty, return null (scripts should not load)
@@ -326,16 +382,24 @@
         }
         
         // Ensure root ends with /
-        const root = kefinTweaksRoot.endsWith('/') ? kefinTweaksRoot : kefinTweaksRoot + '/';
+        let root = kefinTweaksRoot.endsWith('/') ? kefinTweaksRoot : kefinTweaksRoot + '/';
+        
+        // Resolve @latest or @main if needed (with caching)
+        if (resolvedRootCache === null) {
+            root = await resolveRootVersion(root);
+            resolvedRootCache = root;
+        } else {
+            root = resolvedRootCache;
+        }
         
         // Return scripts path
         return root + 'scripts/';
     }
     
     // Load a CSS file
-    function loadCSS(filename) {
-        return new Promise((resolve, reject) => {
-            const scriptRoot = getScriptRoot();
+    async function loadCSS(filename) {
+        return new Promise(async (resolve, reject) => {
+            const scriptRoot = await getScriptRoot();
             if (!scriptRoot) {
                 reject(new Error('kefinTweaksRoot is not configured'));
                 return;
@@ -369,9 +433,9 @@
     }
     
     // Load a JavaScript file
-    function loadScript(filename) {
-        return new Promise((resolve, reject) => {
-            const scriptRoot = getScriptRoot();
+    async function loadScript(filename) {
+        return new Promise(async (resolve, reject) => {
+            const scriptRoot = await getScriptRoot();
             if (!scriptRoot) {
                 reject(new Error('kefinTweaksRoot is not configured'));
                 return;
@@ -436,7 +500,7 @@
     
     // Load a single script (assumes dependencies are already loaded)
     async function loadScriptSync(scriptDef) {
-        const scriptRoot = getScriptRoot();
+        const scriptRoot = await getScriptRoot();
         if (!scriptRoot) {
             throw new Error('kefinTweaksRoot is not configured');
         }
@@ -464,7 +528,7 @@
         console.log(`[KefinTweaks Injector] Starting KefinTweaks v${versionNumber} initialization...`);
         
         // Check if kefinTweaksRoot is configured
-        const scriptRoot = getScriptRoot();
+        const scriptRoot = await getScriptRoot();
         if (!scriptRoot) {
             console.log('[KefinTweaks Injector] kefinTweaksRoot is not configured. Please configure KefinTweaks using the installer before scripts can be loaded.');
             return;

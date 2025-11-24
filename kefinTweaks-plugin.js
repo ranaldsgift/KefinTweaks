@@ -1290,9 +1290,6 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             
             // Hook into Emby.Page.onViewShow
             setupOnViewShow();
-            
-            // Check and load injector if config is ready
-            checkAndLoadInjector();
         } catch (error) {
             console.error('[KefinTweaks Installer] Error checking user:', error);
             // Retry on error
