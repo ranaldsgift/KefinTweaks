@@ -332,7 +332,7 @@
                     const data = await response.json();
                     if (data && data.tag_name) {
                         const versionTag = data.tag_name.startsWith('v') ? data.tag_name : 'v' + data.tag_name;
-                        return root.replace('@latest', versionTag);
+                        return root.replace('@latest', `@${versionTag}`);
                     } else {
                         console.warn('[KefinTweaks Injector] Could not fetch latest version, using @latest');
                         return root;
@@ -352,7 +352,7 @@
                 if (response.ok) {
                     const commit = await response.json();
                     if (commit && commit.sha) {
-                        return root.replace('@main', commit.sha);
+                        return root.replace('@main', `@${commit.sha}`);
                     } else {
                         console.warn('[KefinTweaks Injector] Could not fetch commit hash, using @main');
                         return root;
