@@ -75,10 +75,6 @@
     margin-top: 0;
 }
 
-.sectionTitleContainer.sectionTitleContainer-cards.padded-left > .sectionTitle.sectionTitle-cards {
-    display: flex !important;
-}
-
 div#discovery-loading-indicator:not(.show)::before {
     content: 'Loading...';
     position: absolute;

@@ -23,24 +23,50 @@
     // Cached server version for synchronous access
     let cachedServerVersion = null;
     let versionPollingStarted = false;
+
+    function getMajorServerVersion(version) {
+        const versionParts = version.split('.');
+        if (versionParts.length >= 2) {
+            const majorVersion = parseInt(versionParts[1], 10);
+            if (!isNaN(majorVersion)) {
+                return majorVersion;
+            }
+        }
+        return null;
+    }
     
     /**
      * Get the current major server version from ApiClient
      * Polls every 500ms for up to 5 seconds in the background if not immediately available
      * @returns {number|null} The major version number (e.g., 10 for "10.10.X", 11 for "10.11.X"), or null if unavailable
      */
-    function getCurrentMajorServerVersion() {
+    async function getCurrentMajorServerVersion() {
         try {
-            // Check if ApiClient and serverVersion are available immediately
-            if (typeof window.ApiClient !== 'undefined' && window.ApiClient._appVersion) {
-                const versionParts = window.ApiClient._appVersion.split('.');
-                if (versionParts.length >= 2) {
-                    const majorVersion = parseInt(versionParts[1], 10);
-                    if (!isNaN(majorVersion)) {
-                        cachedServerVersion = majorVersion; // Cache it
-                        return majorVersion;
+            if (!window.ApiClient || !window.ApiClient._appName || !window.ApiClient._appVersion) {
+                return null;
+            }
+
+            if (window.ApiClient._appName === 'Jellyfin Media Player') {
+                // Check the server version instead of app version
+                if (!window.ApiClient._serverVersion) {
+                    // Wait 10s to see if it becomes ready, check every 500ms
+                    const startTime = Date.now();
+                    while (Date.now() - startTime < 10000) {
+                        if (window.ApiClient._serverVersion) {
+                            break;
+                        }
+                        await new Promise(resolve => setTimeout(resolve, 500));
                     }
                 }
+
+                cachedServerVersion = getMajorServerVersion(window.ApiClient._serverVersion);
+                return cachedServerVersion;
+            }
+
+            // Check if ApiClient and serverVersion are available immediately
+            if (window.ApiClient._appVersion) {
+                cachedServerVersion = getMajorServerVersion(window.ApiClient._appVersion);
+                return cachedServerVersion;
             }
             
             // If we have a cached value, return it
@@ -61,15 +87,8 @@
                     
                     try {
                         if (typeof window.ApiClient !== 'undefined' && window.ApiClient._appVersion) {
-                            const versionParts = window.ApiClient._appVersion.split('.');
-                            if (versionParts.length >= 2) {
-                                const majorVersion = parseInt(versionParts[1], 10);
-                                if (!isNaN(majorVersion)) {
-                                    clearInterval(poll);
-                                    cachedServerVersion = majorVersion;
-                                    return;
-                                }
-                            }
+                            cachedServerVersion = getMajorServerVersion(window.ApiClient._appVersion);
+                            return;
                         }
                     } catch (error) {
                         WARN('Error getting server version during poll:', error);
@@ -97,12 +116,12 @@
      * @param {Object} skin - The skin configuration object
      * @returns {Array<string>|null} Array of URLs to load, or null if no URLs
      */
-    function getSkinUrlsForCurrentVersion(skin) {
+    async function getSkinUrlsForCurrentVersion(skin) {
         if (!skin.url) {
             return null;
         }
         
-        const currentMajorVersion = getCurrentMajorServerVersion();
+        const currentMajorVersion = await getCurrentMajorServerVersion();
         
         // New structure: array of objects with majorServerVersions and urls
         if (Array.isArray(skin.url) && skin.url.length > 0 && typeof skin.url[0] === 'object' && skin.url[0].majorServerVersions) {
@@ -151,8 +170,8 @@
      * @param {Array} skins - Array of skin configuration objects
      * @returns {Array} Filtered array of skins compatible with current server version
      */
-    function filterSkinsByServerVersion(skins) {
-        const currentMajorVersion = getCurrentMajorServerVersion();
+    async function filterSkinsByServerVersion(skins) {
+        const currentMajorVersion = await getCurrentMajorServerVersion();
         
         // If we can't determine the server version, include all skins (backward compatibility)
         if (currentMajorVersion === null) {
@@ -207,10 +226,18 @@
     }
     
     // Load and merge skin configurations
-    function loadSkinConfig() {
+    async function loadSkinConfig() {
         // Only load from window.KefinTweaksConfig (from JS Injector)
         const configSkins = window.KefinTweaksConfig?.skins || [];
-        
+
+        // Add any default skins from userConfig.js that are not already present        
+        const defaultSkins = window.KefinTweaksUserConfig?.skins || [];
+        defaultSkins.forEach(skin => {
+            if (!configSkins.some(s => s.name === skin.name)) {
+                configSkins.push(skin);
+            }
+        });
+
         // Filter to only include enabled skins (enabled !== false)
         // Default to enabled if the property is not set
         SKINS_CONFIG = configSkins.filter(skin => {
@@ -231,7 +258,7 @@
         
         // Filter skins based on current server version
         const skinsBeforeFilter = SKINS_CONFIG.length;
-        SKINS_CONFIG = filterSkinsByServerVersion(SKINS_CONFIG);
+        SKINS_CONFIG = await filterSkinsByServerVersion(SKINS_CONFIG);
         const skinsAfterFilter = SKINS_CONFIG.length;
         
         if (skinsBeforeFilter !== skinsAfterFilter) {
@@ -244,12 +271,20 @@
     }
     
     // Load and merge theme configurations
-    function loadThemeConfig() {
+    async function loadThemeConfig() {
         const userThemes = window.KefinTweaksUserConfig?.themes || [];
         const additionalThemes = window.KefinTweaksConfig?.themes || [];
         
         // Start with user themes (these take priority)
         THEMES_CONFIG = [...userThemes];
+
+        // Add any default themes from userConfig.js that are not already present
+        const defaultThemes = window.KefinTweaksUserConfig?.themes || [];
+        defaultThemes.forEach(theme => {
+            if (!THEMES_CONFIG.some(t => t.name === theme.name)) {
+                THEMES_CONFIG.push(theme);
+            }
+        });
         
         // Add additional themes from main config, avoiding duplicates by name
         additionalThemes.forEach(theme => {
@@ -1637,8 +1672,8 @@
         // This prevents the double-reflow/recalc that causes UI freezing
         
         // Step 1: Load the new CSS first (gets cached and starts loading)
-        requestAnimationFrame(() => {
-            const cssUrls = getSkinUrlsForCurrentVersion(skin);
+        requestAnimationFrame(async () => {
+            const cssUrls = await getSkinUrlsForCurrentVersion(skin);
             
             if (!cssUrls || cssUrls.length === 0) {
                 LOG(`No CSS URLs found for skin: ${skin.name}`);

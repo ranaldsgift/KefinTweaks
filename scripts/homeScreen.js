@@ -2007,13 +2007,18 @@
     /**
      * Navigates to the watchlist tab by clicking the appropriate tab button
      */
-    function getWatchlistUrl() {
+    async function getWatchlistUrl() {
         let homePageSuffix = '.html';
         if (ApiClient._serverInfo.Version?.split('.')[1] > 10) {
             homePageSuffix = '';
         }
-        const visibleWatchlistTab = document.querySelector('.libraryPage:not(.hide) .pageTabContent:has(.watchlist.sections)');
-        const visibleWatchlistTabIndex = visibleWatchlistTab ? visibleWatchlistTab.getAttribute('data-index') : null;
+
+        if (!window.KefinTweaksUtils || !window.KefinTweaksUtils.getWatchlistTabIndex || !window.KefinTweaksUtils.getWatchlistTabIndex()) {
+            WARN('KefinTweaksUtils not available');
+            return null;
+        }
+
+        const visibleWatchlistTabIndex = await window.KefinTweaksUtils.getWatchlistTabIndex();
 
         if (visibleWatchlistTabIndex) {
             return `#/home${homePageSuffix}?tab=${visibleWatchlistTabIndex}`;
@@ -2837,7 +2842,7 @@
             const scrollableContainer = window.cardBuilder.renderCards(
                 limitedItems,
                 sectionName,
-                getWatchlistUrl(),
+                await getWatchlistUrl(),
                 true,
                 cardFormat,
                 sortOrder,

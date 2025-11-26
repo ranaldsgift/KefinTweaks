@@ -45,27 +45,23 @@
     order: 1;
 }
 
-.navMenuOption:has(.build) {
+.navMenuOption[data-name="configure"] {
     order: 9999;
     margin-top: 3em !important;
     position: relative;
 }
 
-.navMenuOption:has(.build)>.material-icons {
+.navMenuOption[data-name="configure"]>.material-icons {
     position: relative;
 }
 
-.navMenuOption:has(.build)>.material-icons::after {
+.navMenuOption[data-name="configure"]>.material-icons::after {
     content: 'KefinTweaks';
     position: absolute;
     top: -2.5em;
     left: -1.25em;
     font-family: 'Noto Sans';
     font-size: 14.88px;
-}
-
-.listItemContent:has([data-skin-name]) {
-    justify-content: space-between;
 }
 
 .listItemContent {
@@ -177,7 +173,7 @@ summary.listItemBodyText {
     max-width: calc(100% - 4rem);
 }
 
-.navMenuOption:has(.build):hover:not(.navMenuOption-selected) {
+.navMenuOption[data-name="configure"]:hover:not(.navMenuOption-selected) {
     transform: none !important;
     margin-top: 3em !important;
 }

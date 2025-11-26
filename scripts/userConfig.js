@@ -62,6 +62,20 @@
                 colorSchemes: []
             },
             {
+                name: 'GlassFin',
+                author: 'KBH-Reeper',
+                url: [
+                    {
+                        majorServerVersions: [10, 11],
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/KBH-Reeper/GlassFin@main/Theme/GlassFin-Theme-V01.03.css',
+                            'https://cdn.jsdelivr.net/gh/KBH-Reeper/GlassFin@main/Theme/PluginStyling/MediaBar-Plugin-latest.css'
+                        ]
+                    }
+                ],
+                colorSchemes: []
+            },
+            {
                 name: 'Jellypane',
                 author: 'tedhinklater',
                 url: [

@@ -1016,6 +1016,7 @@
             playButton.addEventListener('click', async (e) => {
                 e.stopPropagation();
                 try {
+                    // TODO - this needs to be updated to use the data-action resume to play the item natively, if possible
                     if (window.apiHelper && window.apiHelper.playItem) {
                         await window.apiHelper.playItem(item.Id);
                     } else {
@@ -1449,7 +1450,6 @@
 
         // Add "Show All" button to title if there are more than 20 items
         if (items.length > 20) {
-            sectionTitleContainer.style.display = 'flex';
             sectionTitleContainer.appendChild(showAllButton);
         }
 

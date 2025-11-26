@@ -538,6 +538,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
             const link = document.createElement('a');
             link.setAttribute('is', 'emby-linkbutton');
             link.className = 'emby-button navMenuOption lnkMediaFolder';
+            link.dataset.name = name.toLowerCase().replace(' ', '-');
             link.href = url;
             
             if (openInNewTab) {
@@ -570,6 +571,40 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
         }
     }
 
+    let _watchlistTabIndex = null;
+
+	/**
+	 * Get watchlist tab index, fetching if not yet set
+	 * @returns {number|null} The watchlist tab index or null if not found
+	 */
+	async function getWatchlistTabIndex() {
+		if (_watchlistTabIndex !== null) {
+			return _watchlistTabIndex;
+		}
+
+		// Fetch the tab index as we do in addCustomMenuLink
+		try {
+			const response = await fetch(`${ApiClient._serverAddress}/CustomTabs/Config`, {
+				method: "GET",
+				headers: {
+					"Content-Type": "application/json",
+					"X-Emby-Token": ApiClient._serverInfo.AccessToken || ApiClient.accessToken(),
+				},
+			});
+			const data = await response.json();
+			data.forEach((tab, index) => {
+				if (tab.ContentHtml.indexOf('sections watchlist') !== -1) {
+					_watchlistTabIndex = index + 2;
+					LOG('Fetched and stored watchlist tab index:', _watchlistTabIndex);
+				}
+			});
+		} catch (err) {
+			ERR('Failed to fetch watchlist tab index:', err);
+		}
+
+		return _watchlistTabIndex;
+	}
+
     // Expose utilities to global scope
     window.KefinTweaksUtils = {
         onViewPage,
@@ -578,7 +613,8 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
         getHandlerCount,
         clearHandlers,
         addCustomMenuLink,
-        saveConfigToJavaScriptInjector
+        saveConfigToJavaScriptInjector,
+        getWatchlistTabIndex
     };
     
     LOG('Initialized successfully');
