@@ -69,7 +69,7 @@
 
             // Wait for all fetches to complete
             const collectionResults = await Promise.all(collectionPromises);
-            
+
             const endTime = performance.now();
             const duration = endTime - startTime;
             LOG(`Collections cache populated in ${duration.toFixed(2)}ms`);
@@ -225,14 +225,21 @@
                     return;
                 }
 
-                await populateCollectionsCache();
-
                 // Only handle details pages
                 const activePage = document.querySelector('.libraryPage:not(.hide)');
                 if (!activePage) return;
 
                 // Await the item promise to get the actual item data
                 const item = await itemPromise;
+
+                const supportedTypes = ['Movie', 'Series', 'Season', 'Episode', 'MusicArtist', 'MusicAlbum', 'Audio', 'Book', 'AudioBook', 'MusicVideo' ];
+
+                if (!supportedTypes.includes(item.Type)) {
+                    LOG(`Item type ${item.Type} not supported for collections, skipping...`);
+                    return;
+                }
+
+                await populateCollectionsCache();
 
                 // Small delay to ensure details DOM is ready
                 setTimeout(async () => {
@@ -264,9 +271,6 @@
             }
             return;
         }
-
-        // Forcefully populate the collections cache
-        populateCollectionsCache(true);
 
         // Initialize collections hook
         initializeCollectionsHook();
