@@ -79,16 +79,30 @@
     }
 
     /**
-     * Fetch playlist children items
+     * Fetch playlist children items with server-side sorting
      * @param {string} playlistId - Playlist item ID
-     * @returns {Promise<Array>} Array of child items
+     * @returns {Promise<Array>} Array of child items (already sorted by server)
      */
     async function fetchPlaylistChildren(playlistId) {
         try {
             const userId = ApiClient.getCurrentUserId();
+            
+            // Get current sort preferences
+            const sortKey = getCurrentSort(playlistId);
+            const direction = getCurrentSortDirection(playlistId, sortKey);
+            
+            // Map sort key to Jellyfin API SortBy parameter
+            const sortOption = SORT_OPTIONS[sortKey];
+            const sortBy = sortOption ? sortOption.field : 'SortName';
+            
+            // Map direction to Jellyfin API SortOrder parameter
+            const sortOrder = direction === 'asc' ? 'Ascending' : 'Descending';
+            
             const response = await ApiClient.getItems(userId, {
                 ParentId: playlistId,
-                Fields: 'PrimaryImageAspectRatio,DateCreated,CommunityRating,CriticRating,SortName,PremiereDate,UserData'
+                Fields: 'PrimaryImageAspectRatio,DateCreated,CommunityRating,CriticRating,SortName,PremiereDate,UserData',
+                SortBy: sortBy,
+                SortOrder: sortOrder
             });
             return response.Items || [];
         } catch (error) {
@@ -231,6 +245,21 @@
 
         // Reorder DOM
         reorderListItems(data.itemsContainer, sortedItems);
+        
+        // Update play button text and "Play from beginning" button visibility in case first item changed
+        const activePage = document.querySelector('.libraryPage:not(.hide)');
+        if (activePage) {
+            const mainDetailButtons = activePage.querySelector('.mainDetailButtons');
+            if (mainDetailButtons) {
+                const playButton = mainDetailButtons.querySelector('.btnPlay') ||
+                                 mainDetailButtons.querySelector('button[data-kt-playlist-sorting-overridden="true"]');
+                if (playButton) {
+                    updatePlayButtonText(playButton, playlistId);
+                }
+                // Update "Play from beginning" button visibility
+                addResumeButton(mainDetailButtons, playlistId);
+            }
+        }
     }
 
     /**
@@ -347,6 +376,7 @@
 
     /**
      * Get sorted playlist item IDs for playback
+     * Items are already sorted by the server via fetchPlaylistChildren
      * @param {string} playlistId - Playlist item ID
      * @param {boolean} resume - If true, filter out played items from the start
      * @returns {Promise<Array<string>>} Array of sorted item IDs
@@ -356,7 +386,7 @@
         const data = playlistData.get(playlistId);
         let items = data?.items;
 
-        // If no cached data, fetch it
+        // If no cached data, fetch it (already sorted by server)
         if (!items || items.length === 0) {
             items = await fetchPlaylistChildren(playlistId);
             if (items.length === 0) {
@@ -365,19 +395,14 @@
             }
         }
 
-        // Get current sort preferences
-        const sortKey = getCurrentSort(playlistId);
-        const direction = getCurrentSortDirection(playlistId, sortKey);
-
-        // Sort items
-        let sortedItems = sortItems(items, sortKey, direction);
+        // Items are already sorted by the server, no need to sort client-side
 
         // If resume mode, filter out played items from the start
         if (resume) {
             // Find the first unplayed item
             let firstUnplayedIndex = -1;
-            for (let i = 0; i < sortedItems.length; i++) {
-                const isPlayed = sortedItems[i].UserData?.Played === true;
+            for (let i = 0; i < items.length; i++) {
+                const isPlayed = items[i].UserData?.Played === true;
                 if (!isPlayed) {
                     firstUnplayedIndex = i;
                     break;
@@ -386,8 +411,8 @@
 
             // If we found an unplayed item, return from that index onwards (includes all remaining items)
             if (firstUnplayedIndex >= 0) {
-                sortedItems = sortedItems.slice(firstUnplayedIndex);
-                LOG(`Resume mode: Starting from item ${firstUnplayedIndex + 1} (${sortedItems.length} items remaining)`);
+                items = items.slice(firstUnplayedIndex);
+                LOG(`Resume mode: Starting from item ${firstUnplayedIndex + 1} (${items.length} items remaining)`);
             } else {
                 // All items are played, return empty array
                 LOG('Resume mode: All items are already played');
@@ -395,11 +420,54 @@
             }
         }
 
-        // Limit to 300 items max
-        sortedItems = sortedItems.slice(0, 300);
-
         // Extract IDs
-        return sortedItems.map(item => item.Id);
+        return items.map(item => item.Id);
+    }
+
+    /**
+     * Update play button text to "Resume" if first item is played
+     * @param {HTMLElement} playButton - The play button element
+     * @param {string} playlistId - Playlist item ID
+     */
+    async function updatePlayButtonText(playButton, playlistId) {
+        try {
+            // Check if we have cached data
+            const data = playlistData.get(playlistId);
+            let items = data?.items;
+
+            // If no cached data, fetch it (already sorted by server)
+            if (!items || items.length === 0) {
+                items = await fetchPlaylistChildren(playlistId);
+            }
+
+            if (items && items.length > 0) {
+                const firstItem = items[0];
+                const isFirstItemPlayed = firstItem.UserData?.Played === true;
+                
+                if (isFirstItemPlayed) {
+                    // Update button title/text to "Resume"
+                    playButton.title = 'Resume';
+                    
+                    // Also update any text content if present
+                    const textSpan = playButton.querySelector('.detailButton-text, .buttonText');
+                    if (textSpan) {
+                        textSpan.textContent = 'Resume';
+                    }
+                    
+                    LOG('First item is played, updated Play button to Resume');
+                } else {
+                    // Ensure it says "Play"
+                    playButton.title = playButton.title || 'Play';
+                    
+                    const textSpan = playButton.querySelector('.detailButton-text, .buttonText');
+                    if (textSpan) {
+                        textSpan.textContent = 'Play';
+                    }
+                }
+            }
+        } catch (error) {
+            WARN('Error updating play button text:', error);
+        }
     }
 
     /**
@@ -458,39 +526,35 @@
         // Replace the original button with the cloned one (this removes all event listeners)
         playButton.parentNode.replaceChild(clonedButton, playButton);
         
-        // Now add our custom click handler
+        // Check if first item is played and update button text accordingly
+        updatePlayButtonText(clonedButton, playlistId);
+        
+        // Now add our custom click handler - Play button now defaults to Resume behavior
         clonedButton.onclick = async (e) => {
             e.preventDefault();
             e.stopPropagation();
             e.stopImmediatePropagation(); // Prevent any other handlers
 
             try {
-                // Get sorted item IDs
-                const sortedIds = await getSortedPlaylistItemIds(playlistId);
+                // Get sorted item IDs with resume mode (skip played items from start)
+                const sortedIds = await getSortedPlaylistItemIds(playlistId, true);
                 
                 if (sortedIds.length === 0) {
-                    WARN('No items to play for playlist:', playlistId);
+                    WARN('No items to resume for playlist:', playlistId);
                     return;
                 }
                 
 
-                LOG(`Playing ${sortedIds.length} sorted items from playlist:`, playlistId);
+                LOG(`Resuming ${sortedIds.length} sorted items from playlist:`, playlistId);
 
                 // Use apiHelper if available, otherwise fallback to ApiClient
                 if (window.apiHelper && window.apiHelper.playItem) {
                     await window.apiHelper.playItem(sortedIds);
-                } else if (window.ApiClient && typeof window.ApiClient.play === 'function') {
-                    await window.ApiClient.play({ ids: sortedIds });
-                } else if (window.PlaybackManager && window.PlaybackManager.play) {
-                    await window.PlaybackManager.play({
-                        ids: sortedIds,
-                        serverId: window.ApiClient.serverId()
-                    });
                 } else {
                     ERR('No play method available');
                 }
             } catch (error) {
-                ERR('Error playing sorted playlist:', error);
+                ERR('Error resuming sorted playlist:', error);
             }
         };
 
@@ -555,13 +619,45 @@
     }
 
     /**
-     * Create and add resume button next to play button
+     * Create and add "Play from beginning" button next to play button
+     * Only shows if the first item is already played
      * @param {HTMLElement} mainDetailButtons - Main detail buttons container
      * @param {string} playlistId - Playlist item ID
      */
-    function addResumeButton(mainDetailButtons, playlistId) {
-        // Check if button already exists
-        if (mainDetailButtons.querySelector('.kt-playlist-resume-btn')) {
+    async function addResumeButton(mainDetailButtons, playlistId) {
+        // Check if button already exists - if so, update its visibility
+        const existingButton = mainDetailButtons.querySelector('.kt-playlist-resume-btn');
+        
+        // Check if first item is played
+        let isFirstItemPlayed = false;
+        try {
+            const data = playlistData.get(playlistId);
+            let items = data?.items;
+
+            // If no cached data, fetch it (already sorted by server)
+            if (!items || items.length === 0) {
+                items = await fetchPlaylistChildren(playlistId);
+            }
+
+            if (items && items.length > 0) {
+                const firstItem = items[0];
+                isFirstItemPlayed = firstItem.UserData?.Played === true;
+            }
+        } catch (error) {
+            WARN('Error checking first item played status:', error);
+        }
+
+        // If first item is not played, hide or remove the button
+        if (!isFirstItemPlayed) {
+            if (existingButton) {
+                existingButton.style.display = 'none';
+            }
+            return;
+        }
+
+        // If button exists and first item is played, show it
+        if (existingButton) {
+            existingButton.style.display = '';
             return;
         }
 
@@ -582,45 +678,45 @@
         }
 
         if (!playButton) {
-            WARN('Play button not found, cannot add resume button');
+            WARN('Play button not found, cannot add play from beginning button');
             return;
         }
 
-        // Create resume button using emby-playstatebutton format
+        // Create "Play from beginning" button using emby-playstatebutton format
         const button = document.createElement('button');
         button.setAttribute('is', 'emby-playstatebutton');
         button.type = 'button';
         button.className = 'button-flat btnPlaystate detailButton emby-button kt-playlist-resume-btn';
-        button.title = 'Resume Playlist';
+        button.title = 'Play from Beginning';
 
         // Create detailButton-content wrapper
         const contentWrapper = document.createElement('div');
         contentWrapper.className = 'detailButton-content';
 
-        // Create icon
+        // Create icon - using refresh/replay icon for "play from beginning"
         const icon = document.createElement('span');
-        icon.className = 'material-icons detailButton-icon play_circle';
+        icon.className = 'material-icons detailButton-icon replay';
         icon.setAttribute('aria-hidden', 'true');
 
         contentWrapper.appendChild(icon);
         button.appendChild(contentWrapper);
 
-        // Add click handler
+        // Add click handler - play all items from beginning (no resume filtering)
         button.onclick = async (e) => {
             e.preventDefault();
             e.stopPropagation();
             e.stopImmediatePropagation();
 
             try {
-                // Get sorted item IDs with resume mode
-                const sortedIds = await getSortedPlaylistItemIds(playlistId, true);
+                // Get sorted item IDs without resume mode (play all items from beginning)
+                const sortedIds = await getSortedPlaylistItemIds(playlistId, false);
                 
                 if (sortedIds.length === 0) {
-                    WARN('No items to resume for playlist:', playlistId);
+                    WARN('No items to play for playlist:', playlistId);
                     return;
                 }
 
-                LOG(`Resuming ${sortedIds.length} items from playlist:`, playlistId);
+                LOG(`Playing from beginning ${sortedIds.length} items from playlist:`, playlistId);
 
                 // Use apiHelper if available, otherwise fallback to ApiClient
                 if (window.apiHelper && window.apiHelper.playItem) {
@@ -636,7 +732,7 @@
                     ERR('No play method available');
                 }
             } catch (error) {
-                ERR('Error resuming sorted playlist:', error);
+                ERR('Error playing from beginning:', error);
             }
         };
 
@@ -694,7 +790,7 @@
                     addSortButton(mainDetailButtons, playlistId);
                 }
                 // Re-add resume button in case it was recreated
-                addResumeButton(mainDetailButtons, playlistId);
+                await addResumeButton(mainDetailButtons, playlistId);
                 // Re-override play button in case it was recreated
                 overridePlayButton(mainDetailButtons, playlistId);
             }
@@ -844,7 +940,7 @@
         }
 
         // Add resume button (only if it doesn't exist)
-        addResumeButton(detailButtons, playlistId);
+        await addResumeButton(detailButtons, playlistId);
 
         // Override play button to use sorted items
         overridePlayButton(detailButtons, playlistId);

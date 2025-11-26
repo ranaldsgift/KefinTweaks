@@ -59,6 +59,8 @@
         
         throw new Error('No active session found for device');
     }
+
+    const MAX_PLAY_NOW_IDS = 200;
     
     /**
      * Sends a PlayNow command directly to the active session
@@ -71,10 +73,12 @@
         
         const token = ApiClient.accessToken();
         const serverUrl = ApiClient.serverAddress();
+
+        const limitedIds = ids.slice(0, MAX_PLAY_NOW_IDS);
         
         const params = new URLSearchParams({
             playCommand: options.playCommand || 'PlayNow',
-            itemIds: ids.join(',')
+            itemIds: limitedIds.join(',')
         });
         
         if (options.startPositionTicks !== undefined) {
@@ -98,13 +102,42 @@
         const response = await fetch(`${serverUrl}/Sessions/${sessionId}/Playing?${params.toString()}`, {
             method: 'POST',
             headers: {
-                'X-Emby-Token': token
+                'X-Emby-Token': token,
             }
         });
         
         if (!response.ok) {
             throw new Error(`PlayNow request failed with HTTP ${response.status}: ${response.statusText}`);
         }
+    }
+
+    async function sendPlayLast(ids) {
+        const session = await getActiveSession();
+        const sessionId = session.Id;
+        
+        const token = ApiClient.accessToken();
+        const serverUrl = ApiClient.serverAddress();
+
+        const params = new URLSearchParams({
+            playCommand: 'PlayLast',
+            itemIds: ids.join(',')
+        });
+        
+        LOG('Sending PlayLast command:', {
+            sessionId,
+            params: params.toString()
+        });
+
+        const response = await fetch(`${serverUrl}/Sessions/${sessionId}/Playing?${params.toString()}`, {
+            method: 'POST',
+            headers: {
+                'X-Emby-Token': token
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error(`PlayLast request failed with HTTP ${response.status}: ${response.statusText}`);
+        }        
     }
     
     /**
@@ -411,6 +444,58 @@
             // Last resort: Navigate to item details page
             const itemUrl = `/web/#/details?id=${ids[0]}&serverId=${ApiClient.serverId()}`;
             window.location.href = `${ApiClient.serverAddress()}${itemUrl}`;
+        },
+        
+        /**
+         * Updates the NowPlayingQueue for the active session
+         * @param {Array<string>} itemIds - Array of item IDs to set as the queue
+         * @returns {Promise} - Promise that resolves when queue is updated
+         */
+        updateQueue: async function(itemIds) {
+            if (!Array.isArray(itemIds) || itemIds.length === 0) {
+                throw new Error('Item IDs array is required and cannot be empty');
+            }
+            
+            ensureApiClient();
+            
+            const session = await getActiveSession();
+            const sessionId = session?.Id;
+            
+            if (!sessionId) {
+                throw new Error('No active session found');
+            }
+            
+            const token = ApiClient.accessToken();
+            const serverUrl = ApiClient.serverAddress();
+            
+            // Build NowPlayingQueue array - each item needs at least an Id
+            const nowPlayingQueue = itemIds.map(id => ({
+                Id: id
+            }));
+            
+            const payload = {
+                NowPlayingQueue: nowPlayingQueue
+            };
+            
+            LOG('Updating playback queue:', {
+                itemCount: itemIds.length
+            });
+            
+            const response = await fetch(`${serverUrl}/Sessions/Playing`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `MediaBrowser Token="${token}"`
+                },
+                body: JSON.stringify(payload)
+            });
+            
+            if (!response.ok) {
+                const errorText = await response.text().catch(() => response.statusText);
+                throw new Error(`Queue update failed with HTTP ${response.status}: ${errorText}`);
+            }
+            
+            LOG('Queue updated successfully');
         }
     };
     
