@@ -104,6 +104,8 @@
                 if (scriptMatch && scriptMatch[1]) {
                     try {
                         const config = JSON.parse(scriptMatch[1]);
+                        // Store enabled state globally for use in modal (defaults to true if not set)
+                        window.KefinTweaksConfigEnabled = config.enabled !== false;
                         console.log('[KefinTweaks Configuration] Loaded config from JS Injector:', config);
                         return config;
                     } catch (parseError) {
@@ -120,6 +122,12 @@
         const currentConfigSource = currentLoadedConfig || window.KefinTweaksCurrentConfig || window.KefinTweaksConfig || {};
         const currentKefinRoot = currentConfigSource.kefinTweaksRoot || defaultConfig.kefinTweaksRoot;
         defaultConfig.kefinTweaksRoot = currentKefinRoot;
+        // Ensure enabled field is set (defaults to true if not present)
+        if (defaultConfig.enabled === undefined) {
+            defaultConfig.enabled = true;
+        }
+        // Store enabled state globally for use in modal
+        window.KefinTweaksConfigEnabled = defaultConfig.enabled !== false;
         // Note: scriptRoot is no longer used - scripts are loaded from kefinTweaksRoot + '/scripts/'
 
             // Save defaults to JS Injector for future use
@@ -414,8 +422,25 @@
         // Get all skin names for autocomplete
         const allSkinNames = skins.map(skin => skin.name).filter(Boolean);
 
+        const isEnabled = window.KefinTweaksConfigEnabled !== false;
+        
         return `
             <div class="paperList" style="margin-bottom: 2em;">
+                <div class="listItem">
+                    <div class="listItemContent" style="display: flex; gap: 1em;">
+                        <label class="checkboxContainer" style="display: flex; align-items: center; gap: 0.75em; cursor: pointer;">
+                            <input type="checkbox" id="kefinTweaksEnabled" class="checkbox" ${isEnabled ? 'checked' : ''}>
+                            <span class="listItemBodyText" style="margin: 0;">Enabled</span>
+                        </label>
+                        <label class="checkboxContainer" style="display: flex; align-items: center; gap: 0.75em; cursor: pointer;">
+                            <input type="checkbox" id="showAdvancedSettings" class="checkbox">
+                            <span class="listItemBodyText" style="margin: 0;">Show Advanced Settings</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="paperList kefinTweaks-advanced-section" style="margin-bottom: 2em; display: none;">
                 <div class="listItem" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 1em; margin-bottom: 1em;">
                     <div class="listItemContent" style="display: flex; justify-content: space-between; align-items: center;">
                         <div>
@@ -502,6 +527,10 @@
                     <div class="listItemContent" style="width: 100%;">
                         <h3 class="listItemBodyText" style="margin-bottom: 0.5em;">Enable/Disable Skins</h3>
                         <div class="listItemBodyText secondary" style="margin-bottom: 1em; font-size: 0.9em;">Disabled skins will not appear in the appearance dropdowns for users</div>
+                        <div class="listItemBodyText secondary" style="margin-bottom: 1em; font-size: 0.85em; color: rgba(255,255,255,0.7); line-height: 1.5;">
+                            All themes are created with love by community members like you. Don't forget to thank them for their work and time if you appreciate their creations.
+                            KefinTweaks has not contributed to the creation of any of the skins below and is only attempting to facilitate their accessibility.
+                        </div>
                         <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.5em;">
                             ${buildSkinToggles(skins)}
                         </div>
@@ -654,8 +683,14 @@
                 <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.5em; background: rgba(255,255,255,0.02);" ${tooltipText ? `title="${tooltipText}"` : ''}>
                     <div class="listItemContent" style="display: flex; justify-content: space-between; align-items: center; gap: 0.5em;">
                         <div style="flex: 1; display: flex; align-items: center; gap: 0.5em; min-width: 0;">
-                            <div class="listItemBodyText" style="font-weight: 500; font-size: 0.9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${skin.name}</div>
-                            ${githubUrl ? `<a href="${githubUrl}" target="_blank" rel="noopener noreferrer" style="flex-shrink: 0; display: flex; align-items: center; color: inherit; text-decoration: none; opacity: 0.6; transition: opacity 0.2s; cursor: pointer;" title="View on GitHub" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.6'"><span class="material-icons" style="font-size: 1em;">info</span></a>` : ''}
+                            ${githubUrl ? `
+                                <a href="${githubUrl}" target="_blank" rel="noopener noreferrer" style="display: flex; align-items: center; gap: 0.4em; color: inherit; text-decoration: none; opacity: 0.85; transition: opacity 0.2s; min-width: 0;" title="View on GitHub" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.85'">
+                                    <span class="listItemBodyText" style="font-weight: 500; font-size: 0.9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${skin.name}</span>
+                                    <span class="material-icons" style="font-size: 1em; flex-shrink: 0;">info</span>
+                                </a>
+                            ` : `
+                                <div class="listItemBodyText" style="font-weight: 500; font-size: 0.9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${skin.name}</div>
+                            `}
                         </div>
                         ${buildJellyfinCheckbox(`skin_${skin.name.replace(/[^a-zA-Z0-9]/g, '_')}`, isEnabled, '', { 'data-skin-name': skin.name })}
                 </div>
@@ -1564,7 +1599,7 @@
         content.className = 'modal-content-wrapper';
         content.id = MODAL_ID;
         content.innerHTML = `
-            <div class="content-primary">
+            <div class="kefin-config-wrapper">
                 ${buildConfigPageContent(config)}
             </div>
         `;
@@ -1579,7 +1614,7 @@
                 <span>Save</span>
             </button>
             <button class="emby-button raised" id="resetConfigBtn" style="padding: 0.75em 2em; font-size: 1em;">
-                <span>Restore</span>
+                <span>Defaults</span>
             </button>
             <button class="emby-button raised" id="exportConfigBtn" style="padding: 0.75em 2em; font-size: 1em;">
                 <span>Export</span>
@@ -1619,6 +1654,45 @@
 
     // Set up event handlers for configuration modal
     function setupConfigModalHandlers(modalInstance, config) {
+        // Enabled checkbox handler
+        const enabledCheckbox = modalInstance.dialogContent.querySelector('#kefinTweaksEnabled');
+        if (enabledCheckbox) {
+            enabledCheckbox.addEventListener('change', async (e) => {
+                const isEnabled = e.target.checked;
+                try {
+                    // Update the config's enabled field
+                    config.enabled = isEnabled;
+                    
+                    // Save the updated config to the injector
+                    await saveConfigToJavaScriptInjector(config);
+                    
+                    window.KefinTweaksConfigEnabled = isEnabled;
+                    console.log('[KefinTweaks Configuration] KefinTweaks', isEnabled ? 'enabled' : 'disabled');
+                    
+                    if (window.KefinTweaksToaster && window.KefinTweaksToaster.toast) {
+                        window.KefinTweaksToaster.toast(`KefinTweaks ${isEnabled ? 'enabled' : 'disabled'}. Page refresh required.`);
+                    }
+                } catch (error) {
+                    console.error('[KefinTweaks Configuration] Error toggling KefinTweaks:', error);
+                    // Revert checkbox on error
+                    enabledCheckbox.checked = !isEnabled;
+                    alert(`Failed to ${isEnabled ? 'enable' : 'disable'} KefinTweaks: ${error.message}`);
+                }
+            });
+        }
+        
+        // Show Advanced Settings checkbox handler
+        const advancedCheckbox = modalInstance.dialogContent.querySelector('#showAdvancedSettings');
+        if (advancedCheckbox) {
+            advancedCheckbox.addEventListener('change', (e) => {
+                const showAdvanced = e.target.checked;
+                const advancedSection = modalInstance.dialogContent.querySelector('.kefinTweaks-advanced-section');
+                if (advancedSection) {
+                    advancedSection.style.display = showAdvanced ? '' : 'none';
+                }
+            });
+        }
+        
         // Edit script root button handler
         const editBtn = modalInstance.dialogContent.querySelector('#editScriptRootBtn');
         if (editBtn) {
@@ -4142,6 +4216,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             themes: [],
             customMenuLinks: []
         };
+        config.enabled = modalInstance.dialogContent.querySelector('#kefinTweaksEnabled')?.checked !== false;
         
         // Remove scriptRoot if it exists (legacy field, no longer used)
         if (config.scriptRoot) {
@@ -4671,7 +4746,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
     // Set up click handler for configuration menu link
     function setupConfigLinkClickHandler() {
         // Find the config button
-        const configButton = document.querySelector('.navMenuOption:has(.build)');
+        const configButton = document.querySelector('.navMenuOption[data-name="configure"]');
         if (!configButton) {
             console.log('[KefinTweaks Configuration] Configuration button not found, retrying...');
             setTimeout(setupConfigLinkClickHandler, 1000);

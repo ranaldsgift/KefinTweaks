@@ -527,10 +527,39 @@
     async function initialize() {
         console.log(`[KefinTweaks Injector] Starting KefinTweaks v${versionNumber} initialization...`);
         
-        // Check if kefinTweaksRoot is configured
         const scriptRoot = await getScriptRoot();
         if (!scriptRoot) {
             console.log('[KefinTweaks Injector] kefinTweaksRoot is not configured. Please configure KefinTweaks using the installer before scripts can be loaded.');
+            return;
+        }
+        
+        // Check if KefinTweaks is enabled in config
+        const isKefinTweaksEnabled = window.KefinTweaksConfig?.enabled !== false;
+        
+        if (!isKefinTweaksEnabled) {
+            console.log('[KefinTweaks Injector] KefinTweaks is disabled in configuration. Only loading configuration UI requirements for admin access.');
+            
+            try {
+                // Ensure configuration dependencies are loaded so the admin UI works
+                const configDependencyNames = ['modal', 'toaster', 'utils'];
+                for (const depName of configDependencyNames) {
+                    const depScript = SCRIPT_DEFINITIONS.find(script => script.name === depName);
+                    if (depScript) {
+                        try {
+                            await loadScriptSync(depScript);
+                        } catch (error) {
+                            console.warn(`[KefinTweaks Injector] Failed to load configuration dependency '${depName}':`, error);
+                        }
+                    }
+                }
+                
+                // Load configuration UI so admins can re-enable KefinTweaks
+                await loadScript('configuration.js');
+                await loadCSS('configuration.css');
+                console.log('[KefinTweaks Injector] Configuration script loaded (KefinTweaks is disabled)');
+            } catch (error) {
+                console.warn('[KefinTweaks Injector] Failed to load configuration UI while disabled:', error);
+            }
             return;
         }
         
