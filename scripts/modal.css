@@ -130,6 +130,6 @@
     cursor: auto
 }
 
-.dialog[data-footer="true"] [data-name="kefin-modal-content"] {
-    margin-bottom: 8em;
+.dialog[data-footer="true"] [data-name="kefin-modal-content"]>*:last-child {
+    margin-bottom: 8em !important;
 }

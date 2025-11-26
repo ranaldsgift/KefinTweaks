@@ -723,6 +723,7 @@
         
         // Update color schemes dropdown based on current skin
         updatePopoverColorSchemes();
+        updateSkinAuthorLabel();
         
         // Add click outside to close
         setTimeout(() => {
@@ -896,6 +897,9 @@
             syncAllColorSchemeDropdowns();
             updateColorSchemesCSS(null);
         }
+        
+        // Update author display in popover if it exists
+        updateSkinAuthorLabel();
     }
     
     /**
@@ -964,6 +968,89 @@
         } else {
             // Hide the container if no color schemes
             colorSchemesContainer.style.display = 'none';
+        }
+    }
+
+    /**
+     * Try to determine the GitHub repository URL for a skin
+     * @param {Object} skin
+     * @returns {string|null}
+     */
+    function getSkinRepositoryUrl(skin) {
+        if (!skin) return null;
+        
+        if (skin.github) return skin.github;
+        if (skin.repo) return skin.repo;
+        if (skin.repository) return skin.repository;
+        
+        if (skin.url) {
+            const candidateUrls = Array.isArray(skin.url) ? skin.url : [skin.url];
+            for (const entry of candidateUrls) {
+                if (typeof entry === 'string') {
+                    const repoUrl = extractRepoFromUrl(entry);
+                    if (repoUrl) return repoUrl;
+                } else if (entry && Array.isArray(entry.urls)) {
+                    for (const nestedUrl of entry.urls) {
+                        const repoUrl = extractRepoFromUrl(nestedUrl);
+                        if (repoUrl) return repoUrl;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    function extractRepoFromUrl(url) {
+        if (typeof url !== 'string') return null;
+        const match = url.match(/https:\/\/cdn\.jsdelivr\.net\/gh\/([^\/]+)\/([^\/@]+)/i);
+        if (match) {
+            const owner = match[1];
+            const repo = match[2];
+            return `https://github.com/${owner}/${repo}`;
+        }
+        return null;
+    }
+
+    /**
+     * Update the author info section within the popover
+     */
+    function updateSkinAuthorLabel() {
+        const labelElement = document.querySelector('label[for="selectSkinPopover"]');
+        if (!labelElement) {
+            return;
+        }
+        
+        const skinSelect = document.getElementById('selectSkinPopover');
+        const selectedSkinName = skinSelect?.value || localStorage.getItem(STORAGE_KEY) || getDefaultSkinName();
+        const selectedSkin = SKINS_CONFIG.find(skin => skin.name === selectedSkinName);
+        
+        labelElement.innerHTML = '';
+        if (!selectedSkin || (!selectedSkin.author && !getSkinRepositoryUrl(selectedSkin))) {
+            labelElement.textContent = 'Skin';
+            return;
+        }
+        
+        const prefix = document.createElement('span');
+        prefix.textContent = 'Skin by ';
+        labelElement.appendChild(prefix);
+        
+        const authorName = selectedSkin.author || 'View Repository';
+        const repoUrl = getSkinRepositoryUrl(selectedSkin);
+        
+        if (repoUrl) {
+            const link = document.createElement('a');
+            link.href = repoUrl;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.textContent = authorName;
+            link.style.color = 'var(--accent, #4a9eff)';
+            link.style.textDecoration = 'none';
+            link.style.marginLeft = '2px';
+            labelElement.appendChild(link);
+        } else {
+            const authorSpan = document.createElement('span');
+            authorSpan.textContent = authorName;
+            labelElement.appendChild(authorSpan);
         }
     }
     
