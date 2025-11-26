@@ -293,6 +293,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	function showSortModal() {
 		// Create modal content
 		const sortOptionsContent = `
+			<h2 style="margin: 0 0 .5em;">Sort By</h2>
 			<div>
 				${Object.entries(SORT_OPTIONS).map(([key, option]) => `
 					<label class="radio-label-block mdl-radio mdl-js-radio mdl-js-ripple-effect show-focus">
@@ -353,7 +354,6 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		// Create modal using the generic modal system
 		const modal = window.ModalSystem.create({
 			id: 'sort-modal',
-			title: 'Sort By',
 			content: sortOptionsContent,
 			onOpen: (modalInstance) => {
 				// Set current selection
@@ -415,6 +415,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	function showMovieSortModal() {
 		// Create modal content
 		const movieSortOptionsContent = `
+			<h2 style="margin: 0 0 .5em;">Sort By</h2>
 			<div>
 				${Object.entries(MOVIE_SORT_OPTIONS).map(([key, option]) => `
 					<label class="radio-label-block mdl-radio mdl-js-radio mdl-js-ripple-effect show-focus">
@@ -475,7 +476,6 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		// Create modal using the generic modal system
 		const modal = window.ModalSystem.create({
 			id: 'movie-sort-modal',
-			title: 'Sort By',
 			content: movieSortOptionsContent,
 			onOpen: (modalInstance) => {
 				// Set current selection
@@ -3272,6 +3272,11 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		importTabBtn.textContent = 'Import';
 		importTabBtn.style.cssText = 'flex: 1; padding: 12px; background: transparent; border: none; border-bottom: 2px solid transparent; color: rgba(255, 255, 255, 0.7); cursor: pointer; font-size: 14px; font-weight: 500;';
 
+		const syncTabBtn = document.createElement('button');
+		syncTabBtn.className = 'import-export-tab';
+		syncTabBtn.textContent = 'Playlist Sync';
+		syncTabBtn.style.cssText = 'flex: 1; padding: 12px; background: transparent; border: none; border-bottom: 2px solid transparent; color: rgba(255, 255, 255, 0.7); cursor: pointer; font-size: 14px; font-weight: 500;';
+
 		// Tab content container
 		const tabContent = document.createElement('div');
 		tabContent.className = 'import-export-tab-content';
@@ -3282,6 +3287,12 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 
 		// Store exported data to preserve across tab switches
 		let savedExportData = '';
+
+		// Playlist sync cache so we only fetch once per modal open
+		let playlistSyncState = {
+			playlists: null,
+			isLoading: false
+		};
 
 		// Tab switching
 		const switchTab = (tab) => {
@@ -3296,26 +3307,33 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			activeTab = tab;
 			exportTabBtn.classList.toggle('active', tab === 'export');
 			importTabBtn.classList.toggle('active', tab === 'import');
+			syncTabBtn.classList.toggle('active', tab === 'sync');
 			exportTabBtn.style.borderBottomColor = tab === 'export' ? '#00a4dc' : 'transparent';
 			exportTabBtn.style.color = tab === 'export' ? '#fff' : 'rgba(255, 255, 255, 0.7)';
 			importTabBtn.style.borderBottomColor = tab === 'import' ? '#00a4dc' : 'transparent';
 			importTabBtn.style.color = tab === 'import' ? '#fff' : 'rgba(255, 255, 255, 0.7)';
+			syncTabBtn.style.borderBottomColor = tab === 'sync' ? '#00a4dc' : 'transparent';
+			syncTabBtn.style.color = tab === 'sync' ? '#fff' : 'rgba(255, 255, 255, 0.7)';
 			
 			tabContent.innerHTML = '';
 			if (tab === 'export') {
 				renderExportTab(tabContent, savedExportData, (newData) => {
 					savedExportData = newData;
 				});
-			} else {
+			} else if (tab === 'import') {
 				renderImportTab(tabContent);
+			} else if (tab === 'sync') {
+				renderPlaylistSyncTab(tabContent, playlistSyncState);
 			}
 		};
 
 		exportTabBtn.onclick = () => switchTab('export');
 		importTabBtn.onclick = () => switchTab('import');
+		syncTabBtn.onclick = () => switchTab('sync');
 
 		tabContainer.appendChild(exportTabBtn);
 		tabContainer.appendChild(importTabBtn);
+		tabContainer.appendChild(syncTabBtn);
 		modalContent.appendChild(tabContainer);
 		modalContent.appendChild(tabContent);
 
@@ -3565,6 +3583,503 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				}
 			}
 		};
+	}
+
+	const PLAYLIST_SYNC_DEFAULT_NAME = '| Watchlist |';
+	const PLAYLIST_SYNC_CHUNK_SIZE = 75;
+
+	function renderPlaylistSyncTab(container, state = { playlists: null, isLoading: false }) {
+		container.innerHTML = '';
+
+		const description = document.createElement('p');
+		description.style.cssText = 'color: rgba(255, 255, 255, 0.7); margin-bottom: 20px; font-size: 14px; line-height: 1.5;';
+		description.textContent = 'Sync your watchlist directly to a Jellyfin playlist. We will overwrite the playlist with the items currently on your watchlist.';
+		container.appendChild(description);
+
+		const selectGroup = document.createElement('div');
+		selectGroup.style.cssText = 'display: flex; flex-direction: column; gap: 6px; margin-bottom: 20px;';
+
+		const selectLabel = document.createElement('label');
+		selectLabel.textContent = 'Choose Playlist';
+		selectLabel.style.cssText = 'font-weight: 600; color: #fff;';
+		selectGroup.appendChild(selectLabel);
+
+		const playlistSelect = document.createElement('select');
+		playlistSelect.id = 'playlist-sync-select';
+		playlistSelect.style.cssText = 'padding: 10px; border-radius: 4px; border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(0, 0, 0, 0.3); color: #fff;';
+		playlistSelect.disabled = true;
+		selectGroup.appendChild(playlistSelect);
+
+		const selectHint = document.createElement('div');
+		selectHint.style.cssText = 'font-size: 12px; color: rgba(255, 255, 255, 0.6);';
+		selectHint.textContent = 'Default: | Watchlist |. Choose "New..." to create a fresh playlist.';
+		selectGroup.appendChild(selectHint);
+
+		container.appendChild(selectGroup);
+
+		const buttonRow = document.createElement('div');
+		buttonRow.style.cssText = 'display: flex; gap: 10px; align-items: center;';
+
+		const syncBtn = document.createElement('button');
+		syncBtn.className = 'emby-button raised button-submit';
+		syncBtn.textContent = 'Sync Playlist';
+		syncBtn.disabled = true;
+
+		const refreshBtn = document.createElement('button');
+		refreshBtn.className = 'emby-button raised';
+		refreshBtn.textContent = 'Refresh List';
+
+		buttonRow.appendChild(syncBtn);
+		buttonRow.appendChild(refreshBtn);
+
+		container.appendChild(buttonRow);
+
+		const statusMsg = document.createElement('div');
+		statusMsg.style.cssText = 'margin-top: 15px; font-size: 13px; display: none;';
+		container.appendChild(statusMsg);
+
+		const loadingText = document.createElement('div');
+		loadingText.style.cssText = 'margin-top: 10px; font-size: 13px; color: rgba(255, 255, 255, 0.6);';
+		container.appendChild(loadingText);
+
+		const setStatus = (message, type = 'info') => {
+			if (!message) {
+				statusMsg.style.display = 'none';
+				statusMsg.textContent = '';
+				return;
+			}
+			statusMsg.style.display = 'block';
+			statusMsg.textContent = message;
+			if (type === 'error') {
+				statusMsg.style.color = '#ff6b6b';
+			} else if (type === 'success') {
+				statusMsg.style.color = '#4caf50';
+			} else {
+				statusMsg.style.color = 'rgba(255, 255, 255, 0.7)';
+			}
+		};
+
+		const setLoading = (isLoading, message = 'Loading playlists...') => {
+			state.isLoading = isLoading;
+			playlistSelect.disabled = isLoading;
+			refreshBtn.disabled = isLoading;
+			syncBtn.disabled = isLoading || !playlistSelect.value;
+			loadingText.textContent = isLoading ? message : '';
+		};
+
+		const populateSelect = (playlists = []) => {
+			playlistSelect.innerHTML = '';
+			const newOption = document.createElement('option');
+			newOption.value = '__new__';
+			newOption.textContent = 'New...';
+			playlistSelect.appendChild(newOption);
+
+			playlists
+				.sort((a, b) => a.Name.localeCompare(b.Name))
+				.forEach(playlist => {
+					const option = document.createElement('option');
+					option.value = playlist.Id;
+					option.textContent = `${playlist.Name} (${playlist.ChildCount || 0})`;
+					playlistSelect.appendChild(option);
+				});
+
+			const defaultPlaylist = playlists.find(pl => pl.Name === PLAYLIST_SYNC_DEFAULT_NAME);
+			if (defaultPlaylist) {
+				playlistSelect.value = defaultPlaylist.Id;
+			} else {
+				playlistSelect.value = '__new__';
+			}
+
+			playlistSelect.disabled = false;
+			syncBtn.disabled = false;
+		};
+
+		const loadPlaylists = async (force = false) => {
+			if (state.isLoading) return;
+			try {
+				setStatus('');
+				setLoading(true);
+				if (!force && state.playlists && state.playlists.length) {
+					populateSelect(state.playlists);
+					return;
+				}
+				const playlists = await fetchUserPlaylistsForSync();
+				state.playlists = playlists;
+				if (!playlists.length) {
+					setStatus('No playlists found. Use the "New..." option to create one from your watchlist.', 'info');
+				}
+				populateSelect(playlists);
+			} catch (err) {
+				ERR('Failed to load playlists:', err);
+				setStatus(`Failed to load playlists: ${err.message}`, 'error');
+				playlistSelect.innerHTML = '';
+				const loadingOption = document.createElement('option');
+				loadingOption.textContent = 'Unable to load playlists';
+				playlistSelect.appendChild(loadingOption);
+				playlistSelect.disabled = true;
+				syncBtn.disabled = true;
+			} finally {
+				setLoading(false);
+			}
+		};
+
+		const getSelectedPlaylist = () => {
+			if (playlistSelect.value === '__new__') {
+				return { isNew: true, playlist: null };
+			}
+			const playlist = state.playlists?.find(pl => pl.Id === playlistSelect.value);
+			return { isNew: false, playlist };
+		};
+
+		playlistSelect.addEventListener('change', () => {
+			setStatus('');
+			syncBtn.disabled = state.isLoading || !playlistSelect.value;
+		});
+
+		refreshBtn.addEventListener('click', () => loadPlaylists(true));
+
+		syncBtn.addEventListener('click', () => {
+			const selection = getSelectedPlaylist();
+			if (!selection.isNew && !selection.playlist) {
+				setStatus('Please select a playlist or choose "New...".', 'error');
+				return;
+			}
+			openPlaylistSyncConfirmation({
+				isNew: selection.isNew,
+				playlist: selection.playlist,
+				onSuccess: (message) => {
+					setStatus(message || 'Playlist synced successfully.', 'success');
+					loadPlaylists(true);
+				}
+			});
+		});
+
+		loadPlaylists();
+	}
+
+	async function fetchUserPlaylistsForSync() {
+		const apiClient = window.ApiClient;
+		const userId = apiClient.getCurrentUserId();
+		const serverUrl = apiClient.serverAddress();
+		const token = apiClient.accessToken();
+
+		const url = `${serverUrl}/Users/${userId}/Items?IncludeItemTypes=Playlist&Recursive=true&Fields=ChildCount`;
+		const response = await fetch(url, {
+			headers: {
+				'Authorization': `MediaBrowser Token="${token}"`
+			}
+		});
+
+		if (!response.ok) {
+			throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+		}
+
+		const data = await response.json();
+		return data.Items || [];
+	}
+
+	function openPlaylistSyncConfirmation({ isNew, playlist, onSuccess }) {
+		if (!window.ModalSystem) {
+			alert('Modal system not available');
+			return;
+		}
+
+		const modalId = 'playlist-sync-confirm-modal';
+		window.ModalSystem.close(modalId);
+
+		const modalContent = document.createElement('div');
+		modalContent.style.cssText = 'display: flex; flex-direction: column; gap: 15px;';
+
+		const message = document.createElement('p');
+		message.style.cssText = 'color: rgba(255, 255, 255, 0.8); line-height: 1.5;';
+
+		let nameInput = null;
+		let title = 'Sync Playlist';
+
+		if (isNew) {
+			title = 'Create Playlist From Watchlist';
+			message.textContent = 'A new playlist will be created containing the items currently on your watchlist.';
+
+			nameInput = document.createElement('input');
+			nameInput.type = 'text';
+			nameInput.className = 'emby-input';
+			nameInput.placeholder = 'Playlist name';
+			nameInput.value = PLAYLIST_SYNC_DEFAULT_NAME;
+			nameInput.style.cssText = 'padding: 10px; border-radius: 4px; border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(0, 0, 0, 0.3); color: #fff;';
+
+			modalContent.appendChild(message);
+			modalContent.appendChild(nameInput);
+		} else {
+			title = 'Sync Existing Playlist';
+			message.textContent = 'This will set the items in the playlist to be the items in your watchlist. Any items on this playlist which are not in your watchlist will be removed.';
+			const playlistInfo = document.createElement('div');
+			playlistInfo.style.cssText = 'padding: 10px; border-radius: 4px; background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.9);';
+			playlistInfo.textContent = `Playlist: ${playlist?.Name || 'Unknown'}`;
+			modalContent.appendChild(message);
+			modalContent.appendChild(playlistInfo);
+		}
+
+		const modal = window.ModalSystem.create({
+			id: modalId,
+			title,
+			content: modalContent,
+			closeOnBackdrop: true,
+			closeOnEscape: true,
+			footer: `
+				<button class="emby-button raised button-submit" id="playlistSyncConfirmBtn">
+					<span>Confirm</span>
+				</button>
+				<button class="emby-button raised" id="playlistSyncCancelBtn">
+					<span>Cancel</span>
+				</button>
+			`,
+			onOpen: (modalInstance) => {
+				const confirmBtn = modalInstance.dialogFooter?.querySelector('#playlistSyncConfirmBtn');
+				const cancelBtn = modalInstance.dialogFooter?.querySelector('#playlistSyncCancelBtn');
+
+				const setError = (message) => {
+					if (message) {
+						const errorMsg = document.createElement('div');
+						errorMsg.style.cssText = 'color: #ff6b6b; font-size: 13px; display: none;';
+						modalContent.appendChild(errorMsg);	
+						errorMsg.textContent = message;
+						errorMsg.style.display = 'block';
+					}
+				};
+
+				if (cancelBtn) {
+					cancelBtn.addEventListener('click', () => modalInstance.close());
+				}
+
+				if (confirmBtn) {
+					confirmBtn.addEventListener('click', async () => {
+						try {
+							setError('');
+							confirmBtn.disabled = true;
+							confirmBtn.querySelector('span').textContent = 'Syncing...';
+
+							const playlistName = isNew ? (nameInput?.value || '').trim() : playlist?.Name;
+							if (isNew && !playlistName) {
+								setError('Please provide a playlist name.');
+								confirmBtn.disabled = false;
+								confirmBtn.querySelector('span').textContent = 'Confirm';
+								return;
+							}
+
+							await syncWatchlistToPlaylist({
+								isNew,
+								playlistId: playlist?.Id,
+								playlistName
+							});
+
+							modalInstance.close();
+							if (typeof onSuccess === 'function') {
+								onSuccess(`Playlist "${playlistName}" now matches your watchlist.`);
+							}
+							showPlaylistSyncToast(`Playlist "${playlistName}" synced with your watchlist.`);
+						} catch (err) {
+							ERR('Playlist sync failed:', err);
+							setError(err.message || 'Failed to sync playlist.');
+						} finally {
+							if (confirmBtn) {
+								confirmBtn.disabled = false;
+								confirmBtn.querySelector('span').textContent = 'Confirm';
+							}
+						}
+					});
+				}
+			}
+		});
+
+		return modal;
+	}
+
+	function showPlaylistSyncToast(message) {
+		if (window.KefinTweaksToaster && typeof window.KefinTweaksToaster.toast === 'function') {
+			window.KefinTweaksToaster.toast(message);
+		} else {
+			LOG(message);
+		}
+	}
+
+	function buildPlaylistSyncItems(items = []) {
+		if (!Array.isArray(items)) {
+			return [];
+		}
+
+		const seriesIds = new Set();
+		const seasonIds = new Set();
+
+		items.forEach(item => {
+			if (!item || !item.Id) return;
+			if (item.Type === 'Series') {
+				seriesIds.add(item.Id);
+			} else if (item.Type === 'Season') {
+				seasonIds.add(item.Id);
+			}
+		});
+
+		const seenIds = new Set();
+		const filtered = [];
+
+		items.forEach(item => {
+			if (!item || !item.Id) {
+				return;
+			}
+
+			if (item.Type === 'Episode') {
+				const parentSeasonId = item.ParentId || item.SeasonId;
+				if ((parentSeasonId && seasonIds.has(parentSeasonId)) || (item.SeriesId && seriesIds.has(item.SeriesId))) {
+					return;
+				}
+			}
+
+			if (seenIds.has(item.Id)) {
+				return;
+			}
+
+			filtered.push(item);
+			seenIds.add(item.Id);
+		});
+
+		return filtered;
+	}
+
+	async function syncWatchlistToPlaylist({ isNew, playlistId, playlistName }) {
+		const apiClient = window.ApiClient;
+		const userId = apiClient.getCurrentUserId();
+		const serverUrl = apiClient.serverAddress();
+		const token = apiClient.accessToken();
+
+		if (!window.apiHelper || typeof window.apiHelper.getWatchlistItems !== 'function') {
+			throw new Error('apiHelper is not available.');
+		}
+
+		const watchlistItems = await window.apiHelper.getWatchlistItems({
+			IncludeItemTypes: 'Movie,Series,Season,Episode',
+			Fields: 'ProviderIds'
+		}, false);
+
+		const itemsToSync = buildPlaylistSyncItems(watchlistItems.Items || []);
+		if (!itemsToSync.length) {
+			throw new Error('No eligible watchlist items to sync.');
+		}
+		const watchlistIds = itemsToSync.map(item => item.Id);
+
+		if (!watchlistIds.length) {
+			throw new Error('Your watchlist is empty.');
+		}
+
+		if (isNew) {
+			await createPlaylistFromWatchlist({
+				serverUrl,
+				token,
+				userId,
+				name: playlistName,
+				itemIds: watchlistIds
+			});
+			return;
+		}
+
+		if (!playlistId) {
+			throw new Error('Playlist ID is required.');
+		}
+
+		await replacePlaylistItemsWithWatchlist({
+			serverUrl,
+			token,
+			playlistId,
+			itemIds: watchlistIds
+		});
+	}
+
+	async function createPlaylistFromWatchlist({ serverUrl, token, userId, name, itemIds }) {
+		const params = new URLSearchParams({
+			Name: name,
+			UserId: userId
+		});
+
+		const response = await fetch(`${serverUrl}/Playlists?${params.toString()}`, {
+			method: 'POST',
+			headers: {
+				'Authorization': `MediaBrowser Token="${token}"`
+			}
+		});
+
+		if (!response.ok) {
+			throw new Error(`Failed to create playlist (${response.status})`);
+		}
+
+		const playlist = await response.json();
+		const playlistId = playlist?.Id;
+		if (!playlistId) {
+			throw new Error('Playlist created but no ID returned.');
+		}
+
+		if (itemIds.length) {
+			await addItemsToPlaylist({ serverUrl, token, playlistId, itemIds });
+		}
+	}
+
+	async function replacePlaylistItemsWithWatchlist({ serverUrl, token, playlistId, itemIds }) {
+		// Remove existing entries
+		const existingItemsResponse = await fetch(`${serverUrl}/Playlists/${playlistId}/Items`, {
+			headers: {
+				'Authorization': `MediaBrowser Token="${token}"`
+			}
+		});
+
+		if (!existingItemsResponse.ok) {
+			throw new Error(`Failed to fetch existing playlist items (${existingItemsResponse.status})`);
+		}
+
+		const existingData = await existingItemsResponse.json();
+		const entryIds = (existingData.Items || [])
+			.map(item => item.PlaylistItemId)
+			.filter(Boolean);
+
+		for (const chunk of chunkArray(entryIds, PLAYLIST_SYNC_CHUNK_SIZE)) {
+			const params = new URLSearchParams({
+				EntryIds: chunk.join(',')
+			});
+			const deleteResponse = await fetch(`${serverUrl}/Playlists/${playlistId}/Items?${params.toString()}`, {
+				method: 'DELETE',
+				headers: {
+					'Authorization': `MediaBrowser Token="${token}"`
+				}
+			});
+			if (!deleteResponse.ok) {
+				throw new Error(`Failed to clear playlist items (${deleteResponse.status})`);
+			}
+		}
+
+		await addItemsToPlaylist({ serverUrl, token, playlistId, itemIds });
+	}
+
+	async function addItemsToPlaylist({ serverUrl, token, playlistId, itemIds }) {
+		if (!itemIds.length) return;
+		for (const chunk of chunkArray(itemIds, PLAYLIST_SYNC_CHUNK_SIZE)) {
+			const params = new URLSearchParams({
+				Ids: chunk.join(',')
+			});
+			const response = await fetch(`${serverUrl}/Playlists/${playlistId}/Items?${params.toString()}`, {
+				method: 'POST',
+				headers: {
+					'Authorization': `MediaBrowser Token="${token}"`
+				}
+			});
+			if (!response.ok) {
+				throw new Error(`Failed to add items to playlist (${response.status})`);
+			}
+		}
+	}
+
+	function chunkArray(array, size) {
+		const chunks = [];
+		for (let i = 0; i < array.length; i += size) {
+			chunks.push(array.slice(i, i + size));
+		}
+		return chunks;
 	}
 
 	// Show validation message
@@ -4130,15 +4645,6 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 						if (originalHandler) {
 							originalHandler.call(this, event);
 						}
-						
-						// Parse the WebSocket message data
-						// The event might have event.Data or event.data depending on implementation
-/* 						const messageData = event.Data || event.data;
-						if (!messageData) {
-							// If no data, just pass through to original handler
-							if (originalHandler) originalHandler.call(this, event);
-							return;
-						} */
 
 						const messageData = event.Data || event.data;
 						const data = typeof messageData === 'string' ? JSON.parse(messageData) : messageData;
