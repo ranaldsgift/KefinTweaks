@@ -57,6 +57,7 @@ window.ModalSystem = (function() {
         dialog.setAttribute('data-history', 'true');
         dialog.setAttribute('data-autofocus', 'true');
         dialog.setAttribute('data-removeonclose', 'true');
+        dialog.setAttribute('data-name', 'kefin-modal');
         dialog.style.animation = '160ms ease-out 0s 1 normal both running scaleup';
         dialog.style.display = 'flex';
         dialog.style.flexDirection = 'column';
@@ -102,7 +103,6 @@ window.ModalSystem = (function() {
 
         // Create scrollable content area
         const dialogContent = document.createElement('div');
-        dialogContent.style.marginBottom = '5em';
         dialogContent.style.padding = title || footer ? '1.25em 1.5em' : '1.25em 1.5em 1.5em';
         dialogContent.style.overflowY = 'auto';
         dialogContent.style.flex = '1';
@@ -131,9 +131,12 @@ window.ModalSystem = (function() {
             } else if (footer instanceof HTMLElement) {
                 dialogFooter.appendChild(footer);
             }
+            dialog.dataset.footer = footer ? 'true' : 'false';
         }
 
         // Assemble modal
+        dialogContent.setAttribute('data-name', 'kefin-modal-content');
+
         dialog.appendChild(dialogContent);
         if (dialogFooter) {
             dialog.appendChild(dialogFooter);

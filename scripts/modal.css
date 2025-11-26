@@ -129,3 +129,7 @@
     color: rgba(0,0,0,.26);
     cursor: auto
 }
+
+.dialog[data-footer="true"] [data-name="kefin-modal-content"] {
+    margin-bottom: 8em;
+}
