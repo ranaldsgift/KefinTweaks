@@ -189,10 +189,12 @@
                 nextUpSection.style.display = 'none';
             }
 
+            const seasonName = episodes[0]?.SeasonName || `Season ${episodes[0]?.ParentIndexNumber}`;
+
             // Render Season 1 section using renderCards (default behavior)
             const seasonSection = window.cardBuilder.renderCards(
                 episodes,
-                'Season 1',
+                `${seasonName}`,
                 viewMoreUrl,
                 true, // overflowCard
                 null   // cardFormat (use default)
