@@ -68,12 +68,25 @@
                     {
                         majorServerVersions: [10, 11],
                         urls: [
-                            'https://cdn.jsdelivr.net/gh/KBH-Reeper/GlassFin@main/Theme/GlassFin-Theme-V01.03.css',
+                            'https://cdn.jsdelivr.net/gh/KBH-Reeper/GlassFin@main/Theme/GlassFin-Theme-latest-stable.css',
                             'https://cdn.jsdelivr.net/gh/KBH-Reeper/GlassFin@main/Theme/PluginStyling/MediaBar-Plugin-latest.css'
                         ]
                     }
                 ],
-                colorSchemes: []
+                colorSchemes: [
+                    {
+                        name: 'Glass',
+                        url: '@import url("https://cdn.jsdelivr.net/gh/KBH-Reeper/GlassFin@main/Theme/Styling/BadgeStyling/Glass.css");'
+                    },
+                    {
+                        name: 'Faded',
+                        url: '@import url("https://cdn.jsdelivr.net/gh/KBH-Reeper/GlassFin@main/Theme/Styling/BadgeStyling/Faded.css");'
+                    },
+                    {
+                        name: 'Neon',
+                        url: '@import url("https://cdn.jsdelivr.net/gh/KBH-Reeper/GlassFin@main/Theme/Styling/BadgeStyling/Neon.css");'
+                    }
+                ]
             },
             {
                 name: 'Jellypane',
@@ -81,11 +94,26 @@
                 url: [
                     {
                         majorServerVersions: [10],
-                        urls: ['https://cdn.jsdelivr.net/gh/tedhinklater/Jellypane@main/Jellypane.css']
+                        urls: ['https://cdn.jsdelivr.net/gh/tedhinklater/Jellypane@main/jellypane.css']
+                    },
+                    /* {
+                        majorServerVersions: [11],
+                        urls: ['https://cdn.jsdelivr.net/gh/tedhinklater/Jellypane@main/jellypane10.11.css']
+                    } */
+                ],
+                colorSchemes: []
+            },
+            {
+                name: 'Finimalism',
+                author: 'tedhinklater',
+                url: [
+                    {
+                        majorServerVersions: [10],
+                        urls: ['https://cdn.jsdelivr.net/gh/tedhinklater/finimalism@main/finimalism7.css']
                     },
                     {
                         majorServerVersions: [11],
-                        urls: ['https://cdn.jsdelivr.net/gh/tedhinklater/Jellypane@main/Jellypane10.11.css']
+                        urls: ['https://cdn.jsdelivr.net/gh/tedhinklater/finimalism@main/finimalism10.11.css']
                     }
                 ],
                 colorSchemes: []
