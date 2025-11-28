@@ -1080,7 +1080,7 @@
                 userId: userId,
                 IncludeItemTypes: includeItemTypes,
                 Recursive: true,
-                Fields: 'PrimaryImageAspectRatio,DateCreated,Overview,ProductionYear',
+                Fields: 'PrimaryImageAspectRatio,DateCreated,Overview,Taglines,ProductionYear,RecursiveItemCount,ChildCount',
                 Limit: itemLimit,
                 SortBy: sortOrder,
                 SortOrder: sortOrderDirection
@@ -3826,7 +3826,7 @@
                             SortBy: 'CommunityRating',
                             SortOrder: 'Descending',
                             Limit: itemLimit,
-                            Fields: 'BackdropImageTags,ImageTags,People,Genres,Overview,Taglines,ProductionYear,RecursiveItemCount,ChildCount'
+                            Fields: 'BackdropImageTags,ImageTags,Overview,Taglines,ProductionYear,RecursiveItemCount,ChildCount'
                         });
                         
                         const shows = showsResponse.Items || [];
