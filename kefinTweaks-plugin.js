@@ -602,7 +602,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         sourceTypeLabel.style.marginBottom = '0.5em';
 
         const sourceTypeSelect = document.createElement('select');
-        sourceTypeSelect.className = 'fld emby-select emby-select-with-color';
+        sourceTypeSelect.className = 'fld emby-select emby-select-withcolor';
         sourceTypeSelect.id = 'kefinTweaksSourceType';
         sourceTypeSelect.innerHTML = `
             <option value="github" ${sourceInfo.sourceType === 'github' ? 'selected' : ''}>KefinTweaks GitHub</option>
@@ -616,7 +616,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         sourceLabel.style.marginBottom = '0.5em';
 
         const sourceSelect = document.createElement('select');
-        sourceSelect.className = 'fld emby-select emby-select-with-color';
+        sourceSelect.className = 'fld emby-select emby-select-withcolor';
         sourceSelect.id = 'kefinTweaksSource';
         sourceSelect.innerHTML = versions.map(v => 
             `<option value="${v}" ${v === sourceInfo.version ? 'selected' : ''}>${v}</option>`
