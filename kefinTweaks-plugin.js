@@ -476,20 +476,48 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         const content = document.createElement('div');
         content.style.display = 'flex';
         content.style.flexDirection = 'column';
-        content.style.gap = '1em';
         content.style.lineHeight = '1.6';
 
         if (isInitialInstall) {
             // Initial installation message with support information
             content.innerHTML = `
-                <p>Thanks for installing KefinTweaks.</p>
-                <p>KefinTweaks is not maintained by the Jellyfin team, and as a result you are encouraged to seek support from me directly. Sadly, there is no place suitable for discussion of plugins built by community members or fan-made projects in the official Jellyfin Discord, so please visit the <a href="https://discord.gg/v7P9CAvCKZ" target="_blank" style="color: #00a4dc; text-decoration: underline;">Jellyfin Community Discord</a> to find me (username: HighImKevin) and other users who would be happy to help you out. Please also feel free to report bugs and request features from the <a href="https://github.com/ranaldsgift/KefinTweaks/issues" target="_blank" style="color: #00a4dc; text-decoration: underline;">Issues</a> page. The strength of this plugin relies on awesome community members like you, so thanks for using KefinTweaks!</p>
+                <p>Thanks so much for installing KefinTweaks!</p>
+                <p>KefinTweaks is not maintained by the Jellyfin team, and as a result you are encouraged to seek support from me directly.</p>
+                <p>Sadly, there is <i>currently</i> no place suitable for discussion of plugins built by community members or fan-made projects in the official Jellyfin Discord, so please visit the <a href="https://discord.gg/v7P9CAvCKZ" target="_blank" style="color: #00a4dc; text-decoration: underline;">Jellyfin Community Discord</a> to find me (username: HighImKevin) and other users who would be happy to help you out.</p>
+                <p>Please also feel free to report bugs and request features from the <a href="https://github.com/ranaldsgift/KefinTweaks/issues" target="_blank" style="color: #00a4dc; text-decoration: underline;">Issues</a> page. The strength of this plugin relies on awesome community members like you, so thanks for using KefinTweaks!</p>
             `;
         } else {
             // Update message with refresh instruction
             content.innerHTML = `
-                <p>KefinTweaks ${version} has been installed. Please refresh your page for the changes to take effect!</p>
+                <p>KefinTweaks configuration has been successfully updated. Please refresh your page for the changes to take effect!</p>
             `;
+        }
+
+        // Add discord icon link to the bottom of the content use a background img on an element
+        const kefinRoot = window.KefinTweaksConfig?.kefinTweaksRoot;
+
+        if (kefinRoot) {
+            // Wrapped in a link to the discord server
+            const discordLinkWrapper = document.createElement('div');
+            discordLinkWrapper.style.display = 'flex';
+            discordLinkWrapper.style.justifyContent = 'center';
+
+            const discordLink = document.createElement('a');
+            discordLink.href = 'https://discord.gg/v7P9CAvCKZ';
+            discordLink.target = '_blank';
+            discordLink.style.display = 'inline-block';
+            discordLink.style.width = '50px';
+
+
+            const discordIcon = document.createElement('div');
+            discordIcon.style.backgroundImage = `url(${kefinRoot}/pages/images/discord.png)`;
+            discordIcon.style.backgroundSize = 'contain';
+            discordIcon.style.backgroundPosition = 'center';
+            discordIcon.style.backgroundRepeat = 'no-repeat';
+            discordIcon.style.height = '35px';
+            discordLink.appendChild(discordIcon);
+            discordLinkWrapper.appendChild(discordLink);
+            content.appendChild(discordLinkWrapper);
         }
 
         const footer = document.createElement('div');
@@ -510,7 +538,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
 
         footer.appendChild(okBtn);
 
-        createSimpleModal(SUCCESS_MODAL_ID, 'KefinTweaks', content, footer);
+        createSimpleModal(SUCCESS_MODAL_ID, `${isInitialInstall ? 'Plugin Installed' : 'Plugin Updated'}`, content, footer);
     }
 
     // Open source configuration modal
@@ -530,6 +558,42 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         content.style.display = 'flex';
         content.style.flexDirection = 'column';
         content.style.gap = '1.5em';
+
+        // Enabled checkbox
+        const isEnabled = currentConfig?.enabled !== false;
+        const enabledContainer = document.createElement('div');
+        enabledContainer.style.display = 'flex';
+        enabledContainer.style.alignItems = 'center';
+        enabledContainer.style.gap = '0.75em';
+        
+        const enabledCheckbox = document.createElement('input');
+        enabledCheckbox.type = 'checkbox';
+        enabledCheckbox.id = 'kefinTweaksEnabledModal';
+        enabledCheckbox.className = 'checkbox';
+        enabledCheckbox.checked = isEnabled;
+        
+        const enabledLabel = document.createElement('label');
+        enabledLabel.setAttribute('for', 'kefinTweaksEnabledModal');
+        enabledLabel.style.cursor = 'pointer';
+        enabledLabel.style.margin = '0';
+        enabledLabel.style.display = 'flex';
+        enabledLabel.style.alignItems = 'center';
+        enabledLabel.style.gap = '0.75em';
+        
+        const enabledText = document.createElement('span');
+        enabledText.textContent = isEnabled ? 'Enabled' : 'Disabled';
+        enabledText.id = 'kefinTweaksEnabledModalLabel';
+        
+        enabledLabel.appendChild(enabledCheckbox);
+        enabledLabel.appendChild(enabledText);
+        enabledContainer.appendChild(enabledLabel);
+        
+        // Update label text when checkbox changes
+        enabledCheckbox.addEventListener('change', () => {
+            enabledText.textContent = enabledCheckbox.checked ? 'Enabled' : 'Disabled';
+        });
+        
+        content.appendChild(enabledContainer);
 
         // Source Type dropdown
         const sourceTypeLabel = document.createElement('label');
@@ -643,12 +707,16 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                     };
                 }
 
+                // Get enabled state from checkbox
+                const enabledState = enabledCheckbox.checked;
+                
                 // Merge with existing config to preserve user settings
                 const mergedConfig = {
                     ...defaultConfig,
                     kefinTweaksRoot: kefinTweaksRoot,
                     ...(currentConfig || {}),
-                    kefinTweaksRoot: kefinTweaksRoot // Ensure root is updated
+                    kefinTweaksRoot: kefinTweaksRoot, // Ensure root is updated
+                    enabled: enabledState // Update enabled state
                 };
 
                 // Remove scriptRoot if it exists (legacy field)
@@ -660,6 +728,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                 
                 // Update window.KefinTweaksConfig immediately so injector can use it
                 window.KefinTweaksConfig = mergedConfig;
+                window.KefinTweaksConfigEnabled = enabledState;
                 
                 closeSimpleModal(MODAL_ID);
                 
@@ -746,7 +815,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         footer.appendChild(cancelBtn);
         footer.appendChild(uninstallBtn);
 
-        createSimpleModal(MODAL_ID, 'Configure KefinTweaks Source', content, footer);
+        createSimpleModal(MODAL_ID, 'KefinTweaks Plugin Settings', content, footer);
     }
 
     /**

@@ -361,53 +361,6 @@
         document.head.appendChild(style);
     }
 
-    // Show confirmation modal for editing script root configuration
-    function showScriptRootEditConfirmation() {
-        return new Promise((resolve) => {
-            if (!window.ModalSystem) {
-                resolve(false);
-                return;
-            }
-
-            const modal = window.ModalSystem.create({
-                id: 'scriptRootEditConfirmation',
-                title: 'Edit KefinTweaks Root URL',
-                content: `
-                    <div class="listItemBodyText" style="margin-bottom: 1em; max-width: 600px;">
-                        Editing the Root URL is useful if you are hosting the scripts yourself or if you want to use a specific KefinTweaks version. Scripts will be loaded from this root URL + '/scripts/'. There is no validation done for the URL provided so please ensure it is valid. In any case, you can easily revert this setting.
-                    </div>
-                `,
-                footer: `
-                    <button class="emby-button raised button-submit" id="confirmEditScriptRoot" style="padding: 0.75em 2em; font-size: 1em; font-weight: 500; margin-right: 1em;">
-                        <span>Continue</span>
-                    </button>
-                    <button class="emby-button raised" id="cancelEditScriptRoot" style="padding: 0.75em 2em; font-size: 1em;">
-                        <span>Cancel</span>
-                    </button>
-                `,
-                closeOnBackdrop: true,
-                closeOnEscape: true,
-                onOpen: (modalInstance) => {
-                    const confirmBtn = modalInstance.dialogFooter?.querySelector('#confirmEditScriptRoot');
-                    const cancelBtn = modalInstance.dialogFooter?.querySelector('#cancelEditScriptRoot');
-                    
-                    if (confirmBtn) {
-                        confirmBtn.addEventListener('click', () => {
-                            modalInstance.close();
-                            resolve(true);
-                        });
-                    }
-                    
-                    if (cancelBtn) {
-                        cancelBtn.addEventListener('click', () => {
-                            modalInstance.close();
-                            resolve(false);
-                        });
-                    }
-                }
-            });
-        });
-    }
 
     // Build the configuration page content
     function buildConfigPageContent(config) {
@@ -427,39 +380,15 @@
         return `
             <div class="paperList" style="margin-bottom: 2em;">
                 <div class="listItem">
-                    <div class="listItemContent" style="display: flex; gap: 1em;">
+                    <div class="listItemContent" style="display: flex; gap: 1em; align-items: center; flex-wrap: wrap;">
                         <label class="checkboxContainer" style="display: flex; align-items: center; gap: 0.75em; cursor: pointer;">
                             <input type="checkbox" id="kefinTweaksEnabled" class="checkbox" ${isEnabled ? 'checked' : ''}>
-                            <span class="listItemBodyText" style="margin: 0;">Enabled</span>
+                            <span id="kefinTweaksEnabledLabel" class="listItemBodyText" style="margin: 0;">${isEnabled ? 'Enabled' : 'Disabled'}</span>
                         </label>
-                        <label class="checkboxContainer" style="display: flex; align-items: center; gap: 0.75em; cursor: pointer;">
-                            <input type="checkbox" id="showAdvancedSettings" class="checkbox">
-                            <span class="listItemBodyText" style="margin: 0;">Show Advanced Settings</span>
-                        </label>
-                    </div>
-                </div>
-            </div>
-
-            <div class="paperList kefinTweaks-advanced-section" style="margin-bottom: 2em; display: none;">
-                <div class="listItem" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 1em; margin-bottom: 1em;">
-                    <div class="listItemContent" style="display: flex; justify-content: space-between; align-items: center;">
-                        <div>
-                        <h3 class="listItemBodyText" style="margin-bottom: 0.25em;">KefinTweaks Root Configuration</h3>
-                        <div class="listItemBodyText secondary">Configure where KefinTweaks scripts are loaded from. Scripts will be loaded from this root URL + '/scripts/'</div>
-                    </div>
-                        <button class="emby-button raised paper-icon-button-light" id="editScriptRootBtn">
-                            <span class="material-icons" aria-hidden="true">edit</span>
+                        <button class="emby-button raised" id="changeKefinTweaksSourceBtn" style="padding: 0.75em 2em; font-size: 1em;" title="Switch between the Latest, Development, Version specific branches or point to your own self hosted location!">
+                            <span>Plugin Settings</span>
                         </button>
-                </div>
-                </div>
-                <div id="scriptRootConfigContent" style="display: none;">
-                <div class="listItem">
-                    <div class="listItemContent">
-                        <div class="listItemBodyText" style="margin-bottom: 0.5em;">KefinTweaks Root URL</div>
-                            <input type="text" id="kefinTweaksRoot" class="fld emby-input" value="${config.kefinTweaksRoot || ''}" placeholder="https://cdn.jsdelivr.net/gh/ranaldsgift/KefinTweaks@latest/" style="width: 100%; max-width: 600px;">
-                        <div class="listItemBodyText secondary" style="margin-top: 0.5em; font-size: 0.9em;">Base URL for KefinTweaks resources. Scripts will be loaded from this URL + '/scripts/'</div>
                     </div>
-                </div>
                 </div>
             </div>
 
@@ -1162,7 +1091,6 @@
                     <div class="listItemBodyText" style="margin-bottom: 0.5em;">Sort Order</div>
                     <select id="${prefix}_sortOrder" class="fld emby-select-withcolor emby-select" style="width: 100%; max-width: 200px;">
                         <option value="Random" ${sortOrder === 'Random' ? 'selected' : ''}>Random</option>
-                        <option value="ReleaseDate" ${sortOrder === 'ReleaseDate' ? 'selected' : ''}>Release Date</option>
                         <option value="PremiereDate" ${sortOrder === 'PremiereDate' ? 'selected' : ''}>Premiere Date</option>
                         <option value="CriticRating" ${sortOrder === 'CriticRating' ? 'selected' : ''}>Critic Rating</option>
                         <option value="CommunityRating" ${sortOrder === 'CommunityRating' ? 'selected' : ''}>Community Rating</option>
@@ -1656,9 +1584,20 @@
     function setupConfigModalHandlers(modalInstance, config) {
         // Enabled checkbox handler
         const enabledCheckbox = modalInstance.dialogContent.querySelector('#kefinTweaksEnabled');
+        const enabledLabel = modalInstance.dialogContent.querySelector('#kefinTweaksEnabledLabel');
         if (enabledCheckbox) {
+            // Function to update label text
+            const updateLabel = () => {
+                if (enabledLabel) {
+                    enabledLabel.textContent = enabledCheckbox.checked ? 'Enabled' : 'Disabled';
+                }
+            };
+            
             enabledCheckbox.addEventListener('change', async (e) => {
                 const isEnabled = e.target.checked;
+                // Update label immediately for better UX
+                updateLabel();
+                
                 try {
                     // Update the config's enabled field
                     config.enabled = isEnabled;
@@ -1676,33 +1615,27 @@
                     console.error('[KefinTweaks Configuration] Error toggling KefinTweaks:', error);
                     // Revert checkbox on error
                     enabledCheckbox.checked = !isEnabled;
+                    updateLabel();
                     alert(`Failed to ${isEnabled ? 'enable' : 'disable'} KefinTweaks: ${error.message}`);
                 }
             });
         }
         
-        // Show Advanced Settings checkbox handler
-        const advancedCheckbox = modalInstance.dialogContent.querySelector('#showAdvancedSettings');
-        if (advancedCheckbox) {
-            advancedCheckbox.addEventListener('change', (e) => {
-                const showAdvanced = e.target.checked;
-                const advancedSection = modalInstance.dialogContent.querySelector('.kefinTweaks-advanced-section');
-                if (advancedSection) {
-                    advancedSection.style.display = showAdvanced ? '' : 'none';
-                }
-            });
-        }
-        
-        // Edit script root button handler
-        const editBtn = modalInstance.dialogContent.querySelector('#editScriptRootBtn');
-        if (editBtn) {
-            editBtn.addEventListener('click', async () => {
-                const confirmed = await showScriptRootEditConfirmation();
-                if (confirmed) {
-                    const contentDiv = modalInstance.dialogContent.querySelector('#scriptRootConfigContent');
-                    if (contentDiv) {
-                        contentDiv.style.display = 'block';
+        // Change KefinTweaks Source button handler
+        const changeSourceBtn = modalInstance.dialogContent.querySelector('#changeKefinTweaksSourceBtn');
+        if (changeSourceBtn) {
+            changeSourceBtn.addEventListener('click', async () => {
+                try {
+                    // Check if the modal function is available
+                    if (window.openKefinTweaksSourceModal) {
+                        // Open the KefinTweaks source modal
+                        window.openKefinTweaksSourceModal();
+                    } else {
+                        throw new Error('KefinTweaks source modal is not available. Please ensure kefinTweaks-plugin.js is loaded.');
                     }
+                } catch (error) {
+                    console.error('[KefinTweaks Configuration] Error opening source modal:', error);
+                    alert(`Failed to open source configuration: ${error.message}`);
                 }
             });
         }
@@ -4205,8 +4138,10 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         console.log('[KefinTweaks Configuration] Saving configuration...');
         
         // Collect all form values
+        // Preserve existing kefinTweaksRoot from current config (no longer editable in UI)
+        const currentConfig = window.KefinTweaksCurrentConfig || {};
         const config = {
-            kefinTweaksRoot: document.getElementById('kefinTweaksRoot')?.value || '',
+            kefinTweaksRoot: currentConfig.kefinTweaksRoot || '',
             scripts: {},
             homeScreen: {},
             exclusiveElsewhere: {},
