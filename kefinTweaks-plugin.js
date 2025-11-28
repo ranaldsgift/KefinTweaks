@@ -220,10 +220,14 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         }
     }
 
+    const LATEST_RELEASE_NAME = 'Latest';
+    const DEVELOPMENT_NAME = 'Development';
+    const SELF_HOSTED_NAME = 'Self Hosted';
+
     // Parse source URL to determine source type and version
     function parseKefinTweaksSource(url) {
         if (!url || url === '') {
-            return { sourceType: 'github', version: 'Latest' };
+            return { sourceType: 'github', version: LATEST_RELEASE_NAME };
         }
 
         const match = url.match(/cdn\.jsdelivr\.net\/gh\/ranaldsgift\/KefinTweaks@([^\/]+)\//);
@@ -234,9 +238,9 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         
         const version = match[1];
         if (version === 'latest') {
-            return { sourceType: 'github', version: 'Latest' };
+            return { sourceType: 'github', version: LATEST_RELEASE_NAME };
         } else if (version === 'main' || version === 'master') {
-            return { sourceType: 'github', version: 'Bleeding Edge' };
+            return { sourceType: 'github', version: DEVELOPMENT_NAME };
         } else {
             return { sourceType: 'github', version: version.replace(/^v/, '') };
         }
@@ -259,11 +263,11 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                 .map(release => release.tag_name.replace(/^v/, ''))
                 .filter(tag => tag.match(/^\d+\.\d+\.\d+/)); // Only semantic versions
 
-            versionsCache = ['Latest', 'Bleeding Edge', ...versions];
+            versionsCache = [LATEST_RELEASE_NAME, DEVELOPMENT_NAME, ...versions];
             return versionsCache;
         } catch (error) {
             console.warn('[KefinTweaks Installer] Error fetching versions:', error);
-            return ['Latest', 'Bleeding Edge'];
+            return [LATEST_RELEASE_NAME, DEVELOPMENT_NAME];
         }
     }
 
@@ -276,9 +280,9 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
 
         // GitHub source
         let versionTag = 'latest';
-        if (source === 'Bleeding Edge') {
+        if (source === DEVELOPMENT_NAME) {
             versionTag = 'main';
-        } else if (source !== 'Latest') {
+        } else if (source !== LATEST_RELEASE_NAME) {
             versionTag = source.startsWith('v') ? source : 'v' + source;
         }
 
@@ -538,7 +542,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         sourceTypeSelect.id = 'kefinTweaksSourceType';
         sourceTypeSelect.innerHTML = `
             <option value="github" ${sourceInfo.sourceType === 'github' ? 'selected' : ''}>KefinTweaks GitHub</option>
-            <option value="custom" ${sourceInfo.sourceType === 'custom' ? 'selected' : ''}>Self Hosted</option>
+            <option value="custom" ${sourceInfo.sourceType === 'custom' ? 'selected' : ''}>${SELF_HOSTED_NAME}</option>
         `;
 
         // Source dropdown (for GitHub)
@@ -669,23 +673,23 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                 const sourceInfo = parseKefinTweaksSource(kefinTweaksRoot);
                 let versionDisplay = '';
                 if (sourceInfo.sourceType === 'custom') {
-                    versionDisplay = 'Self Hosted';
-                } else if (sourceInfo.version === 'Bleeding Edge') {
-                    versionDisplay = 'Bleeding Edge';
-                } else if (sourceInfo.version === 'Latest') {
+                    versionDisplay = SELF_HOSTED_NAME;
+                } else if (sourceInfo.version === DEVELOPMENT_NAME) {
+                    versionDisplay = DEVELOPMENT_NAME;
+                } else if (sourceInfo.version === LATEST_RELEASE_NAME) {
                     // Fetch the actual latest version number
                     try {
                         const response = await fetch('https://api.github.com/repos/ranaldsgift/KefinTweaks/releases/latest');
                         if (response.ok) {
                             const data = await response.json();
                             const versionNumber = data.tag_name.replace(/^v/, '');
-                            versionDisplay = `${versionNumber} (Latest)`;
+                            versionDisplay = `${versionNumber} (${LATEST_RELEASE_NAME})`;
                         } else {
-                            versionDisplay = 'Latest';
+                            versionDisplay = LATEST_RELEASE_NAME;
                         }
                     } catch (error) {
                         console.warn('[KefinTweaks Installer] Error fetching latest version:', error);
-                        versionDisplay = 'Latest';
+                        versionDisplay = LATEST_RELEASE_NAME;
                     }
                 } else {
                     versionDisplay = sourceInfo.version;
@@ -838,23 +842,23 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             let versionDisplay = 'Installation Pending';
             if (root) {
                 if (sourceInfo.sourceType === 'custom') {
-                    versionDisplay = 'Self Hosted';
-                } else if (sourceInfo.version === 'Bleeding Edge') {
-                    versionDisplay = 'Bleeding Edge';
-                } else if (sourceInfo.version === 'Latest') {
+                    versionDisplay = SELF_HOSTED_NAME;
+                } else if (sourceInfo.version === DEVELOPMENT_NAME) {
+                    versionDisplay = DEVELOPMENT_NAME;
+                } else if (sourceInfo.version === LATEST_RELEASE_NAME) {
                     // Fetch the actual latest version number
                     try {
                         const response = await fetch('https://api.github.com/repos/ranaldsgift/KefinTweaks/releases/latest');
                         if (response.ok) {
                             const data = await response.json();
                             const versionNumber = data.tag_name.replace(/^v/, '');
-                            versionDisplay = `${versionNumber} (Latest)`;
+                            versionDisplay = `${versionNumber} (${LATEST_RELEASE_NAME})`;
                         } else {
-                            versionDisplay = 'Latest';
+                            versionDisplay = LATEST_RELEASE_NAME;
                         }
                     } catch (error) {
                         console.warn('[KefinTweaks Installer] Error fetching latest version:', error);
-                        versionDisplay = 'Latest';
+                        versionDisplay = LATEST_RELEASE_NAME;
                     }
                 } else {
                     // Specific version
@@ -1011,23 +1015,23 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             let versionDisplay = 'Installation Pending';
             if (root) {
                 if (sourceInfo.sourceType === 'custom') {
-                    versionDisplay = 'Self Hosted';
-                } else if (sourceInfo.version === 'Bleeding Edge') {
-                    versionDisplay = 'Bleeding Edge';
-                } else if (sourceInfo.version === 'Latest') {
+                    versionDisplay = SELF_HOSTED_NAME;
+                } else if (sourceInfo.version === DEVELOPMENT_NAME) {
+                    versionDisplay = DEVELOPMENT_NAME;
+                } else if (sourceInfo.version === LATEST_RELEASE_NAME) {
                     // Fetch the actual latest version number
                     try {
                         const response = await fetch('https://api.github.com/repos/ranaldsgift/KefinTweaks/releases/latest');
                         if (response.ok) {
                             const data = await response.json();
                             const versionNumber = data.tag_name.replace(/^v/, '');
-                            versionDisplay = `${versionNumber} (Latest)`;
+                            versionDisplay = `${versionNumber} (${LATEST_RELEASE_NAME})`;
                         } else {
-                            versionDisplay = 'Latest';
+                            versionDisplay = LATEST_RELEASE_NAME;
                         }
                     } catch (error) {
                         console.warn('[KefinTweaks Installer] Error fetching latest version:', error);
-                        versionDisplay = 'Latest';
+                        versionDisplay = LATEST_RELEASE_NAME;
                     }
                 } else {
                     // Specific version
