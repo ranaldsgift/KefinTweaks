@@ -597,7 +597,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
 
         // Source Type dropdown
         const sourceTypeLabel = document.createElement('label');
-        sourceTypeLabel.textContent = 'Source Type:';
+        sourceTypeLabel.textContent = 'Install From:';
         sourceTypeLabel.style.display = 'block';
         sourceTypeLabel.style.marginBottom = '0.5em';
 
