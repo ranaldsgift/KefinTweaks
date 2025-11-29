@@ -1123,7 +1123,7 @@
                             ParentId: collectionId,
                             IncludeItemTypes: includeItemTypes,
                             Fields: 'ItemCounts,Overview,Taglines',
-                            Limit: itemLimit * sources.length, // Get more items to account for filtering
+                            Limit: itemLimit,
                             SortBy: sortOrder,
                             SortOrder: sortOrderDirection
                         };
@@ -1162,7 +1162,7 @@
                             ParentId: playlistId,
                             IncludeItemTypes: includeItemTypes,
                             Fields: 'Overview,Taglines',
-                            Limit: itemLimit * sources.length, // Get more items to account for filtering
+                            Limit: itemLimit,
                             SortBy: sortOrder,
                             SortOrder: sortOrderDirection
                         };
