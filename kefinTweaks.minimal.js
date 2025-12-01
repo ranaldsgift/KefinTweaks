@@ -33,7 +33,9 @@ window.KefinTweaksConfig = {
                 "sortOrder": "ReleaseDate",
                 "sortOrderDirection": "Descending",
                 "cardFormat": "Poster",
-                "order": 30
+                "order": 30,
+                "minPremiereDate": "",
+                "maxPremiereDate": ""
             },
             "episodes": {
                 "name": "Recently Aired Episodes",
@@ -42,7 +44,9 @@ window.KefinTweaksConfig = {
                 "sortOrder": "PremiereDate",
                 "sortOrderDirection": "Descending",
                 "cardFormat": "Backdrop",
-                "order": 31
+                "order": 31,
+                "minPremiereDate": "",
+                "maxPremiereDate": ""
             }
         },
         "trending": {
@@ -100,6 +104,7 @@ window.KefinTweaksConfig = {
         },
         "seasonal": {
             "enabled": true,
+            "enableSeasonalAnimations": true,
             "defaultItemLimit": 16,
             "defaultSortOrder": "Random",
             "defaultCardFormat": "Poster",
@@ -173,7 +178,8 @@ window.KefinTweaksConfig = {
                             "searchTerm": "",
                             "includeItemTypes": [
                                 "Movie"
-                            ]
+                            ],
+                            "additionalQueryOptions": []
                         },
                         {
                             "id": "seasonal-2-section-1",
@@ -191,7 +197,8 @@ window.KefinTweaksConfig = {
                             "searchTerm": "thanksgiving",
                             "includeItemTypes": [
                                 "Episode"
-                            ]
+                            ],
+                            "additionalQueryOptions": []
                         }
                     ]
                 },
@@ -203,28 +210,42 @@ window.KefinTweaksConfig = {
                     "endDate": "12-31",
                     "sections": [
                         {
-                            "id": "christmas-genre",
+                            "id": "seasonal-1-section-0",
                             "enabled": true,
                             "name": "Christmas Movies",
-                            "type": "Genre",
-                            "source": "Christmas",
+                            "type": "Tag",
+                            "source": "christmas",
                             "itemLimit": 16,
                             "sortOrder": "Random",
                             "sortOrderDirection": "Ascending",
                             "cardFormat": "Poster",
-                            "order": 60
+                            "order": 50,
+                            "spotlight": true,
+                            "discoveryEnabled": false,
+                            "searchTerm": "",
+                            "includeItemTypes": [
+                                "Movie"
+                            ],
+                            "additionalQueryOptions": []
                         },
                         {
-                            "id": "christmas-family",
+                            "id": "seasonal-1-section-1",
                             "enabled": true,
-                            "name": "Family Movies",
-                            "type": "Genre",
-                            "source": "Family",
+                            "name": "Christmas Episodes",
+                            "type": "Parent",
+                            "source": "",
                             "itemLimit": 16,
                             "sortOrder": "Random",
                             "sortOrderDirection": "Ascending",
-                            "cardFormat": "Poster",
-                            "order": 61
+                            "cardFormat": "Thumb",
+                            "order": 51,
+                            "spotlight": false,
+                            "discoveryEnabled": false,
+                            "searchTerm": "christmas",
+                            "includeItemTypes": [
+                                "Episode"
+                            ],
+                            "additionalQueryOptions": []
                         }
                     ]
                 }
@@ -354,6 +375,7 @@ window.KefinTweaksConfig = {
                 }
             },
             "spotlightDiscoveryChance": 0.5,
+            "renderSpotlightAboveMatching": false,
             "spotlight": {
                 "autoPlay": true,
                 "interval": 5000,
@@ -371,17 +393,9 @@ window.KefinTweaksConfig = {
     "search": {
         "enableJellyseerr": false
     },
-    "skins": [
-        {
-            "name": "Default",
-            "author": "Jellyfin",
-            "url": null,
-            "colorSchemes": [],
-            "enabled": true,
-            "hidden": true
-        }
-    ],
+    "skins": [],
     "defaultSkin": null,
     "themes": [],
-    "customMenuLinks": []
+    "customMenuLinks": [],
+    "optionalIncludes": []
 };
