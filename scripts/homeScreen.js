@@ -638,54 +638,93 @@
             }
         }
 
-        // 2. Update Christmas Seasonal Sections
+        // 2. Update Seasonal Sections (Christmas/Halloween legacy IDs)
         if (currentConfig.seasonal && Array.isArray(currentConfig.seasonal.seasons)) {
-            const christmasSeason = currentConfig.seasonal.seasons.find(s => s.id === 'christmas');
-            if (christmasSeason && Array.isArray(christmasSeason.sections)) {
-                
-                // Check for old "Christmas Movies" (genre) and update to new "Christmas Movies" (tag)
-                const movieSectionIndex = christmasSeason.sections.findIndex(s => s.id === 'christmas-genre');
-                if (movieSectionIndex !== -1) {
-                    christmasSeason.sections[movieSectionIndex] = {
-                        "id": "seasonal-1-section-0",
-                        "enabled": true,
-                        "name": "Christmas Movies",
-                        "type": "Tag",
-                        "source": "christmas",
-                        "itemLimit": 16,
-                        "sortOrder": "Random",
-                        "sortOrderDirection": "Ascending",
-                        "cardFormat": "Poster",
-                        "order": 50,
-                        "spotlight": true,
-                        "discoveryEnabled": false,
-                        "searchTerm": "",
-                        "includeItemTypes": ["Movie"],
-                        "additionalQueryOptions": []
-                    };
+            // Helper function to update a section if it matches an old ID
+            const updateSectionIfMatch = (season, oldId, newConfig) => {
+                if (!season.sections || !Array.isArray(season.sections)) return false;
+                const index = season.sections.findIndex(s => s.id === oldId);
+                if (index !== -1) {
+                    season.sections[index] = newConfig;
+                    return true;
+                }
+                return false;
+            };
+
+            // Iterate ALL seasons to find legacy sections, regardless of season ID/Name
+            for (const season of currentConfig.seasonal.seasons) {
+                if (!season.sections || !Array.isArray(season.sections)) continue;
+
+                // Update old "Christmas Movies" (genre) to new "Christmas Movies" (tag)
+                if (updateSectionIfMatch(season, 'christmas-genre', {
+                    "id": "seasonal-1-section-0",
+                    "enabled": true,
+                    "name": "Christmas Movies",
+                    "type": "Tag",
+                    "source": "christmas",
+                    "itemLimit": 16,
+                    "sortOrder": "Random",
+                    "sortOrderDirection": "Ascending",
+                    "cardFormat": "Poster",
+                    "order": 50,
+                    "spotlight": true,
+                    "discoveryEnabled": false,
+                    "searchTerm": "",
+                    "includeItemTypes": ["Movie"],
+                    "additionalQueryOptions": []
+                })) {
                     configChanged = true;
                 }
 
-                // Check for old "Family Movies" (genre) and update to new "Christmas Episodes" (parent/search)
-                const familySectionIndex = christmasSeason.sections.findIndex(s => s.id === 'christmas-family');
-                if (familySectionIndex !== -1) {
-                    christmasSeason.sections[familySectionIndex] = {
-                        "id": "seasonal-1-section-1",
-                        "enabled": true,
-                        "name": "Christmas Episodes",
-                        "type": "Parent",
-                        "source": "",
-                        "itemLimit": 16,
-                        "sortOrder": "Random",
-                        "sortOrderDirection": "Ascending",
-                        "cardFormat": "Thumb",
-                        "order": 51,
-                        "spotlight": false,
-                        "discoveryEnabled": false,
-                        "searchTerm": "christmas",
-                        "includeItemTypes": ["Episode"],
-                        "additionalQueryOptions": []
-                    };
+                // Update old "Family Movies" (genre) to new "Christmas Episodes" (parent/search)
+                if (updateSectionIfMatch(season, 'christmas-family', {
+                    "id": "seasonal-1-section-1",
+                    "enabled": true,
+                    "name": "Christmas Episodes",
+                    "type": "Parent",
+                    "source": "",
+                    "itemLimit": 16,
+                    "sortOrder": "Random",
+                    "sortOrderDirection": "Ascending",
+                    "cardFormat": "Thumb",
+                    "order": 51,
+                    "spotlight": false,
+                    "discoveryEnabled": false,
+                    "searchTerm": "christmas",
+                    "includeItemTypes": ["Episode"],
+                    "additionalQueryOptions": []
+                })) {
+                    configChanged = true;
+                }
+
+                 // Update Halloween Horror (ensure correct config)
+                 if (updateSectionIfMatch(season, 'halloween-horror', {
+                    "id": "halloween-horror",
+                    "enabled": true,
+                    "name": "Horror Genre",
+                    "type": "Genre",
+                    "source": "Horror",
+                    "itemLimit": 16,
+                    "sortOrder": "Random",
+                    "sortOrderDirection": "Ascending",
+                    "cardFormat": "Poster",
+                    "order": 51
+                })) {
+                     configChanged = true;
+                }
+                 // Update Halloween Thriller (ensure correct config)
+                 if (updateSectionIfMatch(season, 'halloween-thriller', {
+                    "id": "halloween-thriller",
+                    "enabled": true,
+                    "name": "Thriller Genre",
+                    "type": "Genre",
+                    "source": "Thriller",
+                    "itemLimit": 16,
+                    "sortOrder": "Random",
+                    "sortOrderDirection": "Ascending",
+                    "cardFormat": "Poster",
+                    "order": 52
+                })) {
                     configChanged = true;
                 }
             }
