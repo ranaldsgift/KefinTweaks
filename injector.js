@@ -529,6 +529,24 @@
         
         console.log(`[KefinTweaks Injector] Successfully loaded: ${scriptDef.name}`);
     }
+
+    async function loadConfigurationJS() {
+        const configDependencyNames = ['modal', 'toaster', 'utils'];
+        for (const depName of configDependencyNames) {
+            const depScript = SCRIPT_DEFINITIONS.find(script => script.name === depName);
+            if (depScript) {
+                try {
+                    await loadScriptSync(depScript);
+                } catch (error) {
+                    console.warn(`[KefinTweaks Injector] Failed to load configuration dependency '${depName}':`, error);
+                }
+            }
+        }
+        
+        // Load configuration UI so admins can re-enable KefinTweaks
+        await loadScript('configuration.js');
+        await loadCSS('configuration.css');
+    }
     
     // Main initialization function
     async function initialize() {
@@ -548,21 +566,7 @@
             
             try {
                 // Ensure configuration dependencies are loaded so the admin UI works
-                const configDependencyNames = ['modal', 'toaster', 'utils'];
-                for (const depName of configDependencyNames) {
-                    const depScript = SCRIPT_DEFINITIONS.find(script => script.name === depName);
-                    if (depScript) {
-                        try {
-                            await loadScriptSync(depScript);
-                        } catch (error) {
-                            console.warn(`[KefinTweaks Injector] Failed to load configuration dependency '${depName}':`, error);
-                        }
-                    }
-                }
-                
-                // Load configuration UI so admins can re-enable KefinTweaks
-                await loadScript('configuration.js');
-                await loadCSS('configuration.css');
+                await loadConfigurationJS();
                 console.log('[KefinTweaks Injector] Configuration script loaded (KefinTweaks is disabled)');
             } catch (error) {
                 console.warn('[KefinTweaks Injector] Failed to load configuration UI while disabled:', error);
@@ -635,8 +639,7 @@
             // Always load configuration.js for admin UI (loads after other scripts)
             console.log('[KefinTweaks Injector] Loading configuration script...');
             try {
-                await loadScript('configuration.js');
-                await loadCSS('configuration.css');
+                await loadConfigurationJS();
                 console.log('[KefinTweaks Injector] Configuration script loaded successfully');
             } catch (error) {
                 console.warn('[KefinTweaks Injector] Failed to load configuration script:', error);
