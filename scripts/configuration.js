@@ -323,6 +323,15 @@
                 transition: transform 0.2s ease;
             }
             
+            /* Skins JSON collapsible styling */
+            #${MODAL_ID} details.listItem[open] summary .material-icons {
+                transform: rotate(90deg);
+            }
+            
+            #${MODAL_ID} details.listItem summary .material-icons {
+                transition: transform 0.2s ease;
+            }
+            
             /* Responsive design */
             @media (max-width: 768px) {
                 #${MODAL_ID} .modal-content-wrapper {
@@ -369,11 +378,15 @@
         const exclusiveElsewhere = config.exclusiveElsewhere || {};
         const search = config.search || {};
         const customMenuLinks = config.customMenuLinks || [];
-        const skins = config.skins || [];
+        // Use merged skin config from skinManager (includes both defaults and admin skins)
+        const skins = window.KefinTweaksSkinConfig || [];
         const themes = config.themes || [];
 
         // Get all skin names for autocomplete
         const allSkinNames = skins.map(skin => skin.name).filter(Boolean);
+        
+        // Get skin source info for visual distinctions
+        const skinSources = window.KefinTweaksSkinManager?.getAllSkinSources?.() || {};
 
         const isEnabled = window.KefinTweaksConfigEnabled !== false;
         
@@ -448,6 +461,7 @@
                         <div class="listItemBodyText" style="margin-bottom: 0.5em;">Default Skin</div>
                         <select id="defaultSkin" class="fld emby-select-withcolor emby-select emby-select-withcolor emby-select-withcolor" style="width: 100%; max-width: 400px;">
                             ${allSkinNames.map(name => `<option value="${name}" ${config.defaultSkin === name ? 'selected' : ''}>${name}</option>`).join('')}
+                            ${allSkinNames.length === 0 ? '<option value="">No skins available</option>' : ''}
                         </select>
                         <div class="listItemBodyText secondary" style="margin-top: 0.5em; font-size: 0.9em;">Select a default skin for all users</div>
                     </div>
@@ -461,18 +475,53 @@
                             KefinTweaks has not contributed to the creation of any of the skins below and is only attempting to facilitate their accessibility.
                         </div>
                         <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.5em;">
-                            ${buildSkinToggles(skins)}
+                            ${buildSkinToggles(skins, skinSources)}
                         </div>
                     </div>
                 </div>
-                <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
+                ${(() => {
+                    // Check if there are any overridden default skins
+                    const hasOverriddenSkins = Object.values(skinSources).some(source => source === 'overridden');
+                    if (hasOverriddenSkins) {
+                        return `
+                            <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
+                                <div class="listItemContent">
+                                    <div class="listItemBodyText secondary" style="margin-bottom: 0.75em; font-size: 0.9em;">Some default skins have been overridden by custom configurations. Click the button below to remove custom skins that override defaults.</div>
+                                    <button type="button" id="removeDuplicateDefaultsBtn" class="emby-button raised" style="padding: 0.5em 1.5em; font-size: 0.9em;">
+                                        <span>Remove Custom Skins Overriding Defaults</span>
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    }
+                    return '';
+                })()}
+                <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
                     <div class="listItemContent">
-                        <div class="listItemBodyText" style="margin-bottom: 0.5em;">Skins JSON</div>
-                        <div class="listItemBodyText secondary" style="margin-bottom: 0.75em; font-size: 0.9em;">Add additional skins that will be available to all users. Each skin can have multiple CSS files for different server versions. Hidden skins (included automatically by KefinTweaks) are not shown here.</div>
-                        <textarea id="skinsJson" class="fld emby-textarea" rows="15" placeholder='[{"name":"Skin Name","author":"Author","url":[...]}]' style="width: 100%; font-family: monospace; font-size: 0.9em; line-height: 1.5;">${JSON.stringify(skins.filter(skin => !skin.hidden), null, 2)}</textarea>
-                        <details style="margin-top: 0.75em;">
-                            <summary class="listItemBodyText secondary" style="font-size: 0.9em; color: #4a9eff;">View Example Format</summary>
-                            <pre style="background: rgba(0,0,0,0.3); padding: 1em; border-radius: 4px; margin-top: 0.5em; overflow-x: auto; font-size: 0.85em; line-height: 1.6;">[
+                        <h3 class="listItemBodyText" style="margin-bottom: 0.25em;">Optional CSS Modules</h3>
+                        <div class="listItemBodyText secondary" style="margin-bottom: 1em; font-size: 0.9em;">Configure default enabled/disabled state for optional CSS modules. These settings will be used when users haven't specified their own preferences.</div>
+                        <div class="listItemBodyText" style="margin-bottom: 0.5em;">Select Skin</div>
+                        <select id="optionalIncludesCategory" class="fld emby-select-withcolor emby-select emby-select-withcolor emby-select-withcolor" style="width: 100%; max-width: 400px; margin-bottom: 1em;">
+                            <option value="global">Global (applies to all skins)</option>
+                            ${buildOptionalIncludesSkinOptions(skins)}
+                        </select>
+                        <div id="optionalIncludesEditor" style="margin-top: 1em;">
+                            ${buildOptionalIncludesEditor('global', config, skins)}
+                        </div>
+                    </div>
+                </div>
+                <details class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0; margin-bottom: 1em; display: grid;">
+                    <summary class="listItemBodyText" style="font-weight: 500; cursor: pointer; padding: 0.75em; display: flex; align-items: center; gap: 0.5em; list-style: none; user-select: none;">
+                        <span class="material-icons" style="font-size: 1.2em; transition: transform 0.2s;">chevron_right</span>
+                        <span>Skins JSON</span>
+                    </summary>
+                    <div style="padding: 0.75em; border-top: 1px solid rgba(255,255,255,0.1);">
+                        <div class="listItemContent">
+                            <div class="listItemBodyText secondary" style="margin-bottom: 0.75em; font-size: 0.9em;">Add additional skins that will be available to all users. Each skin can have multiple CSS files for different server versions. You can override the Default skins from KefinTweaks by specifying a custom configuration with that Skin Name in the configuration JSON below. Any skins that appear in this JSON and are named the same as the KefinTweaks default skins will override the default functionality. Default skins are not shown here as they are managed separately.</div>
+                            <textarea id="skinsJson" class="fld emby-textarea" rows="15" placeholder='[{"name":"Skin Name","author":"Author","url":[...]}]' style="width: 100%; font-family: monospace; font-size: 0.9em; line-height: 1.5;">${JSON.stringify(config.skins || [], null, 2)}</textarea>
+                            <details style="margin-top: 0.75em;">
+                                <summary class="listItemBodyText secondary" style="font-size: 0.9em; color: #4a9eff;">View Example Format</summary>
+                                <pre style="background: rgba(0,0,0,0.3); padding: 1em; border-radius: 4px; margin-top: 0.5em; overflow-x: auto; font-size: 0.85em; line-height: 1.6;">[
   {
     "name": "Custom Skin",
     "author": "username",
@@ -496,9 +545,10 @@
     "colorSchemes": []
   }
 ]</pre>
-                        </details>
+                            </details>
+                        </div>
                     </div>
-                </div>
+                </details>
             </div>
 
             <div class="paperList" id="configSection_theme" style="margin-bottom: 2em; ${scripts.skinManager === false ? 'display: none;' : ''}">
@@ -594,22 +644,221 @@
     }
 
     // Build skin toggle switches
-    function buildSkinToggles(skins) {
+    /**
+     * Build dropdown options for skins that have optional includes
+     * @param {Array} skins - Array of skin configurations
+     * @returns {string} HTML string for dropdown options
+     */
+    function buildOptionalIncludesSkinOptions(skins) {
+        const skinsWithOptionalIncludes = skins.filter(skin => 
+            skin.optionalIncludes && skin.optionalIncludes.length > 0
+        );
+        
+        return skinsWithOptionalIncludes.map(skin => 
+            `<option value="${skin.name}">${skin.name}</option>`
+        ).join('');
+    }
+    
+    /**
+     * Extract author from URL (for display purposes)
+     * @param {string} url - The URL
+     * @returns {string} Author name or empty string
+     */
+    function extractAuthorFromUrl(url) {
+        if (!url) return '';
+        try {
+            // Try to extract GitHub username from jsdelivr URLs
+            const jsdelivrMatch = url.match(/cdn\.jsdelivr\.net\/gh\/([^\/]+)\//);
+            if (jsdelivrMatch) {
+                return jsdelivrMatch[1];
+            }
+        } catch (e) {
+            // Ignore errors
+        }
+        return '';
+    }
+    
+    /**
+     * Generate optional include key (same format as skinManager)
+     * @param {string} skinName - The skin name or "global"
+     * @param {string} author - The author name
+     * @param {string} url - The URL
+     * @returns {string} The generated key
+     */
+    function generateOptionalIncludeKey(skinName, author, url) {
+        const normalizedSkinName = skinName === 'global' ? 'global' : skinName.replace(/\s+/g, '_');
+        const filename = url ? url.split('?')[0].split('#')[0].split('/').pop() : '';
+        const normalizedAuthor = (author || '').replace(/\s+/g, '_');
+        return `${normalizedSkinName}-${normalizedAuthor}-${filename}`;
+    }
+    
+    /**
+     * Extract filename from URL
+     * @param {string} url - The URL
+     * @returns {string} The filename
+     */
+    function extractFilenameFromUrl(url) {
+        if (!url) return '';
+        try {
+            const urlWithoutParams = url.split('?')[0].split('#')[0];
+            const pathParts = urlWithoutParams.split('/');
+            return pathParts[pathParts.length - 1] || '';
+        } catch (e) {
+            return '';
+        }
+    }
+    
+    /**
+     * Build the optional includes editor UI
+     * @param {string} category - "global" or skin name
+     * @param {Object} config - The KefinTweaksConfig object
+     * @param {Array} skins - Array of all skins
+     * @returns {string} HTML string for the editor
+     */
+    function buildOptionalIncludesEditor(category, config, skins) {
+        let optionalIncludes = [];
+        
+        if (category === 'global') {
+            // Get global optional includes from defaults + admin config
+            const defaultGlobalIncludes = window.KefinTweaksDefaultSkinsConfig?.globalOptionalIncludes || [];
+            optionalIncludes = defaultGlobalIncludes.map(include => ({ ...include }));
+            
+            // Merge with admin config (admin can override enabled state)
+            const adminOptionalIncludes = config.optionalIncludes || [];
+            adminOptionalIncludes.forEach(adminEntry => {
+                if (typeof adminEntry === 'object' && adminEntry.key) {
+                    // Extract info from key: global-author-filename
+                    const keyParts = adminEntry.key.split('-');
+                    if (keyParts[0] === 'global' && keyParts.length >= 3) {
+                        const author = keyParts[1];
+                        const filename = keyParts.slice(2).join('-');
+                        
+                        // Find matching include by URL
+                        const matchingInclude = optionalIncludes.find(inc => {
+                            const incAuthor = extractAuthorFromUrl(inc.url);
+                            const incFilename = extractFilenameFromUrl(inc.url);
+                            return incAuthor === author && incFilename === filename;
+                        });
+                        
+                        if (matchingInclude) {
+                            matchingInclude.enabled = adminEntry.enabled;
+                        } else {
+                            // Admin added a new include (we'd need URL, but for now just show it)
+                            optionalIncludes.push({
+                                name: filename.replace('.css', '').replace(/-/g, ' '),
+                                url: '', // We don't have the URL stored, would need to enhance
+                                enabled: adminEntry.enabled,
+                                key: adminEntry.key
+                            });
+                        }
+                    }
+                }
+            });
+        } else {
+            // Get skin-specific optional includes
+            const skin = skins.find(s => s.name === category);
+            if (skin && skin.optionalIncludes) {
+                optionalIncludes = skin.optionalIncludes.map(include => {
+                    const author = extractAuthorFromUrl(include.url);
+                    const key = generateOptionalIncludeKey(category, author, include.url);
+                    
+                    // Check admin config for enabled state
+                    const adminOptionalIncludes = config.optionalIncludes || [];
+                    const adminEntry = adminOptionalIncludes.find(entry => 
+                        typeof entry === 'object' && entry.key === key
+                    );
+                    
+                    return {
+                        ...include,
+                        key: key,
+                        enabled: adminEntry ? adminEntry.enabled : (include.enabled || false)
+                    };
+                });
+            }
+        }
+        
+        if (optionalIncludes.length === 0) {
+            return `
+                <div class="listItemBodyText secondary" style="padding: 1em; text-align: center; opacity: 0.7;">
+                    No optional CSS modules available for ${category === 'global' ? 'global options' : category}.
+                </div>
+            `;
+        }
+        
+        return `
+            <div class="listItemBodyText secondary" style="margin-bottom: 0.75em; font-size: 0.9em;">
+                Configure which optional CSS modules are enabled by default. Users can override these settings individually.
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.5em;">
+                ${optionalIncludes.map((include, index) => {
+                    const author = extractAuthorFromUrl(include.url);
+                    const key = include.key || generateOptionalIncludeKey(category, author, include.url);
+                    const filename = include.url ? extractFilenameFromUrl(include.url) : '';
+                    
+                    return `
+                        <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; background: rgba(255,255,255,0.02);">
+                            <div class="listItemContent">
+                                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5em; gap: 0.5em;">
+                                    <div style="flex: 1; min-width: 0;">
+                                        <div class="listItemBodyText" style="font-weight: 500; margin-bottom: 0.25em;">${include.name}</div>
+                                        ${author ? `<div class="listItemBodyText secondary" style="font-size: 0.85em;">by <a href="https://github.com/${author}" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: underline; opacity: 0.8; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.8'">${author}</a></div>` : ''}
+                                    </div>
+                                    <input type="checkbox" 
+                                           id="optionalInclude_${category}_${index}" 
+                                           class="checkbox optionalIncludeCheckbox" 
+                                           data-category="${category}"
+                                           data-key="${key}"
+                                           data-url="${include.url || ''}"
+                                           ${include.enabled ? 'checked' : ''}
+                                           style="width: 18px; height: 18px; cursor: pointer; flex-shrink: 0; margin-top: 0.125em;">
+                                </div>
+                                ${filename ? `<div class="listItemBodyText secondary" style="font-size: 0.75em; opacity: 0.5; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl;" title="${include.url}">${filename}</div>` : ''}
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        `;
+    }
+    
+    function buildSkinToggles(skins, skinSources = {}) {
         return skins.map(skin => {
             const isEnabled = skin.enabled !== false; // Default to true if not set
-            const isHidden = skin.hidden === true;
             const githubUrl = getSkinGitHubUrl(skin);
+            const source = skinSources[skin.name] || 'default';
+            
+            // Determine styling based on source
+            let borderStyle = '1px solid rgba(255,255,255,0.1)';
+            let backgroundStyle = 'rgba(255,255,255,0.02)';
+            let badgeText = '';
+            let badgeStyle = '';
+            let badgeIcon = '';
+            
+            if (source === 'default') {
+                backgroundStyle = 'rgba(255,255,255,0.01)';
+                badgeText = 'D';
+                badgeStyle = 'background: rgba(0,122,255,0.2); color: rgba(0,122,255,0.9);';
+            } else if (source === 'overridden') {
+                borderStyle = '2px solid rgba(0, 122, 255, 0.5)';
+                backgroundStyle = 'rgba(0,122,255,0.05)';
+                badgeIcon = 'warning';
+                badgeStyle = 'color: rgba(255,165,0,0.9);';
+            } else if (source === 'custom') {
+                // Custom skins use default styling
+            }
             
             // Determine tooltip text
             let tooltipText = '';
-            if (isHidden) {
+            if (source === 'default') {
                 tooltipText = 'This skin is included automatically by KefinTweaks';
+            } else if (source === 'overridden') {
+                tooltipText = 'This default skin has been overridden by a custom configuration';
             } else if (githubUrl) {
                 tooltipText = 'View on GitHub';
             }
             
             return `
-                <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.5em; background: rgba(255,255,255,0.02);" ${tooltipText ? `title="${tooltipText}"` : ''}>
+                <div class="listItem" data-skin-source="${source}" style="border: ${borderStyle}; border-radius: 4px; padding: 0.5em; background: ${backgroundStyle};" ${tooltipText ? `title="${tooltipText}"` : ''}>
                     <div class="listItemContent" style="display: flex; justify-content: space-between; align-items: center; gap: 0.5em;">
                         <div style="flex: 1; display: flex; align-items: center; gap: 0.5em; min-width: 0;">
                             ${githubUrl ? `
@@ -620,6 +869,8 @@
                             ` : `
                                 <div class="listItemBodyText" style="font-weight: 500; font-size: 0.9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${skin.name}</div>
                             `}
+                            ${badgeIcon ? `<span class="material-icons" style="font-size: 1.1em; ${badgeStyle}" title="${tooltipText}">${badgeIcon}</span>` : ''}
+                            ${badgeText ? `<span style="font-size: 0.75em; padding: 0.15em 0.4em; border-radius: 3px; ${badgeStyle}">${badgeText}</span>` : ''}
                         </div>
                         ${buildJellyfinCheckbox(`skin_${skin.name.replace(/[^a-zA-Z0-9]/g, '_')}`, isEnabled, '', { 'data-skin-name': skin.name })}
                 </div>
@@ -1580,6 +1831,50 @@
             });
         }
 
+    /**
+     * Collect optional includes configuration from the UI
+     * @param {Object} modalInstance - The modal instance
+     * @returns {Array} Array of { key, enabled } objects
+     */
+    function collectOptionalIncludesConfig(modalInstance) {
+        const optionalIncludes = [];
+        const allCheckboxes = modalInstance.dialogContent.querySelectorAll('.optionalIncludeCheckbox');
+        
+        allCheckboxes.forEach(checkbox => {
+            const key = checkbox.getAttribute('data-key');
+            const enabled = checkbox.checked;
+            
+            if (key) {
+                optionalIncludes.push({
+                    key: key,
+                    enabled: enabled
+                });
+            }
+        });
+        
+        return optionalIncludes;
+    }
+    
+    /**
+     * Attach event handlers for optional includes checkboxes
+     * @param {Object} modalInstance - The modal instance
+     * @param {string} category - "global" or skin name
+     * @param {Object} config - The current config
+     */
+    function attachOptionalIncludesCheckboxHandlers(modalInstance, category, config) {
+        const checkboxes = modalInstance.dialogContent.querySelectorAll(`.optionalIncludeCheckbox[data-category="${category}"]`);
+        checkboxes.forEach(checkbox => {
+            // Remove existing listeners (if any) and add new one
+            const newCheckbox = checkbox.cloneNode(true);
+            checkbox.parentNode.replaceChild(newCheckbox, checkbox);
+            
+            newCheckbox.addEventListener('change', () => {
+                // Update will be saved when user clicks Save button
+                // No need to save immediately
+            });
+        });
+    }
+    
     // Set up event handlers for configuration modal
     function setupConfigModalHandlers(modalInstance, config) {
         // Enabled checkbox handler
@@ -3584,6 +3879,25 @@
         });
         }
         
+        // Optional includes category dropdown handler
+        const optionalIncludesCategory = modalInstance.dialogContent.querySelector('#optionalIncludesCategory');
+        if (optionalIncludesCategory) {
+            optionalIncludesCategory.addEventListener('change', (e) => {
+                const category = e.target.value;
+                const editor = modalInstance.dialogContent.querySelector('#optionalIncludesEditor');
+                if (editor) {
+                    // Use current config from window (which may have been updated after save)
+                    const currentConfig = window.KefinTweaksConfig || config;
+                    editor.innerHTML = buildOptionalIncludesEditor(category, currentConfig, window.KefinTweaksSkinConfig || []);
+                    // Re-attach checkbox handlers
+                    attachOptionalIncludesCheckboxHandlers(modalInstance, category, currentConfig);
+                }
+            });
+        }
+        
+        // Attach initial checkbox handlers
+        attachOptionalIncludesCheckboxHandlers(modalInstance, 'global', config);
+        
         if (scriptCheckboxes.customMenuLinks) {
             scriptCheckboxes.customMenuLinks.addEventListener('change', () => toggleSectionVisibility('customMenuLinks', 'customMenuLinks'));
         }
@@ -3609,6 +3923,53 @@
         const importBtn = modalInstance.dialogFooter?.querySelector('#importConfigBtn');
         if (importBtn) {
             importBtn.addEventListener('click', () => handleImportConfig(modalInstance));
+        }
+
+        // Remove duplicate defaults button handler
+        const removeDuplicateDefaultsBtn = modalInstance.dialogContent.querySelector('#removeDuplicateDefaultsBtn');
+        if (removeDuplicateDefaultsBtn) {
+            removeDuplicateDefaultsBtn.addEventListener('click', () => handleRemoveDuplicateDefaults(modalInstance));
+        }
+    }
+    
+    // Handle removing custom skins that override defaults
+    function handleRemoveDuplicateDefaults(modalInstance) {
+        const skinsTextarea = modalInstance.dialogContent.querySelector('#skinsJson');
+        if (!skinsTextarea) return;
+        
+        try {
+            const currentSkins = JSON.parse(skinsTextarea.value || '[]');
+            const defaultSkinNames = new Set((window.KefinTweaksDefaultSkinsConfig?.skins || []).map(s => s.name));
+            
+            // Filter out skins that match default names
+            const filteredSkins = currentSkins.filter(skin => !defaultSkinNames.has(skin.name));
+            const removedCount = currentSkins.length - filteredSkins.length;
+            
+            if (removedCount === 0) {
+                if (window.KefinTweaksToaster && window.KefinTweaksToaster.toast) {
+                    window.KefinTweaksToaster.toast('No duplicate default skins found in configuration');
+                } else {
+                    alert('No duplicate default skins found in configuration');
+                }
+                return;
+            }
+            
+            // Update textarea
+            skinsTextarea.value = JSON.stringify(filteredSkins, null, 2);
+            
+            // Show confirmation
+            if (window.KefinTweaksToaster && window.KefinTweaksToaster.toast) {
+                window.KefinTweaksToaster.toast(`Removed ${removedCount} custom skin${removedCount > 1 ? 's' : ''} that were overriding defaults`);
+            } else {
+                alert(`Removed ${removedCount} custom skin${removedCount > 1 ? 's' : ''} that were overriding defaults`);
+            }
+        } catch (error) {
+            console.error('[KefinTweaks Configuration] Error removing duplicate defaults:', error);
+            if (window.KefinTweaksToaster && window.KefinTweaksToaster.toast) {
+                window.KefinTweaksToaster.toast('Error processing skins JSON', '5');
+            } else {
+                alert('Error processing skins JSON. Please check the format.');
+            }
         }
     }
 
@@ -4357,49 +4718,35 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         const skinsFromJson = parseJSONField('skinsJson', []);
         config.themes = parseJSONField('themesJson', []);
         config.customMenuLinks = parseJSONField('customMenuLinksJson', []);
+        
+        // Collect optional includes configuration
+        config.optionalIncludes = collectOptionalIncludesConfig(modalInstance);
 
         // Collect skin enabled toggles and merge with JSON skins
-        // First, get the original config to preserve hidden skins
-        const originalConfig = await getKefinTweaksConfig();
-        const originalSkins = originalConfig.skins || [];
-        const hiddenSkins = originalSkins.filter(skin => skin.hidden === true);
+        // Only save admin-configured skins (not defaults)
+        // Get default skin names to filter them out
+        const defaultSkinNames = new Set((window.KefinTweaksDefaultSkinsConfig?.skins || []).map(s => s.name));
         
-        // Collect enabled states from toggles
+        // Collect enabled states from toggles (for all skins, including defaults)
         const skinEnabledStates = {};
         modalInstance.dialogContent.querySelectorAll('[data-skin-name]').forEach(checkbox => {
             const skinName = checkbox.getAttribute('data-skin-name');
             skinEnabledStates[skinName] = checkbox.checked;
         });
 
-        // Merge: start with hidden skins (preserve them), then add/update from JSON
-        config.skins = [...hiddenSkins];
+        // Only save admin skins (from JSON textarea) - filter out any that match default names
+        // This ensures we don't accidentally save default skins
+        config.skins = skinsFromJson
+            .filter(skin => !defaultSkinNames.has(skin.name)) // Exclude defaults
+            .map(skin => ({
+                ...skin,
+                enabled: skinEnabledStates[skin.name] !== false, // Default to true if not set
+                hidden: false // Explicitly set for admin skins
+            }));
         
-        // Add/update skins from JSON textarea
-        skinsFromJson.forEach(skin => {
-            const existingIndex = config.skins.findIndex(s => s.name === skin.name);
-            if (existingIndex !== -1) {
-                // Update existing skin (shouldn't happen for hidden, but just in case)
-                config.skins[existingIndex] = {
-                    ...config.skins[existingIndex],
-                    ...skin,
-                    enabled: skinEnabledStates[skin.name] !== false // Default to true if not set
-                };
-            } else {
-                // Add new skin
-                config.skins.push({
-                    ...skin,
-                    enabled: skinEnabledStates[skin.name] !== false,
-                    hidden: false // Explicitly set for new skins
-                });
-            }
-        });
-
-        // Update enabled states for all skins (including hidden ones)
-        config.skins.forEach(skin => {
-            if (skinEnabledStates.hasOwnProperty(skin.name)) {
-                skin.enabled = skinEnabledStates[skin.name];
-            }
-        });
+        // Note: Enabled states for default skins are collected but not saved in config.skins
+        // Default skins will use their default enabled state from skinConfig.js
+        // If we need to save enabled states for defaults, we'd need a separate field (future enhancement)
 
         // Handle defaultSkin
         if (config.defaultSkin === '') {
@@ -4411,6 +4758,11 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         // Save to JavaScript Injector plugin
         try {
             await saveConfigToJavaScriptInjector(config);
+            
+            // Update global config objects so dropdown changes reflect saved values
+            window.KefinTweaksConfig = config;
+            window.KefinTweaksCurrentConfig = config;
+            currentLoadedConfig = config;
             
             // Show success toast
             if (window.KefinTweaksToaster && window.KefinTweaksToaster.toast) {

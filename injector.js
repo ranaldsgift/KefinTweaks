@@ -50,17 +50,24 @@
             description: 'Common utilities for page view management and MutationObserver conversion'
         },
         {
-            name: 'userConfig',
-            script: 'userConfig.js',
+            name: 'skinConfigLegacyDefaults',
+            script: 'skinConfig-0.3.5-defaults.js',
             css: null,
             dependencies: [],
-            description: 'User-specific configuration for skins and other settings'
+            description: 'Legacy skin defaults (v0.3.5) for duplicate detection'
+        },
+        {
+            name: 'skinConfig',
+            script: 'skinConfig.js',
+            css: null,
+            dependencies: [],
+            description: 'Default skin configuration for KefinTweaks'
         },
         {
             name: 'skinManager',
             script: 'skinManager.js',
             css: 'defaultSkin.css',
-            dependencies: ['utils', 'userConfig'],
+            dependencies: ['utils', 'skinConfigLegacyDefaults', 'skinConfig'],
             priority: true, // Load immediately after dependencies to reduce UI disruption
             description: 'Adds skin selection dropdown to display preferences page and manages skin CSS loading'
         },

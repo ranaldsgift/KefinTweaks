@@ -1,29 +1,20 @@
-// KefinTweaks User Configuration
-// User-specific settings and configurations for KefinTweaks features
-// This file contains settings that users can customize for their specific needs
+// KefinTweaks Legacy Skin Defaults (v0.3.5)
+// Canonical snapshot of default skins for duplicate detection
+// This file is used to identify and remove duplicate skins from admin configs
+// DO NOT modify this file - it represents the canonical state at version 0.3.5
 
 (function() {
     'use strict';
     
     // ============================================================================
-    // USER CONFIGURATION
+    // LEGACY SKIN DEFAULTS (v0.3.5)
     // ============================================================================
 
     const getKefinTweaksRoot = () => {
         return window.KefinTweaksConfig?.kefinTweaksRoot || 'https://ranaldsgift.github.io/KefinTweaks/';
     }
     
-    const USER_CONFIG = {
-        // ============================================================================
-        // SKIN CONFIGURATION
-        // ============================================================================
-        // Configure available skins for the display settings page
-        // These skins will be merged with skins from the main KefinTweaks config
-        // User-defined skins take priority over main config skins (no duplicates by name)
-        // Each skin's url field should be an array of objects with majorServerVersions and urls arrays
-        // Example: url: [{ majorServerVersions: [10, 11], urls: ['url1.css', 'url2.css'] }]
-        // Each skin can also have colorSchemes array for color variations specific to that skin
-        // Each skin should have an author field indicating who created the skin
+    const KEFIN_TWEAKS_LEGACY_SKIN_DEFAULTS = {
         skins: [
             {
                 name: 'Default',
@@ -95,11 +86,7 @@
                     {
                         majorServerVersions: [10],
                         urls: ['https://cdn.jsdelivr.net/gh/tedhinklater/Jellypane@main/jellypane.css']
-                    },
-                    /* {
-                        majorServerVersions: [11],
-                        urls: ['https://cdn.jsdelivr.net/gh/tedhinklater/Jellypane@main/jellypane10.11.css']
-                    } */
+                    }
                 ],
                 colorSchemes: []
             },
@@ -437,26 +424,16 @@
                 ],
                 colorSchemes: []
             }
-            // Add more skins here as needed
-        ],
-        
-        // ============================================================================
-        // THEME CONFIGURATION
-        // ============================================================================
-        // Configure available themes for color variations
-        // These themes will be added as options to the existing select#selectTheme dropdown
-        // When a custom theme is selected, the cssTheme link href will be updated to the custom URL
-        // Each theme should have a name and URL pointing to a CSS file
-        themes: [
         ]
     };
     
     // ============================================================================
     // CONFIGURATION EXPOSURE
     // ============================================================================
-    // Make user configuration available to scripts
-    window.KefinTweaksUserConfig = USER_CONFIG;
+    // Make legacy skin defaults available for duplicate detection
+    window.KefinTweaksLegacySkinDefaults = KEFIN_TWEAKS_LEGACY_SKIN_DEFAULTS;
     
-    console.log('[KefinTweaks UserConfig] User configuration loaded. Available at window.KefinTweaksUserConfig');
+    console.log('[KefinTweaks Legacy Skin Defaults] Canonical defaults (v0.3.5) loaded. Available at window.KefinTweaksLegacySkinDefaults');
     
 })();
+

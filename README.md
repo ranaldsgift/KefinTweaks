@@ -181,8 +181,8 @@ The features in KefinTweaks which use local data caching are listed below, along
   - **Series Progress and Movie History** [24h]:  
   These are both more expensive operations, especially if you have watched a very high number of Movies or Shows. It's not practical to fetch this data on demand so we cache it to improve UX.
 - Collections on Details Page  
-  - **Collections** [24h]:  
-  Sadly I know no way to retreive a list of Collections that an Item is a child of from the API directly. The Ancestors endpoint only returns the physical ancestors of an item. In order to be able to populate the "Included In" section, we fetch the children from every Collection in your library and add the Item ID of each child to the cache.
+  - **Collections** [1h]:  
+  These items are only cached after they are fetched on first page load. Sadly I know no way to retreive a list of Collections that an Item is a child of from the API directly. The Ancestors endpoint only returns the physical ancestors of an item. In order to be able to populate the "Included In" section, we fetch the children from every Collection in your library and add the Item ID of each child to the cache.
   <hr>
 
 ## Community Request Progress

@@ -1,7 +1,7 @@
 // KefinTweaks Skin Manager
 // Manages skin selection and CSS loading for the display settings page
 // Adds a skin dropdown to mypreferencesdisplay.html and handles skin switching
-// Requires: utils.js, userConfig.js modules to be loaded before this script
+// Requires: utils.js, skinConfig.js modules to be loaded before this script
 
 (function() {
     'use strict';
@@ -41,69 +41,35 @@
      * @returns {number|null} The major version number (e.g., 10 for "10.10.X", 11 for "10.11.X"), or null if unavailable
      */
     async function getCurrentMajorServerVersion() {
-        try {
-            if (!window.ApiClient || !window.ApiClient._appName || !window.ApiClient._appVersion) {
-                return null;
-            }
-
-            if (window.ApiClient._appName === 'Jellyfin Media Player') {
-                // Check the server version instead of app version
-                if (!window.ApiClient._serverVersion) {
-                    // Wait 10s to see if it becomes ready, check every 500ms
-                    const startTime = Date.now();
-                    while (Date.now() - startTime < 10000) {
-                        if (window.ApiClient._serverVersion) {
-                            break;
-                        }
-                        await new Promise(resolve => setTimeout(resolve, 500));
-                    }
-                }
-
-                cachedServerVersion = getMajorServerVersion(window.ApiClient._serverVersion);
-                return cachedServerVersion;
-            }
-
-            // Check if ApiClient and serverVersion are available immediately
-            if (window.ApiClient._appVersion) {
-                cachedServerVersion = getMajorServerVersion(window.ApiClient._appVersion);
-                return cachedServerVersion;
-            }
-            
+        try {            
             // If we have a cached value, return it
             if (cachedServerVersion !== null) {
                 return cachedServerVersion;
             }
-            
-            // Start background polling if not already started
-            if (!versionPollingStarted) {
-                versionPollingStarted = true;
-                const pollInterval = 500; // 500ms
-                const maxDuration = 5000; // 5 seconds
-                const maxAttempts = maxDuration / pollInterval; // 10 attempts
-                let attempts = 0;
-                
-                const poll = setInterval(() => {
-                    attempts++;
-                    
-                    try {
-                        if (typeof window.ApiClient !== 'undefined' && window.ApiClient._appVersion) {
-                            cachedServerVersion = getMajorServerVersion(window.ApiClient._appVersion);
-                            return;
-                        }
-                    } catch (error) {
-                        WARN('Error getting server version during poll:', error);
-                    }
-                    
-                    // Timeout after max attempts
-                    if (attempts >= maxAttempts) {
-                        clearInterval(poll);
-                        cachedServerVersion = null; // Cache null to indicate we tried
-                    }
-                }, pollInterval);
+
+            if (!window.ApiClient || !window.ApiClient._appName || !window.ApiClient._appVersion) {
+                return null;
             }
-            
-            // Return null immediately (callers can check again later or use cached value)
-            return null;
+
+            if (window.ApiClient._appName === 'Jellyfin Web' && window.ApiClient._appVersion) {
+                cachedServerVersion = getMajorServerVersion(window.ApiClient._appVersion);
+                return cachedServerVersion;
+            }
+
+            // Check the server version instead of app version
+            if (!window.ApiClient._serverVersion) {
+                // Wait 10s to see if it becomes ready, check every 500ms
+                const startTime = Date.now();
+                while (Date.now() - startTime < 10000) {
+                    if (window.ApiClient._serverVersion) {
+                        break;
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+            }
+
+            cachedServerVersion = getMajorServerVersion(window.ApiClient._serverVersion);
+            return cachedServerVersion;
         } catch (error) {
             WARN('Error getting server version:', error);
             return null;
@@ -225,22 +191,358 @@
         });
     }
     
+    /**
+     * Normalize a single URL string for comparison
+     * URLs pointing to /KefinTweaks/skins/{filename}.css are normalized to just the filename
+     * This allows matching across different root domains (self-hosted, GitHub, jsdelivr, etc.)
+     * @param {string} urlString - URL string to normalize
+     * @returns {string} Normalized URL (filename if it's a KefinTweaks skin, otherwise original URL)
+     */
+    function normalizeSingleUrl(urlString) {
+        if (!urlString || typeof urlString !== 'string') {
+            return urlString;
+        }
+        
+        // Remove query parameters and fragments for comparison
+        let normalized = urlString.split('?')[0].split('#')[0];
+        
+        // Match pattern: .../KefinTweaks/skins/{filename}.css
+        // This works for various formats:
+        // - https://ranaldsgift.github.io/KefinTweaks/skins/elegantKefin.css
+        // - https://cdn.jsdelivr.net/gh/ranaldsgift/KefinTweaks@main/skins/elegantKefin.css
+        // - https://selfhosted.com/KefinTweaks/skins/elegantKefin.css
+        const kefinTweaksSkinPattern = /\/KefinTweaks\/skins\/([^\/\?]+\.css)(?:\?.*)?$/i;
+        const match = normalized.match(kefinTweaksSkinPattern);
+        
+        if (match) {
+            // Extract just the filename (e.g., "elegantKefin.css")
+            return match[1].toLowerCase();
+        }
+        
+        // For other URLs, normalize by removing trailing slashes and normalizing the URL
+        // Remove trailing slash
+        normalized = normalized.replace(/\/$/, '');
+        
+        // Return normalized URL (lowercase for case-insensitive comparison)
+        return normalized.toLowerCase();
+    }
+    
+    /**
+     * Deep compare two skin configurations to check if they are materially identical
+     * Compares URLs and colorSchemes, ignoring other properties like enabled/hidden
+     * URLs pointing to /KefinTweaks/skins/{filename}.css are normalized to just the filename
+     * @param {Object} skin1 - First skin configuration
+     * @param {Object} skin2 - Second skin configuration
+     * @returns {boolean} True if skins match exactly in URLs and colorSchemes
+     */
+    function skinsMatchExactly(skin1, skin2) {
+        if (!skin1 || !skin2 || skin1.name !== skin2.name) {
+            return false;
+        }
+        
+        // Normalize URLs for comparison
+        const normalizeUrls = (url) => {
+            if (!url) return null;
+            // New format: array of objects with majorServerVersions and urls
+            if (Array.isArray(url) && url.length > 0 && typeof url[0] === 'object' && url[0].majorServerVersions) {
+                // Sort by majorServerVersions for consistent comparison
+                const sorted = [...url].sort((a, b) => {
+                    const aVersions = Array.isArray(a.majorServerVersions) ? a.majorServerVersions.sort().join(',') : '';
+                    const bVersions = Array.isArray(b.majorServerVersions) ? b.majorServerVersions.sort().join(',') : '';
+                    return aVersions.localeCompare(bVersions);
+                });
+                return JSON.stringify(sorted.map(u => ({
+                    majorServerVersions: Array.isArray(u.majorServerVersions) ? [...u.majorServerVersions].sort() : u.majorServerVersions,
+                    urls: Array.isArray(u.urls) 
+                        ? [...u.urls].map(normalizeSingleUrl).sort() 
+                        : normalizeSingleUrl(u.urls)
+                })));
+            }
+            // Old format: string or array of strings
+            if (typeof url === 'string') {
+                return JSON.stringify([normalizeSingleUrl(url)]);
+            }
+            if (Array.isArray(url)) {
+                return JSON.stringify([...url].map(normalizeSingleUrl).sort());
+            }
+            return JSON.stringify(url);
+        };
+        
+        // Normalize colorSchemes for comparison
+        const normalizeColorSchemes = (colorSchemes) => {
+            if (!colorSchemes || !Array.isArray(colorSchemes)) return '[]';
+            const sorted = [...colorSchemes].sort((a, b) => {
+                const aName = (a.name || '').toLowerCase();
+                const bName = (b.name || '').toLowerCase();
+                return aName.localeCompare(bName);
+            });
+            return JSON.stringify(sorted.map(cs => {
+                let normalizedUrl = cs.url;
+                if (normalizedUrl) {
+                    // Handle @import url(...) format - extract the URL
+                    const importMatch = normalizedUrl.match(/@import\s+url\(["']?([^"']+)["']?\)/i);
+                    if (importMatch) {
+                        normalizedUrl = importMatch[1];
+                    }
+                    normalizedUrl = normalizeSingleUrl(normalizedUrl);
+                }
+                return {
+                    name: cs.name,
+                    url: normalizedUrl
+                };
+            }));
+        };
+        
+        const urls1 = normalizeUrls(skin1.url);
+        const urls2 = normalizeUrls(skin2.url);
+        const schemes1 = normalizeColorSchemes(skin1.colorSchemes);
+        const schemes2 = normalizeColorSchemes(skin2.colorSchemes);
+        
+        return urls1 === urls2 && schemes1 === schemes2;
+    }
+    
+    /**
+     * Check if a Jellypane skin contains the old URL from the default config
+     * @param {Object} skin - Skin configuration to check
+     * @returns {boolean} True if it's Jellypane with the old URL
+     */
+    function isJellypaneWithOldUrlFormat(skin) {
+        if (!skin || skin.name !== 'Jellypane') {
+            return false;
+        }
+        
+        if (!skin.url) return false;
+        
+        const oldJellypaneUrl = 'https://cdn.jsdelivr.net/gh/tedhinklater/Jellypane@main/Jellypane.css';
+        
+        // Check if the old URL exists in the skin config
+        // Handle new format: array of objects with majorServerVersions and urls
+        if (Array.isArray(skin.url) && skin.url.length > 0 && typeof skin.url[0] === 'object' && skin.url[0].majorServerVersions) {
+            // Check all url objects for the old URL
+            for (const urlObj of skin.url) {
+                if (Array.isArray(urlObj.urls)) {
+                    if (urlObj.urls.includes(oldJellypaneUrl)) {
+                        return true;
+                    }
+                } else if (urlObj.urls === oldJellypaneUrl) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        
+        // Handle old format: string or array of strings
+        if (typeof skin.url === 'string') {
+            return skin.url === oldJellypaneUrl;
+        }
+        
+        if (Array.isArray(skin.url)) {
+            return skin.url.includes(oldJellypaneUrl);
+        }
+        
+        return false;
+    }
+
+    /**
+     * Create a backup of the current KefinTweaksConfig in JS Injector
+     * @param {Object} configToBackup - The config object to backup
+     * @returns {Promise<boolean>} True if backup was successful
+     */
+    async function createConfigBackup(configToBackup) {
+        try {
+            if (!window.ApiClient || !window.ApiClient._serverAddress || !window.ApiClient.accessToken) {
+                WARN('ApiClient not available, cannot create backup');
+                return false;
+            }
+            
+            const server = window.ApiClient._serverAddress;
+            const token = window.ApiClient.accessToken();
+            
+            // Find JavaScript Injector plugin
+            const pluginsResponse = await fetch(`${server}/Plugins`, {
+                headers: { 'X-Emby-Token': token }
+            });
+            
+            if (!pluginsResponse.ok) {
+                WARN(`Failed to get plugins for backup: ${pluginsResponse.statusText}`);
+                return false;
+            }
+            
+            const pluginsData = await pluginsResponse.json();
+            const pluginsList = Array.isArray(pluginsData) ? pluginsData : (pluginsData.Items || []);
+            const plugin = pluginsList.find(p => p.Name === 'JavaScript Injector' || p.Name === 'JS Injector');
+            
+            if (!plugin) {
+                WARN('JavaScript Injector plugin not found, cannot create backup');
+                return false;
+            }
+            
+            const pluginId = plugin.Id;
+            
+            // Get current injector config
+            const configUrl = `${server}/Plugins/${pluginId}/Configuration`;
+            const configResponse = await fetch(configUrl, {
+                headers: { 'X-Emby-Token': token }
+            });
+            
+            if (!configResponse.ok) {
+                WARN(`Failed to get plugin config for backup: ${configResponse.statusText}`);
+                return false;
+            }
+            
+            const injectorConfig = await configResponse.json();
+            
+            // Ensure CustomJavaScripts array exists
+            if (!injectorConfig.CustomJavaScripts) {
+                injectorConfig.CustomJavaScripts = [];
+            }
+            
+            // Create backup script name with timestamp
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5); // Format: 2024-01-01T12-30-45
+            const backupName = `KefinTweaks-Config-[SkinConflictsRemoved-${timestamp}]`;
+            
+            // Create the backup script content
+            const backupScriptContent = `// KefinTweaks Configuration Backup
+// This backup was automatically created when skin conflicts were removed
+// Created: ${new Date().toISOString()}
+// Do not edit manually
+
+window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
+            
+            // Add backup script (disabled by default so it doesn't interfere)
+            injectorConfig.CustomJavaScripts.push({
+                Name: backupName,
+                Script: backupScriptContent,
+                Enabled: false, // Disabled so it doesn't interfere with the main config
+                RequiresAuthentication: false
+            });
+            
+            // Save the updated configuration with backup
+            const saveResponse = await fetch(configUrl, {
+                method: 'POST',
+                headers: {
+                    'X-Emby-Token': token,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(injectorConfig)
+            });
+            
+            if (!saveResponse.ok) {
+                WARN(`Failed to save backup: ${saveResponse.statusText}`);
+                return false;
+            }
+            
+            LOG(`Created backup: ${backupName}`);
+            return true;
+        } catch (error) {
+            ERR('Error creating config backup:', error);
+            return false;
+        }
+    }
+
     // Load and merge skin configurations
     async function loadSkinConfig() {
-        // Only load from window.KefinTweaksConfig (from JS Injector)
-        const configSkins = window.KefinTweaksConfig?.skins || [];
+        // Load default skins from skinConfig.js (for merging)
+        const defaultSkins = window.KefinTweaksDefaultSkinsConfig?.skins || [];
+        
+        // Load legacy defaults for duplicate detection (canonical v0.3.5 snapshot)
+        const legacyDefaults = window.KefinTweaksLegacySkinDefaults?.skins || [];
+        
+        // Load admin-configured skins from window.KefinTweaksConfig (from JS Injector)
+        let adminSkins = window.KefinTweaksConfig?.skins || [];
+        
+        // Clean up admin skins: remove exact duplicates of legacy defaults and old Jellypane format
+        const cleanedAdminSkins = [];
+        const skinsToRemove = new Set();
+        
+        adminSkins.forEach(adminSkin => {
+            // Check for exact match with any legacy default skin (canonical comparison)
+            const matchingLegacyDefault = legacyDefaults.find(legacySkin => {
+                if (adminSkin.name !== legacySkin.name) {
+                    return false;
+                }
+                const matches = skinsMatchExactly(adminSkin, legacySkin);
+                if (!matches) {
+                    // Debug: Log why skins with same name don't match
+                    LOG(`[Skin Match Debug] Skin '${adminSkin.name}' found in both configs but URLs/colorSchemes differ. Admin: ${JSON.stringify({url: adminSkin.url, colorSchemes: adminSkin.colorSchemes})}, Legacy Default: ${JSON.stringify({url: legacySkin.url, colorSchemes: legacySkin.colorSchemes})}`);
+                }
+                return matches;
+            });
+            
+            if (matchingLegacyDefault) {
+                // Exact match found - remove from admin config
+                LOG(`Removing exact duplicate of legacy default skin '${adminSkin.name}' from admin config`);
+                skinsToRemove.add(adminSkin.name);
+                return; // Skip adding to cleanedAdminSkins
+            }
+            
+            // Special case: Jellypane with old URL format
+            if (isJellypaneWithOldUrlFormat(adminSkin)) {
+                LOG(`Removing Jellypane with old URL format from admin config`);
+                skinsToRemove.add(adminSkin.name);
+                return; // Skip adding to cleanedAdminSkins
+            }
+            
+            // Keep this admin skin
+            cleanedAdminSkins.push(adminSkin);
+        });
+        
+        // If we removed any skins, create backup and save cleaned config
+        if (skinsToRemove.size > 0 && window.KefinTweaksConfig) {
+            // Create a deep copy of the original config for backup
+            const originalConfig = JSON.parse(JSON.stringify(window.KefinTweaksConfig));
+            
+            // Create backup before modifying
+            const backupCreated = await createConfigBackup(originalConfig);
+            if (!backupCreated) {
+                WARN('Failed to create backup, but continuing with cleanup');
+            }
+            
+            // Update KefinTweaksConfig with cleaned skins
+            window.KefinTweaksConfig.skins = cleanedAdminSkins;
+            
+            // Save the cleaned config back to JS Injector
+            if (window.KefinTweaksUtils && window.KefinTweaksUtils.saveConfigToJavaScriptInjector) {
+                const saveSuccess = await window.KefinTweaksUtils.saveConfigToJavaScriptInjector(window.KefinTweaksConfig, { waitForLogin: false });
+                if (saveSuccess) {
+                    LOG(`Successfully saved cleaned config (removed ${skinsToRemove.size} duplicate/old-format skin(s): ${Array.from(skinsToRemove).join(', ')})`);
+                } else {
+                    WARN('Failed to save cleaned config to JS Injector');
+                }
+            } else {
+                WARN('KefinTweaksUtils.saveConfigToJavaScriptInjector not available, cannot save cleaned config');
+            }
+            
+            LOG(`Cleaned up ${skinsToRemove.size} duplicate/old-format skin(s) from admin config: ${Array.from(skinsToRemove).join(', ')}`);
+        }
+        
+        adminSkins = cleanedAdminSkins;
 
-        // Add any default skins from userConfig.js that are not already present        
-        const defaultSkins = window.KefinTweaksUserConfig?.skins || [];
+        // Merge: Start with defaults, then override/add from admin config
+        // Admin config takes precedence for duplicate names
+        const mergedSkins = [];
+        const adminSkinNames = new Set(adminSkins.map(s => s.name));
+        
+        // First, add all default skins
         defaultSkins.forEach(skin => {
-            if (!configSkins.some(s => s.name === skin.name)) {
-                configSkins.push(skin);
+            mergedSkins.push({ ...skin });
+        });
+        
+        // Then, add/override with admin skins
+        adminSkins.forEach(adminSkin => {
+            const existingIndex = mergedSkins.findIndex(s => s.name === adminSkin.name);
+            if (existingIndex >= 0) {
+                // Override existing default skin with admin version
+                mergedSkins[existingIndex] = { ...adminSkin };
+            } else {
+                // Add new admin skin
+                mergedSkins.push({ ...adminSkin });
             }
         });
 
         // Filter to only include enabled skins (enabled !== false)
         // Default to enabled if the property is not set
-        SKINS_CONFIG = configSkins.filter(skin => {
+        SKINS_CONFIG = mergedSkins.filter(skin => {
             // Include skin if enabled is not explicitly false
             // If enabled is undefined/null, treat as enabled (true)
             return skin.enabled !== false;
@@ -265,41 +567,484 @@
             LOG(`Filtered skins by server version: ${skinsBeforeFilter} -> ${skinsAfterFilter} (removed ${skinsBeforeFilter - skinsAfterFilter} incompatible skins)`);
         }
         
-        const enabledCount = configSkins.filter(s => s.enabled !== false).length;
-        const disabledCount = configSkins.length - enabledCount;
-        LOG(`Loaded ${SKINS_CONFIG.length} enabled skins from KefinTweaksConfig (${enabledCount} enabled, ${disabledCount} disabled)`);
+        // Expose merged config globally for use by other scripts
+        window.KefinTweaksSkinConfig = SKINS_CONFIG;
+        
+        const enabledCount = mergedSkins.filter(s => s.enabled !== false).length;
+        const disabledCount = mergedSkins.length - enabledCount;
+        LOG(`Loaded ${SKINS_CONFIG.length} enabled skins (${enabledCount} enabled, ${disabledCount} disabled). Merged config available at window.KefinTweaksSkinConfig`);
     }
+    
+    /**
+     * Get the source information for a skin (default, custom, or overridden)
+     * @param {string} skinName - Name of the skin to check
+     * @returns {string} 'default', 'custom', or 'overridden'
+     */
+    function getSkinSourceInfo(skinName) {
+        if (!skinName) return 'default';
+        
+        const defaultSkins = window.KefinTweaksDefaultSkinsConfig?.skins || [];
+        const adminSkins = window.KefinTweaksConfig?.skins || [];
+        
+        const isDefault = defaultSkins.some(s => s.name === skinName);
+        const isAdmin = adminSkins.some(s => s.name === skinName);
+        
+        if (isDefault && isAdmin) {
+            return 'overridden';
+        } else if (isAdmin) {
+            return 'custom';
+        } else {
+            return 'default';
+        }
+    }
+    
+    /**
+     * Get source information for all skins in the merged config
+     * @returns {Object} Map of skin names to their source ('default', 'custom', or 'overridden')
+     */
+    function getAllSkinSources() {
+        const sourceMap = {};
+        const mergedSkins = window.KefinTweaksSkinConfig || SKINS_CONFIG || [];
+        
+        mergedSkins.forEach(skin => {
+            if (skin.name) {
+                sourceMap[skin.name] = getSkinSourceInfo(skin.name);
+            }
+        });
+        
+        return sourceMap;
+    }
+    
+    // Expose helper functions globally
+    window.KefinTweaksSkinManager = window.KefinTweaksSkinManager || {};
+    window.KefinTweaksSkinManager.getSkinSourceInfo = getSkinSourceInfo;
+    window.KefinTweaksSkinManager.getAllSkinSources = getAllSkinSources;
     
     // Load and merge theme configurations
     async function loadThemeConfig() {
-        const userThemes = window.KefinTweaksUserConfig?.themes || [];
-        const additionalThemes = window.KefinTweaksConfig?.themes || [];
+        // Load themes from admin config only (no default themes support for now)
+        const adminThemes = window.KefinTweaksConfig?.themes || [];
         
-        // Start with user themes (these take priority)
-        THEMES_CONFIG = [...userThemes];
-
-        // Add any default themes from userConfig.js that are not already present
-        const defaultThemes = window.KefinTweaksUserConfig?.themes || [];
-        defaultThemes.forEach(theme => {
-            if (!THEMES_CONFIG.some(t => t.name === theme.name)) {
-                THEMES_CONFIG.push(theme);
-            }
-        });
+        // Start with admin themes
+        THEMES_CONFIG = [...adminThemes];
         
-        // Add additional themes from main config, avoiding duplicates by name
-        additionalThemes.forEach(theme => {
-            const exists = THEMES_CONFIG.some(existingTheme => existingTheme.name === theme.name);
-            if (!exists) {
-                THEMES_CONFIG.push(theme);
-            }
-        });
-        
-        LOG(`Loaded ${THEMES_CONFIG.length} themes (${userThemes.length} user + ${additionalThemes.length} additional)`);
+        LOG(`Loaded ${THEMES_CONFIG.length} themes from admin config`);
     }
     
     
     // Track loaded skin CSS URLs
     let loadedSkinUrls = new Set();
+    
+    // Track loaded optional includes CSS URLs
+    let loadedOptionalIncludesUrls = new Set();
+    
+    // Storage key for user config
+    const USER_CONFIG_STORAGE_KEY = 'kefinTweaksUserConfig';
+    
+    /**
+     * Extract filename from a URL
+     * @param {string} url - The URL to extract filename from
+     * @returns {string} The filename (e.g., "custom-media-covers-latest-min.css")
+     */
+    function extractFilenameFromUrl(url) {
+        if (!url) return '';
+        
+        try {
+            // Remove query parameters and fragments
+            const urlWithoutParams = url.split('?')[0].split('#')[0];
+            
+            // Extract the last path segment
+            const pathParts = urlWithoutParams.split('/');
+            const filename = pathParts[pathParts.length - 1];
+            
+            return filename || '';
+        } catch (e) {
+            ERR('Error extracting filename from URL:', e);
+            return '';
+        }
+    }
+    
+    /**
+     * Normalize skin name for use in keys (replace spaces with underscores)
+     * @param {string} skinName - The skin name
+     * @returns {string} Normalized skin name
+     */
+    function normalizeSkinNameForKey(skinName) {
+        if (!skinName) return '';
+        return skinName.replace(/\s+/g, '_');
+    }
+    
+    /**
+     * Generate a key for an optional include
+     * Format: [skin_name]-[author]-[css-filename]
+     * @param {string} skinName - The skin name (or "global" for global includes)
+     * @param {string} author - The author name
+     * @param {string} url - The URL to extract filename from
+     * @returns {string} The generated key
+     */
+    function generateOptionalIncludeKey(skinName, author, url) {
+        const normalizedSkinName = skinName === 'global' ? 'global' : normalizeSkinNameForKey(skinName);
+        const filename = extractFilenameFromUrl(url);
+        const normalizedAuthor = (author || '').replace(/\s+/g, '_');
+        
+        return `${normalizedSkinName}-${normalizedAuthor}-${filename}`;
+    }
+    
+    /**
+     * Get the user config from localStorage
+     * @returns {Object} User config object with optionalIncludes array of { key, enabled } objects
+     */
+    function getUserConfig() {
+        try {
+            const saved = localStorage.getItem(USER_CONFIG_STORAGE_KEY);
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                // Migrate old format (array of keys) to new format (array of objects)
+                if (parsed.optionalIncludes && parsed.optionalIncludes.length > 0) {
+                    const firstItem = parsed.optionalIncludes[0];
+                    if (typeof firstItem === 'string') {
+                        // Old format: array of keys (all enabled)
+                        parsed.optionalIncludes = parsed.optionalIncludes.map(key => ({ key, enabled: true }));
+                    }
+                }
+                return parsed;
+            }
+        } catch (e) {
+            ERR('Error parsing user config:', e);
+        }
+        return { optionalIncludes: [] };
+    }
+    
+    /**
+     * Save the user config to localStorage
+     * @param {Object} userConfig - User config object
+     */
+    function saveUserConfig(userConfig) {
+        try {
+            localStorage.setItem(USER_CONFIG_STORAGE_KEY, JSON.stringify(userConfig));
+        } catch (e) {
+            ERR('Error saving user config:', e);
+        }
+    }
+    
+    /**
+     * Check if an optional include is enabled based on precedence:
+     * 1. User localStorage config (highest priority) - objects with { key, enabled }
+     * 2. Admin config (KefinTweaksConfig.optionalIncludes) - objects with { key, enabled }
+     * 3. Default config (lowest priority) - defaultEnabled parameter
+     * @param {string} key - The optional include key
+     * @param {boolean} defaultEnabled - Default enabled state from config
+     * @returns {boolean} Whether the include is enabled
+     */
+    function isOptionalIncludeEnabled(key, defaultEnabled = false) {
+        // Check user localStorage first (highest priority)
+        const userConfig = getUserConfig();
+        const userOptionalIncludes = userConfig.optionalIncludes || [];
+        
+        // Check if user has explicitly set this key
+        const userEntry = userOptionalIncludes.find(entry => {
+            if (typeof entry === 'string') {
+                // Legacy format: just a key (enabled)
+                return entry === key;
+            }
+            if (typeof entry === 'object' && entry.key) {
+                return entry.key === key;
+            }
+            return false;
+        });
+        
+        if (userEntry !== undefined) {
+            // User has explicitly configured this key
+            if (typeof userEntry === 'string') {
+                return true; // Legacy format: key string means enabled
+            }
+            return userEntry.enabled === true;
+        }
+        
+        // User hasn't configured this key, check admin config
+        const adminOptionalIncludes = window.KefinTweaksConfig?.optionalIncludes || [];
+        
+        if (Array.isArray(adminOptionalIncludes) && adminOptionalIncludes.length > 0) {
+            // Check if admin has configured this key
+            const adminEntry = adminOptionalIncludes.find(entry => {
+                if (typeof entry === 'string') {
+                    // Legacy format: just a key (enabled)
+                    return entry === key;
+                }
+                if (typeof entry === 'object' && entry.key) {
+                    return entry.key === key;
+                }
+                return false;
+            });
+            
+            if (adminEntry !== undefined) {
+                // Admin has configured this key
+                if (typeof adminEntry === 'string') {
+                    return true; // Legacy format: key string means enabled
+                }
+                return adminEntry.enabled === true;
+            }
+        }
+        
+        // Neither user nor admin has configured this key, fall back to default
+        return defaultEnabled;
+    }
+    
+    /**
+     * Get enabled optional includes for a skin from user config
+     * @param {string} skinName - The skin name (or "global" for global includes)
+     * @param {Array} defaultOptionalIncludes - Default optional includes from skin config
+     * @returns {Array} Array of enabled optional includes with their enabled state
+     */
+    function getOptionalIncludesEnabledState(skinName, defaultOptionalIncludes = []) {
+        if (!skinName || !defaultOptionalIncludes || defaultOptionalIncludes.length === 0) {
+            return [];
+        }
+        
+        // Map default optional includes to enabled state based on key-based checks
+        return defaultOptionalIncludes.map(include => {
+            const author = extractAuthorFromUrl(include.url);
+            const key = generateOptionalIncludeKey(skinName, author, include.url);
+            const enabled = isOptionalIncludeEnabled(key, include.enabled || false);
+            
+            return {
+                ...include,
+                enabled: enabled,
+                key: key // Store key for later use
+            };
+        });
+    }
+    
+    /**
+     * Save a single optional include state to user config
+     * Only saves the specific key that was toggled, maintaining existing entries
+     * @param {string} key - The optional include key
+     * @param {boolean} enabled - Whether the include is enabled
+     */
+    function saveOptionalIncludeState(key, enabled) {
+        if (!key) {
+            return;
+        }
+        
+        const userConfig = getUserConfig();
+        const currentEntries = userConfig.optionalIncludes || [];
+        
+        // Find existing entry for this key
+        const existingIndex = currentEntries.findIndex(entry => {
+            const entryKey = typeof entry === 'string' ? entry : entry.key;
+            return entryKey === key;
+        });
+        
+        if (existingIndex >= 0) {
+            // Update existing entry
+            if (typeof currentEntries[existingIndex] === 'string') {
+                // Legacy format: replace with object
+                currentEntries[existingIndex] = { key: key, enabled: enabled };
+            } else {
+                // Update enabled state
+                currentEntries[existingIndex].enabled = enabled;
+            }
+        } else {
+            // Add new entry
+            currentEntries.push({ key: key, enabled: enabled });
+        }
+        
+        // Update user config
+        userConfig.optionalIncludes = currentEntries;
+        
+        // Save updated config
+        saveUserConfig(userConfig);
+    }
+    
+    /**
+     * Save enabled optional includes state to user config (legacy function for bulk updates)
+     * @param {string} skinName - The skin name (or "global" for global includes)
+     * @param {Array} optionalIncludes - Array of optional includes with enabled state
+     * @deprecated Use saveOptionalIncludeState for individual updates
+     */
+    function saveOptionalIncludesEnabledState(skinName, optionalIncludes) {
+        if (!skinName || !optionalIncludes) {
+            return;
+        }
+        
+        const userConfig = getUserConfig();
+        
+        // Get array of optional include entries with { key, enabled }
+        const entries = optionalIncludes.map(include => {
+            // Use stored key if available, otherwise generate it
+            const key = include.key || (() => {
+                const author = extractAuthorFromUrl(include.url);
+                return generateOptionalIncludeKey(skinName, author, include.url);
+            })();
+            
+            return {
+                key: key,
+                enabled: include.enabled === true
+            };
+        });
+        
+        // Get all current entries (from other skins/global)
+        const currentEntries = userConfig.optionalIncludes || [];
+        
+        // Remove entries for this skin/global (to replace with new ones)
+        const prefix = skinName === 'global' ? 'global-' : `${normalizeSkinNameForKey(skinName)}-`;
+        const otherEntries = currentEntries.filter(entry => {
+            const entryKey = typeof entry === 'string' ? entry : entry.key;
+            return !entryKey.startsWith(prefix);
+        });
+        
+        // Combine other entries with new entries
+        const allEntries = [...otherEntries, ...entries];
+        
+        // Update user config
+        userConfig.optionalIncludes = allEntries;
+        
+        // Save updated config
+        saveUserConfig(userConfig);
+    }
+    
+    /**
+     * Get merged global optional includes (defaults + admin config)
+     * Admin config should contain array of keys (strings), not objects
+     * @returns {Array} Merged list of global optional includes
+     */
+    function getMergedGlobalOptionalIncludes() {
+        // Get default global optional includes from skinConfig.js
+        const defaultGlobalIncludes = window.KefinTweaksDefaultSkinsConfig?.globalOptionalIncludes || [];
+        
+        // Get admin-configured global optional includes from KefinTweaksConfig
+        // Admin config should be an array of keys (strings)
+        const adminGlobalIncludeKeys = window.KefinTweaksConfig?.optionalIncludes || [];
+        
+        // Create a set of admin keys for quick lookup
+        const adminKeysSet = new Set(adminGlobalIncludeKeys.filter(k => typeof k === 'string'));
+        
+        // Start with defaults, then check if admin has added any new ones
+        // For now, we only support defaults + admin keys
+        // Admin can't override defaults, only add new ones via keys
+        const merged = defaultGlobalIncludes.map(include => ({ ...include }));
+        
+        // Note: Admin config now stores keys, not full objects
+        // If admin wants to add new optional includes, they would need to add them to defaults
+        // or we'd need to support a different structure. For now, we'll just use defaults
+        // and check enabled state via keys
+        
+        return merged;
+    }
+    
+    /**
+     * Load optional includes CSS for a skin based on userConfig
+     * Includes both global and skin-specific optional includes
+     * @param {Object} skin - The skin configuration object
+     */
+    function loadOptionalIncludes(skin) {
+        if (!skin) {
+            return;
+        }
+        
+        // Get merged global optional includes
+        const globalOptionalIncludes = getMergedGlobalOptionalIncludes();
+        
+        // Load enabled global optional includes (check enabled state via keys)
+        globalOptionalIncludes.forEach(include => {
+            const author = extractAuthorFromUrl(include.url);
+            const key = generateOptionalIncludeKey('global', author, include.url);
+            const isEnabled = isOptionalIncludeEnabled(key, include.enabled || false);
+            
+            if (isEnabled && include.url) {
+                loadOptionalIncludeCSS(include.url, 'global');
+            }
+        });
+        
+        // Load enabled skin-specific optional includes
+        if (skin.optionalIncludes && skin.optionalIncludes.length > 0) {
+            skin.optionalIncludes.forEach(include => {
+                const author = extractAuthorFromUrl(include.url);
+                const key = generateOptionalIncludeKey(skin.name, author, include.url);
+                const isEnabled = isOptionalIncludeEnabled(key, include.enabled || false);
+                
+                if (isEnabled && include.url) {
+                    loadOptionalIncludeCSS(include.url, skin.name);
+                }
+            });
+        }
+    }
+    
+    /**
+     * Unload all optional includes CSS for a specific skin
+     * @param {string} skinName - The skin name to unload includes for (or 'global' for global includes)
+     */
+    function unloadOptionalIncludesForSkin(skinName) {
+        const optionalIncludeLinks = document.querySelectorAll('link[data-kefin-optional-include="true"]');
+        optionalIncludeLinks.forEach(link => {
+            if (link.getAttribute('data-skin') === skinName) {
+                if (link.parentNode) {
+                    link.parentNode.removeChild(link);
+                }
+                const url = link.href;
+                loadedOptionalIncludesUrls.delete(url);
+            }
+        });
+    }
+    
+    /**
+     * Unload all optional includes CSS (both global and skin-specific)
+     */
+    function unloadAllOptionalIncludes() {
+        const optionalIncludeLinks = document.querySelectorAll('link[data-kefin-optional-include="true"]');
+        optionalIncludeLinks.forEach(link => {
+            if (link.parentNode) {
+                link.parentNode.removeChild(link);
+            }
+            const url = link.href;
+            loadedOptionalIncludesUrls.delete(url);
+        });
+    }
+    
+    /**
+     * Load CSS for an optional include
+     * @param {string} url - The CSS URL
+     * @param {string} skinName - The skin name
+     */
+    function loadOptionalIncludeCSS(url, skinName) {
+        // Check if this CSS is already loaded
+        if (loadedOptionalIncludesUrls.has(url)) {
+            LOG(`Optional include CSS already loaded: ${url}`);
+            return;
+        }
+
+        if (!url || url === '') {
+            LOG(`Invalid optional include CSS URL: ${url}, skipping`);
+            return;
+        }
+        
+        const link = document.createElement('link');
+        link.id = `cssOptionalInclude-${Date.now()}-${Math.random()}`;
+        link.rel = 'stylesheet';
+        link.type = 'text/css';
+        link.href = url;
+        link.setAttribute('data-kefin-optional-include', 'true');
+        link.setAttribute('data-skin', skinName);
+        
+        // Insert after the last skin link
+        const skinLinks = document.querySelectorAll('link[data-kefin-skin="true"]');
+        let insertAfter = null;
+        
+        if (skinLinks.length > 0) {
+            insertAfter = skinLinks[skinLinks.length - 1];
+        } else {
+            insertAfter = document.getElementById('cssTheme');
+        }
+        
+        if (insertAfter && insertAfter.parentNode) {
+            insertAfter.parentNode.insertBefore(link, insertAfter.nextSibling);
+        } else {
+            document.head.appendChild(link);
+        }
+        
+        loadedOptionalIncludesUrls.add(url);
+        LOG(`Loaded optional include CSS: ${url}`);
+    }
     
     // Tooltip management
     let currentTooltip = null;
@@ -900,6 +1645,50 @@
         
         // Update author display in popover if it exists
         updateSkinAuthorLabel();
+        
+        // Update author display in display preferences if it exists
+        updateDisplayPreferencesSkinLabel();
+    }
+    
+    /**
+     * Update the author info section in the display preferences page
+     */
+    function updateDisplayPreferencesSkinLabel() {
+        const labelElement = document.querySelector('label[for="selectSkin"]');
+        if (!labelElement) {
+            return;
+        }
+        
+        const skinSelect = document.getElementById('selectSkin');
+        const selectedSkinName = skinSelect?.value || localStorage.getItem(STORAGE_KEY) || getDefaultSkinName();
+        const selectedSkin = SKINS_CONFIG.find(skin => skin.name === selectedSkinName);
+        
+        // Find existing gear icon and remove it
+        const existingGear = labelElement.querySelector('.material-icons[data-optional-includes-gear]');
+        if (existingGear) {
+            existingGear.remove();
+        }
+        
+        // Add gear icon for all skins (global optional includes apply to all)
+        if (selectedSkin) {
+            const gearIcon = document.createElement('span');
+            gearIcon.className = 'material-icons';
+            gearIcon.setAttribute('data-optional-includes-gear', 'true');
+            gearIcon.textContent = 'settings';
+            gearIcon.style.cssText = 'font-size: 1em; margin-left: 0.5em; cursor: pointer; opacity: 0.7; transition: opacity 0.2s; vertical-align: middle;';
+            gearIcon.title = 'Configure additional skin options';
+            gearIcon.addEventListener('mouseenter', () => {
+                gearIcon.style.opacity = '1';
+            });
+            gearIcon.addEventListener('mouseleave', () => {
+                gearIcon.style.opacity = '0.7';
+            });
+            gearIcon.addEventListener('click', (e) => {
+                e.stopPropagation();
+                openOptionalIncludesModal(selectedSkin);
+            });
+            labelElement.appendChild(gearIcon);
+        }
     }
     
     /**
@@ -1012,6 +1801,328 @@
     }
 
     /**
+     * Extract author name from GitHub URL
+     * @param {string} url - The URL to extract author from
+     * @returns {string|null} Author name or null
+     */
+    function extractAuthorFromUrl(url) {
+        if (!url || typeof url !== 'string') return null;
+        const match = url.match(/https:\/\/cdn\.jsdelivr\.net\/gh\/([^\/]+)\//i);
+        if (match) {
+            return match[1];
+        }
+        return null;
+    }
+    
+    /**
+     * Open modal for configuring optional includes for a skin
+     * Shows both global and skin-specific optional includes
+     * @param {Object} skin - The skin configuration object
+     */
+    function openOptionalIncludesModal(skin) {
+        if (!skin) {
+            return;
+        }
+        
+        if (!window.ModalSystem) {
+            ERR('ModalSystem not available');
+            return;
+        }
+        
+        // Get merged global optional includes (defaults + admin config)
+        const mergedGlobalOptionalIncludes = getMergedGlobalOptionalIncludes();
+        
+        // Get enabled state for global includes (using key-based checks)
+        const enabledGlobalIncludes = mergedGlobalOptionalIncludes.map(include => {
+            const author = extractAuthorFromUrl(include.url);
+            const key = generateOptionalIncludeKey('global', author, include.url);
+            const enabled = isOptionalIncludeEnabled(key, include.enabled || false);
+            
+            return {
+                ...include,
+                enabled: enabled,
+                key: key
+            };
+        });
+        
+        // Get skin-specific optional includes
+        const skinOptionalIncludes = skin.optionalIncludes || [];
+        
+        // Get current enabled state for skin-specific includes
+        const enabledSkinIncludes = getOptionalIncludesEnabledState(skin.name, skinOptionalIncludes);
+        
+        const modalId = `optional-includes-${skin.name.replace(/[^a-zA-Z0-9]/g, '-')}`;
+        
+        // Create content
+        const content = document.createElement('div');
+        
+        // Description
+        const description = document.createElement('div');
+        description.className = 'listItemBodyText secondary';
+        description.textContent = 'Enable or disable additional CSS modules. Global options apply to all skins:';
+        description.style.cssText = 'margin-bottom: 1em; font-size: 0.9em; opacity: 0.8;';
+        content.appendChild(description);
+        
+        // Create checkboxes container
+        const checkboxesContainer = document.createElement('div');
+        checkboxesContainer.style.cssText = 'display: flex; flex-direction: column; gap: 0.75em;';
+        
+        // Check if there are any optional includes at all
+        if (enabledGlobalIncludes.length === 0 && enabledSkinIncludes.length === 0) {
+            const noOptionsMessage = document.createElement('div');
+            noOptionsMessage.className = 'listItemBodyText secondary';
+            noOptionsMessage.textContent = 'No additional options available for this skin.';
+            noOptionsMessage.style.cssText = 'text-align: center; padding: 1em; opacity: 0.6;';
+            checkboxesContainer.appendChild(noOptionsMessage);
+        }
+        
+        // Add global optional includes first
+        if (enabledGlobalIncludes.length > 0) {
+            const globalSection = document.createElement('div');
+            globalSection.style.cssText = 'margin-bottom: 1em;';
+            
+            const globalHeader = document.createElement('div');
+            globalHeader.className = 'listItemBodyText';
+            globalHeader.textContent = 'Global Options';
+            globalHeader.style.cssText = 'font-weight: 500; margin-bottom: 0.5em; font-size: 0.95em;';
+            globalSection.appendChild(globalHeader);
+            
+            enabledGlobalIncludes.forEach((include, index) => {
+                const checkboxItem = document.createElement('div');
+                checkboxItem.style.cssText = 'display: flex; flex-direction: column; gap: 0.25em; padding: 0.5em; border-radius: 4px; background: rgba(255, 255, 255, 0.05);';
+                
+                const checkboxRow = document.createElement('div');
+                checkboxRow.style.cssText = 'display: flex; align-items: center; gap: 0.75em;';
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.id = `globalOptionalInclude_${index}`;
+                checkbox.checked = include.enabled;
+                checkbox.setAttribute('data-include-name', include.name);
+                checkbox.setAttribute('data-include-url', include.url);
+                checkbox.setAttribute('data-is-global', 'true');
+                checkbox.style.cssText = 'width: 18px; height: 18px; cursor: pointer;';
+                
+                const label = document.createElement('label');
+                label.htmlFor = checkbox.id;
+                label.style.cssText = 'flex: 1; cursor: pointer; user-select: none;';
+                
+                const nameSpan = document.createElement('span');
+                nameSpan.textContent = include.name;
+                nameSpan.style.cssText = 'font-weight: 500;';
+                label.appendChild(nameSpan);
+                
+                // Add author name if available
+                const author = extractAuthorFromUrl(include.url);
+                if (author) {
+                    const authorSpan = document.createElement('span');
+                    authorSpan.textContent = ' by ';
+                    authorSpan.style.cssText = 'font-size: 0.85em; opacity: 0.7; margin-left: 0.25em;';
+                    
+                    const authorLink = document.createElement('a');
+                    authorLink.href = `https://github.com/${author}`;
+                    authorLink.target = '_blank';
+                    authorLink.rel = 'noopener noreferrer';
+                    authorLink.textContent = author;
+                    authorLink.style.cssText = 'color: inherit; text-decoration: underline; opacity: 0.8; transition: opacity 0.2s;';
+                    authorLink.addEventListener('mouseenter', () => {
+                        authorLink.style.opacity = '1';
+                    });
+                    authorLink.addEventListener('mouseleave', () => {
+                        authorLink.style.opacity = '0.8';
+                    });
+                    
+                    authorSpan.appendChild(authorLink);
+                    label.appendChild(authorSpan);
+                }
+                
+                checkboxRow.appendChild(checkbox);
+                checkboxRow.appendChild(label);
+                checkboxItem.appendChild(checkboxRow);
+                globalSection.appendChild(checkboxItem);
+            });
+            
+            checkboxesContainer.appendChild(globalSection);
+        }
+        
+        // Add skin-specific optional includes
+        if (enabledSkinIncludes.length > 0) {
+            const skinSection = document.createElement('div');
+            
+            const skinHeader = document.createElement('div');
+            skinHeader.className = 'listItemBodyText';
+            skinHeader.textContent = `${skin.name} Skin Options`;
+            skinHeader.style.cssText = 'font-weight: 500; margin-bottom: 0.5em; font-size: 0.95em;';
+            skinSection.appendChild(skinHeader);
+            
+            enabledSkinIncludes.forEach((include, index) => {
+                const checkboxItem = document.createElement('div');
+                checkboxItem.style.cssText = 'display: flex; flex-direction: column; gap: 0.25em; padding: 0.5em; border-radius: 4px; background: rgba(255, 255, 255, 0.05);';
+                
+                const checkboxRow = document.createElement('div');
+                checkboxRow.style.cssText = 'display: flex; align-items: center; gap: 0.75em;';
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.id = `skinOptionalInclude_${skin.name}_${index}`;
+                checkbox.checked = include.enabled;
+                checkbox.setAttribute('data-include-name', include.name);
+                checkbox.setAttribute('data-include-url', include.url);
+                checkbox.setAttribute('data-is-global', 'false');
+                checkbox.style.cssText = 'width: 18px; height: 18px; cursor: pointer;';
+                
+                const label = document.createElement('label');
+                label.htmlFor = checkbox.id;
+                label.style.cssText = 'flex: 1; cursor: pointer; user-select: none;';
+                
+                const nameSpan = document.createElement('span');
+                nameSpan.textContent = include.name;
+                nameSpan.style.cssText = 'font-weight: 500;';
+                label.appendChild(nameSpan);
+                
+                // Add author name if available
+                const author = extractAuthorFromUrl(include.url);
+                if (author) {
+                    const authorSpan = document.createElement('span');
+                    authorSpan.textContent = ' by ';
+                    authorSpan.style.cssText = 'font-size: 0.85em; opacity: 0.7; margin-left: 0.25em;';
+                    
+                    const authorLink = document.createElement('a');
+                    authorLink.href = `https://github.com/${author}`;
+                    authorLink.target = '_blank';
+                    authorLink.rel = 'noopener noreferrer';
+                    authorLink.textContent = author;
+                    authorLink.style.cssText = 'color: inherit; text-decoration: underline; opacity: 0.8; transition: opacity 0.2s;';
+                    authorLink.addEventListener('mouseenter', () => {
+                        authorLink.style.opacity = '1';
+                    });
+                    authorLink.addEventListener('mouseleave', () => {
+                        authorLink.style.opacity = '0.8';
+                    });
+                    
+                    authorSpan.appendChild(authorLink);
+                    label.appendChild(authorSpan);
+                }
+                
+                checkboxRow.appendChild(checkbox);
+                checkboxRow.appendChild(label);
+                checkboxItem.appendChild(checkboxRow);
+                skinSection.appendChild(checkboxItem);
+            });
+            
+            // Prepend child instead so that it appears first
+            checkboxesContainer.prepend(skinSection);
+        }
+        
+        content.appendChild(checkboxesContainer);
+        
+        // Create modal using ModalSystem (no footer - auto-save on change)
+        const modal = window.ModalSystem.create({
+            id: modalId,
+            title: `Optional CSS Modules`,
+            content: content,
+            footer: null,
+            closeOnBackdrop: true,
+            closeOnEscape: true,
+            onOpen: (modalInstance) => {
+                // Focus first checkbox
+                const firstCheckbox = modalInstance.dialog.querySelector('input[type="checkbox"]');
+                if (firstCheckbox) {
+                    setTimeout(() => firstCheckbox.focus(), 100);
+                }
+                
+                // Add change event listeners to all checkboxes for auto-save and real-time updates
+                const allCheckboxes = modalInstance.dialog.querySelectorAll('input[type="checkbox"]');
+                allCheckboxes.forEach(checkbox => {
+                    checkbox.addEventListener('change', () => {
+                        const isGlobal = checkbox.getAttribute('data-is-global') === 'true';
+                        
+                        if (isGlobal) {
+                            // Handle global optional includes - save to user localStorage (highest priority)
+                            const includeUrl = checkbox.getAttribute('data-include-url');
+                            const author = extractAuthorFromUrl(includeUrl);
+                            const key = generateOptionalIncludeKey('global', author, includeUrl);
+                            const enabled = checkbox.checked;
+                            
+                            // Save only this specific key (Option 1: only save what user toggled)
+                            saveOptionalIncludeState(key, enabled);
+                            
+                            // Also update admin config with { key, enabled } (for initial enabled state)
+                            // Only update the specific key that was changed
+                            if (!window.KefinTweaksConfig) {
+                                window.KefinTweaksConfig = {};
+                            }
+                            if (!window.KefinTweaksConfig.optionalIncludes) {
+                                window.KefinTweaksConfig.optionalIncludes = [];
+                            }
+                            
+                            // Find or create entry for this key in admin config
+                            const currentAdminEntries = window.KefinTweaksConfig.optionalIncludes || [];
+                            const adminEntryIndex = currentAdminEntries.findIndex(entry => {
+                                const entryKey = typeof entry === 'string' ? entry : (entry.key || '');
+                                return entryKey === key;
+                            });
+                            
+                            if (adminEntryIndex >= 0) {
+                                // Update existing entry
+                                if (typeof currentAdminEntries[adminEntryIndex] === 'string') {
+                                    currentAdminEntries[adminEntryIndex] = { key: key, enabled: enabled };
+                                } else {
+                                    currentAdminEntries[adminEntryIndex].enabled = enabled;
+                                }
+                            } else {
+                                // Add new entry
+                                currentAdminEntries.push({ key: key, enabled: enabled });
+                            }
+                            
+                            window.KefinTweaksConfig.optionalIncludes = currentAdminEntries;
+                            
+                            // Save to JS Injector
+                            if (window.KefinTweaksUtils && window.KefinTweaksUtils.saveConfigToJavaScriptInjector) {
+                                window.KefinTweaksUtils.saveConfigToJavaScriptInjector(window.KefinTweaksConfig, { waitForLogin: false });
+                            }
+                            
+                            // Apply changes immediately
+                            const currentSkinName = localStorage.getItem(STORAGE_KEY) || getDefaultSkinName();
+                            const currentSkin = SKINS_CONFIG.find(s => s.name === currentSkinName);
+                            if (currentSkin) {
+                                // Unload and reload global optional includes
+                                unloadOptionalIncludesForSkin('global');
+                                // Reload based on updated config (will reload both global and skin-specific)
+                                loadOptionalIncludes(currentSkin);
+                            }
+                            
+                            LOG(`Updated global optional include: ${key}`);
+                        } else {
+                            // Handle skin-specific optional includes
+                            const includeUrl = checkbox.getAttribute('data-include-url');
+                            const author = extractAuthorFromUrl(includeUrl);
+                            const key = generateOptionalIncludeKey(skin.name, author, includeUrl);
+                            const enabled = checkbox.checked;
+                            
+                            // Save only this specific key (Option 1: only save what user toggled)
+                            saveOptionalIncludeState(key, enabled);
+                            
+                            // Check if this is the currently active skin
+                            const currentSkinName = localStorage.getItem(STORAGE_KEY) || getDefaultSkinName();
+                            if (currentSkinName === skin.name) {
+                                // Reload skin-specific optional includes based on updated userConfig
+                                // First, unload current skin-specific optional includes
+                                unloadOptionalIncludesForSkin(skin.name);
+                                
+                                // Then reload based on userConfig (will reload both global and skin-specific)
+                                loadOptionalIncludes(skin);
+                                
+                                LOG(`Updated optional includes for ${skin.name} in real-time`);
+                            }
+                        }
+                    });
+                });
+            }
+        });
+    }
+    
+    /**
      * Update the author info section within the popover
      */
     function updateSkinAuthorLabel() {
@@ -1051,6 +2162,30 @@
             const authorSpan = document.createElement('span');
             authorSpan.textContent = authorName;
             labelElement.appendChild(authorSpan);
+        }
+        
+        // Add gear icon for all skins (global optional includes apply to all)
+        if (selectedSkin) {
+            const gearIcon = document.createElement('span');
+            gearIcon.className = 'material-icons';
+            gearIcon.textContent = 'settings';
+            gearIcon.style.fontSize = '1em';
+            gearIcon.style.marginLeft = '0.5em';
+            gearIcon.style.cursor = 'pointer';
+            gearIcon.style.opacity = '0.7';
+            gearIcon.style.transition = 'opacity 0.2s';
+            gearIcon.title = 'Configure additional skin options';
+            gearIcon.addEventListener('mouseenter', () => {
+                gearIcon.style.opacity = '1';
+            });
+            gearIcon.addEventListener('mouseleave', () => {
+                gearIcon.style.opacity = '0.7';
+            });
+            gearIcon.addEventListener('click', (e) => {
+                e.stopPropagation();
+                openOptionalIncludesModal(selectedSkin);
+            });
+            labelElement.appendChild(gearIcon);
         }
     }
     
@@ -1163,8 +2298,11 @@
         const selectedSkinName = localStorage.getItem(STORAGE_KEY) || getDefaultSkinName();
         const select = document.getElementById('selectSkin');
         if (select) {
-        select.value = selectedSkinName;
+            select.value = selectedSkinName;
         }
+        
+        // Update label with gear icon
+        updateDisplayPreferencesSkinLabel();
         
         LOG('Skin dropdown added successfully');
     }
@@ -1753,6 +2891,10 @@
         // Use requestAnimationFrame to avoid blocking
         requestAnimationFrame(() => {
             removeAllSkinCSS();
+            // Unload skin-specific optional includes for the current skin (if switching)
+            if (currentSkinName) {
+                unloadOptionalIncludesForSkin(currentSkinName);
+            }
         });
         
         // Performance optimization: Load new CSS first, then remove old CSS
@@ -1773,6 +2915,9 @@
                     loadSkinCSS(url, skin.name);
                 }
             });
+            
+            // Load optional includes for this skin
+            loadOptionalIncludes(skin);
         });
     }
     
