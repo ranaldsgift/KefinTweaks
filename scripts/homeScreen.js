@@ -695,6 +695,17 @@
 
     const discoverySectionSettingsCache = {};
 
+    /**
+     * Helper to get IsPlayed filter string from config
+     * @param {Object} config - Section configuration object
+     * @returns {string|null} - 'IsPlayed', 'IsUnplayed', or null
+     */
+    function getIsPlayedFilter(config) {
+        if (config && config.isPlayed === true) return 'IsPlayed';
+        if (config && config.isPlayed === false) return 'IsUnplayed';
+        return null;
+    }
+
     let collectionsData = null;
     async function getCollectionsData() {
         if (collectionsData !== null) {
@@ -795,14 +806,25 @@
 
     function applyDiscoverySectionOrdering(items, sectionConfig) {
         if (!Array.isArray(items)) return [];
+        
+        // Filter by IsPlayed if configured
+        let filteredItems = items;
+        const isPlayedFilter = sectionConfig?.isPlayed;
+        
+        if (isPlayedFilter === true) {
+            filteredItems = items.filter(item => item.UserData && item.UserData.Played);
+        } else if (isPlayedFilter === false) {
+            filteredItems = items.filter(item => !item.UserData || !item.UserData.Played);
+        }
+        
         const sortOrder = sectionConfig?.sortOrder || discoveryConfig.defaultSortOrder || defaultSortOrder;
         const sortDirection = sectionConfig?.sortOrderDirection || 'Ascending';
-        let sortedItems = items;
+        let sortedItems = filteredItems;
 
         if (sortOrder === 'Random') {
-            sortedItems = [...items].sort(() => Math.random() - 0.5);
+            sortedItems = [...filteredItems].sort(() => Math.random() - 0.5);
         } else if (window.cardBuilder && typeof window.cardBuilder.sortItems === 'function') {
-            sortedItems = window.cardBuilder.sortItems(items, sortOrder, sortDirection);
+            sortedItems = window.cardBuilder.sortItems(filteredItems, sortOrder, sortDirection);
         }
 
         const limit = parseDiscoveryNumber(
@@ -868,74 +890,6 @@
     /************ Helpers ************/
 
     /**
-     * Fetches item data from Jellyfin API to determine type
-     * @param {string} itemId - The item ID to fetch
-     * @returns {Promise<Object>} - Item data with type information
-     */
-    async function fetchItemData(itemId) {
-        const apiClient = window.ApiClient;
-        const serverUrl = apiClient.serverAddress();
-        const token = apiClient.accessToken();
-        
-        const url = `${serverUrl}/Items/${itemId}`;
-        
-        try {
-            const response = await fetch(url, {
-                headers: {
-                    "Authorization": `MediaBrowser Token="${token}"`
-                }
-            });
-            
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            
-            const data = await response.json();
-            return data;
-        } catch (err) {
-            ERR(`Failed to fetch item data for ${itemId}:`, err);
-            return null;
-        }
-    }
-
-    function buildParams(params) {
-        return Object.entries(params)
-            .map(([key, value]) => `${key}=${value}`)
-            .join('&');
-    }
-
-    /**
-     * Fetches playlist data from Jellyfin API
-     * @param {string} playlistId - The playlist ID to fetch
-     * @returns {Promise<Object>} - Playlist data with ItemIds array
-     */
-    async function fetchPlaylistData(playlistId, params = {}) {
-        const apiClient = window.ApiClient;
-        const serverUrl = apiClient.serverAddress();
-        const token = apiClient.accessToken();
-        
-        const url = `${serverUrl}/Playlists/${playlistId}/Items?${buildParams(params)}`;
-        
-        try {
-            const response = await fetch(url, {
-                headers: {
-                    "Authorization": `MediaBrowser Token="${token}"`
-                }
-            });
-            
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            
-            const data = await response.json();
-            return data;
-        } catch (err) {
-            ERR(`Failed to fetch playlist data for ${playlistId}:`, err);
-            return { ItemIds: [] };
-        }
-    }
-
-    /**
      * Fetches collection data from Jellyfin API
      * @param {string} collectionId - The collection ID to fetch
      * @returns {Promise<Object>} - Collection data with Items array
@@ -967,91 +921,6 @@
         }
     }
 
-    /**
-     * Generates the view more URL for a playlist or collection
-     * @param {string} itemId - The item ID
-     * @param {string} itemType - The item type ('Playlist' or 'BoxSet')
-     * @returns {string} - The complete URL for the item page
-     */
-    function generateViewMoreUrl(itemId, itemType) {
-        const apiClient = window.ApiClient;
-        const serverId = apiClient.serverId();
-
-        if (itemType === 'BoxSet') {
-            // For collections, use the collection page
-            return `${apiClient._serverAddress}/web/#/details?id=${itemId}&serverId=${serverId}`;
-        } else {
-            // For playlists, use the list page
-            return `#/list.html?parentId=${itemId}&serverId=${serverId}`;
-        }
-    }
-
-    /**
-     * Fetches genre items from Jellyfin API
-     * @param {string} genreId - The genre ID
-     * @returns {Promise<Array>} - Array of item IDs
-     */
-    async function fetchGenreItems(genreId) {
-        const apiClient = window.ApiClient;
-        const serverUrl = apiClient.serverAddress();
-        const token = apiClient.accessToken();
-        const userId = apiClient.getCurrentUserId();
-        
-        // First get genre name
-        const genreData = await fetchItemData(genreId);
-        if (!genreData) return [];
-        
-        const genreName = genreData.Name;
-        
-        const url = `${serverUrl}/Items?userId=${userId}&Genres=${encodeURIComponent(genreName)}&Recursive=true&Fields=ItemCounts`;
-        
-        try {
-            const response = await fetch(url, {
-                headers: { "Authorization": `MediaBrowser Token="${token}"` }
-            });
-            
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            
-            const data = await response.json();
-            return { Items: data.Items || [] };
-        } catch (err) {
-            ERR(`Failed to fetch genre items for ${genreName}:`, err);
-            return { Items: [] };
-        }
-    }
-
-    /**
-     * Fetches studio items from Jellyfin API
-     * @param {string} studioId - The studio ID
-     * @returns {Promise<Array>} - Array of item IDs
-     */
-    async function fetchStudioItems(studioId) {
-        const apiClient = window.ApiClient;
-        const serverUrl = apiClient.serverAddress();
-        const token = apiClient.accessToken();
-        const userId = apiClient.getCurrentUserId();
-        
-        const url = `${serverUrl}/Items?userId=${userId}&StudioIds=${studioId}&IncludeItemTypes=Series&Recursive=true&Fields=ItemCounts`;
-        
-        try {
-            const response = await fetch(url, {
-                headers: { "Authorization": `MediaBrowser Token="${token}"` }
-            });
-            
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            
-            const data = await response.json();
-            return { Items: data.Items || [] };
-        } catch (err) {
-            ERR(`Failed to fetch studio items for ${studioId}:`, err);
-            return { Items: [] };
-        }
-    }
-
     async function loadItemsForSectionConfig(sectionConfig) {
         const apiClient = window.ApiClient;
         const serverAddress = apiClient.serverAddress();
@@ -1066,6 +935,26 @@
         const sortOrder = sectionConfig.sortOrder || defaultSortOrder;
         const sortOrderDirection = sectionConfig.sortOrderDirection || 'Ascending';
         const itemLimit = sectionConfig.itemLimit || defaultItemLimit;
+        
+        // Parse additional query options
+        const additionalOptions = {};
+        if (Array.isArray(sectionConfig.additionalQueryOptions)) {
+            sectionConfig.additionalQueryOptions.forEach(option => {
+                if (option && option.key) {
+                    let value = option.value;
+                    // Handle booleans
+                    if (value === 'true' || value === true) value = true;
+                    else if (value === 'false' || value === false) value = false;
+                    
+                    additionalOptions[option.key] = value;
+                }
+            });
+        }
+        
+        if (Object.keys(additionalOptions).length > 0) {
+            LOG('Applied additional query options:', additionalOptions);
+        }
+
         let allItems = [];
 
         const sources = source.split(',').map(s => s.trim()).filter(Boolean);
@@ -1075,20 +964,17 @@
         }
 
         try {
-            // Build common query parameters
-            const commonParams = {
+            // Base parameters that apply to all queries
+            // Use defaults if not overridden by additionalOptions
+            const baseParams = {
                 userId: userId,
-                IncludeItemTypes: includeItemTypes,
                 Recursive: true,
-                Fields: 'PrimaryImageAspectRatio,DateCreated,Overview,Taglines,ProductionYear,RecursiveItemCount,ChildCount',
-                Limit: itemLimit,
-                SortBy: sortOrder,
-                SortOrder: sortOrderDirection
+                ...additionalOptions
             };
 
-            // Add search term if provided
-            if (searchTerm) {
-                commonParams.SearchTerm = searchTerm;
+            // Add search term if provided and not already in additional options
+            if (searchTerm && !baseParams.SearchTerm) {
+                baseParams.SearchTerm = searchTerm;
             }
 
             if (type === 'Genre') {
@@ -1097,7 +983,12 @@
 
                 const options = {
                     Genres: genresParam,
-                    ...commonParams
+                    IncludeItemTypes: includeItemTypes,
+                    Fields: 'PrimaryImageAspectRatio,DateCreated,Overview,Taglines,ProductionYear,RecursiveItemCount,ChildCount',
+                    Limit: itemLimit,
+                    SortBy: sortOrder,
+                    SortOrder: sortOrderDirection,
+                    ...baseParams
                 }
 
                 const data = await window.apiHelper.getItems(options, true);
@@ -1108,7 +999,12 @@
 
                 const options = {
                     Tags: tagsParam,
-                    ...commonParams
+                    IncludeItemTypes: includeItemTypes,
+                    Fields: 'PrimaryImageAspectRatio,DateCreated,Overview,Taglines,ProductionYear,RecursiveItemCount,ChildCount',
+                    Limit: itemLimit,
+                    SortBy: sortOrder,
+                    SortOrder: sortOrderDirection,
+                    ...baseParams
                 }
 
                 const data = await window.apiHelper.getItems(options, true);
@@ -1125,13 +1021,10 @@
                             Fields: 'ItemCounts,Overview,Taglines',
                             Limit: itemLimit,
                             SortBy: sortOrder,
-                            SortOrder: sortOrderDirection
+                            SortOrder: sortOrderDirection,
+                            ...baseParams
                         };
                         
-                        if (searchTerm) {
-                            queryParams.SearchTerm = searchTerm;
-                        }
-
                         const collectionData = await window.apiHelper.getItems(queryParams, true);
                         if (collectionData.Items && collectionData.Items.length > 0) {
                             collectionData.Items.forEach(item => {
@@ -1164,13 +1057,10 @@
                             Fields: 'Overview,Taglines',
                             Limit: itemLimit,
                             SortBy: sortOrder,
-                            SortOrder: sortOrderDirection
+                            SortOrder: sortOrderDirection,
+                            ...baseParams
                         };
                         
-                        if (searchTerm) {
-                            queryParams.SearchTerm = searchTerm;
-                        }
-
                         const playlistData = await window.apiHelper.getItems(queryParams, true);
                         if (playlistData.Items && playlistData.Items.length > 0) {
                             playlistData.Items.forEach(item => {
@@ -1201,16 +1091,12 @@
                     try {
                         const queryParams = {
                             IncludeItemTypes: includeItemTypes,
-                            Recursive: true,
                             Fields: 'PrimaryImageAspectRatio,DateCreated,Overview,ProductionYear',
                             Limit: itemLimit,
                             SortBy: sortOrder,
-                            SortOrder: sortOrderDirection
+                            SortOrder: sortOrderDirection,
+                            ...baseParams
                         };
-                        
-                        if (searchTerm) {
-                            queryParams.SearchTerm = searchTerm;
-                        }
                         
                         const response = await window.apiHelper.getItems(queryParams, true);
                         if (response.Items && response.Items.length > 0) {
@@ -1226,16 +1112,12 @@
                             const queryParams = {
                                 ParentId: parentId,
                                 IncludeItemTypes: includeItemTypes,
-                                Recursive: true,
                                 Fields: 'PrimaryImageAspectRatio,DateCreated,Overview,ProductionYear',
                                 Limit: itemLimit * sources.length,
                                 SortBy: sortOrder,
-                                SortOrder: sortOrderDirection
+                                SortOrder: sortOrderDirection,
+                                ...baseParams
                             };
-                            
-                            if (searchTerm) {
-                                queryParams.SearchTerm = searchTerm;
-                            }
                             
                             const parentData = await window.apiHelper.getItems(queryParams, true);
                             if (parentData.Items && parentData.Items.length > 0) {
@@ -2060,19 +1942,9 @@
             const data = await response.json();
             const allItems = data.Items || [];
             
-            // Filter out played items
-            const unplayedItems = allItems.filter(item => !item.UserData?.Played);
-            
-            // If we have enough unplayed items, randomly select 16
-            if (unplayedItems.length >= 16) {
-                // Shuffle array and take first 16
-                const shuffled = [...unplayedItems].sort(() => Math.random() - 0.5);
-                return shuffled.slice(0, 16);
-            }
-            
-            // If we don't have enough unplayed items, return what we have
+            // Return all items, filtering will happen in applyDiscoverySectionOrdering if needed
             // (shuffled to avoid always showing the same items)
-            return [...unplayedItems].sort(() => Math.random() - 0.5);
+            return [...allItems].sort(() => Math.random() - 0.5);
             
         } catch (err) {
             ERR(`Failed to fetch similar content for ${type} ${itemId}:`, err);
@@ -2402,9 +2274,12 @@
             
             // Fetch studios from all TV libraries
             const allStudios = [];
+            const isPlayedFilter = getIsPlayedFilter(popularTVNetworksConfig);
+            const filterParam = isPlayedFilter ? `&Filters=${isPlayedFilter}` : '';
+
             for (const library of tvLibraries) {
                 try {
-                    const studiosUrl = `${serverUrl}/Studios?SortBy=SortName&SortOrder=Ascending&IncludeItemTypes=Series&Recursive=true&Fields=DateCreated%2CPrimaryImageAspectRatio&StartIndex=0&ParentId=${library.Id}&userId=${userId}`;
+                    const studiosUrl = `${serverUrl}/Studios?SortBy=SortName&SortOrder=Ascending&IncludeItemTypes=Series&Recursive=true&Fields=DateCreated%2CPrimaryImageAspectRatio&StartIndex=0&ParentId=${library.Id}&userId=${userId}${filterParam}`;
                     const response = await fetch(studiosUrl, {
                         headers: {
                             "Authorization": `MediaBrowser Token="${token}"`
@@ -2517,7 +2392,7 @@
             const userId = apiClient.getCurrentUserId();
             
             // Use Items endpoint with PersonIds parameter, sort by random, include People field
-            const url = `${serverUrl}/Items?IncludeItemTypes=${includeItemTypes}&PersonIds=${personId}&Recursive=true&SortBy=Random&Fields=PrimaryImageAspectRatio%2CDateCreated%2COverview%2CProductionYear%2CPeople&userId=${userId}&Limit=32`;
+            const url = `${serverUrl}/Items?IncludeItemTypes=${includeItemTypes}&PersonIds=${personId}&Recursive=true&SortBy=Random&Fields=PrimaryImageAspectRatio%2CDateCreated%2COverview%2CProductionYear%2CPeople%2CUserData&userId=${userId}&Limit=32`;
             
             const response = await fetch(url, {
                 headers: {
@@ -2574,6 +2449,11 @@
             MaxPremiereDate: today
         }
 
+        const isPlayedFilter = getIsPlayedFilter(newMoviesConfig);
+        if (isPlayedFilter) {
+            options.Filters = isPlayedFilter;
+        }
+
         const data = await window.apiHelper.getItems(options, true);
         return data.Items || [];
     }
@@ -2602,6 +2482,11 @@
             MaxPremiereDate: maxDate,
             Limit: 100,
             Fields: 'PremiereDate,SeriesName,ParentIndexNumber,IndexNumber,ProviderIds,Path'
+        }
+
+        const isPlayedFilter = getIsPlayedFilter(newEpisodesConfig);
+        if (isPlayedFilter) {
+            options.Filters = isPlayedFilter;
         }
 
         const data = await window.apiHelper.getItems(options, true);
@@ -2912,7 +2797,12 @@
             const libraries = await ApiClient.getItems();
             const parentIds = libraries.Items.filter(lib => lib.CollectionType === 'tvshows')?.map(lib => lib.Id);
 
-            const url = `${serverAddress}/Shows/Upcoming?Limit=${itemLimit}&Fields=AirTime,SeriesName,ParentIndexNumber,IndexNumber&UserId=${userId}&ImageTypeLimit=1&EnableImageTypes=Primary,Backdrop,Banner,Thumb&EnableTotalRecordCount=false&ParentIds=${parentIds.join(',')}`;
+            let url = `${serverAddress}/Shows/Upcoming?Limit=${itemLimit}&Fields=AirTime,SeriesName,ParentIndexNumber,IndexNumber&UserId=${userId}&ImageTypeLimit=1&EnableImageTypes=Primary,Backdrop,Banner,Thumb&EnableTotalRecordCount=false&ParentIds=${parentIds.join(',')}`;
+
+            const isPlayedFilter = getIsPlayedFilter(upcomingConfig);
+            if (isPlayedFilter) {
+                url += `&Filters=${isPlayedFilter}`;
+            }
 
             const data = await window.apiHelper.getData(url, true);
             let episodes = data.Items || [];
@@ -3060,11 +2950,18 @@
             
             // Fetch all movies and match by IMDb ID
             const userId = ApiClient.getCurrentUserId();
-            const allMoviesResponse = await ApiClient.getItems(userId, {
+            const options = {
                 IncludeItemTypes: 'Movie',
                 Recursive: true,
                 Fields: 'ProviderIds'
-            });
+            };
+
+            const isPlayedFilter = getIsPlayedFilter(imdbTop250Config);
+            if (isPlayedFilter) {
+                options.Filters = isPlayedFilter;
+            }
+
+            const allMoviesResponse = await ApiClient.getItems(userId, options);
             
             const allMovies = allMoviesResponse.Items || [];
             const matchedMovies = [];
@@ -3325,10 +3222,15 @@
             LOG('Generating single discovery group...');
 
             const spotlightChance = discoveryConfig.spotlightDiscoveryChance ?? 0.5;
+            const renderSpotlightAboveMatching = discoveryConfig.renderSpotlightAboveMatching === true;
 
             let renderGenresSpotlight = false;
             let renderNetworksSpotlight = false;
             let renderCollectionsSpotlight = false;
+
+            // Pre-selected data for forced matching
+            let forcedGenre = null;
+            let forcedNetwork = null;
 
             if (Math.random() < spotlightChance) {
                 // Randomly pick one of the spotlight sections to render
@@ -3337,6 +3239,45 @@
                 renderGenresSpotlight = selectedSpotlightSection === 'spotlight-genre';
                 renderNetworksSpotlight = selectedSpotlightSection === 'spotlight-network';
                 renderCollectionsSpotlight = selectedSpotlightSection === 'spotlight-collection';
+
+                // If forcing matching, pre-select content now
+                if (renderSpotlightAboveMatching) {
+                    if (renderGenresSpotlight) {
+                        try {
+                            forcedGenre = await getRandomGenre();
+                            if (!forcedGenre) renderGenresSpotlight = false;
+                        } catch (e) {
+                            ERR('Error pre-selecting genre for forced matching:', e);
+                            renderGenresSpotlight = false;
+                        }
+                    } else if (renderNetworksSpotlight) {
+                        try {
+                            const networks = await getPopularTVNetworks();
+                            if (networks && networks.length > 0) {
+                                // Find one that hasn't been used in either context
+                                const availableNetworks = networks.filter(network => 
+                                    network.Id && 
+                                    !renderedStudios.has(network.Id) && 
+                                    !renderedNetworks.has(network.Id)
+                                );
+                                
+                                if (availableNetworks.length > 0) {
+                                    forcedNetwork = availableNetworks[Math.floor(Math.random() * availableNetworks.length)];
+                                    // Reserve it immediately
+                                    renderedStudios.add(forcedNetwork.Id);
+                                    renderedNetworks.add(forcedNetwork.Id);
+                                } else {
+                                    renderNetworksSpotlight = false;
+                                }
+                            } else {
+                                renderNetworksSpotlight = false;
+                            }
+                        } catch (e) {
+                            ERR('Error pre-selecting network for forced matching:', e);
+                            renderNetworksSpotlight = false;
+                        }
+                    }
+                }
             }
             
             // Run all async operations in parallel for maximum speed
@@ -3345,7 +3286,14 @@
                 (async () => {
                     const sectionConfig = getDiscoverySectionSettings('genreMovies');
                     if (!sectionConfig || !sectionConfig.enabled) return null;
-                    const randomGenre = await getRandomGenre();
+
+                    let randomGenre = null;
+                    if (forcedGenre) {
+                        randomGenre = forcedGenre;
+                    } else {
+                        randomGenre = await getRandomGenre();
+                    }
+
                     if (randomGenre) {
                         const genreData = await preloadGenreSection(
                             randomGenre,
@@ -3490,35 +3438,45 @@
                 (async () => {
                     const sectionConfig = getDiscoverySectionSettings('studioShows');
                     if (!sectionConfig || !sectionConfig.enabled) return null;
-                    const networks = await getPopularTVNetworks();
-                    if (networks && networks.length > 0) {
-                        // Filter out already rendered studios
-                        const availableNetworks = networks.filter(network => 
-                            network.Id && !renderedStudios.has(network.Id)
-                        );
-                        
-                        if (availableNetworks.length > 0) {
-                            const randomNetwork = availableNetworks[Math.floor(Math.random() * availableNetworks.length)];
-                            const items = await fetchItemsByStudio(randomNetwork.Id);
-                            const viewMoreUrl = `#/list.html?studioId=${randomNetwork.Id}&serverId=${ApiClient.serverId()}`;
+                    
+                    let randomNetwork = null;
+
+                    if (forcedNetwork) {
+                        randomNetwork = forcedNetwork;
+                    } else {
+                        const networks = await getPopularTVNetworks();
+                        if (networks && networks.length > 0) {
+                            // Filter out already rendered studios
+                            const availableNetworks = networks.filter(network => 
+                                network.Id && !renderedStudios.has(network.Id)
+                            );
                             
-                            if (items && items.length > 0) {
+                            if (availableNetworks.length > 0) {
+                                randomNetwork = availableNetworks[Math.floor(Math.random() * availableNetworks.length)];
                                 renderedStudios.add(randomNetwork.Id);
-                                
-                                const orderedItems = applyDiscoverySectionOrdering(items, sectionConfig);
-                                if (orderedItems.length === 0) {
-                                    return null;
-                                }
-                                
-                                return {
-                                    type: 'studio',
-                                    sectionKey: 'studioShows',
-                                    config: sectionConfig,
-                                    data: randomNetwork,
-                                    items: orderedItems,
-                                    viewMoreUrl: viewMoreUrl
-                                };
                             }
+                        }
+                    }
+
+                    if (randomNetwork) {
+                        const items = await fetchItemsByStudio(randomNetwork.Id);
+                        const viewMoreUrl = `#/list.html?studioId=${randomNetwork.Id}&serverId=${ApiClient.serverId()}`;
+                        
+                        if (items && items.length > 0) {
+                            
+                            const orderedItems = applyDiscoverySectionOrdering(items, sectionConfig);
+                            if (orderedItems.length === 0) {
+                                return null;
+                            }
+                            
+                            return {
+                                type: 'studio',
+                                sectionKey: 'studioShows',
+                                config: sectionConfig,
+                                data: randomNetwork,
+                                items: orderedItems,
+                                viewMoreUrl: viewMoreUrl
+                            };
                         }
                     }
                     return null;
@@ -3752,19 +3710,30 @@
                     if (!sectionConfig || !sectionConfig.enabled) return null;
                     
                     try {
-                        // Get qualifying genres (cached)
-                        const allQualifyingGenres = await getQualifyingGenres();
-                        if (allQualifyingGenres.length === 0) return null;
+                        let selectedGenre = null;
                         
-                        // Filter out already rendered genres
-                        const availableGenres = allQualifyingGenres.filter(genre => 
-                            !renderedGenres.has(genre.Id)
-                        );
-                        
-                        if (availableGenres.length === 0) return null;
-                        
-                        // Pick random genre
-                        const selectedGenre = availableGenres[Math.floor(Math.random() * availableGenres.length)];
+                        if (forcedGenre) {
+                            selectedGenre = forcedGenre;
+                            // Ensure it's marked as rendered in spotlight tracking (if not already)
+                            renderedGenres.add(selectedGenre.Id);
+                        } else {
+                            // Get qualifying genres (cached)
+                            const allQualifyingGenres = await getQualifyingGenres();
+                            if (allQualifyingGenres.length === 0) return null;
+                            
+                            // Filter out already rendered genres
+                            const availableGenres = allQualifyingGenres.filter(genre => 
+                                !renderedGenres.has(genre.Id)
+                            );
+                            
+                            if (availableGenres.length === 0) return null;
+                            
+                            // Pick random genre
+                            selectedGenre = availableGenres[Math.floor(Math.random() * availableGenres.length)];
+                            
+                            // Track rendered genre
+                            renderedGenres.add(selectedGenre.Id);
+                        }
                         
                         const itemLimit = sectionConfig.itemLimit ?? (discoveryConfig.defaultItemLimit ?? defaultItemLimit);
                         const moviesResponse = await ApiClient.getItems(ApiClient.getCurrentUserId(), {
@@ -3779,9 +3748,6 @@
                         
                         const movies = moviesResponse.Items || [];
                         if (movies.length === 0) return null;
-                        
-                        // Track rendered genre
-                        renderedGenres.add(selectedGenre.Id);
                         
                         return {
                             type: 'spotlight-genre',
@@ -3804,19 +3770,30 @@
                     if (!sectionConfig || !sectionConfig.enabled) return null;
                     
                     try {
-                        // Get popular TV networks
-                        const networks = await getPopularTVNetworks();
-                        if (networks.length === 0) return null;
-                        
-                        // Filter out already rendered networks
-                        const availableNetworks = networks.filter(network => 
-                            network.Id && !renderedNetworks.has(network.Id)
-                        );
-                        
-                        if (availableNetworks.length === 0) return null;
-                        
-                        // Pick random network
-                        const selectedNetwork = availableNetworks[Math.floor(Math.random() * availableNetworks.length)];
+                        let selectedNetwork = null;
+
+                        if (forcedNetwork) {
+                            selectedNetwork = forcedNetwork;
+                            // Ensure it's marked as rendered in spotlight tracking
+                            renderedNetworks.add(selectedNetwork.Id);
+                        } else {
+                            // Get popular TV networks
+                            const networks = await getPopularTVNetworks();
+                            if (networks.length === 0) return null;
+                            
+                            // Filter out already rendered networks
+                            const availableNetworks = networks.filter(network => 
+                                network.Id && !renderedNetworks.has(network.Id)
+                            );
+                            
+                            if (availableNetworks.length === 0) return null;
+                            
+                            // Pick random network
+                            selectedNetwork = availableNetworks[Math.floor(Math.random() * availableNetworks.length)];
+                            
+                            // Track rendered network
+                            renderedNetworks.add(selectedNetwork.Id);
+                        }
                         
                         const itemLimit = sectionConfig.itemLimit ?? (discoveryConfig.defaultItemLimit ?? defaultItemLimit);
                         const showsResponse = await ApiClient.getItems(ApiClient.getCurrentUserId(), {
@@ -3831,9 +3808,6 @@
                         
                         const shows = showsResponse.Items || [];
                         if (shows.length === 0) return null;
-                        
-                        // Track rendered network
-                        renderedNetworks.add(selectedNetwork.Id);
                         
                         return {
                             type: 'spotlight-network',
@@ -3951,15 +3925,55 @@
             
             // Filter out null results and collect valid sections
             let sections = preloadResults.filter(section => section !== null);
-            
+
             if (discoveryConfig.randomizeOrder) {
                 sections = shuffleArray(sections);
             } else {
                 sections.sort((a, b) => {
-                    const orderA = typeof a?.order === 'number' ? a.order : DISCOVERY_ORDER;
-                    const orderB = typeof b?.order === 'number' ? b.order : DISCOVERY_ORDER;
+                    // Use explicit order on object if available (set by our matching logic), fallback to config order
+                    const orderA = typeof a.order === 'number' ? a.order : (typeof a.config?.order === 'number' ? a.config.order : DISCOVERY_ORDER);
+                    const orderB = typeof b.order === 'number' ? b.order : (typeof b.config?.order === 'number' ? b.config.order : DISCOVERY_ORDER);
                     return orderA - orderB;
                 });
+            }
+
+            // Logic to position forced spotlight sections directly above their content
+            // We run this AFTER randomization to force adjacency
+            if (renderSpotlightAboveMatching) {
+                // Adjust orders to ensure spotlight is right above content
+                if (forcedGenre) {
+                    const genreSectionIndex = sections.findIndex(s => s.type === 'genre' && s.data.Id === forcedGenre.Id);
+                    const genreSpotlightIndex = sections.findIndex(s => s.type === 'spotlight-genre' && s.data.Id === forcedGenre.Id);
+                    
+                    if (genreSectionIndex !== -1 && genreSpotlightIndex !== -1) {
+                        // Both exist in the array.
+                        // Remove spotlight from its current position
+                        const [spotlight] = sections.splice(genreSpotlightIndex, 1);
+                        
+                        // Find the new index of the content section (it might have shifted)
+                        const newGenreSectionIndex = sections.findIndex(s => s.type === 'genre' && s.data.Id === forcedGenre.Id);
+                        
+                        // Insert spotlight immediately before the content section
+                        sections.splice(newGenreSectionIndex, 0, spotlight);
+                    }
+                }
+
+                if (forcedNetwork) {
+                    const studioSectionIndex = sections.findIndex(s => s.type === 'studio' && s.data.Id === forcedNetwork.Id);
+                    const networkSpotlightIndex = sections.findIndex(s => s.type === 'spotlight-network' && s.data.Id === forcedNetwork.Id);
+                    
+                    if (studioSectionIndex !== -1 && networkSpotlightIndex !== -1) {
+                        // Both exist.
+                        // Remove spotlight
+                        const [spotlight] = sections.splice(networkSpotlightIndex, 1);
+                        
+                        // Find new content index
+                        const newStudioSectionIndex = sections.findIndex(s => s.type === 'studio' && s.data.Id === forcedNetwork.Id);
+                        
+                        // Insert spotlight immediately before
+                        sections.splice(newStudioSectionIndex, 0, spotlight);
+                    }
+                }
             }
             
             LOG(`Generated discovery group with ${sections.length} sections`);
@@ -4384,7 +4398,7 @@
             const userId = apiClient.getCurrentUserId();
             const serverId = apiClient.serverId();
             
-            const url = `${serverUrl}/Items?userId=${userId}&Genres=${encodeURIComponent(genre.Name)}&IncludeItemTypes=Movie&Recursive=true&SortBy=Random&Limit=${limit}`;
+            const url = `${serverUrl}/Items?userId=${userId}&Genres=${encodeURIComponent(genre.Name)}&IncludeItemTypes=Movie&Recursive=true&SortBy=Random&Fields=UserData&Limit=${limit}`;
             
             const response = await fetch(url, {
                 headers: {
@@ -4426,7 +4440,7 @@
             if (items.length === 0) return null;
             
             return {
-                items: items.slice(0, limit),
+                items: items, // Return all items, let render logic handle limit
                 hasFullItems: true
             };
             
@@ -4447,7 +4461,7 @@
             if (items.length === 0) return null;
             
             return {
-                items: items.slice(0, limit),
+                items: items, // Return all items, let render logic handle limit
                 hasFullItems: true
             };
             

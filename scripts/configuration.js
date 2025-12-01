@@ -27,6 +27,66 @@
         { key: 'writtenByWriterRecentlyWatched', label: 'Written by [Writer] because you recently watched [Movie]', defaultName: 'Written by [Writer] because you recently watched [Movie]' }
     ];
 
+    const SUPPORTED_CUSTOM_SECTION_PARAMS = {
+        // Booleans
+        hasThemeSong: { label: 'Has Theme Song', type: 'boolean' },
+        hasThemeVideo: { label: 'Has Theme Video', type: 'boolean' },
+        hasSubtitles: { label: 'Has Subtitles', type: 'boolean' },
+        hasSpecialFeature: { label: 'Has Special Feature', type: 'boolean' },
+        hasTrailer: { label: 'Has Trailer', type: 'boolean' },
+        hasParentalRating: { label: 'Has Parental Rating', type: 'boolean' },
+        isHd: { label: 'Is HD', type: 'boolean' },
+        is4K: { label: 'Is 4K', type: 'boolean' },
+        isMissing: { label: 'Is Missing', type: 'boolean' },
+        isUnaired: { label: 'Is Unaired', type: 'boolean' },
+        hasOverview: { label: 'Has Overview', type: 'boolean' },
+        isFavorite: { label: 'Is Favorite', type: 'boolean' },
+        isPlayed: { label: 'Is Played', type: 'boolean' },
+        hasOfficialRating: { label: 'Has Official Rating', type: 'boolean' },
+        recursive: { label: 'Recursive', type: 'boolean', default: true },
+        is3D: { label: 'Is 3D', type: 'boolean' },
+        isSeries: { label: 'Is Series (Live TV)', type: 'boolean' },
+        
+        // Strings
+        maxOfficialRating: { label: 'Max Official Rating', type: 'string', hint: 'e.g., PG-13, TV-MA' },
+        minOfficialRating: { label: 'Min Official Rating', type: 'string', hint: 'e.g., PG, TV-14' },
+        person: { label: 'Person Name', type: 'string' },
+        nameStartsWith: { label: 'Name Starts With', type: 'string' },
+        nameStartsWithOrGreater: { label: 'Name Starts With Or Greater', type: 'string' },
+        nameLessThan: { label: 'Name Less Than', type: 'string' },
+        
+        // Numbers
+        indexNumber: { label: 'Index Number', type: 'number' },
+        parentIndexNumber: { label: 'Parent Index Number', type: 'number' },
+        minCommunityRating: { label: 'Min Community Rating', type: 'number' },
+        minCriticRating: { label: 'Min Critic Rating', type: 'number' },
+        limit: { label: 'Limit', type: 'number' },
+        
+        // Dates (ISO 8601)
+        minPremiereDate: { label: 'Min Premiere Date', type: 'date', hint: 'YYYY-MM-DD' },
+        maxPremiereDate: { label: 'Max Premiere Date', type: 'date', hint: 'YYYY-MM-DD' },
+        minDateLastSaved: { label: 'Min Date Last Saved', type: 'date', hint: 'YYYY-MM-DD' },
+        minDateLastSavedForUser: { label: 'Min Date Last Saved For User', type: 'date', hint: 'YYYY-MM-DD' },
+        
+        // Arrays (Comma-separated strings in UI)
+        locationTypes: { label: 'Location Types', type: 'array', hint: 'FileSystem, Remote, Virtual, Offline' },
+        excludeLocationTypes: { label: 'Exclude Location Types', type: 'array', hint: 'FileSystem, Remote, Virtual, Offline' },
+        excludeItemIds: { label: 'Exclude Item IDs', type: 'array', hint: 'Comma-separated GUIDs' },
+        excludeItemTypes: { label: 'Exclude Item Types', type: 'array', hint: 'Movie, Series, Episode, etc.' },
+        filters: { label: 'Filters', type: 'array', hint: 'IsFolder, IsNotFolder, IsUnplayed, IsPlayed, IsFavorite, IsResumable, Likes, Dislikes' },
+        imageTypes: { label: 'Image Types', type: 'array', hint: 'Primary, Backdrop, Thumb, Logo, etc.' },
+        officialRatings: { label: 'Official Ratings', type: 'array', hint: 'PG, PG-13, R, etc.' },
+        years: { label: 'Years', type: 'array', hint: 'Comma-separated years' },
+        personTypes: { label: 'Person Types', type: 'array', hint: 'Actor, Director, Writer, etc.' },
+        studios: { label: 'Studios', type: 'array', hint: 'Pipe-delimited names' },
+        artists: { label: 'Artists', type: 'array', hint: 'Pipe-delimited names' },
+        albums: { label: 'Albums', type: 'array', hint: 'Pipe-delimited names' },
+        seriesStatus: { label: 'Series Status', type: 'array', hint: 'Continuing, Ended, Unreleased' },
+        personIds: { label: 'Person IDs', type: 'array', hint: 'Comma-separated GUIDs' },
+        studioIds: { label: 'Studio IDs', type: 'array', hint: 'Comma-separated GUIDs' },
+        ids: { label: 'Item IDs', type: 'array', hint: 'Comma-separated GUIDs' }
+    };
+
     // Check if user is admin
     async function isAdmin() {
         try {
@@ -919,12 +979,15 @@
 
     // Helper function to build Include Item Types badge field
     function buildIncludeItemTypesField(prefix, sectionIndex, sanitizedPrefix, currentTypes, sourceType) {
-        // Available item types (excluding Collections and Playlists unless source type is Parent)
-        const availableTypes = ['Movie', 'Series', 'Season', 'Episode', 'MusicArtist', 'MusicAlbum', 'Audio', 'MusicVideo', 'Book'];
-        const parentOnlyTypes = ['BoxSet', 'Playlist']; // Only available when source type is Parent
+        // All available item types
+        const allAvailableTypes = [
+            'AggregateFolder', 'Audio', 'AudioBook', 'BasePluginFolder', 'Book', 'BoxSet', 'Channel', 
+            'ChannelFolderItem', 'CollectionFolder', 'Episode', 'Folder', 'Genre', 'ManualPlaylistsFolder', 
+            'Movie', 'LiveTvChannel', 'LiveTvProgram', 'MusicAlbum', 'MusicArtist', 'MusicGenre', 'MusicVideo', 
+            'Person', 'Photo', 'PhotoAlbum', 'Playlist', 'PlaylistsFolder', 'Program', 'Recording', 'Season', 
+            'Series', 'Studio', 'Trailer', 'TvChannel', 'TvProgram', 'UserRootFolder', 'UserView', 'Video', 'Year'
+        ];
         
-        // All available types for this source type
-        const allAvailableTypes = sourceType === 'Parent' ? [...availableTypes, ...parentOnlyTypes] : availableTypes;
         const selectionLabel = currentTypes.length ? `${currentTypes.length} selected` : 'Select item types';
         
         // Current types as badges
@@ -974,14 +1037,91 @@
         `;
     }
 
+    // Helper function to build Additional Options Controls (Dropdown + Add Button)
+    function buildAdditionalOptionsControls(prefix, sectionIndex, sanitizedPrefix) {
+        // Build dropdown options from supported params
+        const dropdownOptions = Object.entries(SUPPORTED_CUSTOM_SECTION_PARAMS)
+            .sort((a, b) => a[1].label.localeCompare(b[1].label))
+            .map(([key, meta]) => `<option value="${key}">${meta.label}</option>`)
+            .join('');
+
+        return `
+            <div class="${prefix}_section_additionalOptions_controls" data-section-index="${sectionIndex}" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; position: static;">
+                <div class="listItemBodyText" style="margin-bottom: 0.5em;">Additional Options</div>
+                <div style="display: flex; gap: 0.5em; align-items: center;">
+                    <select class="fld emby-select-withcolor emby-select additional-option-select" style="flex: 1; margin: 0; min-width: 0;">
+                        <option value="">Select an option to add...</option>
+                        ${dropdownOptions}
+                    </select>
+                    <button type="button" class="raised emby-button add-additional-option" style="background: rgba(0, 164, 220, 0.2); min-width: auto; padding: 0.5em 1em;">
+                        <span>Add</span>
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    // Helper function to build Additional Options List
+    function buildAdditionalOptionsList(prefix, sectionIndex, sanitizedPrefix, currentOptions) {
+        const optionsHtml = (currentOptions || []).map((option, index) => {
+            const meta = SUPPORTED_CUSTOM_SECTION_PARAMS[option.key] || { label: option.key, type: 'string' };
+            const inputId = `${sanitizedPrefix}_additionalOption_${index}`;
+            
+            let inputField = '';
+            if (meta.type === 'boolean') {
+                const isChecked = option.value === true || option.value === 'true';
+                inputField = buildJellyfinCheckbox(inputId, isChecked, meta.label, { 
+                    'data-key': option.key, 
+                    'class': 'additional-option-value',
+                    'data-type': 'boolean'
+                });
+            } else {
+                inputField = `
+                    <div style="flex: 1;">
+                        <div class="listItemBodyText" style="margin-bottom: 0.25em;">${meta.label}</div>
+                        <input type="text" id="${inputId}" class="fld emby-input additional-option-value" value="${option.value || ''}" data-key="${option.key}" data-type="${meta.type}" placeholder="${meta.hint || ''}" style="width: 100%;">
+                    </div>
+                `;
+            }
+
+            return `
+                <div class="additional-option-row" style="display: flex; align-items: flex-end; gap: 0.5em; margin-top: 0.5em; padding: 0.5em; background: rgba(255,255,255,0.05); border-radius: 4px;">
+                    ${inputField}
+                    <button type="button" class="remove-additional-option" style="background: none; border: none; color: rgba(255,255,255,0.7); cursor: pointer; padding: 0.25em; display: flex; align-items: center;" title="Remove Option">
+                        <span class="material-icons">close</span>
+                    </button>
+                </div>
+            `;
+        }).join('');
+
+        return `
+            <div class="${prefix}_section_additionalOptions_list_container" data-section-index="${sectionIndex}" style="margin-top: 0.75em;">
+                <div class="additional-options-list">
+                    ${optionsHtml}
+                </div>
+            </div>
+        `;
+    }
+
     // Helper function to build Jellyfin-style checkbox
     function buildJellyfinCheckbox(id, checked, label, dataAttributes = {}) {
-        const dataAttrs = Object.entries(dataAttributes).map(([key, value]) => `${key}="${value}"`).join(' ');
+        let className = 'emby-checkbox';
+        const otherAttrs = {};
+        
+        for (const [key, value] of Object.entries(dataAttributes)) {
+            if (key === 'class') {
+                className += ' ' + value;
+            } else {
+                otherAttrs[key] = value;
+            }
+        }
+        
+        const dataAttrs = Object.entries(otherAttrs).map(([key, value]) => `${key}="${value}"`).join(' ');
         const checkedAttr = checked ? 'checked' : '';
         return `
             <div class="checkboxContainer">
                 <label class="emby-checkbox-label">
-                    <input is="emby-checkbox" type="checkbox" id="${id}" class="emby-checkbox" data-embycheckbox="true" ${checkedAttr} ${dataAttrs}>
+                    <input is="emby-checkbox" type="checkbox" id="${id}" class="${className}" data-embycheckbox="true" ${checkedAttr} ${dataAttrs}>
                     <span class="checkboxLabel">${label}</span>
                     <span class="checkboxOutline">
                         <span class="material-icons checkboxIcon checkboxIcon-checked check" aria-hidden="true"></span>
@@ -1008,6 +1148,7 @@
         const discoveryEnabled = section.discoveryEnabled === true;
         const searchTerm = section.searchTerm || '';
         const includeItemTypes = Array.isArray(section.includeItemTypes) ? section.includeItemTypes : (section.includeItemTypes ? section.includeItemTypes.split(',').map(s => s.trim()).filter(Boolean) : (type === 'Parent' ? [] : ['Movie']));
+        const additionalQueryOptions = section.additionalQueryOptions || [];
         
         // Determine source field based on type
         let sourceFieldHtml = '';
@@ -1134,7 +1275,13 @@
                     </div>
                     <!-- Include Item Types field -->
                     ${buildIncludeItemTypesField(prefix, sectionIndex, sanitizedSectionPrefix, includeItemTypes, type)}
+                    
+                    <!-- Additional Options Controls -->
+                    ${buildAdditionalOptionsControls(prefix, sectionIndex, sanitizedSectionPrefix)}
                 </div>
+                
+                <!-- Additional Options List -->
+                ${buildAdditionalOptionsList(prefix, sectionIndex, sanitizedSectionPrefix, additionalQueryOptions)}
             `;
         }
         
@@ -1294,7 +1441,8 @@
             nameLabel = 'Section Name',
             nameInputAttributes = {},
             includeCardFormat = true,
-            includeItemLimit = true
+            includeItemLimit = true,
+            includeIsPlayed = false
         } = options;
 
         const nameValue = config.name ?? defaultName ?? '';
@@ -1303,6 +1451,12 @@
         const sortOrderDirection = config.sortOrderDirection ?? 'Ascending';
         const cardFormat = config.cardFormat ?? 'Poster';
         const order = config.order ?? 100;
+        
+        // IsPlayed logic
+        // If isPlayed is undefined or null, it means the filter is disabled.
+        // If it's true/false, the filter is enabled and set to that value.
+        const isPlayedFilterEnabled = config.isPlayed !== undefined && config.isPlayed !== null;
+        const isPlayedValue = config.isPlayed === true; // true if played, false if unplayed
 
         let html = '';
 
@@ -1343,10 +1497,29 @@
                     <select id="${prefix}_sortOrder" class="fld emby-select-withcolor emby-select" style="width: 100%; max-width: 200px;">
                         <option value="Random" ${sortOrder === 'Random' ? 'selected' : ''}>Random</option>
                         <option value="PremiereDate" ${sortOrder === 'PremiereDate' ? 'selected' : ''}>Premiere Date</option>
-                        <option value="CriticRating" ${sortOrder === 'CriticRating' ? 'selected' : ''}>Critic Rating</option>
-                        <option value="CommunityRating" ${sortOrder === 'CommunityRating' ? 'selected' : ''}>Community Rating</option>
-                        <option value="SortTitle" ${sortOrder === 'SortTitle' ? 'selected' : ''}>Sort Title</option>
+                        <option value="DateCreated" ${sortOrder === 'DateCreated' ? 'selected' : ''}>Date Created</option>
                         <option value="DateAdded" ${sortOrder === 'DateAdded' ? 'selected' : ''}>Date Added</option>
+                        <option value="SortName" ${sortOrder === 'SortName' ? 'selected' : ''}>Sort Name</option>
+                        <option value="Name" ${sortOrder === 'Name' ? 'selected' : ''}>Name</option>
+                        <option value="CommunityRating" ${sortOrder === 'CommunityRating' ? 'selected' : ''}>Community Rating</option>
+                        <option value="CriticRating" ${sortOrder === 'CriticRating' ? 'selected' : ''}>Critic Rating</option>
+                        <option value="OfficialRating" ${sortOrder === 'OfficialRating' ? 'selected' : ''}>Official Rating</option>
+                        <option value="ProductionYear" ${sortOrder === 'ProductionYear' ? 'selected' : ''}>Production Year</option>
+                        <option value="PlayCount" ${sortOrder === 'PlayCount' ? 'selected' : ''}>Play Count</option>
+                        <option value="Runtime" ${sortOrder === 'Runtime' ? 'selected' : ''}>Runtime</option>
+                        <option value="Default" ${sortOrder === 'Default' ? 'selected' : ''}>Default</option>
+                        <option value="AiredEpisodeOrder" ${sortOrder === 'AiredEpisodeOrder' ? 'selected' : ''}>Aired Episode Order</option>
+                        <option value="DatePlayed" ${sortOrder === 'DatePlayed' ? 'selected' : ''}>Date Played</option>
+                        <option value="StartDate" ${sortOrder === 'StartDate' ? 'selected' : ''}>Start Date</option>
+                        <option value="IsFolder" ${sortOrder === 'IsFolder' ? 'selected' : ''}>Is Folder</option>
+                        <option value="IsUnplayed" ${sortOrder === 'IsUnplayed' ? 'selected' : ''}>Is Unplayed</option>
+                        <option value="IsPlayed" ${sortOrder === 'IsPlayed' ? 'selected' : ''}>Is Played</option>
+                        <option value="SeriesSortName" ${sortOrder === 'SeriesSortName' ? 'selected' : ''}>Series Sort Name</option>
+                        <option value="AirTime" ${sortOrder === 'AirTime' ? 'selected' : ''}>Air Time</option>
+                        <option value="Studio" ${sortOrder === 'Studio' ? 'selected' : ''}>Studio</option>
+                        <option value="IsFavoriteOrLiked" ${sortOrder === 'IsFavoriteOrLiked' ? 'selected' : ''}>Is Favorite Or Liked</option>
+                        <option value="ParentIndexNumber" ${sortOrder === 'ParentIndexNumber' ? 'selected' : ''}>Parent Index Number</option>
+                        <option value="IndexNumber" ${sortOrder === 'IndexNumber' ? 'selected' : ''}>Index Number</option>
                     </select>
                 </div>
             </div>
@@ -1382,6 +1555,22 @@
                         <input type="number" id="${prefix}_itemLimit" class="fld emby-input" value="${itemLimit}" min="1" style="width: 100%; max-width: 200px;">
                     </div>
                 </div>`;
+        }
+
+        if (includeIsPlayed) {
+            html += `
+            <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
+                <div class="listItemContent">
+                    ${buildJellyfinCheckbox(`${prefix}_isPlayed_enabled`, isPlayedFilterEnabled, 'Filter by Played Status')}
+                    
+                    <div id="${prefix}_isPlayed_options" style="margin-top: 0.5em; margin-left: 1.5em; display: ${isPlayedFilterEnabled ? 'block' : 'none'};">
+                        <select id="${prefix}_isPlayed_value" class="fld emby-select-withcolor emby-select" style="width: 100%; max-width: 200px;">
+                            <option value="false" ${!isPlayedValue ? 'selected' : ''}>Unplayed</option>
+                            <option value="true" ${isPlayedValue ? 'selected' : ''}>Played</option>
+                        </select>
+                    </div>
+                </div>
+            </div>`;
         }
 
         return html;
@@ -1479,7 +1668,7 @@
                                         ${buildJellyfinCheckbox('homeScreen_recentlyReleased_movies_enabled', (recentlyReleased.movies || {}).enabled !== false, 'Enabled')}
                                     </div>
                                     <div class="listItemContent" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 0.75em;">
-                                        ${createSectionConfiguration('homeScreen_recentlyReleased_movies', recentlyReleased.movies || {}, { includeName: true, defaultName: 'Recently Released Movies', includeSortOrder: false, includeOrder: true })}
+                                        ${createSectionConfiguration('homeScreen_recentlyReleased_movies', recentlyReleased.movies || {}, { includeName: true, defaultName: 'Recently Released Movies', includeSortOrder: false, includeOrder: true, includeIsPlayed: true })}
                                     </div>
                                 </div>
                             </details>
@@ -1496,7 +1685,7 @@
                                         ${buildJellyfinCheckbox('homeScreen_recentlyReleased_episodes_enabled', (recentlyReleased.episodes || {}).enabled !== false, 'Enabled')}
                                     </div>
                                     <div class="listItemContent" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 0.75em;">
-                                        ${createSectionConfiguration('homeScreen_recentlyReleased_episodes', recentlyReleased.episodes || {}, { includeName: true, defaultName: 'Recently Aired Episodes', includeSortOrder: false, includeOrder: true })}
+                                        ${createSectionConfiguration('homeScreen_recentlyReleased_episodes', recentlyReleased.episodes || {}, { includeName: true, defaultName: 'Recently Aired Episodes', includeSortOrder: false, includeOrder: true, includeIsPlayed: true })}
                                     </div>
                                 </div>
                             </details>
@@ -1515,7 +1704,7 @@
                 <div style="padding: 0.75em 0 0 0;">
                     <div id="homeScreen_trending_container" style="${trending.enabled !== true ? 'display: none;' : ''}">
                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 0.75em;">
-                            ${createSectionConfiguration('homeScreen_trending', trending, { includeName: true, defaultName: 'Trending' })}
+                            ${createSectionConfiguration('homeScreen_trending', trending, { includeName: true, defaultName: 'Trending', includeIsPlayed: true })}
                         </div>
                     </div>
                 </div>
@@ -1581,7 +1770,7 @@
                 <div style="padding: 0.75em 0 0 0;">
                     <div id="homeScreen_imdbTop250_container" style="${imdbTop250.enabled === false ? 'display: none;' : ''}">
                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 0.75em;">
-                            ${createSectionConfiguration('homeScreen_imdbTop250', imdbTop250, { includeName: true, defaultName: 'IMDb Top 250' })}
+                            ${createSectionConfiguration('homeScreen_imdbTop250', imdbTop250, { includeName: true, defaultName: 'IMDb Top 250', includeIsPlayed: true })}
                         </div>
                     </div>
                 </div>
@@ -1658,7 +1847,11 @@
                                     <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-top: 0.25em;">0.0 = never, 1.0 = always</div>
                 </div>
             </div>
-                            ${createSectionConfiguration('homeScreen_discovery', discovery, { includeName: false, includeOrder: false, includeCardFormat: false, includeSortOrder: false, includeItemLimit: false })}
+            <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; display: grid;">
+                ${buildJellyfinCheckbox('homeScreen_discovery_renderSpotlightAboveMatching', discovery.renderSpotlightAboveMatching === true, 'Spotlight Grouping')}
+                <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-top: 0.25em; margin-left: 2em;">Render Spotlight discovery sections alongside the corresponding discovery section (e.g. Action Spotlight above Action Movies).</div>
+            </div>
+            ${createSectionConfiguration('homeScreen_discovery', discovery, { includeName: false, includeOrder: false, includeCardFormat: false, includeSortOrder: false, includeItemLimit: false })}
                         </div>
                         <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 0.75em;">
                             <div class="listItemContent">
@@ -1668,7 +1861,7 @@
                                     ${DISCOVERY_SECTION_DEFINITIONS.map(section => {
                                         const sectionConfig = normalizedDiscoverySections[section.key];
                                         const prefix = `homeScreen_discovery_sectionTypes_${section.key}`;
-                                        const configHtml = createSectionConfiguration(prefix, sectionConfig, { includeName: true, includeOrder: true, includeSortOrder: false, defaultName: section.defaultName });
+                                        const configHtml = createSectionConfiguration(prefix, sectionConfig, { includeName: true, includeOrder: true, includeSortOrder: false, defaultName: section.defaultName, includeIsPlayed: true });
                                         const extraFields = section.extras?.minimumItems !== undefined
                                             ? `
                                                 <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
@@ -1964,6 +2157,17 @@
         setupToggleVisibility('#homeScreen_seasonal_enabled', '#homeScreen_seasonal_container');
         setupToggleVisibility('#homeScreen_watchAgain_enabled', '#homeScreen_watchAgain_container');
         setupToggleVisibility('#homeScreen_discovery_enabled', '#homeScreen_discovery_container');
+        
+        // Discovery Sections IsPlayed Toggles
+        ['recentlyReleased_movies', 'recentlyReleased_episodes', 'trending', 'popularTVNetworks', 'upcoming', 'imdbTop250'].forEach(key => {
+            setupToggleVisibility(`#homeScreen_${key}_isPlayed_enabled`, `#homeScreen_${key}_isPlayed_options`);
+        });
+        
+        // Dynamic Discovery Sections IsPlayed Toggles
+        DISCOVERY_SECTION_DEFINITIONS.forEach(section => {
+            const prefix = `homeScreen_discovery_sectionTypes_${section.key}`;
+            setupToggleVisibility(`#${prefix}_isPlayed_enabled`, `#${prefix}_isPlayed_options`);
+        });
         
         // Setup event listeners for section management
         // Add section to seasonal season
@@ -2354,6 +2558,76 @@
             if (enabledCheckbox && enabledSpan) {
                 enabledCheckbox.addEventListener('change', () => {
                     enabledSpan.textContent = enabledCheckbox.checked ? 'Enabled' : 'Disabled';
+                });
+            }
+
+            // Setup additional options listeners
+            const additionalOptionsControls = sectionItem.querySelector(`.${prefix}_section_additionalOptions_controls[data-section-index="${sectionIndex}"]`);
+            const additionalOptionsListContainer = sectionItem.querySelector(`.${prefix}_section_additionalOptions_list_container[data-section-index="${sectionIndex}"]`);
+            
+            if (additionalOptionsControls) {
+                const addBtn = additionalOptionsControls.querySelector('.add-additional-option');
+                const select = additionalOptionsControls.querySelector('.additional-option-select');
+                const list = additionalOptionsListContainer ? additionalOptionsListContainer.querySelector('.additional-options-list') : null;
+                
+                if (addBtn && select && list) {
+                    addBtn.addEventListener('click', () => {
+                        const key = select.value;
+                        if (!key) return;
+                        
+                        const meta = SUPPORTED_CUSTOM_SECTION_PARAMS[key];
+                        if (!meta) return;
+                        
+                        const index = list.children.length;
+                        const sanitizedPrefix = `${prefix}_section_${sanitizedIndex}`;
+                        const inputId = `${sanitizedPrefix}_additionalOption_${Date.now()}_${index}`;
+                        
+                        let inputField = '';
+                        if (meta.type === 'boolean') {
+                            inputField = buildJellyfinCheckbox(inputId, meta.default === true, meta.label, { 
+                                'data-key': key, 
+                                'class': 'additional-option-value',
+                                'data-type': 'boolean'
+                            });
+                        } else {
+                            inputField = `
+                                <div style="flex: 1;">
+                                    <div class="listItemBodyText" style="margin-bottom: 0.25em;">${meta.label}</div>
+                                    <input type="text" id="${inputId}" class="fld emby-input additional-option-value" value="" data-key="${key}" data-type="${meta.type}" placeholder="${meta.hint || ''}" style="width: 100%;">
+                                </div>
+                            `;
+                        }
+                        
+                        const row = document.createElement('div');
+                        row.className = 'additional-option-row';
+                        row.style.cssText = 'display: flex; align-items: flex-end; gap: 0.5em; margin-top: 0.5em; padding: 0.5em; background: rgba(255,255,255,0.05); border-radius: 4px;';
+                        row.innerHTML = `
+                            ${inputField}
+                            <button type="button" class="remove-additional-option" style="background: none; border: none; color: rgba(255,255,255,0.7); cursor: pointer; padding: 0.25em; display: flex; align-items: center;" title="Remove Option">
+                                <span class="material-icons">close</span>
+                            </button>
+                        `;
+                        
+                        // Add delete listener for new row
+                        row.querySelector('.remove-additional-option').addEventListener('click', () => {
+                            row.remove();
+                        });
+                        
+                        list.appendChild(row);
+                        
+                        // Reset select
+                        select.value = '';
+                    });
+                }
+            }
+            
+            // Add listeners for existing delete buttons
+            if (additionalOptionsListContainer) {
+                additionalOptionsListContainer.querySelectorAll('.remove-additional-option').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const row = e.target.closest('.additional-option-row');
+                        if (row) row.remove();
+                    });
                 });
             }
         }
@@ -4351,6 +4625,28 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         if (includeItemTypes.length === 0 && type !== 'Parent') {
             includeItemTypes = ['Movie'];
         }
+
+        const additionalQueryOptions = [];
+        const additionalOptionsContainer = sectionItem.querySelector(`.${prefix}_section_additionalOptions_list_container[data-section-index="${sectionIndex}"]`);
+        if (additionalOptionsContainer) {
+            const optionRows = additionalOptionsContainer.querySelectorAll('.additional-options-list .additional-option-row');
+            optionRows.forEach(row => {
+                const input = row.querySelector('.additional-option-value');
+                if (input) {
+                    const key = input.getAttribute('data-key');
+                    const type = input.getAttribute('data-type');
+                    let value;
+                    if (type === 'boolean') {
+                        value = input.checked;
+                    } else {
+                        value = input.value;
+                    }
+                    if (key) {
+                        additionalQueryOptions.push({ key, value });
+                    }
+                }
+            });
+        }
         
         return {
             id: sectionIdAttr,
@@ -4366,7 +4662,8 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             spotlight: spotlight,
             discoveryEnabled: discoveryEnabled,
             searchTerm: searchTerm,
-            includeItemTypes: includeItemTypes
+            includeItemTypes: includeItemTypes,
+            additionalQueryOptions: additionalQueryOptions
         };
     }
     
@@ -4377,8 +4674,6 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         }
         
         const userId = apiClient.getCurrentUserId();
-        const serverAddress = apiClient.serverAddress();
-        const token = apiClient.accessToken();
         const type = sectionConfig.type || 'Genre';
         const searchTerm = sectionConfig.searchTerm?.trim() || '';
         const includeItemTypes = Array.isArray(sectionConfig.includeItemTypes) && sectionConfig.includeItemTypes.length > 0
@@ -4389,8 +4684,20 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         const itemLimit = parseInt(sectionConfig.itemLimit, 10) || 16;
         const sources = (sectionConfig.source || '').split(',').map(s => s.trim()).filter(Boolean);
         const fields = 'PrimaryImageAspectRatio,DateCreated,Overview,ProductionYear,ImageTags,BackdropImageTags,ParentBackdropImageTags,ParentThumbImageTag,SeriesPrimaryImageTag';
-        const headers = { 'Authorization': `MediaBrowser Token="${token}"` };
         
+        // Parse additional query options
+        const additionalOptions = {};
+        if (Array.isArray(sectionConfig.additionalQueryOptions)) {
+            sectionConfig.additionalQueryOptions.forEach(option => {
+                if (option && option.key) {
+                    let value = option.value;
+                    if (value === 'true' || value === true) value = true;
+                    else if (value === 'false' || value === false) value = false;
+                    additionalOptions[option.key] = value;
+                }
+            });
+        }
+
         const dedupeAndLimit = (items = []) => {
             let working = Array.isArray(items) ? [...items] : [];
             if (sortOrder === 'Random') {
@@ -4409,41 +4716,41 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             return limited;
         };
         
-        const fetchJson = async (url) => {
-            const response = await fetch(url, { headers });
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
-            }
-            return response.json();
-        };
-        
         try {
+            const queryBase = {
+                IncludeItemTypes: includeItemTypes,
+                Recursive: true,
+                Fields: fields,
+                SortBy: sortOrder,
+                SortOrder: sortOrderDirection,
+                ...additionalOptions
+            };
+
             if (type === 'Genre' || type === 'Tag') {
                 if (sources.length === 0) {
                     return [];
                 }
                 const paramName = type === 'Genre' ? 'Genres' : 'Tags';
-                const valueParam = sources.map(s => encodeURIComponent(s)).join('|');
-                const url = `${serverAddress}/Items?userId=${userId}&${paramName}=${valueParam}` +
-                    `&IncludeItemTypes=${encodeURIComponent(includeItemTypes)}` +
-                    `&Recursive=true&Fields=${encodeURIComponent(fields)}` +
-                    `&Limit=${itemLimit}&SortBy=${encodeURIComponent(sortOrder)}&SortOrder=${encodeURIComponent(sortOrderDirection)}` +
-                    (searchTerm ? `&SearchTerm=${encodeURIComponent(searchTerm)}` : '');
-                const data = await fetchJson(url);
-                return dedupeAndLimit(data.Items || []);
+                // Genres use pipe delimiter usually, tags comma?
+                // homeScreen.js uses pipe for Genres, comma for Tags.
+                // apiClient handles array/string? usually string.
+                const delimiter = type === 'Genre' ? '|' : ',';
+                const valueParam = sources.join(delimiter); 
+                
+                const params = {
+                    ...queryBase,
+                    [paramName]: valueParam,
+                    Limit: itemLimit
+                };
+                if (searchTerm) params.SearchTerm = searchTerm;
+                
+                const response = await apiClient.getItems(userId, params);
+                return dedupeAndLimit(response.Items || []);
             }
             
             if (type === 'Collection' || type === 'Playlist' || type === 'Parent') {
                 const existingIds = new Set();
                 let collected = [];
-                
-                const queryBase = {
-                    IncludeItemTypes: includeItemTypes,
-                    Recursive: true,
-                    Fields: fields,
-                    SortBy: sortOrder,
-                    SortOrder: sortOrderDirection
-                };
                 
                 const runQuery = async (params) => {
                     const response = await apiClient.getItems(userId, params);
@@ -4560,6 +4867,17 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
 
             if (includeOrder) {
                 config.order = parseInt(document.getElementById(`${prefix}_order`)?.value || '100', 10);
+            }
+
+            // Check for IsPlayed configuration
+            const isPlayedEnabledCheckbox = document.getElementById(`${prefix}_isPlayed_enabled`);
+            if (isPlayedEnabledCheckbox) {
+                if (isPlayedEnabledCheckbox.checked) {
+                    const isPlayedValueSelect = document.getElementById(`${prefix}_isPlayed_value`);
+                    config.isPlayed = isPlayedValueSelect?.value === 'true';
+                } else {
+                    config.isPlayed = null;
+                }
             }
 
             return config;
@@ -4683,6 +5001,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                 minPeopleAppearances: parseInt(document.getElementById('homeScreen_discovery_minPeopleAppearances')?.value || '10'),
                 minGenreMovieCount: parseInt(document.getElementById('homeScreen_discovery_minGenreMovieCount')?.value || '50'),
                 spotlightDiscoveryChance: parseFloat(document.getElementById('homeScreen_discovery_spotlightDiscoveryChance')?.value || '0.5'),
+                renderSpotlightAboveMatching: document.getElementById('homeScreen_discovery_renderSpotlightAboveMatching')?.checked === true,
                 defaultItemLimit: parseInt(document.getElementById('homeScreen_discovery_itemLimit')?.value || '16'),
                 defaultSortOrder: document.getElementById('homeScreen_discovery_sortOrder')?.value || 'Random',
                 defaultCardFormat: document.getElementById('homeScreen_discovery_cardFormat')?.value || 'Poster',
