@@ -70,6 +70,29 @@
     background-size: auto 102%;
 }
 
+/* Christmas theme */
+.home-screen.christmas-theme #reactRoot:has(.libraryPage:not(.hide) .pageTabContent.is-active[data-index="0"])>.backgroundContainer::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0%;
+    background: linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)), url('../pages/images/christmas-2.jpg');
+    background-position: center;
+    background-size: cover;
+}
+
+.flurry-container {
+    display: none;
+}
+
+.home-screen.christmas-theme .flurry-container {
+    display: block;
+    position: fixed !important;
+    z-index: 9999999999 !important;
+}
+
 .home-screen h2.sectionTitle {
     margin-bottom: .35em;
     margin-top: 0;

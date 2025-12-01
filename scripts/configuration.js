@@ -28,7 +28,26 @@
     ];
 
     const SUPPORTED_CUSTOM_SECTION_PARAMS = {
+        filters: { label: 'Filters', type: 'array', hint: 'IsFolder, IsNotFolder, IsUnplayed, IsPlayed, IsFavorite, IsResumable, Likes, Dislikes' },
+        isPlayed: { label: 'Is Played', type: 'boolean' },
+        person: { label: 'Person Name', type: 'string' },
+        personTypes: { label: 'Person Types', type: 'array', hint: 'Actor, Director, Writer, etc.' },
+        years: { label: 'Years', type: 'array', hint: 'Comma-separated years' },
+        
+        // Dates (ISO 8601)
+        minPremiereDate: { label: 'Min Premiere Date', type: 'date', hint: 'YYYY-MM-DD' },
+        maxPremiereDate: { label: 'Max Premiere Date', type: 'date', hint: 'YYYY-MM-DD' },
+        //minDateLastSaved: { label: 'Min Date Last Saved', type: 'date', hint: 'YYYY-MM-DD' },
+        //minDateLastSavedForUser: { label: 'Min Date Last Saved For User', type: 'date', hint: 'YYYY-MM-DD' },
+        
+        // Numbers
+        indexNumber: { label: 'Index Number', type: 'number' },
+        parentIndexNumber: { label: 'Parent Index Number', type: 'number' },
+        minCommunityRating: { label: 'Min Community Rating', type: 'number' },
+        minCriticRating: { label: 'Min Critic Rating', type: 'number' },
+
         // Booleans
+        isFavorite: { label: 'Is Favorite', type: 'boolean' },
         hasThemeSong: { label: 'Has Theme Song', type: 'boolean' },
         hasThemeVideo: { label: 'Has Theme Video', type: 'boolean' },
         hasSubtitles: { label: 'Has Subtitles', type: 'boolean' },
@@ -39,45 +58,26 @@
         is4K: { label: 'Is 4K', type: 'boolean' },
         isMissing: { label: 'Is Missing', type: 'boolean' },
         isUnaired: { label: 'Is Unaired', type: 'boolean' },
+        //is3D: { label: 'Is 3D', type: 'boolean' },
+        //isSeries: { label: 'Is Series (Live TV)', type: 'boolean' },
         hasOverview: { label: 'Has Overview', type: 'boolean' },
-        isFavorite: { label: 'Is Favorite', type: 'boolean' },
-        isPlayed: { label: 'Is Played', type: 'boolean' },
         hasOfficialRating: { label: 'Has Official Rating', type: 'boolean' },
         recursive: { label: 'Recursive', type: 'boolean', default: true },
-        is3D: { label: 'Is 3D', type: 'boolean' },
-        isSeries: { label: 'Is Series (Live TV)', type: 'boolean' },
         
         // Strings
         maxOfficialRating: { label: 'Max Official Rating', type: 'string', hint: 'e.g., PG-13, TV-MA' },
         minOfficialRating: { label: 'Min Official Rating', type: 'string', hint: 'e.g., PG, TV-14' },
-        person: { label: 'Person Name', type: 'string' },
         nameStartsWith: { label: 'Name Starts With', type: 'string' },
         nameStartsWithOrGreater: { label: 'Name Starts With Or Greater', type: 'string' },
         nameLessThan: { label: 'Name Less Than', type: 'string' },
-        
-        // Numbers
-        indexNumber: { label: 'Index Number', type: 'number' },
-        parentIndexNumber: { label: 'Parent Index Number', type: 'number' },
-        minCommunityRating: { label: 'Min Community Rating', type: 'number' },
-        minCriticRating: { label: 'Min Critic Rating', type: 'number' },
-        limit: { label: 'Limit', type: 'number' },
-        
-        // Dates (ISO 8601)
-        minPremiereDate: { label: 'Min Premiere Date', type: 'date', hint: 'YYYY-MM-DD' },
-        maxPremiereDate: { label: 'Max Premiere Date', type: 'date', hint: 'YYYY-MM-DD' },
-        minDateLastSaved: { label: 'Min Date Last Saved', type: 'date', hint: 'YYYY-MM-DD' },
-        minDateLastSavedForUser: { label: 'Min Date Last Saved For User', type: 'date', hint: 'YYYY-MM-DD' },
         
         // Arrays (Comma-separated strings in UI)
         locationTypes: { label: 'Location Types', type: 'array', hint: 'FileSystem, Remote, Virtual, Offline' },
         excludeLocationTypes: { label: 'Exclude Location Types', type: 'array', hint: 'FileSystem, Remote, Virtual, Offline' },
         excludeItemIds: { label: 'Exclude Item IDs', type: 'array', hint: 'Comma-separated GUIDs' },
         excludeItemTypes: { label: 'Exclude Item Types', type: 'array', hint: 'Movie, Series, Episode, etc.' },
-        filters: { label: 'Filters', type: 'array', hint: 'IsFolder, IsNotFolder, IsUnplayed, IsPlayed, IsFavorite, IsResumable, Likes, Dislikes' },
         imageTypes: { label: 'Image Types', type: 'array', hint: 'Primary, Backdrop, Thumb, Logo, etc.' },
         officialRatings: { label: 'Official Ratings', type: 'array', hint: 'PG, PG-13, R, etc.' },
-        years: { label: 'Years', type: 'array', hint: 'Comma-separated years' },
-        personTypes: { label: 'Person Types', type: 'array', hint: 'Actor, Director, Writer, etc.' },
         studios: { label: 'Studios', type: 'array', hint: 'Pipe-delimited names' },
         artists: { label: 'Artists', type: 'array', hint: 'Pipe-delimited names' },
         albums: { label: 'Albums', type: 'array', hint: 'Pipe-delimited names' },
@@ -1041,7 +1041,7 @@
     function buildAdditionalOptionsControls(prefix, sectionIndex, sanitizedPrefix) {
         // Build dropdown options from supported params
         const dropdownOptions = Object.entries(SUPPORTED_CUSTOM_SECTION_PARAMS)
-            .sort((a, b) => a[1].label.localeCompare(b[1].label))
+            //.sort((a, b) => a[1].label.localeCompare(b[1].label))
             .map(([key, meta]) => `<option value="${key}">${meta.label}</option>`)
             .join('');
 
@@ -1667,8 +1667,23 @@
                                     <div style="margin-top: 0.75em; margin-bottom: 0.75em;">
                                         ${buildJellyfinCheckbox('homeScreen_recentlyReleased_movies_enabled', (recentlyReleased.movies || {}).enabled !== false, 'Enabled')}
                                     </div>
-                                    <div class="listItemContent" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 0.75em;">
+                                    <div class="listItemContent" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75em;">
                                         ${createSectionConfiguration('homeScreen_recentlyReleased_movies', recentlyReleased.movies || {}, { includeName: true, defaultName: 'Recently Released Movies', includeSortOrder: false, includeOrder: true, includeIsPlayed: true })}
+                                        
+                                        <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
+                                            <div class="listItemContent">
+                                                <div class="listItemBodyText" style="margin-bottom: 0.5em;">Min Premiere Date</div>
+                                                <input type="date" id="homeScreen_recentlyReleased_movies_minPremiereDate" class="fld emby-input" value="${recentlyReleased.movies?.minPremiereDate || ''}" style="width: 100%;">
+                                                <div class="fieldDescription" style="margin-top: 0.25em;">Optional. Leave empty for default (30 days ago).</div>
+                                            </div>
+                                        </div>
+                                        <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
+                                            <div class="listItemContent">
+                                                <div class="listItemBodyText" style="margin-bottom: 0.5em;">Max Premiere Date</div>
+                                                <input type="date" id="homeScreen_recentlyReleased_movies_maxPremiereDate" class="fld emby-input" value="${recentlyReleased.movies?.maxPremiereDate || ''}" style="width: 100%;">
+                                                <div class="fieldDescription" style="margin-top: 0.25em;">Optional. Leave empty for default (today).</div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </details>
@@ -1684,8 +1699,23 @@
                                     <div style="margin-top: 0.75em; margin-bottom: 0.75em;">
                                         ${buildJellyfinCheckbox('homeScreen_recentlyReleased_episodes_enabled', (recentlyReleased.episodes || {}).enabled !== false, 'Enabled')}
                                     </div>
-                                    <div class="listItemContent" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 0.75em;">
+                                    <div class="listItemContent" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75em;">
                                         ${createSectionConfiguration('homeScreen_recentlyReleased_episodes', recentlyReleased.episodes || {}, { includeName: true, defaultName: 'Recently Aired Episodes', includeSortOrder: false, includeOrder: true, includeIsPlayed: true })}
+
+                                        <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
+                                            <div class="listItemContent">
+                                                <div class="listItemBodyText" style="margin-bottom: 0.5em;">Min Premiere Date</div>
+                                                <input type="date" id="homeScreen_recentlyReleased_episodes_minPremiereDate" class="fld emby-input" value="${recentlyReleased.episodes?.minPremiereDate || ''}" style="width: 100%;">
+                                                <div class="fieldDescription" style="margin-top: 0.25em;">Optional. Leave empty for default (7 days ago).</div>
+                                            </div>
+                                        </div>
+                                        <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
+                                            <div class="listItemContent">
+                                                <div class="listItemBodyText" style="margin-bottom: 0.5em;">Max Premiere Date</div>
+                                                <input type="date" id="homeScreen_recentlyReleased_episodes_maxPremiereDate" class="fld emby-input" value="${recentlyReleased.episodes?.maxPremiereDate || ''}" style="width: 100%;">
+                                                <div class="fieldDescription" style="margin-top: 0.25em;">Optional. Leave empty for default (today).</div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </details>
@@ -1783,6 +1813,13 @@
                 </summary>
                 <div style="padding: 0.75em 0 0 0;">
                     <div id="homeScreen_seasonal_container" style="${seasonal.enabled === false ? 'display: none;' : ''}">
+                        <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
+                            <div class="listItemContent">
+                                <div class="listItemBodyText" style="margin-bottom: 0.5em;">Enable Seasonal Animations</div>
+                                <div class="listItemBodyText secondary" style="margin-bottom: 0.75em; font-size: 0.9em;">Enable falling snow/leaves animations for seasonal themes</div>
+                                ${buildJellyfinCheckbox('homeScreen_seasonal_enableSeasonalAnimations', seasonal.enableSeasonalAnimations !== false, 'Enabled')}
+                            </div>
+                        </div>
                         <div id="homeScreen_seasonal_seasons_list" style="margin-bottom: 1em;">
                             ${seasonalSectionsHtml}
                         </div>
@@ -4955,14 +4992,18 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                 enabled: document.getElementById('homeScreen_recentlyReleased_enabled')?.checked !== false,
                 movies: {
                     enabled: document.getElementById('homeScreen_recentlyReleased_movies_enabled')?.checked !== false,
-                    ...getSectionConfig('homeScreen_recentlyReleased_movies', { includeName: true, defaultName: 'Recently Released Movies', includeSortOrder: false, includeOrder: true })
-                },
-                episodes: {
-                    enabled: document.getElementById('homeScreen_recentlyReleased_episodes_enabled')?.checked !== false,
-                    ...getSectionConfig('homeScreen_recentlyReleased_episodes', { includeName: true, defaultName: 'Recently Aired Episodes', includeSortOrder: false, includeOrder: true })
-                }
-            },
-            trending: {
+                                        ...getSectionConfig('homeScreen_recentlyReleased_movies', { includeName: true, defaultName: 'Recently Released Movies', includeSortOrder: false, includeOrder: true }),
+                                        minPremiereDate: document.getElementById('homeScreen_recentlyReleased_movies_minPremiereDate')?.value || '',
+                                        maxPremiereDate: document.getElementById('homeScreen_recentlyReleased_movies_maxPremiereDate')?.value || ''
+                                    },
+                                    episodes: {
+                                        enabled: document.getElementById('homeScreen_recentlyReleased_episodes_enabled')?.checked !== false,
+                                        minPremiereDate: document.getElementById('homeScreen_recentlyReleased_episodes_minPremiereDate')?.value || '',
+                                        maxPremiereDate: document.getElementById('homeScreen_recentlyReleased_episodes_maxPremiereDate')?.value || '',
+                                        ...getSectionConfig('homeScreen_recentlyReleased_episodes', { includeName: true, defaultName: 'Recently Aired Episodes', includeSortOrder: false, includeOrder: true })
+                                    }
+                                },
+                                trending: {
                 enabled: document.getElementById('homeScreen_trending_enabled')?.checked === true,
                 ...getSectionConfig('homeScreen_trending', { includeName: true, defaultName: 'Trending' })
             },
@@ -4989,6 +5030,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             },
             seasonal: {
                 enabled: document.getElementById('homeScreen_seasonal_enabled')?.checked !== false,
+                enableSeasonalAnimations: document.getElementById('homeScreen_seasonal_enableSeasonalAnimations')?.checked !== false,
                 defaultItemLimit: 16,
                 defaultSortOrder: 'Random',
                 defaultCardFormat: 'Poster',

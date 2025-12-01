@@ -589,6 +589,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **[BobHasNoSoul](https://github.com/BobHasNoSoul)**: For the jellyfin-updoot functionality
 - **[The Jellyfin Community](https://discord.gg/v7P9CAvCKZhttps://discord.gg/v7P9CAvCKZ)**: For sharing knowledge and providing a welcoming environment to ask questions and learn 
 - **[movie-monk-b0t](https://github.com/movie-monk-b0t)**: For the IMDb Top 250 JSON data
+- **[joshmcrty](https://github.com/joshmcrty)**: For the [Flurry](https://github.com/joshmcrty/Flurry) jQuery plugin
 
 ## Support
 
@@ -608,6 +609,8 @@ This README and the inline comments in kefinTweaks.js and the other scripts is t
 <hr>
 
 ### Version History
+- **v0.3.5**: Critical bug fix
+- **v0.3.4**: Improved handling of Latest/Development branches for KefinTweaks installation. Improved collection caching.
 - **v0.3.3**: Important fix for a bug preventing the plugin from running on non-admin accounts
 - **v0.3.2**: Add proper installation and uninstallation support from the Plugins page. New feature: Playlist sorting.
 - **v0.3.1**: New Home Screen Section feature: Spotlights! Improved Configuration UI.

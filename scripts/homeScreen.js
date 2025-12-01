@@ -138,6 +138,11 @@
         const currentView = window.KefinTweaksUtils?.getCurrentView();
         const isHomePage = currentView === 'home' || currentView === 'home.html';
         
+        // Get seasonal animation setting
+        const homeScreenConfig = window.KefinTweaksConfig?.homeScreen || {};
+        const seasonalConfig = homeScreenConfig.seasonal || {};
+        const enableSeasonalAnimations = seasonalConfig.enableSeasonalAnimations !== false;
+        
         // Manage home-screen class
         if (isHomePage && body) {
             body.classList.add('home-screen');
@@ -156,6 +161,30 @@
                 body.classList.add('halloween-theme');
             } else if (isChristmasPeriod()) {
                 body.classList.add('christmas-theme');
+
+                if (enableSeasonalAnimations) {
+                    // Import the Flurry module and leverage it from jQuery. /scripts/third party/flurry.js by appending it to the head
+                    const flurryScriptSrc = (window.KefinTweaksConfig.kefinTweaksRoot || '') + 'scripts/third party/jquery.flurry.min.js';
+                    
+                    // Function to run flurry safely
+                    const startFlurry = () => {
+                        if (window.jQuery && typeof window.jQuery.fn.flurry === 'function') {
+                            window.jQuery("body").flurry();
+                        }
+                    };
+    
+                    // Check if script is already present
+                    if (!document.querySelector(`script[src="${flurryScriptSrc}"]`)) {
+                        const flurryScript = document.createElement('script');
+                        flurryScript.src = flurryScriptSrc;
+                        flurryScript.onload = startFlurry; // Run after load
+                        document.head.appendChild(flurryScript);
+                    } else {
+                        // Script loaded, try running directly
+                        startFlurry();
+                    }
+                }
+
             } else if (isValentinesPeriod()) {
                 body.classList.add('valentines-theme');
             } else if (isNewYearsPeriod()) {
@@ -587,6 +616,90 @@
                 WARN('KefinTweaksUtils.saveConfigToJavaScriptInjector not available, config migration not persisted');
             }
         }
+
+        // --- NEW UPDATE LOGIC ---
+        // Runs even if no major migration was needed, to catch specific updates
+        
+        // 1. Ensure Recently Released date fields exist
+        let configChanged = false;
+        // Use the current config (which might have been just migrated)
+        const currentConfig = window.KefinTweaksConfig.homeScreen;
+        
+        if (currentConfig.recentlyReleased) {
+            if (currentConfig.recentlyReleased.movies && currentConfig.recentlyReleased.movies.minPremiereDate === undefined) {
+                currentConfig.recentlyReleased.movies.minPremiereDate = "";
+                currentConfig.recentlyReleased.movies.maxPremiereDate = "";
+                configChanged = true;
+            }
+            if (currentConfig.recentlyReleased.episodes && currentConfig.recentlyReleased.episodes.minPremiereDate === undefined) {
+                currentConfig.recentlyReleased.episodes.minPremiereDate = "";
+                currentConfig.recentlyReleased.episodes.maxPremiereDate = "";
+                configChanged = true;
+            }
+        }
+
+        // 2. Update Christmas Seasonal Sections
+        if (currentConfig.seasonal && Array.isArray(currentConfig.seasonal.seasons)) {
+            const christmasSeason = currentConfig.seasonal.seasons.find(s => s.id === 'christmas');
+            if (christmasSeason && Array.isArray(christmasSeason.sections)) {
+                
+                // Check for old "Christmas Movies" (genre) and update to new "Christmas Movies" (tag)
+                const movieSectionIndex = christmasSeason.sections.findIndex(s => s.id === 'christmas-genre');
+                if (movieSectionIndex !== -1) {
+                    christmasSeason.sections[movieSectionIndex] = {
+                        "id": "seasonal-1-section-0",
+                        "enabled": true,
+                        "name": "Christmas Movies",
+                        "type": "Tag",
+                        "source": "christmas",
+                        "itemLimit": 16,
+                        "sortOrder": "Random",
+                        "sortOrderDirection": "Ascending",
+                        "cardFormat": "Poster",
+                        "order": 50,
+                        "spotlight": true,
+                        "discoveryEnabled": false,
+                        "searchTerm": "",
+                        "includeItemTypes": ["Movie"],
+                        "additionalQueryOptions": []
+                    };
+                    configChanged = true;
+                }
+
+                // Check for old "Family Movies" (genre) and update to new "Christmas Episodes" (parent/search)
+                const familySectionIndex = christmasSeason.sections.findIndex(s => s.id === 'christmas-family');
+                if (familySectionIndex !== -1) {
+                    christmasSeason.sections[familySectionIndex] = {
+                        "id": "seasonal-1-section-1",
+                        "enabled": true,
+                        "name": "Christmas Episodes",
+                        "type": "Parent",
+                        "source": "",
+                        "itemLimit": 16,
+                        "sortOrder": "Random",
+                        "sortOrderDirection": "Ascending",
+                        "cardFormat": "Thumb",
+                        "order": 51,
+                        "spotlight": false,
+                        "discoveryEnabled": false,
+                        "searchTerm": "christmas",
+                        "includeItemTypes": ["Episode"],
+                        "additionalQueryOptions": []
+                    };
+                    configChanged = true;
+                }
+            }
+        }
+        
+        if (configChanged && !needsMigration) {
+            LOG('Applied specific configuration updates (recently released dates / christmas sections)');
+            // Save updated config back to JS Injector plugin
+            if (window.KefinTweaksUtils && window.KefinTweaksUtils.saveConfigToJavaScriptInjector) {
+                window.KefinTweaksUtils.saveConfigToJavaScriptInjector().catch(err => {
+                    ERR('Failed to save updated config to JS Injector:', err);
+                });
+            }
+        }
     }
     
     // Run migration before reading config
@@ -644,6 +757,7 @@
     // Seasonal configuration
     const seasonalConfig = homeScreenConfig.seasonal || {};
     const enableSeasonal = seasonalConfig.enabled !== false;
+    const enableSeasonalAnimations = seasonalConfig.enableSeasonalAnimations !== false;
     const SEASONAL_ITEM_LIMIT = seasonalConfig.defaultItemLimit || 16;
     
     // Discovery sections configuration
@@ -2445,13 +2559,18 @@
             Limit: 16,
             Fields: 'PremiereDate',
             Recursive: true,
-            MinPremiereDate: monthAgo,
-            MaxPremiereDate: today
+            MinPremiereDate: newMoviesConfig.minPremiereDate || monthAgo,
+            MaxPremiereDate: newMoviesConfig.maxPremiereDate || today
         }
 
         const isPlayedFilter = getIsPlayedFilter(newMoviesConfig);
         if (isPlayedFilter) {
             options.Filters = isPlayedFilter;
+        }
+
+        // Add UserData to Fields if IsPlayed filter is active or generally useful
+        if (!options.Fields.includes('UserData')) {
+             options.Fields += ',UserData';
         }
 
         const data = await window.apiHelper.getItems(options, true);
@@ -2478,8 +2597,8 @@
             Recursive: true,
             SortBy: 'PremiereDate',
             SortOrder: 'Descending',
-            MinPremiereDate: minDate,
-            MaxPremiereDate: maxDate,
+            MinPremiereDate: newEpisodesConfig.minPremiereDate || minDate,
+            MaxPremiereDate: newEpisodesConfig.maxPremiereDate || maxDate,
             Limit: 100,
             Fields: 'PremiereDate,SeriesName,ParentIndexNumber,IndexNumber,ProviderIds,Path'
         }
@@ -2487,6 +2606,11 @@
         const isPlayedFilter = getIsPlayedFilter(newEpisodesConfig);
         if (isPlayedFilter) {
             options.Filters = isPlayedFilter;
+        }
+
+        // Add UserData to Fields if IsPlayed filter is active or generally useful
+        if (!options.Fields.includes('UserData')) {
+             options.Fields += ',UserData';
         }
 
         const data = await window.apiHelper.getItems(options, true);
