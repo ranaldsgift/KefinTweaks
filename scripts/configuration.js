@@ -1442,7 +1442,8 @@
             nameInputAttributes = {},
             includeCardFormat = true,
             includeItemLimit = true,
-            includeIsPlayed = false
+            includeIsPlayed = false,
+            includePremiereDays = false
         } = options;
 
         const nameValue = config.name ?? defaultName ?? '';
@@ -1553,6 +1554,26 @@
                     <div class="listItemContent">
                         <div class="listItemBodyText" style="margin-bottom: 0.5em;">Item Limit</div>
                         <input type="number" id="${prefix}_itemLimit" class="fld emby-input" value="${itemLimit}" min="1" style="width: 100%; max-width: 200px;">
+                    </div>
+                </div>`;
+        }
+
+        if (includePremiereDays) {
+            const minAgeInDays = config.minAgeInDays ?? 0;
+            const maxAgeInDays = config.maxAgeInDays ?? 30;
+            html += `                
+                <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
+                    <div class="listItemContent">
+                        <div class="listItemBodyText" style="margin-bottom: 0.5em;">Minimum Age (Days)</div>
+                        <input type="number" id="${prefix}_minAgeInDays" class="fld emby-input" value="${minAgeInDays}" style="width: 100%;">
+                        <div class="fieldDescription" style="margin-top: 0.25em;">Optional. Days since release (e.g. 0 for today).</div>
+                    </div>
+                </div>
+                <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
+                    <div class="listItemContent">
+                        <div class="listItemBodyText" style="margin-bottom: 0.5em;">Maximum Age (Days)</div>
+                        <input type="number" id="${prefix}_maxAgeInDays" class="fld emby-input" value="${maxAgeInDays}" style="width: 100%;">
+                        <div class="fieldDescription" style="margin-top: 0.25em;">Optional. Max days old (e.g. 30).</div>
                     </div>
                 </div>`;
         }
@@ -1668,22 +1689,7 @@
                                         ${buildJellyfinCheckbox('homeScreen_recentlyReleased_movies_enabled', (recentlyReleased.movies || {}).enabled !== false, 'Enabled')}
                                     </div>
                                     <div class="listItemContent" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75em;">
-                                        ${createSectionConfiguration('homeScreen_recentlyReleased_movies', recentlyReleased.movies || {}, { includeName: true, defaultName: 'Recently Released Movies', includeSortOrder: false, includeOrder: true, includeIsPlayed: true })}
-                                        
-                                        <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
-                                            <div class="listItemContent">
-                                                <div class="listItemBodyText" style="margin-bottom: 0.5em;">Minimum Age (Days)</div>
-                                                <input type="number" id="homeScreen_recentlyReleased_movies_minAgeInDays" class="fld emby-input" value="${recentlyReleased.movies?.minAgeInDays ?? ''}" style="width: 100%;">
-                                                <div class="fieldDescription" style="margin-top: 0.25em;">Optional. Days since release (e.g. 0 for today).</div>
-                                            </div>
-                                        </div>
-                                        <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
-                                            <div class="listItemContent">
-                                                <div class="listItemBodyText" style="margin-bottom: 0.5em;">Maximum Age (Days)</div>
-                                                <input type="number" id="homeScreen_recentlyReleased_movies_maxAgeInDays" class="fld emby-input" value="${recentlyReleased.movies?.maxAgeInDays ?? ''}" style="width: 100%;">
-                                                <div class="fieldDescription" style="margin-top: 0.25em;">Optional. Max days old (e.g. 30).</div>
-                                            </div>
-                                        </div>
+                                        ${createSectionConfiguration('homeScreen_recentlyReleased_movies', recentlyReleased.movies || {}, { includeName: true, defaultName: 'Recently Released Movies', includeSortOrder: true, includeOrder: true, includeIsPlayed: true, includePremiereDays: true })}
                                     </div>
                                 </div>
                             </details>
@@ -1700,22 +1706,7 @@
                                         ${buildJellyfinCheckbox('homeScreen_recentlyReleased_episodes_enabled', (recentlyReleased.episodes || {}).enabled !== false, 'Enabled')}
                                     </div>
                                     <div class="listItemContent" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75em;">
-                                        ${createSectionConfiguration('homeScreen_recentlyReleased_episodes', recentlyReleased.episodes || {}, { includeName: true, defaultName: 'Recently Aired Episodes', includeSortOrder: false, includeOrder: true, includeIsPlayed: true })}
-
-                                        <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
-                                            <div class="listItemContent">
-                                                <div class="listItemBodyText" style="margin-bottom: 0.5em;">Minimum Age (Days)</div>
-                                                <input type="number" id="homeScreen_recentlyReleased_episodes_minAgeInDays" class="fld emby-input" value="${recentlyReleased.episodes?.minAgeInDays ?? ''}" style="width: 100%;">
-                                                <div class="fieldDescription" style="margin-top: 0.25em;">Optional. Days since release (e.g. 0 for today).</div>
-                                            </div>
-                                        </div>
-                                        <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
-                                            <div class="listItemContent">
-                                                <div class="listItemBodyText" style="margin-bottom: 0.5em;">Maximum Age (Days)</div>
-                                                <input type="number" id="homeScreen_recentlyReleased_episodes_maxAgeInDays" class="fld emby-input" value="${recentlyReleased.episodes?.maxAgeInDays ?? ''}" style="width: 100%;">
-                                                <div class="fieldDescription" style="margin-top: 0.25em;">Optional. Max days old (e.g. 7).</div>
-                                            </div>
-                                        </div>
+                                        ${createSectionConfiguration('homeScreen_recentlyReleased_episodes', recentlyReleased.episodes || {}, { includeName: true, defaultName: 'Recently Aired Episodes', includeSortOrder: true, includeOrder: true, includeIsPlayed: true, includePremiereDays: true })}
                                     </div>
                                 </div>
                             </details>
@@ -5022,17 +5013,13 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                 enabled: document.getElementById('homeScreen_recentlyReleased_enabled')?.checked !== false,
                 movies: {
                     enabled: document.getElementById('homeScreen_recentlyReleased_movies_enabled')?.checked !== false,
-                                        ...getSectionConfig('homeScreen_recentlyReleased_movies', { includeName: true, defaultName: 'Recently Released Movies', includeSortOrder: false, includeOrder: true }),
-                                        minPremiereDate: document.getElementById('homeScreen_recentlyReleased_movies_minPremiereDate')?.value || '',
-                                        maxPremiereDate: document.getElementById('homeScreen_recentlyReleased_movies_maxPremiereDate')?.value || ''
-                                    },
-                                    episodes: {
-                                        enabled: document.getElementById('homeScreen_recentlyReleased_episodes_enabled')?.checked !== false,
-                                        minPremiereDate: document.getElementById('homeScreen_recentlyReleased_episodes_minPremiereDate')?.value || '',
-                                        maxPremiereDate: document.getElementById('homeScreen_recentlyReleased_episodes_maxPremiereDate')?.value || '',
-                                        ...getSectionConfig('homeScreen_recentlyReleased_episodes', { includeName: true, defaultName: 'Recently Aired Episodes', includeSortOrder: false, includeOrder: true })
-                                    }
-                                },
+                    ...getSectionConfig('homeScreen_recentlyReleased_movies', { includeName: true, defaultName: 'Recently Released Movies', includeSortOrder: true, includeOrder: true, includeIsPlayed: true, includePremiereDays: true })
+                },
+                episodes: {
+                    enabled: document.getElementById('homeScreen_recentlyReleased_episodes_enabled')?.checked !== false,
+                    ...getSectionConfig('homeScreen_recentlyReleased_episodes', { includeName: true, defaultName: 'Recently Aired Episodes', includeSortOrder: true, includeOrder: true, includeIsPlayed: true, includePremiereDays: true })
+                }
+            },
                                 trending: {
                 enabled: document.getElementById('homeScreen_trending_enabled')?.checked === true,
                 ...getSectionConfig('homeScreen_trending', { includeName: true, defaultName: 'Trending' })

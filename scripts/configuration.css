@@ -177,3 +177,8 @@ summary.listItemBodyText {
     transform: none !important;
     margin-top: 3em !important;
 }
+
+div#homeScreen_recentlyReleased_container .listItem:has(#homeScreen_recentlyReleased_movies_sortOrder),
+div#homeScreen_recentlyReleased_container .listItem:has(#homeScreen_recentlyReleased_episodes_sortOrder) {
+    display: none;
+}

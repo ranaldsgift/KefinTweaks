@@ -2611,9 +2611,7 @@
      * Fetches newest movies from Jellyfin API
      * @returns {Promise<Array>} - Array of newest movie items
      */
-    async function fetchNewMovies() {
-        const apiClient = window.ApiClient;
-        
+    async function fetchNewMovies() {        
         // Calculate date range based on configuration
         const minAgeInDays = newMoviesConfig.minAgeInDays !== null && newMoviesConfig.minAgeInDays !== undefined ? newMoviesConfig.minAgeInDays : 0;
         const maxAgeInDays = newMoviesConfig.maxAgeInDays !== null && newMoviesConfig.maxAgeInDays !== undefined ? newMoviesConfig.maxAgeInDays : 30; // Default 30 days old max
@@ -2634,8 +2632,8 @@
 
         const options = {
             IncludeItemTypes: 'Movie',
-            SortBy: 'DateCreated',
-            SortOrder: 'Descending',
+            SortBy: 'PremiereDate',
+            SortOrder: newMoviesConfig.sortOrderDirection === 'Ascending' ? 'Ascending' : 'Descending',
             Limit: 16,
             Fields: 'PremiereDate',
             Recursive: true,
@@ -2663,9 +2661,7 @@
      * keeping only the episode with the lowest index number
      * @returns {Promise<Array>} - Array of deduplicated newest episode items
      */
-    async function fetchNewEpisodes() {
-        const apiClient = window.ApiClient;
-        
+    async function fetchNewEpisodes() {        
         // Calculate date range based on configuration
         const minAgeInDays = newEpisodesConfig.minAgeInDays !== null && newEpisodesConfig.minAgeInDays !== undefined ? newEpisodesConfig.minAgeInDays : 0;
         const maxAgeInDays = newEpisodesConfig.maxAgeInDays !== null && newEpisodesConfig.maxAgeInDays !== undefined ? newEpisodesConfig.maxAgeInDays : 7; // Default 7 days old max
@@ -2685,7 +2681,7 @@
             LocationTypes: 'FileSystem',
             Recursive: true,
             SortBy: 'PremiereDate',
-            SortOrder: 'Descending',
+            SortOrder: newEpisodesConfig.sortOrderDirection === 'Ascending' ? 'Ascending' : 'Descending',
             MinPremiereDate: minPremiereDate,
             MaxPremiereDate: maxPremiereDate,
             Limit: 100,
@@ -2792,8 +2788,6 @@
             
             // Get config values
             const itemLimit = newMoviesConfig.itemLimit ?? defaultItemLimit;
-            const sortOrder = newMoviesConfig.sortOrder ?? defaultSortOrder;
-            const sortOrderDirection = newMoviesConfig.sortOrderDirection ?? 'Descending';
             const cardFormat = newMoviesConfig.cardFormat ?? defaultCardFormat;
             const order = newMoviesConfig.order ?? 30;
             const sectionName = newMoviesConfig.name || 'Recently Released Movies';
@@ -2807,9 +2801,7 @@
                 sectionName,
                 null,
                 true,
-                cardFormat,
-                sortOrder,
-                sortOrderDirection
+                cardFormat
             );
             
             // Add data attributes to track rendered sections
@@ -2849,8 +2841,6 @@
             
             // Get config values
             const itemLimit = newEpisodesConfig.itemLimit ?? defaultItemLimit;
-            const sortOrder = newEpisodesConfig.sortOrder ?? defaultSortOrder;
-            const sortOrderDirection = newEpisodesConfig.sortOrderDirection ?? 'Descending';
             const cardFormat = newEpisodesConfig.cardFormat ?? defaultCardFormat;
             const order = newEpisodesConfig.order ?? 31;
             const sectionName = newEpisodesConfig.name || 'Recently Aired Episodes';
@@ -2865,9 +2855,7 @@
                 sectionName,
                 viewMoreUrl,
                 true,
-                cardFormat,
-                sortOrder,
-                sortOrderDirection
+                cardFormat
             );
             
             // Add data attributes to track rendered sections
