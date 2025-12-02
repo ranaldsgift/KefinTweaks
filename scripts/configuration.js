@@ -1653,7 +1653,7 @@
                     ${buildJellyfinCheckbox('homeScreen_recentlyReleased_enabled', recentlyReleased.enabled !== false, 'Recently Released Sections')}
                 </summary>
                 <div style="padding: 0.75em 0 0 0;">
-                    <div id="homeScreen_recentlyReleased_container" style="${recentlyReleased.enabled === false ? 'display: none;' : ''}">
+                    <div id="homeScreen_recentlyReleased_container">
                         <div style="display: grid; grid-template-columns: 1fr; gap: 0.75em; margin-bottom: 0.75em;">
                             <details class="listItem" style="display: grid; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0; gap: 0.5em;">
                                 <summary class="recently-released-subsection-summary" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75em; cursor: pointer; list-style: none; user-select: none;">
@@ -1732,7 +1732,7 @@
                     <span class="listItemBodyText secondary" style="font-size: 0.85em; font-style: italic; opacity: 0.7;">Under development</span>
                 </summary>
                 <div style="padding: 0.75em 0 0 0;">
-                    <div id="homeScreen_trending_container" style="${trending.enabled !== true ? 'display: none;' : ''}">
+                    <div id="homeScreen_trending_container">
                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 0.75em;">
                             ${createSectionConfiguration('homeScreen_trending', trending, { includeName: true, defaultName: 'Trending', includeIsPlayed: true })}
                         </div>
@@ -1747,7 +1747,7 @@
                     <span class="listItemBodyText secondary" style="font-size: 0.9em; font-weight: normal; margin-left: auto;">(Order: <span class="home-section-order" data-prefix="homeScreen_popularTVNetworks">${popularTVNetworks.order || 100}</span>)</span>
                 </summary>
                 <div style="padding: 0.75em 0 0 0;">
-                    <div id="homeScreen_popularTVNetworks_container" style="${popularTVNetworks.enabled !== true ? 'display: none;' : ''}">
+                    <div id="homeScreen_popularTVNetworks_container">
                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 0.75em;">
                             ${createSectionConfiguration('homeScreen_popularTVNetworks', popularTVNetworks, { includeName: true, defaultName: 'Popular TV Networks' })}
             <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
@@ -1768,7 +1768,7 @@
                     <span class="listItemBodyText secondary" style="font-size: 0.9em; font-weight: normal; margin-left: auto;">(Order: <span class="home-section-order" data-prefix="homeScreen_watchlist">${watchlist.order || 100}</span>)</span>
                 </summary>
                 <div style="padding: 0.75em 0 0 0;">
-                    <div id="homeScreen_watchlist_container" style="${watchlist.enabled !== true ? 'display: none;' : ''}">
+                    <div id="homeScreen_watchlist_container">
                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 0.75em;">
                             ${createSectionConfiguration('homeScreen_watchlist', watchlist, { includeName: true, defaultName: 'Watchlist' })}
                         </div>
@@ -1783,7 +1783,7 @@
                     <span class="listItemBodyText secondary" style="font-size: 0.9em; font-weight: normal; margin-left: auto;">(Order: <span class="home-section-order" data-prefix="homeScreen_upcoming">${upcoming.order || 100}</span>)</span>
                 </summary>
                 <div style="padding: 0.75em 0 0 0;">
-                    <div id="homeScreen_upcoming_container" style="${upcoming.enabled === false ? 'display: none;' : ''}">
+                    <div id="homeScreen_upcoming_container">
                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 0.75em;">
                             ${createSectionConfiguration('homeScreen_upcoming', upcoming, { includeName: true, defaultName: 'Upcoming', includeSortOrder: false })}
                         </div>
@@ -1798,7 +1798,7 @@
                     <span class="listItemBodyText secondary" style="font-size: 0.9em; font-weight: normal; margin-left: auto;">(Order: <span class="home-section-order" data-prefix="homeScreen_imdbTop250">${imdbTop250.order || 100}</span>)</span>
                 </summary>
                 <div style="padding: 0.75em 0 0 0;">
-                    <div id="homeScreen_imdbTop250_container" style="${imdbTop250.enabled === false ? 'display: none;' : ''}">
+                    <div id="homeScreen_imdbTop250_container">
                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 0.75em;">
                             ${createSectionConfiguration('homeScreen_imdbTop250', imdbTop250, { includeName: true, defaultName: 'IMDb Top 250', includeIsPlayed: true })}
                         </div>
@@ -1812,7 +1812,7 @@
                     ${buildJellyfinCheckbox('homeScreen_seasonal_enabled', seasonal.enabled !== false, 'Seasonal Sections')}
                 </summary>
                 <div style="padding: 0.75em 0 0 0;">
-                    <div id="homeScreen_seasonal_container" style="${seasonal.enabled === false ? 'display: none;' : ''}">
+                    <div id="homeScreen_seasonal_container">
                         <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
                             <div class="listItemContent">
                                 <div class="listItemBodyText" style="margin-bottom: 0.5em;">Enable Seasonal Animations</div>
@@ -1837,7 +1837,7 @@
                     <span class="listItemBodyText secondary" style="font-size: 0.9em; font-weight: normal; margin-left: auto;">(Order: <span class="home-section-order" data-prefix="homeScreen_watchAgain">${watchAgain.order || 100}</span>)</span>
                 </summary>
                 <div style="padding: 0.75em 0 0 0;">
-                    <div id="homeScreen_watchAgain_container" style="${watchAgain.enabled !== true ? 'display: none;' : ''}">
+                    <div id="homeScreen_watchAgain_container">
                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 0.75em;">
                             ${createSectionConfiguration('homeScreen_watchAgain', watchAgain, { includeName: true, defaultName: 'Watch Again' })}
                         </div>
@@ -1851,7 +1851,7 @@
                     ${buildJellyfinCheckbox('homeScreen_discovery_enabled', discovery.enabled !== false, 'Discovery Sections')}
                 </summary>
                 <div style="padding: 0.75em 0 0 0;">
-                    <div id="homeScreen_discovery_container" style="${discovery.enabled === false ? 'display: none;' : ''}">
+                    <div id="homeScreen_discovery_container">
                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 0.75em; margin-bottom: 0.75em;">
             <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
                 <div class="listItemContent">
@@ -2167,6 +2167,16 @@
 
         // No validation needed for default skin dropdown - it only allows valid options
 
+        // Helper function to prevent click propagation on checkboxes (so they don't toggle details)
+        function setupCheckboxPropagation(checkboxId) {
+            const checkbox = modalInstance.dialogContent.querySelector(checkboxId);
+            if (checkbox) {
+                checkbox.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                });
+            }
+        }
+
         // Helper function to toggle container visibility
         function setupToggleVisibility(checkboxId, containerId) {
             const checkbox = modalInstance.dialogContent.querySelector(checkboxId);
@@ -2184,16 +2194,16 @@
             }
         }
         
-        // Home Screen: Setup all visibility toggles
-        setupToggleVisibility('#homeScreen_recentlyReleased_enabled', '#homeScreen_recentlyReleased_container');
-        setupToggleVisibility('#homeScreen_trending_enabled', '#homeScreen_trending_container');
-        setupToggleVisibility('#homeScreen_popularTVNetworks_enabled', '#homeScreen_popularTVNetworks_container');
-        setupToggleVisibility('#homeScreen_watchlist_enabled', '#homeScreen_watchlist_container');
-        setupToggleVisibility('#homeScreen_upcoming_enabled', '#homeScreen_upcoming_container');
-        setupToggleVisibility('#homeScreen_imdbTop250_enabled', '#homeScreen_imdbTop250_container');
-        setupToggleVisibility('#homeScreen_seasonal_enabled', '#homeScreen_seasonal_container');
-        setupToggleVisibility('#homeScreen_watchAgain_enabled', '#homeScreen_watchAgain_container');
-        setupToggleVisibility('#homeScreen_discovery_enabled', '#homeScreen_discovery_container');
+        // Home Screen: Setup propagation prevention only (don't hide content when disabled)
+        setupCheckboxPropagation('#homeScreen_recentlyReleased_enabled');
+        setupCheckboxPropagation('#homeScreen_trending_enabled');
+        setupCheckboxPropagation('#homeScreen_popularTVNetworks_enabled');
+        setupCheckboxPropagation('#homeScreen_watchlist_enabled');
+        setupCheckboxPropagation('#homeScreen_upcoming_enabled');
+        setupCheckboxPropagation('#homeScreen_imdbTop250_enabled');
+        setupCheckboxPropagation('#homeScreen_seasonal_enabled');
+        setupCheckboxPropagation('#homeScreen_watchAgain_enabled');
+        setupCheckboxPropagation('#homeScreen_discovery_enabled');
         
         // Discovery Sections IsPlayed Toggles
         ['recentlyReleased_movies', 'recentlyReleased_episodes', 'trending', 'popularTVNetworks', 'upcoming', 'imdbTop250'].forEach(key => {
@@ -2230,10 +2240,15 @@
             if (deleteBtn) {
                 e.preventDefault();
                 e.stopPropagation();
+                console.log('[KefinTweaks Configuration] Checking for section to delete...');
                 const prefix = deleteBtn.getAttribute('data-prefix');
                 const sectionIndexRaw = deleteBtn.getAttribute('data-section-index');
                 const isSeasonal = deleteBtn.getAttribute('data-is-seasonal') === 'true';
+                console.log('[KefinTweaks Configuration] Prefix:', prefix);
+                console.log('[KefinTweaks Configuration] Section Index Raw:', sectionIndexRaw);
+                console.log('[KefinTweaks Configuration] Is Seasonal:', isSeasonal);
                 if (prefix && sectionIndexRaw !== null) {
+                    console.log('[KefinTweaks Configuration] Deleting section...');
                     // For seasonal sections, sectionIndex is a compound string like "0_1", don't parse it
                     const sectionIndex = isSeasonal || sectionIndexRaw.includes('_') ? sectionIndexRaw : parseInt(sectionIndexRaw);
                     deleteSection(prefix, sectionIndex, isSeasonal);
@@ -2670,6 +2685,7 @@
         }
         
         function deleteSection(prefix, sectionIndex, isSeasonalNested) {
+            console.log('[KefinTweaks Configuration] Deleting section:', prefix, sectionIndex, isSeasonalNested);
             // Try both string and number comparison for data-section-index
             const sectionItem = modalInstance.dialogContent.querySelector(
                 `.${prefix}_section_item[data-section-index="${sectionIndex}"], .${prefix}_section_item[data-section-index='${sectionIndex}']`
