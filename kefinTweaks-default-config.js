@@ -34,8 +34,8 @@ window.KefinTweaksDefaultConfig = {
         "sortOrderDirection": "Descending",
         "cardFormat": "Poster",
         "order": 30,
-        "minPremiereDate": "",
-        "maxPremiereDate": ""
+        "minAgeInDays": null,
+        "maxAgeInDays": null
       },
       "episodes": {
         "name": "Recently Aired Episodes",
@@ -45,8 +45,8 @@ window.KefinTweaksDefaultConfig = {
         "sortOrderDirection": "Descending",
         "cardFormat": "Backdrop",
         "order": 31,
-        "minPremiereDate": "",
-        "maxPremiereDate": ""
+        "minAgeInDays": null,
+        "maxAgeInDays": null
       }
     },
     "trending": {

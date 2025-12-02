@@ -620,21 +620,47 @@
         // --- NEW UPDATE LOGIC ---
         // Runs even if no major migration was needed, to catch specific updates
         
-        // 1. Ensure Recently Released date fields exist
+        // 1. Ensure Recently Released date fields exist (Migration Logic)
         let configChanged = false;
         // Use the current config (which might have been just migrated)
         const currentConfig = window.KefinTweaksConfig.homeScreen;
         
         if (currentConfig.recentlyReleased) {
-            if (currentConfig.recentlyReleased.movies && currentConfig.recentlyReleased.movies.minPremiereDate === undefined) {
-                currentConfig.recentlyReleased.movies.minPremiereDate = "";
-                currentConfig.recentlyReleased.movies.maxPremiereDate = "";
-                configChanged = true;
+            // Migrate movies config to minAgeInDays / maxAgeInDays
+            if (currentConfig.recentlyReleased.movies) {
+                // If old fields exist, remove them and replace with new defaults if not set
+                if (currentConfig.recentlyReleased.movies.minPremiereDate !== undefined || currentConfig.recentlyReleased.movies.maxPremiereDate !== undefined) {
+                    delete currentConfig.recentlyReleased.movies.minPremiereDate;
+                    delete currentConfig.recentlyReleased.movies.maxPremiereDate;
+                    configChanged = true;
+                }
+                
+                if (currentConfig.recentlyReleased.movies.minAgeInDays === undefined) {
+                    currentConfig.recentlyReleased.movies.minAgeInDays = null;
+                    configChanged = true;
+                }
+                if (currentConfig.recentlyReleased.movies.maxAgeInDays === undefined) {
+                    currentConfig.recentlyReleased.movies.maxAgeInDays = null;
+                    configChanged = true;
+                }
             }
-            if (currentConfig.recentlyReleased.episodes && currentConfig.recentlyReleased.episodes.minPremiereDate === undefined) {
-                currentConfig.recentlyReleased.episodes.minPremiereDate = "";
-                currentConfig.recentlyReleased.episodes.maxPremiereDate = "";
-                configChanged = true;
+
+            // Migrate episodes config to minAgeInDays / maxAgeInDays
+            if (currentConfig.recentlyReleased.episodes) {
+                if (currentConfig.recentlyReleased.episodes.minPremiereDate !== undefined || currentConfig.recentlyReleased.episodes.maxPremiereDate !== undefined) {
+                    delete currentConfig.recentlyReleased.episodes.minPremiereDate;
+                    delete currentConfig.recentlyReleased.episodes.maxPremiereDate;
+                    configChanged = true;
+                }
+
+                if (currentConfig.recentlyReleased.episodes.minAgeInDays === undefined) {
+                    currentConfig.recentlyReleased.episodes.minAgeInDays = null;
+                    configChanged = true;
+                }
+                if (currentConfig.recentlyReleased.episodes.maxAgeInDays === undefined) {
+                    currentConfig.recentlyReleased.episodes.maxAgeInDays = null;
+                    configChanged = true;
+                }
             }
         }
 
@@ -2588,8 +2614,23 @@
     async function fetchNewMovies() {
         const apiClient = window.ApiClient;
         
-        const today = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
-        const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]; // Format: YYYY-MM-DD
+        // Calculate date range based on configuration
+        const minAgeInDays = newMoviesConfig.minAgeInDays !== null && newMoviesConfig.minAgeInDays !== undefined ? newMoviesConfig.minAgeInDays : 0;
+        const maxAgeInDays = newMoviesConfig.maxAgeInDays !== null && newMoviesConfig.maxAgeInDays !== undefined ? newMoviesConfig.maxAgeInDays : 30; // Default 30 days old max
+
+        // Calculate actual dates:
+        // MaxPremiereDate (latest allowed date) = Today - minAgeInDays
+        // MinPremiereDate (earliest allowed date) = Today - maxAgeInDays
+        
+        const today = new Date();
+        
+        const maxDateObj = new Date(today);
+        maxDateObj.setDate(today.getDate() - minAgeInDays);
+        const maxPremiereDate = maxDateObj.toISOString().split('T')[0];
+
+        const minDateObj = new Date(today);
+        minDateObj.setDate(today.getDate() - maxAgeInDays);
+        const minPremiereDate = minDateObj.toISOString().split('T')[0];
 
         const options = {
             IncludeItemTypes: 'Movie',
@@ -2598,8 +2639,8 @@
             Limit: 16,
             Fields: 'PremiereDate',
             Recursive: true,
-            MinPremiereDate: newMoviesConfig.minPremiereDate || monthAgo,
-            MaxPremiereDate: newMoviesConfig.maxPremiereDate || today
+            MinPremiereDate: minPremiereDate,
+            MaxPremiereDate: maxPremiereDate
         }
 
         const isPlayedFilter = getIsPlayedFilter(newMoviesConfig);
@@ -2625,10 +2666,19 @@
     async function fetchNewEpisodes() {
         const apiClient = window.ApiClient;
         
-        // Compute ISO date range for the last 7 days
-        const now = new Date();
-        const maxDate = now.toISOString().split('T')[0];
-        const minDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        // Calculate date range based on configuration
+        const minAgeInDays = newEpisodesConfig.minAgeInDays !== null && newEpisodesConfig.minAgeInDays !== undefined ? newEpisodesConfig.minAgeInDays : 0;
+        const maxAgeInDays = newEpisodesConfig.maxAgeInDays !== null && newEpisodesConfig.maxAgeInDays !== undefined ? newEpisodesConfig.maxAgeInDays : 7; // Default 7 days old max
+
+        const today = new Date();
+        
+        const maxDateObj = new Date(today);
+        maxDateObj.setDate(today.getDate() - minAgeInDays);
+        const maxPremiereDate = maxDateObj.toISOString().split('T')[0];
+
+        const minDateObj = new Date(today);
+        minDateObj.setDate(today.getDate() - maxAgeInDays);
+        const minPremiereDate = minDateObj.toISOString().split('T')[0];
 
         const options = {
             IncludeItemTypes: 'Episode',
@@ -2636,8 +2686,8 @@
             Recursive: true,
             SortBy: 'PremiereDate',
             SortOrder: 'Descending',
-            MinPremiereDate: newEpisodesConfig.minPremiereDate || minDate,
-            MaxPremiereDate: newEpisodesConfig.maxPremiereDate || maxDate,
+            MinPremiereDate: minPremiereDate,
+            MaxPremiereDate: maxPremiereDate,
             Limit: 100,
             Fields: 'PremiereDate,SeriesName,ParentIndexNumber,IndexNumber,ProviderIds,Path'
         }

@@ -1672,16 +1672,16 @@
                                         
                                         <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
                                             <div class="listItemContent">
-                                                <div class="listItemBodyText" style="margin-bottom: 0.5em;">Min Premiere Date</div>
-                                                <input type="date" id="homeScreen_recentlyReleased_movies_minPremiereDate" class="fld emby-input" value="${recentlyReleased.movies?.minPremiereDate || ''}" style="width: 100%;">
-                                                <div class="fieldDescription" style="margin-top: 0.25em;">Optional. Leave empty for default (30 days ago).</div>
+                                                <div class="listItemBodyText" style="margin-bottom: 0.5em;">Minimum Age (Days)</div>
+                                                <input type="number" id="homeScreen_recentlyReleased_movies_minAgeInDays" class="fld emby-input" value="${recentlyReleased.movies?.minAgeInDays ?? ''}" style="width: 100%;">
+                                                <div class="fieldDescription" style="margin-top: 0.25em;">Optional. Days since release (e.g. 0 for today).</div>
                                             </div>
                                         </div>
                                         <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
                                             <div class="listItemContent">
-                                                <div class="listItemBodyText" style="margin-bottom: 0.5em;">Max Premiere Date</div>
-                                                <input type="date" id="homeScreen_recentlyReleased_movies_maxPremiereDate" class="fld emby-input" value="${recentlyReleased.movies?.maxPremiereDate || ''}" style="width: 100%;">
-                                                <div class="fieldDescription" style="margin-top: 0.25em;">Optional. Leave empty for default (today).</div>
+                                                <div class="listItemBodyText" style="margin-bottom: 0.5em;">Maximum Age (Days)</div>
+                                                <input type="number" id="homeScreen_recentlyReleased_movies_maxAgeInDays" class="fld emby-input" value="${recentlyReleased.movies?.maxAgeInDays ?? ''}" style="width: 100%;">
+                                                <div class="fieldDescription" style="margin-top: 0.25em;">Optional. Max days old (e.g. 30).</div>
                                             </div>
                                         </div>
                                     </div>
@@ -1704,16 +1704,16 @@
 
                                         <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
                                             <div class="listItemContent">
-                                                <div class="listItemBodyText" style="margin-bottom: 0.5em;">Min Premiere Date</div>
-                                                <input type="date" id="homeScreen_recentlyReleased_episodes_minPremiereDate" class="fld emby-input" value="${recentlyReleased.episodes?.minPremiereDate || ''}" style="width: 100%;">
-                                                <div class="fieldDescription" style="margin-top: 0.25em;">Optional. Leave empty for default (7 days ago).</div>
+                                                <div class="listItemBodyText" style="margin-bottom: 0.5em;">Minimum Age (Days)</div>
+                                                <input type="number" id="homeScreen_recentlyReleased_episodes_minAgeInDays" class="fld emby-input" value="${recentlyReleased.episodes?.minAgeInDays ?? ''}" style="width: 100%;">
+                                                <div class="fieldDescription" style="margin-top: 0.25em;">Optional. Days since release (e.g. 0 for today).</div>
                                             </div>
                                         </div>
                                         <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
                                             <div class="listItemContent">
-                                                <div class="listItemBodyText" style="margin-bottom: 0.5em;">Max Premiere Date</div>
-                                                <input type="date" id="homeScreen_recentlyReleased_episodes_maxPremiereDate" class="fld emby-input" value="${recentlyReleased.episodes?.maxPremiereDate || ''}" style="width: 100%;">
-                                                <div class="fieldDescription" style="margin-top: 0.25em;">Optional. Leave empty for default (today).</div>
+                                                <div class="listItemBodyText" style="margin-bottom: 0.5em;">Maximum Age (Days)</div>
+                                                <input type="number" id="homeScreen_recentlyReleased_episodes_maxAgeInDays" class="fld emby-input" value="${recentlyReleased.episodes?.maxAgeInDays ?? ''}" style="width: 100%;">
+                                                <div class="fieldDescription" style="margin-top: 0.25em;">Optional. Max days old (e.g. 7).</div>
                                             </div>
                                         </div>
                                     </div>
@@ -4931,6 +4931,20 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                 } else {
                     config.isPlayed = null;
                 }
+            }
+
+            // Handle Min/Max Age In Days for Recently Released
+            if (prefix === 'homeScreen_recentlyReleased_movies') {
+                const minAge = document.getElementById(`${prefix}_minAgeInDays`)?.value;
+                const maxAge = document.getElementById(`${prefix}_maxAgeInDays`)?.value;
+                config.minAgeInDays = minAge !== '' ? parseInt(minAge, 10) : null;
+                config.maxAgeInDays = maxAge !== '' ? parseInt(maxAge, 10) : null;
+            }
+            if (prefix === 'homeScreen_recentlyReleased_episodes') {
+                const minAge = document.getElementById(`${prefix}_minAgeInDays`)?.value;
+                const maxAge = document.getElementById(`${prefix}_maxAgeInDays`)?.value;
+                config.minAgeInDays = minAge !== '' ? parseInt(minAge, 10) : null;
+                config.maxAgeInDays = maxAge !== '' ? parseInt(maxAge, 10) : null;
             }
 
             return config;
