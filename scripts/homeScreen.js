@@ -5630,9 +5630,9 @@
             let sortedItems = allItems;
             if (sortOrder === 'Random') {
                 sortedItems = [...allItems].sort(() => Math.random() - 0.5);
-            } else if (window.cardBuilder && typeof window.cardBuilder.sortItems === 'function') {
+            } /* else if (window.cardBuilder && typeof window.cardBuilder.sortItems === 'function') {
                 sortedItems = window.cardBuilder.sortItems(allItems, sortOrder, sortOrderDirection);
-            }
+            } */
             
             // Apply limit
             const limited = sortedItems.slice(0, itemLimit);
@@ -5644,23 +5644,25 @@
             const type = sectionConfig.type;
             const source = sectionConfig.source;
             let viewMoreUrl = null;
-            switch (type) {
-                case 'Genre':
-                    viewMoreUrl = `#/list.html?genreId=${source}&serverId=${ApiClient.serverId()}`;
-                    break;
-                case 'Studio':
-                    viewMoreUrl = `#/list.html?studioId=${source}&serverId=${ApiClient.serverId()}`;
-                    break;
-                case 'Playlist':
-                case 'BoxSet':
-                    viewMoreUrl = `#/details?id=${source}&serverId=${ApiClient.serverId()}`;
-                    break;
-                case 'Parent':
-                    viewMoreUrl = `#/list.html?parentId=${source}&serverId=${ApiClient.serverId()}`;
-                    break;
-                default:
-                    viewMoreUrl = null;
-                    break;
+            if (source && source !== '') {
+                switch (type) {
+                    case 'Genre':
+                        viewMoreUrl = `#/list.html?genreId=${source}&serverId=${ApiClient.serverId()}`;
+                        break;
+                    case 'Studio':
+                        viewMoreUrl = `#/list.html?studioId=${source}&serverId=${ApiClient.serverId()}`;
+                        break;
+                    case 'Playlist':
+                    case 'BoxSet':
+                        viewMoreUrl = `#/details?id=${source}&serverId=${ApiClient.serverId()}`;
+                        break;
+                    case 'Parent':
+                        viewMoreUrl = `#/list.html?parentId=${source}&serverId=${ApiClient.serverId()}`;
+                        break;
+                    default:
+                        viewMoreUrl = null;
+                        break;
+                }
             }
 
             let cardContainer = null;
