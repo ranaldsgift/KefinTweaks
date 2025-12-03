@@ -437,6 +437,7 @@
         const homeScreen = config.homeScreen || {};
         const exclusiveElsewhere = config.exclusiveElsewhere || {};
         const search = config.search || {};
+        const flattenSingleSeasonShows = config.flattenSingleSeasonShows || {};
         const customMenuLinks = config.customMenuLinks || [];
         // Use merged skin config from skinManager (includes both defaults and admin skins)
         const skins = window.KefinTweaksSkinConfig || [];
@@ -507,6 +508,16 @@
                     </div>
                 </div>
                 ${buildSearchConfig(search)}
+            </div>
+
+            <div class="paperList" id="configSection_flattenSingleSeasonShows" style="margin-bottom: 2em; ${scripts.flattenSingleSeasonShows === false ? 'display: none;' : ''}">
+                <div class="listItem" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 1em; margin-bottom: 1em;">
+                    <div class="listItemContent">
+                        <h3 class="listItemBodyText" style="margin-bottom: 0.25em;">Episodes On Series Page Configuration</h3>
+                        <div class="listItemBodyText secondary">Configure episodes display on series pages</div>
+                    </div>
+                </div>
+                ${buildFlattenShowsConfig(flattenSingleSeasonShows)}
             </div>
 
             <div class="paperList" id="configSection_skin" style="margin-bottom: 2em; ${scripts.skinManager === false ? 'display: none;' : ''}">
@@ -953,7 +964,8 @@
             { key: 'breadcrumbs', label: 'Breadcrumbs', desc: 'Breadcrumb navigation for Movies, TV and Music. Allows quick navigation between Seasons/Episodes and Albums/Songs.' },
             { key: 'playlist', label: 'Playlist UX', desc: 'Improved Playlist page navigation: Items only play when the Play button is pressed. Clicking an item navigates to the item\'s page.' },
             { key: 'itemDetailsCollections', label: 'Collections on Details Page', desc: 'Displays collections on item details pages (Included In section)' },
-            { key: 'flattenSingleSeasonShows', label: 'Flatten Single Season Shows', desc: 'Flattens single-season shows to display episodes directly on series page' },
+            { key: 'flattenSingleSeasonShows', label: 'Episodes On Series Page', desc: 'Displays episodes directly on series page. For single-season shows, shows all episodes. For multi-season shows, shows episodes from the season with Next Up episode (or Season 1 if no Next Up).' },
+            { key: 'seriesInfo', label: 'Series Info+', desc: 'Adds Season and Episode counts to the Series and Season pages. Also adds an "Ends at" time similar to the Episode page.' },
             { key: 'collections', label: 'Collection Sorting', desc: 'Collection sorting functionality on the Collection page' },
             { key: 'subtitleSearch', label: 'Subtitle Search', desc: 'Search and download subtitles directly from the video OSD' },
             { key: 'exclusiveElsewhere', label: 'Exclusive Elsewhere', desc: 'Custom branding when items aren\'t available on streaming services' },
@@ -1969,6 +1981,20 @@
                     <div class="listItemBodyText" style="margin-bottom: 0.5em;">Enable Jellyseerr</div>
                     <div class="listItemBodyText secondary" style="margin-bottom: 0.75em; font-size: 0.9em;">Enable Jellyseerr integration for request functionality</div>
                     ${buildJellyfinCheckbox('search_enableJellyseerr', search.enableJellyseerr === true, 'Enabled')}
+                </div>
+            </div>
+        `;
+    }
+
+    // Build flatten shows configuration
+    function buildFlattenShowsConfig(flattenShows) {
+        const hideSingleSeasonContainer = flattenShows?.hideSingleSeasonContainer === true;
+        return `
+            <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
+                <div class="listItemContent">
+                    <div class="listItemBodyText" style="margin-bottom: 0.5em;">Flatten Single Season Shows</div>
+                    <div class="listItemBodyText secondary" style="margin-bottom: 0.75em; font-size: 0.9em;">When enabled, hides the season container section when a series has only one season, since episodes are already displayed directly.</div>
+                    ${buildJellyfinCheckbox('flattenSingleSeasonShows_hideSingleSeasonContainer', hideSingleSeasonContainer, 'Enabled')}
                 </div>
             </div>
         `;
@@ -4159,7 +4185,8 @@
             search: modalInstance.dialogContent.querySelector('#script_search'),
             exclusiveElsewhere: modalInstance.dialogContent.querySelector('#script_exclusiveElsewhere'),
             skinManager: modalInstance.dialogContent.querySelector('#script_skinManager'),
-            customMenuLinks: modalInstance.dialogContent.querySelector('#script_customMenuLinks')
+            customMenuLinks: modalInstance.dialogContent.querySelector('#script_customMenuLinks'),
+            flattenSingleSeasonShows: modalInstance.dialogContent.querySelector('#script_flattenSingleSeasonShows')
         };
 
         const configSections = {
@@ -4167,7 +4194,8 @@
             exclusiveElsewhere: modalInstance.dialogContent.querySelector('#configSection_exclusiveElsewhere'),
             skin: modalInstance.dialogContent.querySelector('#configSection_skin'),
             theme: modalInstance.dialogContent.querySelector('#configSection_theme'),
-            customMenuLinks: modalInstance.dialogContent.querySelector('#configSection_customMenuLinks')
+            customMenuLinks: modalInstance.dialogContent.querySelector('#configSection_customMenuLinks'),
+            flattenSingleSeasonShows: modalInstance.dialogContent.querySelector('#configSection_flattenSingleSeasonShows')
         };
 
         // Function to toggle section visibility
@@ -4218,6 +4246,10 @@
         
         if (scriptCheckboxes.customMenuLinks) {
             scriptCheckboxes.customMenuLinks.addEventListener('change', () => toggleSectionVisibility('customMenuLinks', 'customMenuLinks'));
+        }
+
+        if (scriptCheckboxes.flattenSingleSeasonShows) {
+            scriptCheckboxes.flattenSingleSeasonShows.addEventListener('change', () => toggleSectionVisibility('flattenSingleSeasonShows', 'flattenSingleSeasonShows'));
         }
 
         // Save button handler
@@ -5090,6 +5122,11 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         // Collect search config
         config.search = {
             enableJellyseerr: document.getElementById('search_enableJellyseerr')?.checked === true
+        };
+
+        // Collect flattenSingleSeasonShows config
+        config.flattenSingleSeasonShows = {
+            hideSingleSeasonContainer: document.getElementById('flattenSingleSeasonShows_hideSingleSeasonContainer')?.checked === true
         };
 
         // Parse JSON fields

@@ -391,6 +391,9 @@ window.KefinTweaksDefaultConfig = {
   "search": {
     "enableJellyseerr": false
   },
+  "flattenSingleSeasonShows": {
+    "hideSingleSeasonContainer": false
+  },
   "skins": [],
   "defaultSkin": null,
   "themes": [],

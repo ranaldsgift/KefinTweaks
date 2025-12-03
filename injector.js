@@ -5,11 +5,53 @@
 (function() {
     'use strict';
 
-    console.log('[KefinTweaks Injector] Initializing...');
-    const versionNumber = "0.3.3";
-    
+    console.log('[KefinTweaks Injector] Initializing...');    
     // Cache for resolved root URL (to avoid multiple API calls)
     let resolvedRootCache = null;
+    
+    /**
+     * Extracts version string from root URL
+     * @param {string} root - The root URL (e.g., "https://cdn.jsdelivr.net/gh/ranaldsgift/KefinTweaks@v0.3.3/")
+     * @returns {string} Version string (e.g., "0.3.3", "latest", "development", or commit hash)
+     */
+    function extractVersionFromRoot(root) {
+        if (!root) {
+            return "Pending Install"; // Fallback
+        }
+        
+        // Match version patterns: @v0.3.3, @latest, @main, or @commitHash
+        const versionMatch = root.match(/@(v?[\d.]+|latest|main|[a-f0-9]{7,})/i);
+        
+        if (versionMatch) {
+            const version = versionMatch[1];
+            
+            // Handle version tags (v0.3.3 -> 0.3.3)
+            if (version.startsWith('v') && /^\d+\.\d+\.\d+/.test(version.substring(1))) {
+                return version.substring(1); // Remove 'v' prefix
+            }
+            
+            // Handle @main -> "development"
+            if (version.toLowerCase() === 'main') {
+                return 'development';
+            }
+            
+            // Handle @latest -> "latest"
+            if (version.toLowerCase() === 'latest') {
+                return 'latest';
+            }
+            
+            // Handle commit hash -> show as "development" or short hash
+            if (/^[a-f0-9]{7,}$/i.test(version)) {
+                return `development (${version.substring(0, 7)})`;
+            }
+            
+            // Return as-is for other patterns
+            return "version";
+        }
+        
+        // No version found in URL, this is a custom install
+        return "Custom Install";
+    }
     
     // Configuration: Start with defaults, then merge user config
     // This allows new scripts to work out of the box without requiring config updates
@@ -30,6 +72,7 @@
         playlist: true,           // Playlist view page modifications
         itemDetailsCollections: true, // Add related collections to item details pages
         flattenSingleSeasonShows: true, // Flatten series with only 1 season to show episodes directly
+        seriesInfo: true,         // Add series and season information to details pages
         collections: true,         // Collection sorting functionality
         skinManager: true,        // Skin selection and management
         
@@ -220,10 +263,17 @@
         },
         {
             name: 'flattenSingleSeasonShows',
-            script: 'flattenSingleSeasonShows.js',
+            script: 'seriesEpisodes.js',
             css: null,
             dependencies: ['cardBuilder', 'utils'],
-            description: 'Flattens series with only 1 season to show episodes directly on the series details page'
+            description: 'Displays episodes directly on series page with season selection. Works for both single and multi-season shows when enabled.'
+        },
+        {
+            name: 'seriesInfo',
+            script: 'seriesInfo.js',
+            css: null,
+            dependencies: ['utils'],
+            description: 'Adds series and season information (seasons count, episodes count, end time) to details pages'
         },
         {
             name: 'collections',
@@ -239,21 +289,43 @@
     //const urlSuffix = `?v=${new Date().getTime()}`;
 
     // Inject dashboard drawer version badge CSS using dynamic version number
-    function injectVersionBadgeCSS() {
+    async function injectVersionBadgeCSS() {
         const styleId = 'kefinTweaks-version-css';
         if (document.getElementById(styleId)) return;
+        
+        // Get version from root URL in config
+        let displayVersion = "";
+        try {
+            const configRoot = window.KefinTweaksConfig?.kefinTweaksRoot || '';
+            if (configRoot) {
+                // Resolve the root to get the actual version (if @latest or @main)
+                const resolvedRoot = await resolveRootVersion(configRoot);
+                displayVersion = extractVersionFromRoot(resolvedRoot);
+            }
+        } catch (error) {
+            console.warn('[KefinTweaks Injector] Could not extract version, using fallback:', error);
+        }
+        
+        // Format version for display (add 'v' prefix if it's a version number, not for 'latest' or 'development')
+        let versionDisplay = displayVersion;
+        if (!displayVersion.startsWith('v') && 
+            !displayVersion.includes('latest') && 
+            !displayVersion.includes('development') &&
+            /^\d+\.\d+/.test(displayVersion)) {
+            versionDisplay = 'v' + displayVersion;
+        }
+        
         const style = document.createElement('style');
         style.id = styleId;
         style.textContent = `
             body:not(:has(.libraryPage:not(.hide))) .MuiPaper-root.MuiDrawer-paperAnchorLeft::after {
-                content: 'KefinTweaks v${versionNumber}';
+                content: 'KefinTweaks ${versionDisplay}';
                 font-style: italic;
                 text-align: center;
                 margin-top: 10px;
                 color: #b7b7b7;
                 font-size: 0.9em;
                 display: block;
-                cursor: help;
             }
             `;
         document.head.appendChild(style);
@@ -550,7 +622,7 @@
     
     // Main initialization function
     async function initialize() {
-        console.log(`[KefinTweaks Injector] Starting KefinTweaks v${versionNumber} initialization...`);
+        console.log(`[KefinTweaks Injector] Starting KefinTweaks initialization...`);
         
         const scriptRoot = await getScriptRoot();
         if (!scriptRoot) {
@@ -934,17 +1006,19 @@
 
     // Start initialization when DOM is ready
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => {
-            injectVersionBadgeCSS();
+        document.addEventListener('DOMContentLoaded', async () => {
+            await injectVersionBadgeCSS();
             initialize();
             // Run startup task after a short delay to ensure ApiClient is ready
             setTimeout(startupTask, 1000);
         });
     } else {
-        injectVersionBadgeCSS();
-        initialize();
-        // Run startup task after a short delay to ensure ApiClient is ready
-        setTimeout(startupTask, 1000);
+        (async () => {
+            await injectVersionBadgeCSS();
+            initialize();
+            // Run startup task after a short delay to ensure ApiClient is ready
+            setTimeout(startupTask, 1000);
+        })();
     }
     
     console.log('[KefinTweaks Injector] Injector script loaded. Available at window.KefinTweaks');

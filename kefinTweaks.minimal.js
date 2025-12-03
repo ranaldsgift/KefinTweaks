@@ -393,6 +393,9 @@ window.KefinTweaksConfig = {
     "search": {
         "enableJellyseerr": false
     },
+    "flattenSingleSeasonShows": {
+        "showEpisodesOnSeriesPage": false
+    },
     "skins": [],
     "defaultSkin": null,
     "themes": [],
