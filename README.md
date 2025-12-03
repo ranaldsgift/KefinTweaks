@@ -547,6 +547,7 @@ A few things to note about KefinTweaks functionality in general and how it inter
   - A new button is added to play the Playlist from the beginning
 - Episodes of Series Page
   - Episodes from the Season of the Next Up episode are displayed in a section with the Next Up item being focused
+  - The default Jellyfin "Next Up" section is hidden in favor of the above
   - With the Flatten Single Season Shows enabled, the normal Seasons section is hidden for shows with only 1 season
 - Background Leak Fix
   - This removes extra backdrops from the DOM
