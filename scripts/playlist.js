@@ -1077,13 +1077,62 @@
             // Play button
             const playButton = document.createElement('button');
             playButton.setAttribute('is', 'paper-icon-button-light');
-            playButton.className = 'itemAction paper-icon-button-light playBtn';
-            playButton.setAttribute('data-action', 'resume');
+            playButton.className = 'itemAction paper-icon-button-light playBtn playlist-play-button';
+            // Don't use data-action="resume" - we'll handle it ourselves
             
             const playIcon = document.createElement('span');
             playIcon.className = 'material-icons play_arrow';
             playIcon.setAttribute('aria-hidden', 'true');
             playButton.appendChild(playIcon);
+            
+            // Add custom click handler to queue next 200 items
+            playButton.addEventListener('click', async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                
+                try {
+                    // Get the clicked item's data-id
+                    const clickedItemId = playlistItemId;
+                    
+                    // Get all playlist items in the container
+                    const allPlaylistItems = Array.from(childrenItemsContainer.querySelectorAll('.listItem[data-playlistitemid]'));
+                    
+                    // Find the index of the clicked item
+                    const clickedIndex = allPlaylistItems.findIndex(listItem => {
+                        return listItem.getAttribute('data-playlistitemid') === clickedItemId;
+                    });
+                    
+                    if (clickedIndex === -1) {
+                        WARN(`Could not find clicked item in playlist: ${clickedItemId}`);
+                        return;
+                    }
+                    
+                    // Get the next 200 items (including the clicked one)
+                    const itemsToQueue = allPlaylistItems.slice(clickedIndex, clickedIndex + 200);
+                    
+                    // Extract item IDs
+                    const itemIds = itemsToQueue.map(listItem => listItem.getAttribute('data-playlistitemid')).filter(id => id);
+                    
+                    if (itemIds.length === 0) {
+                        WARN('No item IDs found to queue');
+                        return;
+                    }
+                    
+                    LOG(`Queueing ${itemIds.length} items starting from index ${clickedIndex} (item: ${clickedItemId})`);
+                    
+                    // Use apiHelper if available, otherwise fallback to ApiClient
+                    if (window.apiHelper && window.apiHelper.playItem) {
+                        await window.apiHelper.playItem(itemIds);
+                    } else if (window.ApiClient && typeof window.ApiClient.play === 'function') {
+                        await window.ApiClient.play({ ids: itemIds });
+                    } else {
+                        ERR('No play method available');
+                    }
+                } catch (error) {
+                    ERR('Error queueing playlist items:', error);
+                }
+            });
             
             // Prepend the play button to the container
             buttonsContainer.insertBefore(playButton, buttonsContainer.firstChild);
