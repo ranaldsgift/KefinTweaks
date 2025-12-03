@@ -78,7 +78,7 @@
     left: 0;
     right: 0;
     bottom: 0%;
-    background: linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)), url('../pages/images/christmas-2.jpg');
+    background: linear-gradient(rgba(0, 0, 0, 0.65), rgba(0, 0, 0, 0.85)), url('../pages/images/christmas.jpg');
     background-position: center;
     background-size: cover;
 }
