@@ -663,7 +663,23 @@
                         ]
                     }
                 ],
-                optionalIncludes: [
+                optionalIncludes: [,
+                    {
+                        name: 'Dark',
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/type/dark.css'
+                    },
+                    {
+                        name: 'Light',
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/type/light.css'
+                    },
+                    {
+                        name: 'Colorful',
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/type/colorful.css'
+                    },
+                    {
+                        name: 'Dark with Accent',
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/type/dark_withaccent.css'
+                    },
                     {
                         name: 'Round UI Corners',
                         url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/rounding.css',
@@ -757,28 +773,19 @@
                 ],
                 colorSchemes: [
                     {
-                        name: 'Dark',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/type/dark.css'
+                        name: 'Monochromic',
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/presets/monochromic_preset.css',
+                        enabled: false
                     },
                     {
-                        name: 'Light',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/type/light.css'
+                        name: 'Kaleidochromic',
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/presets/kaleidochromic_preset.css',
+                        enabled: false
                     },
                     {
-                        name: 'Colorful',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/type/colorful.css'
-                    },
-                    {
-                        name: 'Dark with Accent',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/type/dark_withaccent.css'
-                    },
-                    {
-                        name: 'Light with Accent',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/type/light_withaccent.css'
-                    },
-                    {
-                        name: 'Colorful with Accent',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/type/colorful_withaccent.css'
+                        name: 'Novachromic',
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/presets/novachromic_preset.css',
+                        enabled: false
                     }
                 ]
             }
