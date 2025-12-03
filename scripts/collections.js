@@ -250,6 +250,7 @@
 
         // Build modal content matching watchlist sort modal structure
         const sortOptionsContent = `
+            <h2 style="margin: 0 0 .5em;">Sort By</h2>
             <div>
                 ${Object.entries(SORT_OPTIONS).map(([key, option]) => {
                     const checked = key === currentSort ? 'checked=""' : '';
@@ -313,7 +314,6 @@
         // Create modal using the generic modal system
         const modal = window.ModalSystem.create({
             id: 'kt-collections-sort-modal',
-            title: 'Sort By',
             content: sortOptionsContent,
             onOpen: (modalInstance) => {
                 // Set current selection

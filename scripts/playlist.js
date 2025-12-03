@@ -272,6 +272,7 @@
 
         // Build modal content matching collections sort modal structure
         const sortOptionsContent = `
+            <h2 style="margin: 0 0 .5em;">Sort By</h2>
             <div>
                 ${Object.entries(SORT_OPTIONS).map(([key, option]) => {
                     const checked = key === currentSort ? 'checked=""' : '';
@@ -335,7 +336,6 @@
         // Create modal using the generic modal system
         const modal = window.ModalSystem.create({
             id: 'kt-playlist-sort-modal',
-            title: 'Sort By',
             content: sortOptionsContent,
             onOpen: (modalInstance) => {
                 // Set current selection
@@ -772,8 +772,9 @@
      */
     async function reapplyPlaylistSorting(playlistId, playlistItemsContainer) {
         // Find items container
-        const itemsContainer = playlistItemsContainer.querySelector('.childrenItemsContainer') || 
+        const itemsContainer = playlistItemsContainer.classList.contains('itemsContainer') ? playlistItemsContainer : playlistItemsContainer.querySelector('.childrenItemsContainer') || 
                               playlistItemsContainer.querySelector('#listChildrenCollapsible');
+
         if (!itemsContainer) {
             WARN('Items container not found after re-render for playlist:', playlistId);
             return;
