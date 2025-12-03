@@ -318,24 +318,10 @@
                 const popover = createPopover();
                 sectionTitleContainer.style.position = 'relative';
                 selectButton.parentNode.insertBefore(popover, selectButton.nextSibling);
-                
-                // Check if popover would overflow bottom of viewport
-                const popoverRect = popover.getBoundingClientRect();
-                const viewportHeight = window.innerHeight;
-                const wouldOverflowBottom = popoverRect.bottom > viewportHeight;
-                
-                if (wouldOverflowBottom) {
-                    popover.style.top = 'auto';
-                    popover.style.bottom = '100%';
-                    popover.style.marginTop = '0';
-                    popover.style.marginBottom = '8px';
-                    LOG('Popover positioned above button to avoid overflow');
-                } else {
-                    popover.style.top = '100%';
-                    popover.style.bottom = 'auto';
-                    popover.style.marginTop = '8px';
-                    popover.style.marginBottom = '0';
-                }
+                popover.style.top = '100%';
+                popover.style.bottom = 'auto';
+                popover.style.marginTop = '8px';
+                popover.style.marginBottom = '0';
                 
                 activePopover = popover;
 
