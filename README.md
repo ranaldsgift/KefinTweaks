@@ -202,10 +202,10 @@ The features in KefinTweaks which use local data caching are listed below, along
 - ✅ [List all collections that an item belongs to on the details page](https://features.jellyfin.org/posts/540/list-all-collections-that-a-movie-belong-to-in-movie-details) [[2]](https://features.jellyfin.org/posts/3540/collection-data-present-on-content-within-the-collection) [[3]](https://features.jellyfin.org/posts/3549/show-collections-on-movie-page)
 - ✅ [Custom Skins/Themes](https://features.jellyfin.org/posts/2509/themes-skins-or-clone-plex-layout-to-convert-the-rest-of-the-plex-and-emby-user-base-to-jellyfin) [[2]](https://features.jellyfin.org/posts/2616/theme-skins)
 - ✅ [TV Season Selection at the Series level](https://forum.jellyfin.org/t-tv-season-selection-when-browsing-seasons)
+- ✅ [Add end time to detail page for entire shows and seasons](https://features.jellyfin.org/posts/3470/add-info-ends-at-hh-mm-for-each-season-and-whole-show)
 
 ### 🚧 **Feature Requests Planned**
 
-- 🚧 [Add end time to detail page for entire shows and seasons](https://features.jellyfin.org/posts/3470/add-info-ends-at-hh-mm-for-each-season-and-whole-show)
 - 🚧 [Keep original title option](https://features.jellyfin.org/posts/32/keep-original-title-option)
 - 🚧 [Search by tag/genre](https://features.jellyfin.org/posts/276/search-by-tag-genre)
 - 🚧 [Add drag and drop to library order](https://features.jellyfin.org/posts/3509/add-drag-and-drop-to-libray-order)
@@ -245,8 +245,8 @@ A summary of your watched items by the numbers. See how many movies, shows or ep
   <img src="pages/images/statistics.png" alt="statistics" style="max-width: 100%; height: auto;"/>
 </div>
 
-### **Export/Import**:  
-Export your Watchlist to JSON which can later be imported using the Watchlist Import feature. You can use this feature to make bulk changes to your Watchlist if you need to.
+### **Export/Import/Sync**:  
+Export your Watchlist to JSON which can later be imported using the Watchlist Import feature. You can use this feature to make bulk changes to your Watchlist if you need to. Additionally, you can Sync your Watchlist to any Playlist of your choice.
 
 <table align="center" style="width: 100%;">
   <tr>
@@ -347,6 +347,9 @@ Select from a list of pre-defined Skins created by other Jellyfin community memb
 
 - **Color Schemes**  
 Certain Skins either support or require a color scheme. This lets you change the UI colors within an individual Skin. These options are automatically available for the Skins which support them.
+
+- **Optional CSS Modules**  
+KefinTweaks also includes optional CSS modules from supported Skins, and even adds some of these as Global options for users to take advantage of with any Skin.
 <hr>
 
 ### UX Improvements
@@ -395,11 +398,11 @@ Add custom menu links to the side navigation drawer menu
 #### **Playlist Screen Improvement**:  
 Updates the default playlist functionality to include a play button to start playback and make clicking an item go to the item detail page  
 
-#### **Flatten Single Season Shows**:  
-This will display the list of episodes from the first season on the Series details page for Shows which only have 1 season.  
+#### **Episodes on the Series Page**:  
+Adds an Episodes section on the Series page which displays the episodes from the season with the Next Up item. Users can quickly switch between seasons to browse other episodes. Includes the option to "Flatten Single Season Shows" which will hide the Seasons container when only one season is present.
 
 <div align="center">
-  <img src="pages/images/flattenshows.png" alt="flattenshows" style="max-width: 100%; height: auto;"/>
+  <img src="https://i.imgur.com/ttP9cGT.png" alt="series-episodes" style="max-width: 100%; height: auto;"/>
 </div>  
 <br/>  
 
@@ -444,38 +447,37 @@ Coming soon...requires the [Updoot](https://github.com/BobHasNoSoul/jellyfin-upd
 | Script | Description |
 |--------|-------------|
 | `utils.js` | Page view management and common utilities |
-| `cardBuilder.js` | Enhanced card building functionality |
-| `localStorageCache.js` | Caching layer with TTL management |
-| `indexedDBCache.js` | IndexedDB-based caching for large datasets |
-| `modal.js` | Generic modal system for dialogs |
-| `toaster.js` | Toast notification system |
-| `userConfig.js` | User-specific configuration for skins and settings |
-| `apiHelper.js` | API helper functions for common operations |
+| `skinConfig.js` | Default skin configuration for KefinTweaks |
+| `apiHelper.js` | API helper functions for common Jellyfin operations |
+| `cardBuilder.js` | Core card building functionality (required by other scripts) |
+| `localStorageCache.js` | localStorage-based caching layer with 24-hour TTL and manual refresh |
+| `indexedDBCache.js` | IndexedDB-based caching layer for large datasets with TTL support |
+| `modal.js` | Generic modal system for Jellyfin-style dialogs |
+| `toaster.js` | Toast notification system using Jellyfin's existing toast functionality |
 
 ### Feature Scripts
 
 | Script | Description | Dependencies |
 |--------|-------------|--------------|
-| `watchlist.js` | Complete watchlist management system | `cardBuilder`, `localStorageCache`, `modal`, `utils` |
-| `homeScreen.js` | Custom home screen sections | `cardBuilder`, `localStorageCache`, `utils` |
+| `skinManager.js` | Skin selection and management (loads with priority) | `utils`, `skinConfigLegacyDefaults`, `skinConfig`, `modal` |
+| `watchlist.js` | Adds watchlist functionality throughout Jellyfin interface | `cardBuilder`, `localStorageCache`, `modal`, `utils` |
+| `homeScreen.js` | Adds custom home screen sections | `cardBuilder`, `localStorageCache`, `utils` |
 | `search.js` | Enhanced search functionality | `cardBuilder`, `utils` |
 | `headerTabs.js` | Header tab improvements | None |
-| `customMenuLinks.js` | Custom menu link handling | `utils` |
-| `exclusiveElsewhere.js` | Custom branding for unavailable content | None |
-| `updoot.js` | Upvote functionality integration | None |
-| `backdropLeakFix.js` | Memory leak fixes | None |
-| `dashboardButtonFix.js` | Dashboard button behavior fix | None |
-| `infiniteScroll.js` | Infinite scroll functionality | `cardBuilder` |
-| `removeContinue.js` | Remove continue watching functionality | None |
-| `subtitleSearch.js` | Subtitle search in video OSD | `toaster` |
-| `breadcrumbs.js` | Breadcrumb navigation | `utils` |
-| `playlist.js` | Playlist view enhancements | `cardBuilder`, `utils` |
-| `itemDetailsCollections.js` | Collections display on item details pages | `indexedDBCache`, `utils`, `cardBuilder` |
-| `flattenSingleSeasonShows.js` | Flatten single-season shows to show episodes directly | `cardBuilder`, `utils` |
-| `skinManager.js` | Skin selection and management | `utils`, `userConfig` |
-| `collections.js` | Collection sorting functionality | `utils`, `modal` |
-| `sonarrRequests.js` | Sonarr request functionality for missing episodes and series | None |
-| `deviceManager.js` | Device management with remove device functionality | `utils` |
+| `customMenuLinks.js` | Load and add custom menu links from configuration | `utils` |
+| `exclusiveElsewhere.js` | Modifies the behavior of the Jellyfin Enhanced Elsewhere functionality to add custom branding when items are not available on streaming services | None |
+| `updoot.js` | Upvote functionality provided by https://github.com/BobHasNoSoul/jellyfin-updoot | None |
+| `backdropLeakFix.js` | Fixes issue that causes backdrop images to be continuously added to the page if the tab isn't focused | None |
+| `dashboardButtonFix.js` | Fixes the dashboard button to redirect to the home page when the back button is clicked and there is no history to go back to | None |
+| `infiniteScroll.js` | Adds infinite scroll functionality to media library pages | `cardBuilder` |
+| `removeContinue.js` | Adds remove from continue watching functionality to cards with data-position-ticks | None |
+| `subtitleSearch.js` | Adds subtitle search functionality to the video OSD, allowing users to search and download subtitles from remote sources | `toaster` |
+| `breadcrumbs.js` | Adds breadcrumb navigation to item detail pages for Movies, Series, Seasons, Episodes, Music Artists, and Music Albums | `utils` |
+| `playlist.js` | Modifies playlist view page behavior to navigate to item details instead of playing, adds play button to playlist items, and adds sorting functionality | `cardBuilder`, `utils`, `modal` |
+| `itemDetailsCollections.js` | Adds related collections to item details pages showing which collections contain the current item | `indexedDBCache`, `utils`, `cardBuilder` |
+| `seriesEpisodes.js` | Displays episodes directly on series page with season selection. Works for both single and multi-season shows when enabled. | `cardBuilder`, `utils` |
+| `seriesInfo.js` | Adds series and season information (seasons count, episodes count, end time) to details pages | `utils` |
+| `collections.js` | Adds sorting functionality to collection pages | `utils`, `modal` |
 <br>
 
 ### Auto-Inject Dependencies
@@ -532,6 +534,7 @@ A few things to note about KefinTweaks functionality in general and how it inter
 - Breadcrumb Navigation
 - Custom Menu Links
 - Collections on Details Page
+- SeriesInfo+
 
 ### What functionality is modified?
 
@@ -540,9 +543,11 @@ A few things to note about KefinTweaks functionality in general and how it inter
 - Playlist Page UX
   - Clicking playlist items navigates to the item page instead of playing the item
   - A play button is added to each item on the Playlist page to allow the user to play the item directly
-- Flatten Single Season Shows
-  - The normal Seasons section is hidden for shows with only 1 season
-  - Episodes from the single season are displayed in a section with the Next Up item being the one focused
+  - The Playlist Play button now resumes the Playlist by default instead of playing it from the beginning
+  - A new button is added to play the Playlist from the beginning
+- Episodes of Series Page
+  - Episodes from the Season of the Next Up episode are displayed in a section with the Next Up item being focused
+  - With the Flatten Single Season Shows enabled, the normal Seasons section is hidden for shows with only 1 season
 - Background Leak Fix
   - This removes extra backdrops from the DOM
   - It fixes an issue which causes Jellyfin to endless add backdrop items to the DOM if the Jellyfin browser tab is not focused
@@ -609,6 +614,7 @@ This README and the inline comments in kefinTweaks.js and the other scripts is t
 <hr>
 
 ### Version History
+- **v0.4.0**: New Features: Proper Install Flow, Watchlist->Playlist Sync, Series Info+, Series Page Episodes, Christmas Seasonal Home Screen
 - **v0.3.5**: Critical bug fix
 - **v0.3.4**: Improved handling of Latest/Development branches for KefinTweaks installation. Improved collection caching.
 - **v0.3.3**: Important fix for a bug preventing the plugin from running on non-admin accounts

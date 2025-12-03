@@ -110,7 +110,7 @@
             name: 'skinManager',
             script: 'skinManager.js',
             css: 'defaultSkin.css',
-            dependencies: ['utils', 'skinConfigLegacyDefaults', 'skinConfig'],
+            dependencies: ['utils', 'skinConfigLegacyDefaults', 'skinConfig', 'modal'],
             priority: true, // Load immediately after dependencies to reduce UI disruption
             description: 'Adds skin selection dropdown to display preferences page and manages skin CSS loading'
         },
