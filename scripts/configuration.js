@@ -4255,18 +4255,46 @@
         });
         }
         
+        // Initialize pending state for optional includes to track changes across category switches
+        // Deep copy initial config to avoid mutating reference before save
+        const pendingOptionalIncludes = JSON.parse(JSON.stringify(config.optionalIncludes || []));
+        let currentOptionalIncludesCategory = 'global';
+
         // Optional includes category dropdown handler
         const optionalIncludesCategory = modalInstance.dialogContent.querySelector('#optionalIncludesCategory');
         if (optionalIncludesCategory) {
             optionalIncludesCategory.addEventListener('change', (e) => {
-                const category = e.target.value;
+                const newCategory = e.target.value;
+                
+                // 1. Capture changes from the PREVIOUS category before switching
+                const currentCheckboxes = modalInstance.dialogContent.querySelectorAll(`.optionalIncludeCheckbox[data-category="${currentOptionalIncludesCategory}"]`);
+                currentCheckboxes.forEach(checkbox => {
+                    const key = checkbox.getAttribute('data-key');
+                    const enabled = checkbox.checked;
+                    
+                    const existingIndex = pendingOptionalIncludes.findIndex(item => item.key === key);
+                    if (existingIndex >= 0) {
+                        pendingOptionalIncludes[existingIndex].enabled = enabled;
+                    } else {
+                        pendingOptionalIncludes.push({ key, enabled });
+                    }
+                });
+
+                // Update current category tracker
+                currentOptionalIncludesCategory = newCategory;
+
                 const editor = modalInstance.dialogContent.querySelector('#optionalIncludesEditor');
                 if (editor) {
-                    // Use current config from window (which may have been updated after save)
-                    const currentConfig = window.KefinTweaksConfig || config;
-                    editor.innerHTML = buildOptionalIncludesEditor(category, currentConfig, window.KefinTweaksSkinConfig || []);
+                    // Create a temporary config object that uses our pending state
+                    // This ensures buildOptionalIncludesEditor renders checkboxes with the correct pending state
+                    const currentConfig = { 
+                        ...(window.KefinTweaksConfig || config), 
+                        optionalIncludes: pendingOptionalIncludes 
+                    };
+                    
+                    editor.innerHTML = buildOptionalIncludesEditor(newCategory, currentConfig, window.KefinTweaksSkinConfig || []);
                     // Re-attach checkbox handlers
-                    attachOptionalIncludesCheckboxHandlers(modalInstance, category, currentConfig);
+                    attachOptionalIncludesCheckboxHandlers(modalInstance, newCategory, currentConfig);
                 }
             });
         }
@@ -4285,7 +4313,23 @@
         // Save button handler
         const saveBtn = modalInstance.dialogFooter?.querySelector('#saveConfigBtn');
         if (saveBtn) {
-            saveBtn.addEventListener('click', () => handleSaveConfig(modalInstance));
+            saveBtn.addEventListener('click', () => {
+                // Capture changes from the CURRENT category one last time
+                const currentCheckboxes = modalInstance.dialogContent.querySelectorAll(`.optionalIncludeCheckbox[data-category="${currentOptionalIncludesCategory}"]`);
+                currentCheckboxes.forEach(checkbox => {
+                    const key = checkbox.getAttribute('data-key');
+                    const enabled = checkbox.checked;
+                    
+                    const existingIndex = pendingOptionalIncludes.findIndex(item => item.key === key);
+                    if (existingIndex >= 0) {
+                        pendingOptionalIncludes[existingIndex].enabled = enabled;
+                    } else {
+                        pendingOptionalIncludes.push({ key, enabled });
+                    }
+                });
+
+                handleSaveConfig(modalInstance, pendingOptionalIncludes);
+            });
         }
 
         const resetBtn = modalInstance.dialogFooter?.querySelector('#resetConfigBtn');
@@ -4901,7 +4945,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
     }
     
     // Handle save configuration
-    async function handleSaveConfig(modalInstance) {
+    async function handleSaveConfig(modalInstance, overrideOptionalIncludes = null) {
         // Verify admin status before saving
         const userIsAdmin = await isAdmin();
         if (!userIsAdmin) {
@@ -5166,7 +5210,11 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         config.customMenuLinks = parseJSONField('customMenuLinksJson', []);
         
         // Collect optional includes configuration
-        config.optionalIncludes = collectOptionalIncludesConfig(modalInstance);
+        if (overrideOptionalIncludes) {
+            config.optionalIncludes = overrideOptionalIncludes;
+        } else {
+            config.optionalIncludes = collectOptionalIncludesConfig(modalInstance);
+        }
 
         // Collect skin enabled toggles and merge with JSON skins
         // Only save admin-configured skins (not defaults)
