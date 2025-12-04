@@ -168,26 +168,11 @@
                 }
 
                 if (enableSeasonalAnimations) {
-                    // Import the Flurry module and leverage it from jQuery. /scripts/third party/flurry.js by appending it to the head
-                    const flurryScriptSrc = (window.KefinTweaksConfig.kefinTweaksRoot || '') + 'scripts/third party/jquery.flurry.min.js';
-                    
-                    // Function to run flurry safely
-                    const startFlurry = () => {
-                        if (window.jQuery && typeof window.jQuery.fn.flurry === 'function') {
-                            window.jQuery("body").flurry();
-                        }
-                    };
-    
-                    // Check if script is already present
-                    if (!document.querySelector(`script[src="${flurryScriptSrc}"]`)) {
-                        const flurryScript = document.createElement('script');
-                        flurryScript.src = flurryScriptSrc;
-                        flurryScript.onload = startFlurry; // Run after load
-                        document.head.appendChild(flurryScript);
-                    } else {
-                        // Script loaded, try running directly
-                        startFlurry();
-                    }
+                    // Use the snowverlay.js script to add snowflakes to the background
+                    const snowverlayScriptSrc = (window.KefinTweaksConfig.kefinTweaksRoot || '') + 'scripts/snowverlay.js';
+                    const snowverlayScript = document.createElement('script');
+                    snowverlayScript.src = snowverlayScriptSrc;
+                    document.head.appendChild(snowverlayScript);
                 }
 
             } else if (isValentinesPeriod()) {
