@@ -83,14 +83,12 @@
     background-size: cover;
 }
 
-.flurry-container {
+.snowverlay {
     display: none;
 }
 
-.home-screen.christmas-theme .flurry-container {
+.home-screen.christmas-theme .snowverlay {
     display: block;
-    position: fixed !important;
-    z-index: 9999999999 !important;
 }
 
 .home-screen h2.sectionTitle {
