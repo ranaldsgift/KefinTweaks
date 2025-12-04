@@ -1816,13 +1816,20 @@
                 </summary>
                 <div style="padding: 0.75em 0 0 0;">
                     <div id="homeScreen_seasonal_container">
-                        <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
-                            <div class="listItemContent">
-                                <div class="listItemBodyText" style="margin-bottom: 0.5em;">Enable Seasonal Animations</div>
-                                <div class="listItemBodyText secondary" style="margin-bottom: 0.75em; font-size: 0.9em;">Enable falling snow/leaves animations for seasonal themes</div>
-                                ${buildJellyfinCheckbox('homeScreen_seasonal_enableSeasonalAnimations', seasonal.enableSeasonalAnimations !== false, 'Enabled')}
+                            <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
+                                <div class="listItemContent">
+                                    <div class="listItemBodyText" style="margin-bottom: 0.5em;">Enable Seasonal Animations</div>
+                                    <div class="listItemBodyText secondary" style="margin-bottom: 0.75em; font-size: 0.9em;">Enable falling snow/leaves animations for seasonal themes</div>
+                                    ${buildJellyfinCheckbox('homeScreen_seasonal_enableSeasonalAnimations', seasonal.enableSeasonalAnimations !== false, 'Enabled')}
+                                </div>
                             </div>
-                        </div>
+                            <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
+                                <div class="listItemContent">
+                                    <div class="listItemBodyText" style="margin-bottom: 0.5em;">Enable Christmas Background</div>
+                                    <div class="listItemBodyText secondary" style="margin-bottom: 0.75em; font-size: 0.9em;">Enable the festive background image for the Christmas theme</div>
+                                    ${buildJellyfinCheckbox('homeScreen_seasonal_enableSeasonalBackground', seasonal.enableSeasonalBackground !== false, 'Enabled')}
+                                </div>
+                            </div>
                         <div id="homeScreen_seasonal_seasons_list" style="margin-bottom: 1em;">
                             ${seasonalSectionsHtml}
                         </div>
@@ -5080,6 +5087,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             seasonal: {
                 enabled: document.getElementById('homeScreen_seasonal_enabled')?.checked !== false,
                 enableSeasonalAnimations: document.getElementById('homeScreen_seasonal_enableSeasonalAnimations')?.checked !== false,
+                enableSeasonalBackground: document.getElementById('homeScreen_seasonal_enableSeasonalBackground')?.checked !== false,
                 defaultItemLimit: 16,
                 defaultSortOrder: 'Random',
                 defaultCardFormat: 'Poster',

@@ -142,6 +142,7 @@
         const homeScreenConfig = window.KefinTweaksConfig?.homeScreen || {};
         const seasonalConfig = homeScreenConfig.seasonal || {};
         const enableSeasonalAnimations = seasonalConfig.enableSeasonalAnimations !== false;
+        const enableSeasonalBackground = seasonalConfig.enableSeasonalBackground !== false;
         
         // Manage home-screen class
         if (isHomePage && body) {
@@ -153,7 +154,7 @@
         // Manage theme classes (only on home page)
         if (isHomePage) {
             // Remove all existing theme classes
-            const themeClasses = ['halloween-theme', 'christmas-theme', 'valentines-theme', 'newyear-theme'];
+            const themeClasses = ['halloween-theme', 'christmas-theme', 'valentines-theme', 'newyear-theme', 'with-background'];
             themeClasses.forEach(themeClass => body.classList.remove(themeClass));
             
             // Add appropriate theme class based on current date
@@ -161,6 +162,10 @@
                 body.classList.add('halloween-theme');
             } else if (isChristmasPeriod()) {
                 body.classList.add('christmas-theme');
+
+                if (enableSeasonalBackground) {
+                    body.classList.add('with-background');
+                }
 
                 if (enableSeasonalAnimations) {
                     // Import the Flurry module and leverage it from jQuery. /scripts/third party/flurry.js by appending it to the head
@@ -192,7 +197,7 @@
             }
         } else {
             // Remove all theme classes when not on home page
-            const themeClasses = ['halloween-theme', 'christmas-theme', 'valentines-theme', 'newyear-theme'];
+            const themeClasses = ['halloween-theme', 'christmas-theme', 'valentines-theme', 'newyear-theme', 'with-background'];
             themeClasses.forEach(themeClass => body.classList.remove(themeClass));
         }
     }

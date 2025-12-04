@@ -58,7 +58,7 @@
 }
 
 /* Halloween theme */
-.home-screen.halloween-theme #reactRoot:has(.libraryPage:not(.hide) .pageTabContent.is-active[data-index="0"])>.backgroundContainer::after {
+.home-screen.halloween-theme.with-background #reactRoot:has(.libraryPage:not(.hide) .pageTabContent.is-active[data-index="0"])>.backgroundContainer::after {
     content: '';
     position: absolute;
     top: 0;
@@ -71,7 +71,7 @@
 }
 
 /* Christmas theme */
-.home-screen.christmas-theme #reactRoot:has(.libraryPage:not(.hide) .pageTabContent.is-active[data-index="0"])>.backgroundContainer::after {
+.home-screen.christmas-theme.with-background #reactRoot:has(.libraryPage:not(.hide) .pageTabContent.is-active[data-index="0"])>.backgroundContainer::after {
     content: '';
     position: absolute;
     top: 0;

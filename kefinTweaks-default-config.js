@@ -105,6 +105,7 @@ window.KefinTweaksDefaultConfig = {
     "seasonal": {
       "enabled": true,
       "enableSeasonalAnimations": true,
+      "enableSeasonalBackground": true,
       "defaultItemLimit": 16,
       "defaultSortOrder": "Random",
       "defaultCardFormat": "Poster",
