@@ -1349,6 +1349,57 @@
         if (autoPlay) {
             startAutoPlay();
         }
+
+        // Touch swipe handling
+        let touchStartX = 0;
+        let touchStartY = 0;
+        
+        bannerContainer.addEventListener('touchstart', (e) => {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+        }, { passive: true });
+        
+        bannerContainer.addEventListener('touchmove', (e) => {
+            if (!e.touches[0]) return;
+            
+            const touchX = e.touches[0].clientX;
+            const touchY = e.touches[0].clientY;
+            
+            const deltaX = touchX - touchStartX;
+            const deltaY = touchY - touchStartY;
+            
+            // If horizontal movement is dominant, prevent vertical scrolling and propagation
+            if (Math.abs(deltaX) > Math.abs(deltaY)) {
+                if (e.cancelable) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+            }
+        }, { passive: false });
+        
+        bannerContainer.addEventListener('touchend', (e) => {
+            if (!e.changedTouches[0]) return;
+            
+            const touchEndX = e.changedTouches[0].clientX;
+            const touchEndY = e.changedTouches[0].clientY;
+            
+            const deltaX = touchEndX - touchStartX;
+            const deltaY = touchEndY - touchStartY;
+            
+            // Threshold for swipe (50px)
+            if (Math.abs(deltaX) > 50 && Math.abs(deltaX) > Math.abs(deltaY)) {
+                // Stop propagation to prevent parent handlers (like tab switching)
+                e.stopPropagation();
+                
+                if (deltaX > 0) {
+                    // Swipe right (previous)
+                    goToItem((currentIndex - 1 + items.length) % items.length, true);
+                } else {
+                    // Swipe left (next)
+                    goToItem((currentIndex + 1) % items.length, true);
+                }
+            }
+        }, { passive: true });
         
         container.appendChild(bannerContainer);
         

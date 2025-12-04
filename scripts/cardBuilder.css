@@ -400,6 +400,11 @@
     
     .spotlight-tagline {
         max-height: 175px !important;
-        -webkit-line-clamp: 6;
+        -webkit-line-clamp: 4;
+    }
+
+    .spotlight-item-logo {
+        max-width: 100%;
+        height: 125px;
     }
 }
