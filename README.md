@@ -70,6 +70,7 @@ Note: The Slideshow at the top of the Home Screen in the video below is from the
 ### Prerequisites
 - Jellyfin 10.10.7 or earlier (10.11.X is untested and "unsupported" but may be mostly functional)
 - [JS Injector](https://github.com/n00bcodr/Jellyfin-JavaScript-Injector) plugin installed and configured
+- [File Transformation Plugin](https://github.com/IAmParadox27/jellyfin-plugin-file-transformation) plugin is recommended to avoid file permission issues when injecting scripts with JS Injector
 - Only required for Watchlist: [Custom Tabs](https://github.com/IAmParadox27/jellyfin-plugin-custom-tabs) plugin
 
 ### Setup Instructions
