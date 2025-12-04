@@ -439,8 +439,31 @@
         const search = config.search || {};
         const flattenSingleSeasonShows = config.flattenSingleSeasonShows || {};
         const customMenuLinks = config.customMenuLinks || [];
-        // Use merged skin config from skinManager (includes both defaults and admin skins)
-        const skins = window.KefinTweaksSkinConfig || [];
+        // Reconstruct full skin list (enabled + disabled) for configuration
+        // We can't use window.KefinTweaksSkinConfig directly because it filters out disabled skins
+        const defaultSkins = window.KefinTweaksDefaultSkinsConfig?.skins || [];
+        const adminSkins = config.skins || [];
+        
+        const mergedSkins = [];
+        
+        // 1. Add all default skins first
+        defaultSkins.forEach(skin => {
+            mergedSkins.push({ ...skin, enabled: true });
+        });
+        
+        // 2. Override/Add with admin skins
+        adminSkins.forEach(adminSkin => {
+            const existingIndex = mergedSkins.findIndex(s => s.name === adminSkin.name);
+            if (existingIndex >= 0) {
+                // Override existing default skin
+                mergedSkins[existingIndex] = { ...mergedSkins[existingIndex], ...adminSkin };
+            } else {
+                // Add new admin skin
+                mergedSkins.push({ ...adminSkin });
+            }
+        });
+        
+        const skins = mergedSkins;
         const themes = config.themes || [];
 
         // Get all skin names for autocomplete
@@ -5159,13 +5182,29 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
 
         // Only save admin skins (from JSON textarea) - filter out any that match default names
         // This ensures we don't accidentally save default skins
-        config.skins = skinsFromJson
+        const customSkins = skinsFromJson
             .filter(skin => !defaultSkinNames.has(skin.name)) // Exclude defaults
             .map(skin => ({
                 ...skin,
                 enabled: skinEnabledStates[skin.name] !== false, // Default to true if not set
                 hidden: false // Explicitly set for admin skins
             }));
+
+        // Handle disabled default skins
+        // We need to explicitly save them in config.skins with enabled: false to override the default
+        const disabledDefaultSkins = [];
+        defaultSkinNames.forEach(name => {
+            // If explicitly disabled in UI
+            if (skinEnabledStates[name] === false) {
+                disabledDefaultSkins.push({
+                    name: name,
+                    enabled: false
+                });
+            }
+        });
+
+        // Combine custom skins and disabled default skins
+        config.skins = [...customSkins, ...disabledDefaultSkins];
         
         // Note: Enabled states for default skins are collected but not saved in config.skins
         // Default skins will use their default enabled state from skinConfig.js
