@@ -120,7 +120,7 @@
                         enabled: false
                     },
                     {
-                        name: 'Card Hover Effect',
+                        name: 'Disable Card Hover Effect',
                         url: `${getKefinTweaksRoot()}skins/optional/ElegantFin/cardHoverEffect.css`,
                         enabled: false
                     },
@@ -159,7 +159,44 @@
                         ]
                     }
                 ],
-                colorSchemes: []
+                colorSchemes: [],
+                optionalIncludes: [
+                    {
+                        name: 'Media Bar Support',
+                        url: 'https://cdn.jsdelivr.net/gh/lscambo13/ElegantFin@main/Theme/assets/add-ons/media-bar-plugin-support-latest-min.css',
+                        enabled: true
+                    },
+                    {
+                        name: 'Media Bar Support (Nightly Version)',
+                        url: 'https://cdn.jsdelivr.net/gh/lscambo13/ElegantFin@main/Theme/assets/add-ons/media-bar-plugin-support-nightly.css',
+                        enabled: false
+                    },
+                    {
+                        name: 'Disable Card Hover Effect',
+                        url: `${getKefinTweaksRoot()}skins/optional/ElegantFin/cardHoverEffect.css`,
+                        enabled: false
+                    },
+                    {
+                        name: 'Center Overlay Play Button',
+                        url: `${getKefinTweaksRoot()}skins/optional/ElegantFin/centerPlayButton.css`,
+                        enabled: false
+                    },
+                    {
+                        name: 'Extra Overlay Buttons',
+                        url: `${getKefinTweaksRoot()}skins/optional/ElegantFin/extraOverlayButtons.css`,
+                        enabled: false
+                    },
+                    {
+                        name: 'Library Label Visibility',
+                        url: `${getKefinTweaksRoot()}skins/optional/ElegantFin/libraryLabelVisibility.css`,
+                        enabled: false
+                    },
+                    {
+                        name: 'Solid App Bar',
+                        url: `${getKefinTweaksRoot()}skins/optional/ElegantFin/solidAppBar.css`,
+                        enabled: false
+                    }
+                ]
             },
             {
                 name: 'GlassFin',
@@ -217,6 +254,26 @@
                     {
                         name: 'Watched Status Badges',
                         url: 'https://cdn.jsdelivr.net/gh/KBH-Reeper/GlassFin@main/Theme/Styling/ActivateBadges.css',
+                        enabled: false
+                    },
+                    {
+                        name: 'Disable Card Hover Effect',
+                        url: `${getKefinTweaksRoot()}skins/optional/ElegantFin/cardHoverEffect.css`,
+                        enabled: false
+                    },
+                    {
+                        name: 'Center Overlay Play Button',
+                        url: `${getKefinTweaksRoot()}skins/optional/ElegantFin/centerPlayButton.css`,
+                        enabled: false
+                    },
+                    {
+                        name: 'Library Label Visibility',
+                        url: `${getKefinTweaksRoot()}skins/optional/ElegantFin/libraryLabelVisibility.css`,
+                        enabled: false
+                    },
+                    {
+                        name: 'Solid App Bar',
+                        url: `${getKefinTweaksRoot()}skins/optional/ElegantFin/solidAppBar.css`,
                         enabled: false
                     }
                 ]

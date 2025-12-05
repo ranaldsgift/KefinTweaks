@@ -904,32 +904,15 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
     }
     
     /**
-     * Get merged global optional includes (defaults + admin config)
-     * Admin config should contain array of keys (strings), not objects
-     * @returns {Array} Merged list of global optional includes
+     * Get merged global optional includes
+     * Merges default global includes with admin configuration
+     * @returns {Array} Array of optional include objects
      */
     function getMergedGlobalOptionalIncludes() {
         // Get default global optional includes from skinConfig.js
-        const defaultGlobalIncludes = window.KefinTweaksDefaultSkinsConfig?.globalOptionalIncludes || [];
-        
-        // Get admin-configured global optional includes from KefinTweaksConfig
-        // Admin config should be an array of keys (strings)
-        const adminGlobalIncludeKeys = window.KefinTweaksConfig?.optionalIncludes || [];
-        
-        // Create a set of admin keys for quick lookup
-        const adminKeysSet = new Set(adminGlobalIncludeKeys.filter(k => typeof k === 'string'));
-        
-        // Start with defaults, then check if admin has added any new ones
-        // For now, we only support defaults + admin keys
-        // Admin can't override defaults, only add new ones via keys
-        const merged = defaultGlobalIncludes.map(include => ({ ...include }));
-        
-        // Note: Admin config now stores keys, not full objects
-        // If admin wants to add new optional includes, they would need to add them to defaults
-        // or we'd need to support a different structure. For now, we'll just use defaults
-        // and check enabled state via keys
-        
-        return merged;
+        // We only support toggling existing defaults defined in skinConfig.js
+        // User/Admin enabled states are applied via isOptionalIncludeEnabled()
+        return (window.KefinTweaksDefaultSkinsConfig?.globalOptionalIncludes || []).map(include => ({ ...include }));
     }
     
     /**
@@ -945,10 +928,13 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         // Get merged global optional includes
         const globalOptionalIncludes = getMergedGlobalOptionalIncludes();
         
-        // Load enabled global optional includes (check enabled state via keys)
+        // Load enabled global optional includes
+        // This explicitly checks user localStorage config first via isOptionalIncludeEnabled
         globalOptionalIncludes.forEach(include => {
             const author = extractAuthorFromUrl(include.url);
             const key = generateOptionalIncludeKey('global', author, include.url);
+            
+            // Check enabled state (User Config > Admin Config > Default)
             const isEnabled = isOptionalIncludeEnabled(key, include.enabled || false);
             
             if (isEnabled && include.url) {
@@ -961,6 +947,8 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             skin.optionalIncludes.forEach(include => {
                 const author = extractAuthorFromUrl(include.url);
                 const key = generateOptionalIncludeKey(skin.name, author, include.url);
+                
+                // Check enabled state (User Config > Admin Config > Default)
                 const isEnabled = isOptionalIncludeEnabled(key, include.enabled || false);
                 
                 if (isEnabled && include.url) {
@@ -2044,47 +2032,13 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                             const key = generateOptionalIncludeKey('global', author, includeUrl);
                             const enabled = checkbox.checked;
                             
-                            // Save only this specific key (Option 1: only save what user toggled)
+                            // Save only this specific key to user config
                             saveOptionalIncludeState(key, enabled);
-                            
-                            // Also update admin config with { key, enabled } (for initial enabled state)
-                            // Only update the specific key that was changed
-                            if (!window.KefinTweaksConfig) {
-                                window.KefinTweaksConfig = {};
-                            }
-                            if (!window.KefinTweaksConfig.optionalIncludes) {
-                                window.KefinTweaksConfig.optionalIncludes = [];
-                            }
-                            
-                            // Find or create entry for this key in admin config
-                            const currentAdminEntries = window.KefinTweaksConfig.optionalIncludes || [];
-                            const adminEntryIndex = currentAdminEntries.findIndex(entry => {
-                                const entryKey = typeof entry === 'string' ? entry : (entry.key || '');
-                                return entryKey === key;
-                            });
-                            
-                            if (adminEntryIndex >= 0) {
-                                // Update existing entry
-                                if (typeof currentAdminEntries[adminEntryIndex] === 'string') {
-                                    currentAdminEntries[adminEntryIndex] = { key: key, enabled: enabled };
-                                } else {
-                                    currentAdminEntries[adminEntryIndex].enabled = enabled;
-                                }
-                            } else {
-                                // Add new entry
-                                currentAdminEntries.push({ key: key, enabled: enabled });
-                            }
-                            
-                            window.KefinTweaksConfig.optionalIncludes = currentAdminEntries;
-                            
-                            // Save to JS Injector
-                            if (window.KefinTweaksUtils && window.KefinTweaksUtils.saveConfigToJavaScriptInjector) {
-                                window.KefinTweaksUtils.saveConfigToJavaScriptInjector(window.KefinTweaksConfig, { waitForLogin: false });
-                            }
                             
                             // Apply changes immediately
                             const currentSkinName = localStorage.getItem(STORAGE_KEY) || getDefaultSkinName();
                             const currentSkin = SKINS_CONFIG.find(s => s.name === currentSkinName);
+                            
                             if (currentSkin) {
                                 // Unload and reload global optional includes
                                 unloadOptionalIncludesForSkin('global');
