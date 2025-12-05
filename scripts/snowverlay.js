@@ -48,16 +48,22 @@ function addSnowverlay() {
       size: Math.random() * (SNOWFLAKE_SIZE.max - SNOWFLAKE_SIZE.min) + SNOWFLAKE_SIZE.min,
       speed: Math.random() * (SNOWFLAKE_SPEED.max - SNOWFLAKE_SPEED.min) + SNOWFLAKE_SPEED.min,
       opacity: isAnimated ? null : Math.random() * 0.5 + 0.2,
-      sway: Math.random() * 2 * Math.PI
+      drift: Math.random() * 0.4 - 0.2, // Random horizontal drift (wind)
+      rotation: Math.random() * 360,
+      rotationSpeed: Math.random() * 2 - 1 // Degrees per frame
     });
-  
+
     // Draw single snowflake
     const drawSnowflake = (flake) => {
+      ctx.save();
+      ctx.translate(flake.x, flake.y);
+      ctx.rotate((flake.rotation * Math.PI) / 180);
       ctx.font = `${flake.size}px sans-serif`;
       ctx.fillStyle = `rgba(255, 255, 255, ${flake.opacity ?? (1 - flake.y / canvas.height)})`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('❄', flake.x, flake.y);
+      ctx.fillText('❄', 0, 0);
+      ctx.restore();
     };
   
     // Animation control
@@ -85,7 +91,8 @@ function addSnowverlay() {
         
         snowflakes.forEach(flake => {
           flake.y += flake.speed;
-          flake.x += Math.sin(flake.sway += 0.01) * flake.speed;
+          flake.x += flake.drift;
+          flake.rotation += flake.rotationSpeed;
           
           if (flake.y > canvas.height) {
             flake.y = -10;
