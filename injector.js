@@ -19,35 +19,36 @@
             return "Pending Install"; // Fallback
         }
         
-        // Match version patterns: @v0.3.3, @latest, @main, or @commitHash
-        const versionMatch = root.match(/@(v?[\d.]+|latest|main|[a-f0-9]{7,})/i);
+    // Match version patterns: @commitHash, @latest, @main, or @v0.3.3
+    // Note: check for hash first to avoid partial numeric matches (e.g. hash starting with digits)
+    const versionMatch = root.match(/@([a-f0-9]{7,}|latest|main|v?[\d.]+)/i);
+    
+    if (versionMatch) {
+        const version = versionMatch[1];
         
-        if (versionMatch) {
-            const version = versionMatch[1];
-            
-            // Handle version tags (v0.3.3 -> 0.3.3)
-            if (version.startsWith('v') && /^\d+\.\d+\.\d+/.test(version.substring(1))) {
-                return version.substring(1); // Remove 'v' prefix
-            }
-            
-            // Handle @main -> "development"
-            if (version.toLowerCase() === 'main') {
-                return 'development';
-            }
-            
-            // Handle @latest -> "latest"
-            if (version.toLowerCase() === 'latest') {
-                return 'latest';
-            }
-            
-            // Handle commit hash -> show as "development" or short hash
-            if (/^[a-f0-9]{7,}$/i.test(version)) {
-                return `development (${version.substring(0, 7)})`;
-            }
-            
-            // Return as-is for other patterns
-            return "version";
+        // Handle version tags (v0.3.3 -> 0.3.3)
+        if (version.startsWith('v') && /^\d+\.\d+\.\d+/.test(version.substring(1))) {
+            return version.substring(1); // Remove 'v' prefix
         }
+        
+        // Handle @main -> "Dev"
+        if (version.toLowerCase() === 'main') {
+            return 'development';
+        }
+        
+        // Handle @latest -> "latest"
+        if (version.toLowerCase() === 'latest') {
+            return 'latest';
+        }
+        
+        // Handle commit hash -> show as "Dev (#hash)"
+        if (/^[a-f0-9]{7,}$/i.test(version)) {
+            return `Dev (#${version.substring(0, 7)})`;
+        }
+        
+        // Return as-is for other patterns
+        return version;
+    }
         
         // No version found in URL, this is a custom install
         return "Custom Install";
