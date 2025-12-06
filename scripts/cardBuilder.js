@@ -1501,8 +1501,8 @@
         showAllButton.type = 'button';
         showAllButton.className = 'show-all-button';
         showAllButton.style.cssText = 'margin-left: 10px; font-size: 12px; padding: 4px 8px; min-width: auto; background: transparent; border: 1px solid rgba(255, 255, 255, 0.3) !important; border-radius: 4px; cursor: pointer; color: var(--main-text, #fff) !important; margin-bottom: .35em; align-self: center;';
-        showAllButton.textContent = 'Show All';
-        showAllButton.title = 'Show all items in a grid layout';
+        showAllButton.textContent = 'Expand';
+        showAllButton.title = 'Show all items';
 
         // Create scroller container
         const scroller = document.createElement('div');
@@ -1554,14 +1554,14 @@
                 // Switch back to scroll view
                 itemsContainer.style.cssText = originalItemsContainerStyle;
                 if (scrollButtons) scrollButtons.style.display = '';
-                showAllButton.textContent = 'Show All';
+                showAllButton.textContent = 'Expand';
                 showAllButton.title = 'Show all items in a grid layout';
                 isShowingAll = false;
             } else {
                 // Switch to grid view
                 itemsContainer.style.cssText = 'display: flex; flex-wrap: wrap; gap: 12px; white-space: normal; transform: none !important; transition: none !important;';
                 if (scrollButtons) scrollButtons.style.display = 'none';
-                showAllButton.textContent = 'Show Less';
+                showAllButton.textContent = 'Collapse';
                 showAllButton.title = 'Show items in scrollable layout';
                 isShowingAll = true;
             }
