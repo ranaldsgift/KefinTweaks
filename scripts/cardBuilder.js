@@ -659,9 +659,46 @@
         
         // Add section title in top left corner (absolute positioning, aligned with controls)
         if (title) {
-            const sectionTitleEl = document.createElement('div');
-            sectionTitleEl.className = 'spotlight-section-title';
-            sectionTitleEl.textContent = title;
+            let sectionTitleEl;
+            
+            if (viewMoreUrl) {
+                // Create clickable title
+                const titleLink = document.createElement('a');
+                titleLink.className = 'spotlight-section-title spotlight-title-link';
+                titleLink.textContent = title;
+                titleLink.title = 'See All';
+                titleLink.style.textDecoration = 'none';
+
+                const cssStyle = document.createElement('style');
+                cssStyle.textContent = `
+                    .spotlight-title-link:hover {
+                        text-decoration: underline !important;
+                    }
+                `;
+                titleLink.appendChild(cssStyle);
+                
+                // Handle both URL and function
+                if (typeof viewMoreUrl === 'function') {
+                    titleLink.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        viewMoreUrl();
+                    });
+                } else {
+                    titleLink.href = viewMoreUrl;
+                    titleLink.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                    });
+                }
+                
+                sectionTitleEl = titleLink;
+            } else {
+                // Regular non-clickable title
+                sectionTitleEl = document.createElement('div');
+                sectionTitleEl.className = 'spotlight-section-title';
+                sectionTitleEl.textContent = title;
+            }
+            
             bannerContainer.appendChild(sectionTitleEl);
         }
         

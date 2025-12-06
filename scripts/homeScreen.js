@@ -5649,6 +5649,9 @@
                     case 'Parent':
                         viewMoreUrl = `#/list.html?parentId=${source}&serverId=${ApiClient.serverId()}`;
                         break;
+                    case 'Tag':
+                        viewMoreUrl = `#/list.html?type=tag&tag=${source}&serverId=${ApiClient.serverId()}`;
+                        break;
                     default:
                         viewMoreUrl = null;
                         break;
@@ -5671,7 +5674,8 @@
                         interval: 5000,
                         showDots: true,
                         showNavButtons: true,
-                        showClearArt: true
+                        showClearArt: true,
+                        viewMoreUrl: viewMoreUrl
                     }
                 );
             } else {            
