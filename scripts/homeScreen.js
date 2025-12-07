@@ -207,7 +207,7 @@
      * Migrates old homeScreen config format to new format
      * Small, transparent function that runs automatically
      */
-    function migrateHomeScreenConfig() {
+    async function migrateHomeScreenConfig() {
         if (!window.KefinTweaksConfig || !window.KefinTweaksConfig.homeScreen) {
             return;
         }
@@ -745,14 +745,44 @@
                 }
             }
         }
+
+        // Migrate Recently Added in Library
+        if (!old.recentlyAddedInLibrary) {
+            old.recentlyAddedInLibrary = {};
+        }
+
+        try {
+            // We always check for new libraries to add them as disabled
+            const userId = ApiClient.getCurrentUserId();
+            const result = await window.ApiClient.getUserViews({}, userId);
+            
+            if (result && result.Items) {
+                const libraries = result.Items.filter(item => 
+                    item.CollectionType === 'movies' || item.CollectionType === 'tvshows'
+                );
+                
+                libraries.forEach(lib => {
+                    if (!old.recentlyAddedInLibrary[lib.Id]) {
+                        old.recentlyAddedInLibrary[lib.Id] = {
+                            enabled: false, // Default to disabled for new libraries
+                            order: 11,
+                            itemLimit: 30,
+                            name: `Recently Added in ${lib.Name}`,
+                            cardFormat: lib.CollectionType === 'tvshows' ? 'Thumb' : 'Poster'
+                        };
+                        configChanged = true;
+                    }
+                });
+            }
+        } catch (e) {
+            WARN('Error checking libraries for migration', e);
+        }
         
         if (configChanged && !needsMigration) {
-            LOG('Applied specific configuration updates (recently released dates / christmas sections)');
+            LOG('Applied specific configuration updates');
             // Save updated config back to JS Injector plugin
             if (window.KefinTweaksUtils && window.KefinTweaksUtils.saveConfigToJavaScriptInjector) {
-                window.KefinTweaksUtils.saveConfigToJavaScriptInjector().catch(err => {
-                    ERR('Failed to save updated config to JS Injector:', err);
-                });
+                await window.KefinTweaksUtils.saveConfigToJavaScriptInjector();
             }
         }
     }
@@ -1437,20 +1467,23 @@
      * @param {HTMLElement} container - Container to append sections to
      */
     async function renderAllRecentlyAddedInLibrarySections(container) {
-        if (!recentlyAddedInLibraryConfig || Object.keys(recentlyAddedInLibraryConfig).length === 0) {
+        // Read fresh config to ensure migration updates are picked up
+        const config = window.KefinTweaksConfig?.homeScreen?.recentlyAddedInLibrary || {};
+
+        if (Object.keys(config).length === 0) {
             return;
         }
 
-        const libraryIds = Object.keys(recentlyAddedInLibraryConfig);
+        const libraryIds = Object.keys(config);
         const sectionsToRender = [];
 
         libraryIds.forEach(libraryId => {
-            const config = recentlyAddedInLibraryConfig[libraryId];
-            if (config && config.enabled !== false) {
+            const sectionConfig = config[libraryId];
+            if (sectionConfig && sectionConfig.enabled !== false) {
                 // Check if already rendered
                 const sectionId = `recently-added-${libraryId}`;
                 if (!container.querySelector(`[data-custom-section-id="${sectionId}"]`)) {
-                    sectionsToRender.push(renderRecentlyAddedInLibrarySection(libraryId, config, container));
+                    sectionsToRender.push(renderRecentlyAddedInLibrarySection(libraryId, sectionConfig, container));
                 }
             }
         });
