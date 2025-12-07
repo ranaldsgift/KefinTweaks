@@ -1747,9 +1747,45 @@
             }).join('');
         }
 
+        // Check for orphaned sections (configured but library no longer exists)
+        const activeLibraryIds = libraries.map(l => l.Id);
+        const configuredLibraryIds = Object.keys(recentlyAddedInLibrary);
+        const orphanedLibraryIds = configuredLibraryIds.filter(id => !activeLibraryIds.includes(id));
+        
+        if (orphanedLibraryIds.length > 0) {
+            recentlyAddedInLibraryHtml += orphanedLibraryIds.map(id => {
+                const libConfig = recentlyAddedInLibrary[id];
+                const prefix = `homeScreen_recentlyAddedInLibrary_${id}`;
+                const name = libConfig.name || `Unknown Library (${id})`;
+                
+                return `
+                    <details class="listItem recently-added-library-item" style="display: grid; border: 1px solid rgba(244, 67, 54, 0.3); border-radius: 4px; padding: 0; gap: 0.5em; background: rgba(244, 67, 54, 0.05);">
+                        <summary class="recently-released-subsection-summary" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75em; cursor: pointer; list-style: none; user-select: none;">
+                            <div class="listItemBodyText" style="font-weight: 500; display: flex; align-items: center; gap: 0.5em; color: #ff8a80;">
+                                <span class="material-icons" style="font-size: 1.2em; transition: transform 0.2s;">warning</span>
+                                <span>${name}</span>
+                                <span class="listItemBodyText secondary" style="font-size: 0.9em; font-weight: normal;">(Library Missing)</span>
+                            </div>
+                            <button type="button" class="emby-button" onclick="this.closest('.recently-added-library-item').remove()" style="padding: 0.5em; min-width: auto; background: rgba(244, 67, 54, 0.1);">
+                                <span class="material-icons" style="font-size: 1.2em; color: #ff8a80;">delete</span>
+                            </button>
+                        </summary>
+                        <div style="padding: 0 0.75em 0.75em 0.75em; border-top: 1px solid rgba(244, 67, 54, 0.1);">
+                            <div style="margin-top: 0.75em; margin-bottom: 0.75em;">
+                                <div class="listItemBodyText" style="color: #ff8a80; font-size: 0.9em; margin-bottom: 0.5em;">
+                                    This library is no longer available. You should remove this section.
+                                </div>
+                                ${buildJellyfinCheckbox(`${prefix}_enabled`, false, 'Enabled', { 'data-library-id': id, 'class': 'recently-added-library-enabled', 'disabled': 'true' })}
+                            </div>
+                        </div>
+                    </details>
+                `;
+            }).join('');
+        }
+
         return `
             <!-- Recently Added in Library Sections -->
-            ${libraries && libraries.length > 0 ? `
+            ${(libraries && libraries.length > 0) || orphanedLibraryIds.length > 0 ? `
             <details style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
                 <summary class="listItemBodyText" style="font-weight: 500; cursor: pointer; margin-bottom: 0.5em; display: flex; align-items: center; gap: 0.5em; border-radius: 0px !important;">
                     <span class="material-icons" style="font-size: 1.2em; transition: transform 0.2s;">chevron_right</span>
