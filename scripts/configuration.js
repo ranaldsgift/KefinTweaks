@@ -2114,30 +2114,6 @@
         }
 
     /**
-     * Collect optional includes configuration from the UI
-     * @param {Object} modalInstance - The modal instance
-     * @returns {Array} Array of { key, enabled } objects
-     */
-    function collectOptionalIncludesConfig(modalInstance) {
-        const optionalIncludes = [];
-        const allCheckboxes = modalInstance.dialogContent.querySelectorAll('.optionalIncludeCheckbox');
-        
-        allCheckboxes.forEach(checkbox => {
-            const key = checkbox.getAttribute('data-key');
-            const enabled = checkbox.checked;
-            
-            if (key) {
-                optionalIncludes.push({
-                    key: key,
-                    enabled: enabled
-                });
-            }
-        });
-        
-        return optionalIncludes;
-    }
-    
-    /**
      * Attach event handlers for optional includes checkboxes
      * @param {Object} modalInstance - The modal instance
      * @param {string} category - "global" or skin name
@@ -5222,7 +5198,12 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         if (overrideOptionalIncludes) {
             config.optionalIncludes = overrideOptionalIncludes;
         } else {
-            config.optionalIncludes = collectOptionalIncludesConfig(modalInstance);
+            // Fallback: Use existing config.optionalIncludes to prevent data loss
+            // DOM scraping caused partial overwrites because it only found visible checkboxes for the current category
+            console.warn('[KefinTweaks Configuration] handleSaveConfig called without overrideOptionalIncludes - preserving existing optionalIncludes');
+            if (!config.optionalIncludes) {
+                config.optionalIncludes = [];
+            }
         }
 
         // Collect skin enabled toggles and merge with JSON skins
