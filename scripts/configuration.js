@@ -1180,6 +1180,7 @@
         const cardFormat = section.cardFormat || 'Poster';
         const order = section.order || 100;
         const spotlightEnabled = section.spotlight === true;
+        const renderMode = section.renderMode || (spotlightEnabled ? 'Spotlight' : 'Normal');
         const discoveryEnabled = section.discoveryEnabled === true;
         const searchTerm = section.searchTerm || '';
         const includeItemTypes = Array.isArray(section.includeItemTypes) ? section.includeItemTypes : (section.includeItemTypes ? section.includeItemTypes.split(',').map(s => s.trim()).filter(Boolean) : (type === 'Parent' ? [] : ['Movie']));
@@ -1269,15 +1270,19 @@
         if (useImprovedLayout) {
             // Custom sections: Row 1 (checkboxes + type), Row 2 (source), Row 3+ (remaining fields in 3 columns)
             sectionContent = `
-                <!-- Row 1: Enabled, Spotlight, Discovery, Type -->
+                <!-- Row 1: Enabled, Render Mode, Discovery, Type -->
                 <div class="listItem" style="display: grid; grid-template-columns: auto auto auto 1fr; gap: 1em; align-items: end; margin: 0.75em 0; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
                     <div>
                         <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-bottom: 0.25em;">Enabled</div>
                         ${buildJellyfinCheckbox(`${prefix}_section_enabled_${sectionIndex}`, enabled, '', { 'data-section-index': sectionIndex, 'data-prefix': prefix, 'class': `${prefix}_section_enabled` })}
                     </div>
                     <div>
-                        <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-bottom: 0.25em;">Spotlight</div>
-                        ${buildJellyfinCheckbox(spotlightCheckboxId, spotlightEnabled, 'Enable Spotlight', { 'data-section-index': sectionIndex, 'data-prefix': prefix, 'class': `${prefix}_section_spotlight` })}
+                        <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-bottom: 0.25em;">Render Mode</div>
+                        <select class="${prefix}_section_renderMode fld emby-select-withcolor emby-select" data-section-index="${sectionIndex}" data-prefix="${prefix}" style="width: 100%;">
+                            <option value="Normal" ${renderMode === 'Normal' ? 'selected' : ''}>Normal</option>
+                            <option value="Spotlight" ${renderMode === 'Spotlight' ? 'selected' : ''}>Spotlight</option>
+                            <option value="Random" ${renderMode === 'Random' ? 'selected' : ''}>Random</option>
+                        </select>
                     </div>
                     <div>
                         <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-bottom: 0.25em;">Discovery</div>
@@ -4760,9 +4765,12 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         const sortOrderDirection = sectionItem.querySelector(`#${prefix}_section_${sanitizedIndex}_sortOrderDirection`)?.value || 'Ascending';
         const cardFormat = sectionItem.querySelector(`#${prefix}_section_${sanitizedIndex}_cardFormat`)?.value || 'Poster';
         const order = parseInt(sectionItem.querySelector(`#${prefix}_section_${sanitizedIndex}_order`)?.value || '100', 10);
-        const spotlightCheckbox = sectionItem.querySelector(`#${prefix}_section_${sanitizedIndex}_spotlight`) || sectionItem.querySelector(`.${prefix}_section_spotlight[data-section-index="${sectionIndex}"]`);
+        
+        const renderModeSelect = sectionItem.querySelector(`.${prefix}_section_renderMode[data-section-index="${sectionIndex}"]`);
+        const renderMode = renderModeSelect ? renderModeSelect.value : 'Normal';
+        const spotlight = renderMode === 'Spotlight'; // Legacy compatibility
+        
         const discoveryCheckbox = sectionItem.querySelector(`#${prefix}_section_${sanitizedIndex}_discovery`) || sectionItem.querySelector(`.${prefix}_section_discovery[data-section-index="${sectionIndex}"]`);
-        const spotlight = spotlightCheckbox?.checked === true;
         const discoveryEnabled = discoveryCheckbox?.checked === true;
         const searchTerm = sectionItem.querySelector(`#${prefix}_section_${sanitizedIndex}_searchTerm`)?.value?.trim() || '';
         
@@ -4809,6 +4817,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             sortOrderDirection: sortOrderDirection,
             cardFormat: cardFormat,
             order: order,
+            renderMode: renderMode,
             spotlight: spotlight,
             discoveryEnabled: discoveryEnabled,
             searchTerm: searchTerm,

@@ -1326,68 +1326,20 @@
      */
     async function renderCustomSection(section, container) {
         try {
-            // Support new structure (type + source) and legacy structure (sourceId)
-            const type = section.type;
-            const source = section.source || section.sourceId || section.id;
+            // Support legacy structure (sourceId/id without source)
+            // Create a copy to avoid mutating the original config object
+            const sectionConfig = { ...section };
             
-            if (!source) {
-                ERR(`No source provided for section ${section.name}`);
-                return false;
+/*             if (!sectionConfig.source && (sectionConfig.sourceId || sectionConfig.id)) {
+                sectionConfig.source = sectionConfig.sourceId || sectionConfig.id;
+            } */
+            
+            // Ensure ID exists for renderSection
+            if (!sectionConfig.id) {
+                sectionConfig.id = sectionConfig.source;
             }
             
-            const sortOrder = section.sortOrder ?? defaultSortOrder;
-            const sortOrderDirection = section.sortOrderDirection ?? 'Ascending';
-            const cardFormat = section.cardFormat ?? defaultCardFormat;
-            const order = section.order ?? 100;
-            const useSpotlight = section.spotlight === true;
-
-            let viewMoreUrl = null;
-            switch (type) {
-                case 'Genre':
-                    viewMoreUrl = `#/list.html?genreId=${source}&serverId=${ApiClient.serverId()}`;
-                    break;
-                case 'Studio':
-                    viewMoreUrl = `#/list.html?studioId=${source}&serverId=${ApiClient.serverId()}`;
-                    break;
-                case 'Playlist':
-                case 'BoxSet':
-                    viewMoreUrl = `#/details?id=${source}&serverId=${ApiClient.serverId()}`;
-                    break;
-                case 'Parent':
-                    viewMoreUrl = `#/list.html?parentId=${source}&serverId=${ApiClient.serverId()}`;
-                    break;
-                default:
-                    viewMoreUrl = null;
-                    break;
-            }
-            
-            // If new structure with type, use renderSection helper
-            if (useSpotlight && window.cardBuilder.renderSpotlightSection) {
-                const items = await loadItemsForSectionConfig(section);
-                
-                const spotlightContainer = window.cardBuilder.renderSpotlightSection(
-                    items,
-                    section.name ?? 'Spotlight',
-                    {
-                        autoPlay: spotlightAutoPlay,
-                        interval: spotlightInterval,
-                        showDots: spotlightShowDots,
-                        showNavButtons: spotlightShowNavButtons,
-                        showClearArt: spotlightShowClearArt,
-                        viewMoreUrl: viewMoreUrl
-                    }
-                );
-                
-                spotlightContainer.setAttribute('data-custom-section-id', section.id || source);
-                spotlightContainer.setAttribute('data-custom-section-name', section.name);
-                spotlightContainer.setAttribute('data-custom-section-type', type);
-                spotlightContainer.style.order = order;
-                
-                container.appendChild(spotlightContainer);
-                return true;
-            }
-            
-            return await renderSection(section, container, 'custom');            
+            return await renderSection(sectionConfig, container, 'custom');            
         } catch (err) {
             ERR(`Error rendering section ${section.name}:`, err);
             return false;
@@ -5660,21 +5612,33 @@
 
             let cardContainer = null;
 
-            if (sectionConfig.spotlight === true) {
+            // Render Mode Logic
+            const renderMode = sectionConfig.renderMode || (sectionConfig.spotlight ? 'Spotlight' : 'Normal');
+            let useSpotlight = renderMode === 'Spotlight';
+            
+            if (renderMode === 'Random') {
+                useSpotlight = Math.random() < 0.5;
+            }
+
+            if (useSpotlight) {
                 if (!window.cardBuilder || !window.cardBuilder.renderSpotlightSection) {
                     WARN("cardBuilder.renderSpotlightSection not available");
                     return false;
                 }
 
+                // Use global spotlight config if available
+                const homeScreenConfig = window.KefinTweaksConfig?.homeScreen || {};
+                const spotlightConfig = homeScreenConfig.spotlight || {};
+
                 cardContainer = window.cardBuilder.renderSpotlightSection(
                     limited,
                     sectionConfig.name,
                     {
-                        autoPlay: true,
-                        interval: 5000,
-                        showDots: true,
-                        showNavButtons: true,
-                        showClearArt: true,
+                        autoPlay: spotlightConfig.autoPlay ?? true,
+                        interval: spotlightConfig.interval ?? 5000,
+                        showDots: spotlightConfig.showDots ?? true,
+                        showNavButtons: spotlightConfig.showNavButtons ?? true,
+                        showClearArt: spotlightConfig.showClearArt ?? true,
                         viewMoreUrl: viewMoreUrl
                     }
                 );
@@ -5697,6 +5661,9 @@
             
             cardContainer.setAttribute('data-custom-section-id', sectionId);
             cardContainer.setAttribute('data-custom-section-name', sectionConfig.name);
+            if (sectionConfig.type) {
+                cardContainer.setAttribute('data-custom-section-type', sectionConfig.type);
+            }
             cardContainer.style.order = order;
             
             container.appendChild(cardContainer);
