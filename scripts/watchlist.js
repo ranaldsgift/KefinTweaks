@@ -4640,7 +4640,6 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				// Hook into onmessage
 				socket.onmessage = function(event) {
 					try {
-						LOG('WebSocket message received:', event);
 						// Pass it through so Jellyfin still works normally
 						if (originalHandler) {
 							originalHandler.call(this, event);
