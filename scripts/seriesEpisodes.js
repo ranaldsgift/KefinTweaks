@@ -504,12 +504,18 @@
         // Mark as series episodes section
         seasonSection.classList.add('series-episodes-section');
         seasonSection.classList.add('nextUpSection');
+        
+        const hideSingleSeasonContainer = window.KefinTweaksConfig?.flattenSingleSeasonShows?.hideSingleSeasonContainer === true;
 
         // ElegantFin handling :)
         seasonSection.style.cssText = `
             overflow: hidden;
             display: block;
         `;
+
+        if (seasons.length === 1 && hideSingleSeasonContainer) {
+            seasonSection.style.gridColumn = '1 / 5';
+        }
 
         const scrollerContainer = seasonSection.querySelector('.emby-scroller');
         if (scrollerContainer) {
