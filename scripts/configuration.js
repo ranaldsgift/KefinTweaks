@@ -432,7 +432,7 @@
 
 
     // Build the configuration page content
-    function buildConfigPageContent(config) {
+    function buildConfigPageContent(config, libraries = []) {
         const scripts = config.scripts || {};
         const homeScreen = config.homeScreen || {};
         const exclusiveElsewhere = config.exclusiveElsewhere || {};
@@ -509,7 +509,7 @@
                     </div>
                 </div>
                 <div style="display: grid; grid-template-columns: 1fr; gap: 0.5em;">
-                    ${buildHomeScreenConfig(homeScreen)}
+                    ${buildHomeScreenConfig(homeScreen, libraries)}
                 </div>
             </div>
 
@@ -1487,11 +1487,11 @@
         } = options;
 
         const nameValue = config.name ?? defaultName ?? '';
-        const itemLimit = config.itemLimit ?? 16;
+        const itemLimit = config.itemLimit ?? options.defaultItemLimit ?? 16;
         const sortOrder = config.sortOrder ?? 'Random';
         const sortOrderDirection = config.sortOrderDirection ?? 'Ascending';
-        const cardFormat = config.cardFormat ?? 'Poster';
-        const order = config.order ?? 100;
+        const cardFormat = config.cardFormat ?? options.defaultCardFormat ?? 'Poster';
+        const order = config.order ?? options.defaultOrder ?? 100;
         
         // IsPlayed logic
         // If isPlayed is undefined or null, it means the filter is disabled.
@@ -1638,8 +1638,9 @@
     }
 
     // Build home screen configuration
-    function buildHomeScreenConfig(homeScreen) {
+    function buildHomeScreenConfig(homeScreen, libraries = []) {
         const recentlyReleased = homeScreen.recentlyReleased || {};
+        const recentlyAddedInLibrary = homeScreen.recentlyAddedInLibrary || {};
         const trending = homeScreen.trending || {};
         const popularTVNetworks = homeScreen.popularTVNetworks || {};
         const watchlist = homeScreen.watchlist || {};
@@ -1707,7 +1708,63 @@
             </details>`;
         }).join('');
         
+        // Build library sections HTML for "Recently Added in Library"
+        let recentlyAddedInLibraryHtml = '';
+        if (libraries && libraries.length > 0) {
+            recentlyAddedInLibraryHtml = libraries.map(library => {
+                const libConfig = recentlyAddedInLibrary[library.Id] || {};
+                const prefix = `homeScreen_recentlyAddedInLibrary_${library.Id}`;
+                const defaultName = `Recently Added in ${library.Name}`;
+                
+                return `
+                    <details class="listItem" style="display: grid; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0; gap: 0.5em;">
+                        <summary class="recently-released-subsection-summary" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75em; cursor: pointer; list-style: none; user-select: none;">
+                            <div class="listItemBodyText" style="font-weight: 500; display: flex; align-items: center; gap: 0.5em;">
+                                <span class="material-icons" style="font-size: 1.2em; transition: transform 0.2s;">chevron_right</span>
+                                <span>${library.Name}</span>
+                                <span class="listItemBodyText secondary" style="font-size: 0.9em; font-weight: normal;">(<span class="${prefix}_enabled_display">${libConfig.enabled !== false ? 'Enabled' : 'Disabled'}</span>, Order: <span class="${prefix}_order_display">${libConfig.order || 11}</span>)</span>
+                            </div>
+                        </summary>
+                        <div style="padding: 0 0.75em 0.75em 0.75em; border-top: 1px solid rgba(255,255,255,0.1);">
+                            <div style="margin-top: 0.75em; margin-bottom: 0.75em;">
+                                ${buildJellyfinCheckbox(`${prefix}_enabled`, libConfig.enabled !== false, 'Enabled', { 'data-library-id': library.Id, 'class': 'recently-added-library-enabled' })}
+                            </div>
+                            <div class="listItemContent" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75em;">
+                                ${createSectionConfiguration(prefix, libConfig, { 
+                                    includeName: true, 
+                                    defaultName: defaultName, 
+                                    includeSortOrder: false, 
+                                    includeOrder: true, 
+                                    defaultOrder: 11,
+                                    includeItemLimit: true,
+                                    defaultItemLimit: 30,
+                                    defaultCardFormat: library.CollectionType === 'tvshows' ? 'Thumb' : 'Poster'
+                                })}
+                            </div>
+                        </div>
+                    </details>
+                `;
+            }).join('');
+        }
+
         return `
+            <!-- Recently Added in Library Sections -->
+            ${libraries && libraries.length > 0 ? `
+            <details style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
+                <summary class="listItemBodyText" style="font-weight: 500; cursor: pointer; margin-bottom: 0.5em; display: flex; align-items: center; gap: 0.5em; border-radius: 0px !important;">
+                    <span class="material-icons" style="font-size: 1.2em; transition: transform 0.2s;">chevron_right</span>
+                    Recently Added in Library Sections
+                </summary>
+                <div style="padding: 0.75em 0 0 0;">
+                    <div id="homeScreen_recentlyAddedInLibrary_container">
+                        <div style="display: grid; grid-template-columns: 1fr; gap: 0.75em; margin-bottom: 0.75em;">
+                            ${recentlyAddedInLibraryHtml}
+                        </div>
+                    </div>
+                </div>
+            </details>
+            ` : ''}
+
             <!-- Recently Released Sections -->
             <details style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
                 <summary class="listItemBodyText" style="font-weight: 500; cursor: pointer; margin-bottom: 0.5em; display: flex; align-items: center; gap: 0.5em; border-radius: 0px !important;">
@@ -2036,6 +2093,29 @@
     }
 
     // Open configuration modal
+    // Fetch libraries (Movies and TV)
+    async function fetchLibraries() {
+        if (!window.ApiClient) return [];
+        try {
+            // Get user views (libraries)
+            const result = await window.ApiClient.getUserViews({}, window.ApiClient.getCurrentUserId());
+            if (result && result.Items) {
+                // Filter for movies and tvshows
+                return result.Items.filter(item => 
+                    item.CollectionType === 'movies' || item.CollectionType === 'tvshows'
+                ).map(item => ({
+                    Id: item.Id,
+                    Name: item.Name,
+                    CollectionType: item.CollectionType
+                }));
+            }
+            return [];
+        } catch (error) {
+            console.error('[KefinTweaks Configuration] Error fetching libraries:', error);
+            return [];
+        }
+    }
+
     async function openConfigurationModal() {
         console.log('[KefinTweaks Configuration] Opening configuration modal...');
 
@@ -2055,13 +2135,16 @@
         currentLoadedConfig = config;
         window.KefinTweaksCurrentConfig = config;
 
+        // Fetch libraries for configuration
+        const libraries = await fetchLibraries();
+
         // Build the content (without title, as ModalSystem adds it)
         const content = document.createElement('div');
         content.className = 'modal-content-wrapper';
         content.id = MODAL_ID;
         content.innerHTML = `
             <div class="kefin-config-wrapper">
-                ${buildConfigPageContent(config)}
+                ${buildConfigPageContent(config, libraries)}
             </div>
         `;
 
@@ -5111,7 +5194,27 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                     ...getSectionConfig('homeScreen_recentlyReleased_episodes', { includeName: true, defaultName: 'Recently Aired Episodes', includeSortOrder: true, includeOrder: true, includeIsPlayed: true, includePremiereDays: true })
                 }
             },
-                                trending: {
+            recentlyAddedInLibrary: (() => {
+                const libraryConfigs = {};
+                const libraryCheckboxes = modalInstance.dialogContent.querySelectorAll('.recently-added-library-enabled');
+                libraryCheckboxes.forEach(checkbox => {
+                    const libraryId = checkbox.getAttribute('data-library-id');
+                    if (libraryId) {
+                        const prefix = `homeScreen_recentlyAddedInLibrary_${libraryId}`;
+                        libraryConfigs[libraryId] = {
+                            enabled: checkbox.checked !== false,
+                            ...getSectionConfig(prefix, { 
+                                includeName: true, 
+                                defaultName: '', 
+                                includeSortOrder: false, 
+                                includeOrder: true
+                            })
+                        };
+                    }
+                });
+                return libraryConfigs;
+            })(),
+            trending: {
                 enabled: document.getElementById('homeScreen_trending_enabled')?.checked === true,
                 ...getSectionConfig('homeScreen_trending', { includeName: true, defaultName: 'Trending' })
             },

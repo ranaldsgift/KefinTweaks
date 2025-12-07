@@ -23,6 +23,7 @@ window.KefinTweaksConfig = {
         "defaultItemLimit": 16,
         "defaultSortOrder": "Random",
         "defaultCardFormat": "Poster",
+        "recentlyAddedInLibrary": {},
         "recentlyReleased": {
             "enabled": true,
             "order": 30,

@@ -777,6 +777,9 @@
     // Custom home sections configuration
     const customHomeSections = homeScreenConfig.customSections || [];
 
+    // Recently Added in Library configuration
+    const recentlyAddedInLibraryConfig = homeScreenConfig.recentlyAddedInLibrary || {};
+
     // Recently Released sections configuration
     const recentlyReleasedConfig = homeScreenConfig.recentlyReleased || {};
     const enableNewAndTrending = recentlyReleasedConfig.enabled !== false;
@@ -1427,6 +1430,127 @@
         const results = await Promise.all(sectionsToRender);
         const successCount = results.filter(Boolean).length;
         LOG(`Rendered ${successCount}/${sectionsToRender.length} new and trending sections`);
+    }
+
+    /**
+     * Renders Recently Added in Library sections
+     * @param {HTMLElement} container - Container to append sections to
+     */
+    async function renderAllRecentlyAddedInLibrarySections(container) {
+        if (!recentlyAddedInLibraryConfig || Object.keys(recentlyAddedInLibraryConfig).length === 0) {
+            return;
+        }
+
+        const libraryIds = Object.keys(recentlyAddedInLibraryConfig);
+        const sectionsToRender = [];
+
+        libraryIds.forEach(libraryId => {
+            const config = recentlyAddedInLibraryConfig[libraryId];
+            if (config && config.enabled !== false) {
+                // Check if already rendered
+                const sectionId = `recently-added-${libraryId}`;
+                if (!container.querySelector(`[data-custom-section-id="${sectionId}"]`)) {
+                    sectionsToRender.push(renderRecentlyAddedInLibrarySection(libraryId, config, container));
+                }
+            }
+        });
+
+        if (sectionsToRender.length === 0) {
+            return;
+        }
+
+        const results = await Promise.all(sectionsToRender);
+        const successCount = results.filter(Boolean).length;
+        LOG(`Rendered ${successCount}/${sectionsToRender.length} recently added library sections`);
+    }
+
+    /**
+     * Renders a single Recently Added in Library section
+     * @param {string} libraryId - The library ID
+     * @param {Object} sectionConfig - Configuration for this section
+     * @param {HTMLElement} container - Container to append section to
+     */
+    async function renderRecentlyAddedInLibrarySection(libraryId, sectionConfig, container) {
+        if (sectionConfig.enabled === false) return false;
+
+        const userId = ApiClient.getCurrentUserId();
+        const itemLimit = sectionConfig.itemLimit || 30;
+        
+        // Determine IncludeItemTypes and viewMoreUrl based on library type
+        let includeItemTypes = 'Movie,Episode'; // Default fallback
+        let viewMoreUrl = `#/list.html?parentId=${libraryId}&serverId=${ApiClient.serverId()}`; // Default fallback
+
+        try {
+            const library = await window.ApiClient.getItem(userId, libraryId);
+            if (library) {
+                if (library.CollectionType === 'movies') {
+                    includeItemTypes = 'Movie';
+                    viewMoreUrl = `#/movies.html?topParentId=${libraryId}&collectionType=movies&tab=1`;
+                } else if (library.CollectionType === 'tvshows') {
+                    includeItemTypes = 'Episode';
+                    viewMoreUrl = `#/tv.html?topParentId=${libraryId}&collectionType=tvshows&tab=1`;
+                }
+            }
+        } catch (e) {
+            WARN(`Failed to fetch library info for ${libraryId}`, e);
+        }
+        
+        // Use Users/Items/Latest endpoint logic
+        // Since apiHelper might not have a dedicated getLatestItems, we construct query
+        const params = {
+            Limit: itemLimit,
+            ParentId: libraryId,
+            ImageTypeLimit: 1,
+            EnableImageTypes: 'Primary,Backdrop,Thumb',
+            IncludeItemTypes: includeItemTypes
+        };
+        
+        const queryParams = Object.entries(params)
+            .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
+            .join('&');
+            
+        const url = `${ApiClient.serverAddress()}/Users/${userId}/Items/Latest?${queryParams}`;
+        
+        try {
+            const response = await fetch(url, {
+                headers: {
+                    'Authorization': `MediaBrowser Token="${ApiClient.accessToken()}"`
+                }
+            });
+            
+            if (!response.ok) throw new Error(`Fetch failed: ${response.status}`);
+            const items = await response.json();
+            
+            if (!items || items.length === 0) return false;
+            
+            // Render section
+            if (!window.cardBuilder || !window.cardBuilder.renderCards) {
+                WARN("cardBuilder.renderCards not available");
+                return false;
+            }
+            
+            const cardContainer = window.cardBuilder.renderCards(
+                items,
+                sectionConfig.name || `Recently Added`,
+                viewMoreUrl,
+                true, // overflowCard (use standard overflow style for horizontal scroll)
+                sectionConfig.cardFormat || 'Poster',
+                false, // sortOrder (already sorted)
+                'Ascending'
+            );
+            
+            const sectionId = `recently-added-${libraryId}`;
+            cardContainer.setAttribute('data-custom-section-id', sectionId);
+            cardContainer.setAttribute('data-custom-section-name', sectionConfig.name || `Recently Added`);
+            cardContainer.style.order = sectionConfig.order || 11;
+            
+            container.appendChild(cardContainer);
+            return true;
+            
+        } catch (err) {
+            ERR(`Error rendering recently added library section ${libraryId}:`, err);
+            return false;
+        }
     }
 
     /************ Seasonal Section Helpers ************/
@@ -5808,6 +5932,11 @@
             // Add custom sections if enabled
             if (customHomeSections && customHomeSections.length > 0) {
                 initPromises.push(renderAllCustomSections(homeSectionsContainer));
+            }
+
+            // Add Recently Added in Library sections
+            if (recentlyAddedInLibraryConfig && Object.keys(recentlyAddedInLibraryConfig).length > 0) {
+                initPromises.push(renderAllRecentlyAddedInLibrarySections(homeSectionsContainer));
             }
 
             // Add new and trending sections if enabled
