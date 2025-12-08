@@ -36,14 +36,8 @@
             
             if (items.length > 0) {
                 const item = items[0];
-                if (item.IndexNumber && item.ParentIndexNumber) {
-                    const episodeNumber = {
-                        season: item.ParentIndexNumber,
-                        episode: item.IndexNumber
-                    };
-                    LOG(`Fetched Next Up episode from API: S${episodeNumber.season}:E${episodeNumber.episode}`);
-                    return episodeNumber;
-                }
+                LOG(`Fetched Next Up episode from API: ${item.Name} (S${item.ParentIndexNumber}:E${item.IndexNumber})`);
+                return item;
             }
             
             LOG('No Next Up episode found in API response');
@@ -458,7 +452,7 @@
      * @param {Object} targetEpisodeNumber - Target episode number for scrolling
      * @param {string} nextUpHeaderText - Text from NextUp section header
      */
-    async function renderEpisodesSection(seriesId, seasons, targetSeason, targetEpisodeNumber, nextUpHeaderText) {
+    async function renderEpisodesSection(seriesId, seasons, targetEpisode, nextUpHeaderText) {
         const activePage = document.querySelector('.libraryPage:not(.hide)');
         if (!activePage) {
             WARN('Active page not found');
@@ -471,10 +465,38 @@
             return;
         }
 
+        // Determine target season parameters
+        let targetSeasonId, targetSeasonIndex, targetSeasonName;
+        
+        if (targetEpisode) {
+            targetSeasonId = targetEpisode.SeasonId;
+            targetSeasonIndex = targetEpisode.ParentIndexNumber;
+            // Try to find matching season in seasons list for consistent naming, otherwise use API data
+            const matchingSeason = seasons.find(s => s.id === targetSeasonId);
+            targetSeasonName = matchingSeason ? matchingSeason.name : (targetEpisode.SeasonName || `Season ${targetSeasonIndex}`);
+        } else {
+            // Fallback to first season
+            if (seasons.length > 0) {
+                targetSeasonId = seasons[0].id;
+                targetSeasonIndex = seasons[0].indexNumber;
+                targetSeasonName = seasons[0].name;
+            } else {
+                WARN('No seasons available to render');
+                return;
+            }
+        }
+
+        // Construct targetSeason object for selector
+        const targetSeason = {
+            id: targetSeasonId,
+            name: targetSeasonName,
+            indexNumber: targetSeasonIndex
+        };
+
         // Fetch episodes for the target season
-        const episodes = await fetchEpisodesForSeries(seriesId, targetSeason.id);
+        const episodes = await fetchEpisodesForSeries(seriesId, targetSeasonId);
         if (episodes.length === 0) {
-            WARN(`No episodes found for season ${targetSeason.id}`);
+            WARN(`No episodes found for season ${targetSeasonId}`);
             return;
         }
 
@@ -485,12 +507,12 @@
         }
 
         // Format season name
-        const seasonName = formatSeasonName(targetSeason.name, targetSeason.indexNumber);
+        const seasonName = formatSeasonName(targetSeasonName, targetSeasonIndex);
 
         // Build viewMoreUrl
         const apiClient = window.ApiClient;
         const serverId = apiClient.serverId();
-        const viewMoreUrl = `${apiClient._serverAddress || apiClient.serverAddress()}/web/#/details?id=${targetSeason.id}&serverId=${serverId}`;
+        const viewMoreUrl = `${apiClient._serverAddress || apiClient.serverAddress()}/web/#/details?id=${targetSeasonId}&serverId=${serverId}`;
 
         // Render season section using renderCards
         const seasonSection = window.cardBuilder.renderCards(
@@ -501,9 +523,15 @@
             null   // cardFormat (use default)
         );
 
+        // Define targetEpisodeNumber for internal usage (scrolling/highlighting)
+        const targetEpisodeNumber = targetEpisode ? {
+            season: targetEpisode.ParentIndexNumber,
+            episode: targetEpisode.IndexNumber,
+            id: targetEpisode.Id
+        } : null;
+
         // Mark as series episodes section
         seasonSection.classList.add('series-episodes-section');
-        seasonSection.classList.add('nextUpSection');
         
         const hideSingleSeasonContainer = window.KefinTweaksConfig?.flattenSingleSeasonShows?.hideSingleSeasonContainer === true;
 
@@ -512,10 +540,6 @@
             overflow: hidden;
             display: block;
         `;
-
-        if (seasons.length === 1 && hideSingleSeasonContainer) {
-            seasonSection.style.gridColumn = '1 / 5';
-        }
 
         const scrollerContainer = seasonSection.querySelector('.emby-scroller');
         if (scrollerContainer) {
@@ -735,14 +759,28 @@
         }
 
         // Get NextUp episode
-        let targetEpisodeNumber = await fetchNextUpEpisode(seriesId);
+        let targetEpisode = await fetchNextUpEpisode(seriesId);
+        let targetEpisodeNumber = null;
         
         // Determine target season
         let targetSeason = null;
         
-        if (targetEpisodeNumber) {
-            // Find season matching NextUp episode by index number
-            targetSeason = seasons.find(s => s.indexNumber === targetEpisodeNumber.season);
+        if (targetEpisode) {
+            // Set targetEpisodeNumber for compatibility
+            targetEpisodeNumber = { 
+                season: targetEpisode.ParentIndexNumber, 
+                episode: targetEpisode.IndexNumber,
+                id: targetEpisode.Id
+            };
+
+            // Find season matching NextUp episode by SeasonId (preferred) or index number
+            if (targetEpisode.SeasonId) {
+                targetSeason = seasons.find(s => s.id === targetEpisode.SeasonId);
+            }
+            
+            if (!targetSeason && targetEpisode.ParentIndexNumber !== undefined) {
+                 targetSeason = seasons.find(s => s.indexNumber === targetEpisode.ParentIndexNumber);
+            }
         }
         
         // Fallback to first season if NextUp not found or season not in list
@@ -758,32 +796,6 @@
             }
         }
 
-        // Check if target season is at index 0 in itemsContainer and if it's specials (IndexNumber === 0)
-        const itemsContainer = childrenCollapsible.querySelector('.itemsContainer');
-        if (itemsContainer && targetSeason) {
-            const firstCard = itemsContainer.querySelector(':scope > .card');
-            if (firstCard) {
-                const firstCardSeasonId = firstCard.getAttribute('data-id');
-                // If target season is the first card in itemsContainer, check if it's specials
-                if (firstCardSeasonId === targetSeason.id) {
-                    const seasonData = await fetchSeasonData(targetSeason.id);
-                    if (seasonData && seasonData.IndexNumber === 0) {
-                        LOG(`Target season is specials (IndexNumber 0), skipping to next season`);
-                        // Find the next season in the seasons array
-                        const currentIndex = seasons.findIndex(s => s.id === targetSeason.id);
-                        if (currentIndex !== -1 && currentIndex < seasons.length - 1) {
-                            targetSeason = seasons[currentIndex + 1];
-                            // Update targetEpisodeNumber to match the new season
-                            targetEpisodeNumber = { season: targetSeason.indexNumber, episode: 1 };
-                            LOG(`Using next season instead: ${targetSeason.name} (IndexNumber: ${targetSeason.indexNumber})`);
-                        } else {
-                            WARN('Target season is specials but no next season found');
-                        }
-                    }
-                }
-            }
-        }
-
         // Extract NextUp header text
         let nextUpHeaderText = 'Next Up';
         const nextUpSection = activePage.querySelector('.nextUpSection');
@@ -796,7 +808,7 @@
         }
 
         // Render episodes section
-        await renderEpisodesSection(seriesId, seasons, targetSeason, targetEpisodeNumber, nextUpHeaderText);
+        await renderEpisodesSection(seriesId, seasons, targetEpisode, nextUpHeaderText);
 
         // Hide season container if option is enabled and there's only one season
         if (hideSingleSeasonContainer && isSingleSeason && childrenCollapsible) {
