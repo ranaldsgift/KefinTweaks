@@ -12,3 +12,6 @@ body.home-screen .emby-tabs-slider {
 body.home-screen .emby-tab-button > div {
     align-self: normal;
 }
+.series-episodes-section {
+    grid-area: nextup;
+}

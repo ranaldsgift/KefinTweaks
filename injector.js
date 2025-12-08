@@ -265,7 +265,7 @@
         {
             name: 'flattenSingleSeasonShows',
             script: 'seriesEpisodes.js',
-            css: null,
+            css: 'seriesEpisodes.css',
             dependencies: ['cardBuilder', 'utils'],
             description: 'Displays episodes directly on series page with season selection. Works for both single and multi-season shows when enabled.'
         },
