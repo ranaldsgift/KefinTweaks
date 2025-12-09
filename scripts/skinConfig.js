@@ -100,10 +100,18 @@
                 author: 'lscambo13',
                 url: [
                     {
-                        majorServerVersions: [10, 11],
+                        majorServerVersions: [10],
                         urls: [
                             'https://cdn.jsdelivr.net/gh/lscambo13/ElegantFin@main/Theme/ElegantFin-jellyfin-theme-build-latest-minified.css',
                             `${getKefinTweaksRoot()}skins/elegant-kefin.css`
+                        ]
+                    },
+                    {
+                        majorServerVersions: [11],
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/lscambo13/ElegantFin@main/Theme/ElegantFin-jellyfin-theme-build-latest-minified.css',
+                            `${getKefinTweaksRoot()}skins/elegant-kefin.css`,                            
+                            `${getKefinTweaksRoot()}skins/fin-kefin-10.11.css`
                         ]
                     }
                 ],
