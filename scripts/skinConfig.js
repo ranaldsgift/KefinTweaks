@@ -103,7 +103,7 @@
                         majorServerVersions: [10, 11],
                         urls: [
                             'https://cdn.jsdelivr.net/gh/lscambo13/ElegantFin@main/Theme/ElegantFin-jellyfin-theme-build-latest-minified.css',
-                            `${getKefinTweaksRoot()}skins/elegantKefin.css`
+                            `${getKefinTweaksRoot()}skins/elegant-kefin.css`
                         ]
                     }
                 ],
