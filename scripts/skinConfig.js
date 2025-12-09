@@ -206,7 +206,8 @@
                         majorServerVersions: [10, 11],
                         urls: [
                             'https://cdn.jsdelivr.net/gh/KBH-Reeper/GlassFin@latest/Theme/GlassFin-Theme-latest-stable.css',
-                            'https://cdn.jsdelivr.net/gh/KBH-Reeper/GlassFin@latest/Theme/PluginStyling/MediaBar-Plugin-latest.css'
+                            'https://cdn.jsdelivr.net/gh/KBH-Reeper/GlassFin@latest/Theme/PluginStyling/MediaBar-Plugin-latest.css',
+                            `${getKefinTweaksRoot()}skins/glassfin-kefin.css`
                         ]
                     }
                 ],

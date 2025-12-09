@@ -22,3 +22,12 @@
 :root{
     --appBarHeight: 5em;
 }
+
+.series-episodes-section {
+    grid-column: 1 / 5;
+    order: 2;
+}
+
+.detailSection:has(.series-episodes-section)>#listChildrenCollapsible {
+    grid-column: 1 / 5;
+}
