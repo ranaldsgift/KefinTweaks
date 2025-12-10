@@ -168,11 +168,16 @@
                 }
 
                 if (enableSeasonalAnimations) {
-                    // Use the snowverlay.js script to add snowflakes to the background
-                    const snowverlayScriptSrc = (window.KefinTweaksConfig.kefinTweaksRoot || '') + 'scripts/snowverlay.js';
-                    const snowverlayScript = document.createElement('script');
-                    snowverlayScript.src = snowverlayScriptSrc;
-                    document.head.appendChild(snowverlayScript);
+                    // Check if snowverlay script is already added
+                    const snowverlayScript = document.querySelector('script[src*="snowverlay.js"]');
+                    
+                    if (!snowverlayScript) {
+                        // Use the snowverlay.js script to add snowflakes to the background
+                        const snowverlayScriptSrc = (window.KefinTweaksConfig.kefinTweaksRoot || '') + 'scripts/snowverlay.js';
+                        const snowverlayScript = document.createElement('script');
+                        snowverlayScript.src = snowverlayScriptSrc;
+                        document.head.appendChild(snowverlayScript);
+                    }
                 }
 
             } else if (isValentinesPeriod()) {

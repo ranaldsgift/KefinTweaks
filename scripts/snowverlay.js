@@ -1,4 +1,10 @@
 function addSnowverlay() {
+    // Check if snowverlay canvas is already added
+    const snowverlayCanvas = document.querySelector('.snowverlay');
+    if (snowverlayCanvas) {
+        return;
+    }
+
     // Configuration constants
     const CANVAS_HEIGHT_PX = 160;
     const SNOWFLAKE_AMOUNT = 15;
