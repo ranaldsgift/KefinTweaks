@@ -221,6 +221,7 @@
         const infoContainer = document.createElement('div');
         infoContainer.className = 'kt-series-info';
         infoContainer.style.display = 'flex';
+        infoContainer.style.margin = '0 1em 0 0';
 
         // Seasons count (only show if more than 1 season)
         const childCount = item.ChildCount || 0;
