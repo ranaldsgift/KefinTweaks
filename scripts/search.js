@@ -201,7 +201,7 @@
         // Hide search suggestions
         const searchSuggestions = searchPage.querySelector('.searchSuggestions');
         if (searchSuggestions) {
-            searchSuggestions.remove();
+            searchSuggestions.style.display = 'none';
         }
 
         const noItemsMessage = searchPage.querySelector('.noItemsMessage.dummy-section');
@@ -491,9 +491,10 @@
             wrapper.appendChild(btnRow);
             wrapper.appendChild(stats);
 
-            // Replace the original input with our wrapper
+            // Insert the wrapper before the original input
             originalInput.parentElement.insertBefore(wrapper, originalInput);
-            originalInput.remove(); // Remove the original input
+            // Hide the original input
+            originalInput.style.display = 'none';
             input.focus();
         }
 
