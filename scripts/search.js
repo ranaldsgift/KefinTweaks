@@ -31,6 +31,9 @@
             
             if (isSearchRequest && isSearchPage) {
                 LOG('Blocking default Jellyfin search request:', url);
+
+                // Hide loading spinner in case Jellyfin has already shown it before we blocked the request
+                Dashboard.hideLoadingMsg();
                 
                 // Override send to do nothing
                 xhr.send = function() {
