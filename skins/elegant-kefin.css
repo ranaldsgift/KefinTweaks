@@ -1,7 +1,3 @@
-#slides-container {
-    top: 2em !important;
-}
-
 .slide .watchlist-button:not(:hover) {
     background: transparent;
 }
