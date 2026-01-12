@@ -381,7 +381,7 @@
      * @param {boolean} resume - If true, filter out played items from the start
      * @returns {Promise<Array<string>>} Array of sorted item IDs
      */
-    async function getSortedPlaylistItemIds(playlistId, resume = false) {
+    async function getSortedPlaylistItems(playlistId, resume = false) {
         // Check if we have cached data
         const data = playlistData.get(playlistId);
         let items = data?.items;
@@ -421,7 +421,7 @@
         }
 
         // Extract IDs
-        return items.map(item => item.Id);
+        return items;
     }
 
     /**
@@ -537,19 +537,26 @@
 
             try {
                 // Get sorted item IDs with resume mode (skip played items from start)
-                const sortedIds = await getSortedPlaylistItemIds(playlistId, true);
+                const sortedItems = await getSortedPlaylistItems(playlistId, true);
+                const sortedIds = sortedItems.map(item => item.Id);
                 
                 if (sortedIds.length === 0) {
                     WARN('No items to resume for playlist:', playlistId);
                     return;
-                }
-                
+                }                
 
                 LOG(`Resuming ${sortedIds.length} sorted items from playlist:`, playlistId);
 
+                let options = {};
+                // Check if the first item has playback progress
+                if (sortedItems[0].UserData?.PlaybackPositionTicks > 0) {
+                    // Add the playback position to the options
+                    options.startPositionTicks = sortedItems[0].UserData?.PlaybackPositionTicks;
+                }
+
                 // Use apiHelper if available, otherwise fallback to ApiClient
                 if (window.apiHelper && window.apiHelper.playItem) {
-                    await window.apiHelper.playItem(sortedIds);
+                    await window.apiHelper.playItem(sortedIds, options);
                 } else {
                     ERR('No play method available');
                 }
@@ -709,8 +716,9 @@
 
             try {
                 // Get sorted item IDs without resume mode (play all items from beginning)
-                const sortedIds = await getSortedPlaylistItemIds(playlistId, false);
-                
+                const sortedItems = await getSortedPlaylistItems(playlistId, false);
+                const sortedIds = sortedItems.map(item => item.Id);
+
                 if (sortedIds.length === 0) {
                     WARN('No items to play for playlist:', playlistId);
                     return;
@@ -1119,12 +1127,18 @@
                         WARN('No item IDs found to queue');
                         return;
                     }
+
+                    const options = {};
+                    const positionTicks = item.getAttribute('data-positionticks');
+                    if (positionTicks) {
+                        options.startPositionTicks = positionTicks;
+                    }
                     
                     LOG(`Queueing ${itemIds.length} items starting from index ${clickedIndex} (item: ${clickedItemId})`);
                     
                     // Use apiHelper if available, otherwise fallback to ApiClient
                     if (window.apiHelper && window.apiHelper.playItem) {
-                        await window.apiHelper.playItem(itemIds);
+                        await window.apiHelper.playItem(itemIds, options);
                     } else if (window.ApiClient && typeof window.ApiClient.play === 'function') {
                         await window.ApiClient.play({ ids: itemIds });
                     } else {
