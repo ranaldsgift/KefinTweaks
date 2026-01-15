@@ -68,6 +68,6 @@ span.searchfields-icon {
     transform: translateY(-50%);
 }
 
-.searchResults\,:not(.smart-search-results) {
+.searchResults\,:not(.smart-search-results), .searchResults:not(.smart-search-results) {
     display: none;
 }
