@@ -14,69 +14,6 @@
     const CONFIG = window.KefinTweaksConfig?.search || {
         enableJellyseerr: false  // Toggle for Jellyseerr integration
     };
-    
-    // Override XHR to block automatic search requests from direct URL navigation
-    const OriginalXHR = window.XMLHttpRequest;
-    window.XMLHttpRequest = function() {
-        const xhr = new OriginalXHR();
-        const originalOpen = xhr.open;
-        const originalSend = xhr.send;
-        
-        xhr.open = function(method, url, ...args) {            
-            // Check if this is a search request we want to block
-            const isSearchRequest = url.includes('/Items?') && 
-                                  (url.includes('searchTerm=') || url.includes('query='));
-
-            const isSearchPage = window.location.hash.includes('#/search');
-            
-            if (isSearchRequest && isSearchPage) {
-                LOG('Blocking default Jellyfin search request:', url);
-
-                // Hide loading spinner in case Jellyfin has already shown it before we blocked the request
-                Dashboard.hideLoadingMsg();
-                
-                // Override send to do nothing
-                xhr.send = function() {
-                    // Simulate a successful response
-                    setTimeout(() => {
-                        // Use Object.defineProperty to override read-only properties
-                        Object.defineProperty(xhr, 'readyState', {
-                            value: 4,
-                            writable: true,
-                            configurable: true
-                        });
-                        Object.defineProperty(xhr, 'status', {
-                            value: 200,
-                            writable: true,
-                            configurable: true
-                        });
-                        Object.defineProperty(xhr, 'responseText', {
-                            value: '{"Items":[],"TotalRecordCount":0}',
-                            writable: true,
-                            configurable: true
-                        });
-                        
-                        // Trigger the event handlers
-                        if (xhr.onreadystatechange) {
-                            xhr.onreadystatechange();
-                        }
-                        if (xhr.onload) {
-                            xhr.onload();
-                        }
-                    }, 100);
-                };
-            } else {
-                // Use original send for non-blocked requests
-                xhr.send = function(...args) {
-                    return originalSend.apply(this, args);
-                };
-            }
-            
-            return originalOpen.apply(this, [method, url, ...args]);
-        };
-        
-        return xhr;
-    };
 
     // config
     const CORE_TYPES = ['Movie', 'Series', 'Episode', 'Person'];
@@ -496,8 +433,7 @@
 
             // Insert the wrapper before the original input
             originalInput.parentElement.insertBefore(wrapper, originalInput);
-            // Hide the original input
-            originalInput.style.display = 'none';
+            originalInput.remove();
             input.focus();
         }
 
