@@ -67,3 +67,7 @@ span.searchfields-icon {
     top: 50%;
     transform: translateY(-50%);
 }
+
+.searchResults\,:not(.smart-search-results) {
+    display: none;
+}
