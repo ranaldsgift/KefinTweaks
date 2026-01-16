@@ -55,6 +55,11 @@
                 WARN('User or Policy not available');
                 return false;
             }
+
+            if (user.Policy.IsAdministrator) {
+                LOG('User is admin, has subtitle management permission');
+                return true;
+            }
             
             const hasPermission = user.Policy.EnableSubtitleManagement;
             LOG('Subtitle management permission:', hasPermission);
