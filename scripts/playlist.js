@@ -22,6 +22,7 @@
 
     // Sort options
     const SORT_OPTIONS = {
+        'default': { label: 'Default', field: 'Default', defaultDirection: 'asc' },
         'sortTitle': { label: 'Sort Title', field: 'SortName', defaultDirection: 'asc' },
         'releaseDate': { label: 'Release Date', field: 'PremiereDate', defaultDirection: 'asc' },
         'dateAdded': { label: 'Date Added', field: 'DateCreated', defaultDirection: 'desc' },
@@ -34,6 +35,7 @@
     
     // Single MutationObserver for the current playlist (only one can exist at a time)
     let playlistObserver = null;
+    let ignoreNextMutation = false;
 
     /**
      * Get current sort preference from localStorage
@@ -46,7 +48,7 @@
         if (savedSort && SORT_OPTIONS[savedSort]) {
             return savedSort;
         }
-        return 'sortTitle'; // Default sort
+        return 'default'; // Default sort
     }
 
     /**
@@ -86,24 +88,12 @@
     async function fetchPlaylistChildren(playlistId) {
         try {
             const userId = ApiClient.getCurrentUserId();
-            
-            // Get current sort preferences
-            const sortKey = getCurrentSort(playlistId);
-            const direction = getCurrentSortDirection(playlistId, sortKey);
-            
-            // Map sort key to Jellyfin API SortBy parameter
-            const sortOption = SORT_OPTIONS[sortKey];
-            const sortBy = sortOption ? sortOption.field : 'SortName';
-            
-            // Map direction to Jellyfin API SortOrder parameter
-            const sortOrder = direction === 'asc' ? 'Ascending' : 'Descending';
-            
+
             const response = await ApiClient.getItems(userId, {
                 ParentId: playlistId,
-                Fields: 'PrimaryImageAspectRatio,DateCreated,CommunityRating,CriticRating,SortName,PremiereDate,UserData',
-                SortBy: sortBy,
-                SortOrder: sortOrder
+                Fields: 'PrimaryImageAspectRatio,DateCreated,CommunityRating,CriticRating,SortName,PremiereDate,UserData'
             });
+
             return response.Items || [];
         } catch (error) {
             ERR('Error fetching playlist children:', error);
@@ -122,6 +112,10 @@
         const sortOption = SORT_OPTIONS[sortKey];
         if (!sortOption) {
             WARN('Invalid sort key:', sortKey);
+            return items;
+        }
+
+        if (sortKey === 'default') {
             return items;
         }
 
@@ -225,26 +219,12 @@
      * Sort playlist items and update DOM
      * @param {string} playlistId - Playlist item ID
      */
-    function sortPlaylistItems(playlistId) {
-        const data = playlistData.get(playlistId);
-        if (!data || !data.items || !data.itemsContainer) {
-            WARN('Playlist data not found for:', playlistId);
-            return;
-        }
-
-        const sortKey = getCurrentSort(playlistId);
-        const direction = getCurrentSortDirection(playlistId, sortKey);
-
-        LOG(`Sorting playlist ${playlistId} by ${sortKey} (${direction})`);
-
-        // Sort items
-        const sortedItems = sortItems(data.items, sortKey, direction);
-
-        // Update stored items
-        data.items = sortedItems;
+    async function sortPlaylistItems(playlistId) {
+        const sortedItems = await getSortedPlaylistItems(playlistId);
 
         // Reorder DOM
-        reorderListItems(data.itemsContainer, sortedItems);
+        ignoreNextMutation = true;
+        reorderListItems(getPlaylistItemsContainer(), sortedItems);
         
         // Update play button text and "Play from beginning" button visibility in case first item changed
         const activePage = document.querySelector('.libraryPage:not(.hide)');
@@ -254,10 +234,10 @@
                 const playButton = mainDetailButtons.querySelector('.btnPlay') ||
                                  mainDetailButtons.querySelector('button[data-kt-playlist-sorting-overridden="true"]');
                 if (playButton) {
-                    updatePlayButtonText(playButton, playlistId);
+                    updatePlayButtonText(playButton, playlistId, sortedItems);
                 }
                 // Update "Play from beginning" button visibility
-                addResumeButton(mainDetailButtons, playlistId);
+                addResumeButton(mainDetailButtons, playlistId, sortedItems);
             }
         }
     }
@@ -382,18 +362,23 @@
      * @returns {Promise<Array<string>>} Array of sorted item IDs
      */
     async function getSortedPlaylistItems(playlistId, resume = false) {
-        // Check if we have cached data
-        const data = playlistData.get(playlistId);
-        let items = data?.items;
-
-        // If no cached data, fetch it (already sorted by server)
-        if (!items || items.length === 0) {
-            items = await fetchPlaylistChildren(playlistId);
-            if (items.length === 0) {
-                WARN('No items found for playlist:', playlistId);
-                return [];
-            }
+        let items = await fetchPlaylistChildren(playlistId);
+        if (items.length === 0) {
+            WARN('No items found for playlist:', playlistId);
+            return [];
         }
+
+        const sortKey = getCurrentSort(playlistId);
+        const direction = getCurrentSortDirection(playlistId, sortKey);
+
+        // Add data-sort-key and data-sort-direction attributes to the playlist items container
+        const itemsContainer = getPlaylistItemsContainer();
+        if (itemsContainer) {
+            itemsContainer.setAttribute('data-sort-key', sortKey);
+            itemsContainer.setAttribute('data-sort-direction', direction);
+        }
+
+        items = sortItems(items, sortKey, direction);
 
         // Items are already sorted by the server, no need to sort client-side
 
@@ -429,15 +414,11 @@
      * @param {HTMLElement} playButton - The play button element
      * @param {string} playlistId - Playlist item ID
      */
-    async function updatePlayButtonText(playButton, playlistId) {
+    async function updatePlayButtonText(playButton, playlistId, sortedPlaylistItems) {
         try {
-            // Check if we have cached data
-            const data = playlistData.get(playlistId);
-            let items = data?.items;
-
-            // If no cached data, fetch it (already sorted by server)
-            if (!items || items.length === 0) {
-                items = await fetchPlaylistChildren(playlistId);
+            let items = sortedPlaylistItems;
+            if (!items) {
+                items = await getSortedPlaylistItems(playlistId);
             }
 
             if (items && items.length > 0) {
@@ -631,19 +612,16 @@
      * @param {HTMLElement} mainDetailButtons - Main detail buttons container
      * @param {string} playlistId - Playlist item ID
      */
-    async function addResumeButton(mainDetailButtons, playlistId) {
+    async function addResumeButton(mainDetailButtons, playlistId, sortedPlaylistItems) {
         // Check if button already exists - if so, update its visibility
         const existingButton = mainDetailButtons.querySelector('.kt-playlist-resume-btn');
         
         // Check if first item is played
         let isFirstItemPlayed = false;
         try {
-            const data = playlistData.get(playlistId);
-            let items = data?.items;
-
-            // If no cached data, fetch it (already sorted by server)
-            if (!items || items.length === 0) {
-                items = await fetchPlaylistChildren(playlistId);
+            let items = sortedPlaylistItems;
+            if (!items) {
+                items = await getSortedPlaylistItems(playlistId);
             }
 
             if (items && items.length > 0) {
@@ -773,6 +751,29 @@
         return null;
     }
 
+    function getPlaylistItemsContainer() {
+        const activePage = document.querySelector('.libraryPage:not(.hide)');
+        if (!activePage) {
+            return;
+        }
+
+        let playlistItemsContainer = activePage.querySelector('.childrenItemsContainer');
+        if (!playlistItemsContainer) {
+            playlistItemsContainer = activePage.querySelector('#listChildrenCollapsible');
+            if (!playlistItemsContainer) {
+                WARN('Playlist items container not found');
+                return;
+            }
+        }
+
+        // Find items container
+        const itemsContainer = playlistItemsContainer.querySelector('.childrenItemsContainer') || 
+                              playlistItemsContainer.querySelector('#listChildrenCollapsible') ||
+                              playlistItemsContainer;
+
+        return itemsContainer;
+    }
+
     /**
      * Re-apply sorting after container re-render
      * @param {string} playlistId - Playlist item ID
@@ -805,16 +806,7 @@
             }
         }
 
-        // Update stored items container reference (in case it was recreated)
-        const data = playlistData.get(playlistId);
-        if (data) {
-            data.itemsContainer = itemsContainer;
-            
-            // Re-apply sort
-            sortPlaylistItems(playlistId);
-        } else {
-            WARN('Playlist data not found for re-render:', playlistId);
-        }
+        sortPlaylistItems(playlistId);
     }
 
     /**
@@ -833,6 +825,17 @@
         let debounceTimer = null;
 
         playlistObserver = new MutationObserver((mutations) => {
+            if (ignoreNextMutation) {
+                ignoreNextMutation = false;
+                return;
+            }
+
+            const sortKey = getCurrentSort(playlistId);
+
+            if (sortKey === 'default') {
+                return;
+            }
+
             let shouldReapply = false;
 
             mutations.forEach((mutation) => {
@@ -963,8 +966,6 @@
         // Mark as processed
         activePage.dataset.playlistSortingAdded = 'true';
     }
-
-    // ========== ORIGINAL PLAYLIST FUNCTIONALITY ==========
 
     /**
      * Modifies playlist item click behavior to navigate to details page
@@ -1221,6 +1222,25 @@
         
         pollForElements();
     }
+
+    function addPlaylistCSS() {
+        // Check if the CSS is already added
+        if (document.querySelector('style[data-kefin-playlist-css]')) {
+            return;
+        }
+
+
+        const css = `
+        .itemsContainer:not([data-sort-key="default"]) .listViewDragHandle {
+            pointer-events: none;
+        }
+        `;
+
+        const style = document.createElement('style');
+        style.setAttribute('data-kefin-playlist-css', 'true');
+        style.textContent = css;
+        document.head.appendChild(style);
+    }
     
     /**
      * Initialize playlist hook using utils
@@ -1231,7 +1251,9 @@
             setTimeout(initializePlaylistHook, 1000);
             return;
         }
-        
+
+        addPlaylistCSS();
+
         LOG('Registering playlist handler with KefinTweaksUtils');
         
         // Register handler for details pages

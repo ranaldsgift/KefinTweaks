@@ -15,3 +15,11 @@ body.home-screen .emby-tab-button > div {
 .series-episodes-section {
     grid-area: nextup;
 }
+.layout-desktop .mainDetailButtons:has(.btnReplay:not(.hide)) .btnPlay::after {
+    content: 'Resume' !important;
+}
+.layout-desktop .mainDetailButtons:has(.btnReplay:not(.hide)) .btnPlay {
+    margin-right: -115px !important;
+    padding-right: 20px !important;
+    right: 140px !important;
+}

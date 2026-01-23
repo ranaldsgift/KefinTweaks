@@ -12,3 +12,11 @@ body.home-screen .emby-tabs-slider {
 body.home-screen .emby-tab-button > div {
     align-self: normal;
 } */
+.layout-desktop .mainDetailButtons:has(.btnReplay:not(.hide)) .btnPlay::after {
+    content: 'Resume' !important;
+}
+.layout-desktop .mainDetailButtons:has(.btnReplay:not(.hide)) .btnPlay {
+    margin-right: -115px !important;
+    padding-right: 20px !important;
+    right: 140px !important;
+}
