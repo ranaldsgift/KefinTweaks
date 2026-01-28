@@ -573,6 +573,30 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
 
     let _watchlistTabIndex = null;
 
+    async function fetchWatchlistTabIndex() {
+        // Fetch the tab index as we do in addCustomMenuLink
+        try {
+            const response = await fetch(`${ApiClient._serverAddress}/CustomTabs/Config`, {
+                method: "GET",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-Emby-Token": ApiClient._serverInfo.AccessToken || ApiClient.accessToken(),
+                },
+            });
+            const data = await response.json();
+            let tabIndex = null;
+            data.forEach((tab, index) => {
+                if (tab.ContentHtml.indexOf('sections watchlist') !== -1) {
+                    tabIndex = index + 2;
+                }
+            });
+            return tabIndex;
+        } catch (err) {
+            ERR('Failed to fetch watchlist tab index:', err);
+            return null;
+        }
+    }
+
 	/**
 	 * Get watchlist tab index, fetching if not yet set
 	 * @returns {number|null} The watchlist tab index or null if not found
@@ -582,26 +606,21 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
 			return _watchlistTabIndex;
 		}
 
-		// Fetch the tab index as we do in addCustomMenuLink
-		try {
-			const response = await fetch(`${ApiClient._serverAddress}/CustomTabs/Config`, {
-				method: "GET",
-				headers: {
-					"Content-Type": "application/json",
-					"X-Emby-Token": ApiClient._serverInfo.AccessToken || ApiClient.accessToken(),
-				},
-			});
-			const data = await response.json();
-			data.forEach((tab, index) => {
-				if (tab.ContentHtml.indexOf('sections watchlist') !== -1) {
-					_watchlistTabIndex = index + 2;
-					LOG('Fetched and stored watchlist tab index:', _watchlistTabIndex);
-				}
-			});
-		} catch (err) {
-			ERR('Failed to fetch watchlist tab index:', err);
-		}
+        // Check if the tab index is already stored in local storage
+        const storedTabIndex = localStorage.getItem(`kefinTweaks_watchlistTabIndex_${ApiClient.serverId()}`);
+        if (storedTabIndex) {
+            _watchlistTabIndex = Number(storedTabIndex);
+            LOG('Loaded watchlist tab index from local storage:', _watchlistTabIndex);
 
+            // Fetch tab in the background in case it has changed
+            fetchWatchlistTabIndex();
+            return _watchlistTabIndex;
+        }
+
+        _watchlistTabIndex = await fetchWatchlistTabIndex();
+
+        // Save to local storage
+        localStorage.setItem(`kefinTweaks_watchlistTabIndex_${ApiClient.serverId()}`, _watchlistTabIndex);
 		return _watchlistTabIndex;
 	}
 

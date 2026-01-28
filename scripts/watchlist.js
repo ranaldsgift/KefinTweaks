@@ -1401,6 +1401,15 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			cachedProgress.watchedCount = watchedCount;
 			cachedProgress.remainingCount = totalEpisodes - watchedCount;
 			cachedProgress.totalEpisodes = totalEpisodes;
+		
+			// Get the last watched episode based on the cachedProgress.episodes
+			const lastWatchedEpisode = cachedProgress.episodes
+				.filter(ep => ep.UserData && ep.UserData.LastPlayedDate)
+				.sort((a, b) => new Date(b.UserData.LastPlayedDate) - new Date(a.UserData.LastPlayedDate))[0];
+	
+			if (lastWatchedEpisode) {
+				cachedProgress.lastWatchedEpisode = lastWatchedEpisode;
+			}
 		}
 		
 		// Recalculate percentage
@@ -1411,15 +1420,6 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		// Regenerate binaryProgress from episodes if available
 		if (Array.isArray(cachedProgress.episodes) && cachedProgress.episodes.length > 0) {
 			cachedProgress.binaryProgress = generateBinaryProgressData(cachedProgress.episodes);
-		}
-		
-		// Get the last watched episode based on the cachedProgress.episodes
-		const lastWatchedEpisode = cachedProgress.episodes
-			.filter(ep => ep.UserData && ep.UserData.LastPlayedDate)
-			.sort((a, b) => new Date(b.UserData.LastPlayedDate) - new Date(a.UserData.LastPlayedDate))[0];
-
-		if (lastWatchedEpisode) {
-			cachedProgress.lastWatchedEpisode = lastWatchedEpisode;
 		}
 		
 		// Update the cache
@@ -6782,14 +6782,14 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		
 		if (watchlistSection) {
 			// Check if this is a new watchlist section (no HTML structure)
-			const hasTabs = watchlistSection.querySelector('.watchlist-tabs');
+/* 			const hasTabs = watchlistSection.querySelector('.watchlist-tabs');
 			const isNewSection = !hasTabs;
 			
 			// Check if this is a recreated section by comparing content to cache
-			const isRecreatedSection = hasTabs && !isWatchlistContentValid(watchlistSection);
+			const isRecreatedSection = hasTabs && !isWatchlistContentValid(watchlistSection); */
 			
-			if (isNewSection || isRecreatedSection) {
-				LOG(`Watchlist section ${isNewSection ? 'found' : 'recreated'}, initializing...`);
+			if (!watchlistSection.dataset.watchlistRendered) {
+				LOG(`Watchlist section found and not rendered, initializing...`);
 				
 				// Mark as rendered to prevent duplicate initialization
 				watchlistSection.dataset.watchlistRendered = 'true';
@@ -6872,9 +6872,9 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	// Set up observer to watch for home page navigation
 	function setupWatchlistSectionObserver() {
 		// Check immediately in case we're already on home page
-		if (window.location.href.includes('#/home')) {
+/* 		if (window.location.href.includes('#/home')) {
 			renderWatchlist();
-		}
+		} */
 		
 		// Create a MutationObserver to watch for empty watchlist containers
 		const observer = new MutationObserver((mutations) => {
@@ -6922,7 +6922,8 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			visibleWatchlistSections.forEach(section => {
 				if (section.children.length === 0) {
 					LOG('Empty watchlist container found, initializing...');
-					renderWatchlist();
+					//renderWatchlist();
+					renderWatchlistHtml();
 				}
 			});
 		}
@@ -7166,9 +7167,6 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	// Register onViewPage handler to call setActiveTab
 	if (window.KefinTweaksUtils && window.KefinTweaksUtils.onViewPage) {
 		window.KefinTweaksUtils.onViewPage(async (view, element, hash) => {
-			LOG('onViewPage handler triggered for view:', view);
-			renderWatchlist();
-
 			// Check if we're on the watchlist tab
 			const watchlistTabIndex = await getWatchlistTabIndex();
 			if (watchlistTabIndex !== null && hash) {
@@ -7179,11 +7177,8 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				const currentTabIndex = currentTab ? parseInt(currentTab, 10) : 0;
 
 				if (currentTabIndex === watchlistTabIndex) {
-					LOG('On watchlist tab, enhancing progress bars with episode details');
-					// Small delay to let initial render complete
-					setTimeout(() => {
-						//fetchEpisodesAndEnhanceProgressBar();
-					}, 100);
+					LOG('onViewPage handler triggered for view:', view);
+					renderWatchlist();
 				}
 			}
 		}, {
