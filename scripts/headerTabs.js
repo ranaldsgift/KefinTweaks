@@ -233,9 +233,56 @@
             LOG('Tab clicked:', currentPage, tabIndex);
         }
     }
-    
+
+
+    async function pollForElement(selectorFn, maxAttempts = 50, pollInterval = 100) {
+        let attempts = 0;
+        while (attempts < maxAttempts) {
+            const element = selectorFn();
+            if (element) {
+                return element;
+            }
+            attempts++;
+            await new Promise(resolve => setTimeout(resolve, pollInterval));
+        }
+        WARN('Element not found after', attempts, 'attempts');
+        return null;
+    }
+
     // Synchronize active tab state with URL parameter
-    async function syncActiveTabState() {
+    async function syncActiveTabState(currentTabIndex) {
+        const headerTabButtons = document.querySelectorAll('.headerTabs button');
+        let targetTabButton = document.querySelector(`.headerTabs button[data-index="${currentTabIndex}"]`);
+
+        // If the target tab is a custom home tab, we may need to wait for it to be rendered
+        if (!targetTabButton && currentTabIndex > 1) {
+            // Wait for the target tab button to be rendered
+            targetTabButton = await pollForElement(() => document.querySelector(`.headerTabs button[data-index="${currentTabIndex}"]`), 50, 100);
+        }
+
+        const pageTabContents = document.querySelectorAll('.libraryPage:not(.hide) .pageTabContent');
+        const targetPageTabContent = document.querySelector(`.libraryPage:not(.hide) .pageTabContent[data-index="${currentTabIndex}"]`);
+
+        if (headerTabButtons && targetTabButton && pageTabContents && targetPageTabContent) {
+            // Remove is-active class from all tab buttons
+            headerTabButtons.forEach(button => {
+                button.classList.remove('emby-tab-button-active');
+            });
+            // Add is-active class to the active tab button
+            targetTabButton.classList.add('emby-tab-button-active');
+            LOG('Set active tab button:', currentTabIndex);
+            
+            // Remove is-active class from all page tab contents
+            pageTabContents.forEach(content => {
+                content.classList.remove('is-active');
+            });
+            // Add is-active class to the target page tab content
+            targetPageTabContent.classList.add('is-active');
+            LOG('Set active page tab content:', currentTabIndex);
+        }
+
+
+        return;
         const headerTabs = document.querySelector('.headerTabs');
         if (!headerTabs) return;
         
@@ -385,7 +432,7 @@
                                     // All custom tabs are now present
                                     obs.disconnect();
                                     LOG('All custom tabs rendered, adding click listeners');
-                                    syncActiveTabState();
+                                    //syncActiveTabState();
                                     
                                     // Add click listeners to all buttons including the new custom tabs
                                     const allButtons = headerTabs.querySelectorAll('.emby-tab-button');
@@ -435,13 +482,22 @@
         }
     
         // Register onViewPage handler to sync active tab state
-        window.KefinTweaksUtils.onViewPage((view, element) => {
+        window.KefinTweaksUtils.onViewPage((view, element, hash) => {
             LOG('onViewPage handler triggered for view:', view);
             addClickListeners();
+            // Get selected tab from hash
+            const hashParams = hash.includes('?') ? hash.split('?')[1] : '';
+            const urlParams = new URLSearchParams(hashParams);
+            const currentTab = urlParams.get('tab');
+            const currentTabIndex = currentTab ? parseInt(currentTab, 10) : 0;
+
             // Sync active tab state when page view changes
-            syncActiveTabState().catch(err => {
-                ERR('Error in syncActiveTabState:', err);
-            });
+            // This is only necessary for the home page with custom tabs
+            if ((view === 'home' || view === 'home.html') && currentTabIndex > 1) {
+                syncActiveTabState(currentTabIndex).catch(err => {
+                    ERR('Error in syncActiveTabState:', err);
+                });
+            }
         }, {
             pages: SUPPORTED_PAGES // Only trigger for supported pages
         });
