@@ -9,8 +9,12 @@
     const WARN = (...args) => console.warn('[KefinTweaks ItemDetailsCollections]', ...args);
     const ERR = (...args) => console.error('[KefinTweaks ItemDetailsCollections]', ...args);
 
+    const COLLECTIONS_CHILD_COUNT_KEY = `kefinTweaks_${ApiClient.getCurrentUserId()}_allCollectionsChildCount`;
     const CACHE_NAME = 'collections';
-    const CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
+    const state = {
+        allCollections: null,
+    }
 
     // Populate collections cache
     async function populateCollectionsCache(invalidate = false) {
@@ -19,13 +23,31 @@
             return;
         }
 
+        const cache = window.IndexedDBCache;
 
-        if (!window.IndexedDBCache) {
-            WARN('IndexedDBCache not available');
+        if (!cache) {
+            WARN('IndexedDBCache instance not available');
             return;
         }
 
-        const cache = new window.IndexedDBCache('kefinTweaks_', CACHE_TTL);
+        if (!state.allCollections) {
+            state.allCollections = await ApiClient.getItems(ApiClient.getCurrentUserId(), {
+                IncludeItemTypes: 'BoxSet,CollectionFolder',
+                Recursive: true,
+                Fields: 'ChildCount'
+            });
+        }
+
+        const allCollectionsChildCount = state.allCollections.Items.map(collection => collection.ChildCount).reduce((a, b) => a + b, 0);
+
+        // Get saved Collections Child Count
+        const cachedAllCollectionsChildCount = Number(localStorage.getItem(COLLECTIONS_CHILD_COUNT_KEY));
+
+        if (allCollectionsChildCount !== cachedAllCollectionsChildCount) {
+            localStorage.setItem(COLLECTIONS_CHILD_COUNT_KEY, allCollectionsChildCount);
+            invalidate = true;
+            LOG('Collections Child Count has changed, invalidating cache');
+        }
         
         // Check if cache is valid
         if (!invalidate && await cache.isCacheValid(CACHE_NAME)) {
@@ -37,13 +59,8 @@
         
         try {
 
-            const allCollections = await ApiClient.getItems(ApiClient.getCurrentUserId(), {
-                IncludeItemTypes: 'BoxSet,CollectionFolder',
-                Recursive: true
-            });
-
             // Fetch all collection items in parallel
-            const collectionPromises = allCollections.Items.map(coll => 
+            const collectionPromises = state.allCollections.Items.map(coll => 
                 ApiClient.getItems(ApiClient.getCurrentUserId(), {
                     ParentId: coll.Id,
                 }).then(items => ({
@@ -60,7 +77,32 @@
             if (currentCacheData && currentCacheData.length > 0) {
                 // Refreshing the cache Collections cache in the background
                 LOG('Refreshing collections cache in the background');
-                Promise.all(collectionPromises);
+                Promise.all(collectionPromises).then(async (results) => {
+                    LOG('Collections cache refreshed');
+                    const cacheData = [];
+                    for (const { collection: coll, items } of results) {
+                        const collectionItemData = {
+                            Id: coll.Id,
+                            Type: coll.Type,
+                            Name: coll.Name,
+                            ParentIndexNumber: coll.ParentIndexNumber,
+                            IndexNumber: coll.IndexNumber,
+                            ImageTags: coll.ImageTags,
+                            BackdropImageTags: coll.BackdropImageTags,
+                            ProductionYear: coll.ProductionYear,
+                            PremiereDate: coll.PremiereDate
+                        };
+                        const itemIds = items.Items.map(item => item.Id);
+                        if (itemIds.length > 0) {
+                            cacheData.push({
+                                CollectionItem: collectionItemData,
+                                ItemIds: itemIds
+                            });
+                        }
+                    }
+                    await cache.set(CACHE_NAME, cacheData);
+                    LOG(`Collections cache populated: ${cacheData.length} collections`);
+                });
                 return;
             }
 
@@ -111,12 +153,13 @@
 
     // Get parent collections for an item ID (returns collection items that can be passed to renderCards)
     async function getParentCollections(itemId) {
-        if (!window.IndexedDBCache) {
-            WARN('IndexedDBCache not available');
+        const cache = window.IndexedDBCache;
+
+        if (!cache) {
+            WARN('IndexedDBCache instance not available');
             return [];
         }
-
-        const cache = new window.IndexedDBCache('kefinTweaks_', CACHE_TTL);
+        
         const cacheData = await cache.get(CACHE_NAME);
 
         if (!cacheData || !Array.isArray(cacheData)) {
