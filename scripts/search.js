@@ -10,6 +10,37 @@
     
     LOG('Initializing...');
 
+/*     const originalOpen = XMLHttpRequest.prototype.open;
+    const originalSend = XMLHttpRequest.prototype.send;
+
+    XMLHttpRequest.prototype.open = function (method, url, ...args) {
+        this.__url = url;
+        return originalOpen.apply(this, [method, url, ...args]);
+    };
+
+    XMLHttpRequest.prototype.send = function (...args) {
+        const url = this.__url || '';
+        const isSearchPage = location.hash.startsWith('#/search');
+
+        const isBlockedSearch =
+            isSearchPage &&
+            url.includes('/Items?') &&
+            url.includes('searchTerm=');
+
+        if (!isBlockedSearch) {
+            return originalSend.apply(this, args);
+        }
+
+        LOG('Blocking default Jellyfin search request:', url);
+        Dashboard.hideLoadingMsg();
+
+        // Async success without touching internal state
+        queueMicrotask(() => {
+            this.onload?.();
+            this.onreadystatechange?.();
+        });
+    }; */
+
     // Configuration
     const CONFIG = window.KefinTweaksConfig?.search || {
         enableJellyseerr: false  // Toggle for Jellyseerr integration
@@ -333,7 +364,7 @@
     }
 
     // main init
-    function initSmartSearch() {
+    async function initSmartSearch() {
         if (typeof ApiClient === 'undefined') { setTimeout(initSmartSearch, 500); return; }
 
         const originalInput = document.getElementById('searchTextInput');
@@ -385,32 +416,46 @@
             const btnRow = document.createElement('div');
             btnRow.className = 'smart-search-buttons';
 
+            const smartSearchButtonClass = 'smart-search-btn emby-button raised';
             const btnAll = document.createElement('button');
             btnAll.id = 'smart-search-all';
-            btnAll.className = 'smart-search-btn emby-button';
+            btnAll.className = smartSearchButtonClass;
             btnAll.textContent = 'All';
             const btnCore = document.createElement('button');
             btnCore.id = 'smart-search-core';
-            btnCore.className = 'smart-search-btn emby-button raised button-submit active';
+            btnCore.className = smartSearchButtonClass + ' button-submit active';
             btnCore.textContent = 'Movies/TV';
             const btnMusic = document.createElement('button');
             btnMusic.id = 'smart-search-music';
-            btnMusic.className = 'smart-search-btn emby-button';
+            btnMusic.className = smartSearchButtonClass;
             btnMusic.textContent = 'Music';
             const btnBooks = document.createElement('button');
             btnBooks.id = 'smart-search-books';
-            btnBooks.className = 'smart-search-btn emby-button';
+            btnBooks.className = smartSearchButtonClass;
             btnBooks.textContent = 'Books';
 
+            const libraries = await window.dataHelper.getLibraries();
+
+            const hasVideoLibraries = libraries.some(library => library.CollectionType === 'movies' || library.CollectionType === 'tvshows' || library.CollectionType === 'homevideos');
+            const hasMusicLibraries = libraries.some(library => library.CollectionType === 'music' || library.CollectionType === 'musicvideos');
+            const hasBookLibraries = libraries.some(library => library.CollectionType === 'books');
+
             btnRow.appendChild(btnAll);
-            btnRow.appendChild(btnCore);
-            btnRow.appendChild(btnMusic);
-            btnRow.appendChild(btnBooks);
+            
+            if (hasVideoLibraries) {
+                btnRow.appendChild(btnCore);
+            }
+            if (hasMusicLibraries) {
+                btnRow.appendChild(btnMusic);
+            }
+            if (hasBookLibraries) {
+                btnRow.appendChild(btnBooks);
+            }
             
             if (CONFIG.enableJellyseerr) {
                 const btnRequest = document.createElement('button');
                 btnRequest.id = 'smart-search-request';
-                btnRequest.className = 'smart-search-btn emby-button';
+                btnRequest.className = smartSearchButtonClass;
                 btnRequest.textContent = 'Request';
     
                 btnRow.appendChild(btnRequest);
@@ -452,26 +497,26 @@
         // Function to update button states
         function updateButtonStates(activeType) {
             // Remove active class from all buttons
-            smartAllBtn.classList.remove('active','button-submit','raised');
-            smartCoreBtn.classList.remove('active','button-submit','raised');
-            smartMusicBtn.classList.remove('active','button-submit','raised');
-            smartBooksBtn.classList.remove('active','button-submit','raised');
+            smartAllBtn.classList.remove('active','button-submit');
+            smartCoreBtn.classList.remove('active','button-submit');
+            smartMusicBtn.classList.remove('active','button-submit');
+            smartBooksBtn.classList.remove('active','button-submit');
 
             if (smartRequestBtn) {
-                smartRequestBtn.classList.remove('active','button-submit','raised');
+                smartRequestBtn.classList.remove('active','button-submit');
             }
             
             // Add active class to the selected button
             if (activeType === 'all') {
-                smartAllBtn.classList.add('active','button-submit','raised');
+                smartAllBtn.classList.add('active','button-submit');
             } else if (activeType === 'videos') {
-                smartCoreBtn.classList.add('active','button-submit','raised');
+                smartCoreBtn.classList.add('active','button-submit');
             } else if (activeType === 'music') {
-                smartMusicBtn.classList.add('active','button-submit','raised');
+                smartMusicBtn.classList.add('active','button-submit');
             } else if (activeType === 'books') {
-                smartBooksBtn.classList.add('active','button-submit','raised');
+                smartBooksBtn.classList.add('active','button-submit');
             } else if (activeType === 'request' && smartRequestBtn) {
-                smartRequestBtn.classList.add('active','button-submit','raised');
+                smartRequestBtn.classList.add('active','button-submit');
             }
         }
 
@@ -526,6 +571,13 @@
                     const resultsContainer = ensureSmartResultsContainer();
                     resultsContainer.innerHTML='';
                     Dashboard.hideLoadingMsg();
+
+                    // Show search suggestions
+                    const searchSuggestions = document.querySelector('.searchSuggestions');
+                    if (searchSuggestions) {
+                        searchSuggestions.style.display = 'block';
+                    }
+
                     return; 
                 }
                 if (timer) clearTimeout(timer);
