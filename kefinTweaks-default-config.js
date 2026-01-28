@@ -34,7 +34,7 @@ window.KefinTweaksDefaultConfig = {
         "sortOrder": "ReleaseDate",
         "sortOrderDirection": "Descending",
         "cardFormat": "Poster",
-        "order": 30,
+        "order": 60,
         "minAgeInDays": null,
         "maxAgeInDays": null
       },
@@ -45,7 +45,7 @@ window.KefinTweaksDefaultConfig = {
         "sortOrder": "PremiereDate",
         "sortOrderDirection": "Descending",
         "cardFormat": "Backdrop",
-        "order": 31,
+        "order": 61,
         "minAgeInDays": null,
         "maxAgeInDays": null
       }
@@ -66,8 +66,8 @@ window.KefinTweaksDefaultConfig = {
       "itemLimit": 16,
       "sortOrder": "Random",
       "sortOrderDirection": "Ascending",
-      "cardFormat": "Poster",
-      "order": 61
+      "cardFormat": "Thumb",
+      "order": 72
     },
     "watchlist": {
       "name": "Watchlist",
@@ -76,7 +76,7 @@ window.KefinTweaksDefaultConfig = {
       "sortOrder": "DateAdded",
       "sortOrderDirection": "Descending",
       "cardFormat": "Poster",
-      "order": 60
+      "order": 71
     },
     "watchAgain": {
       "name": "Watch Again",
@@ -84,15 +84,15 @@ window.KefinTweaksDefaultConfig = {
       "itemLimit": 16,
       "sortOrder": "Random",
       "sortOrderDirection": "Ascending",
-      "cardFormat": "Poster",
-      "order": 62
+      "cardFormat": "Random",
+      "order": 73
     },
     "upcoming": {
       "name": "Upcoming",
       "enabled": true,
       "itemLimit": 48,
       "cardFormat": "Thumb",
-      "order": 20
+      "order": 62
     },
     "imdbTop250": {
       "name": "IMDb Top 250",
@@ -101,12 +101,12 @@ window.KefinTweaksDefaultConfig = {
       "sortOrder": "Random",
       "sortOrderDirection": "Ascending",
       "cardFormat": "Poster",
-      "order": 21
+      "order": 70
     },
     "seasonal": {
-      "enabled": true,
-      "enableSeasonalAnimations": true,
-      "enableSeasonalBackground": true,
+      "enabled": false,
+      "enableSeasonalAnimations": false,
+      "enableSeasonalBackground": false,
       "defaultItemLimit": 16,
       "defaultSortOrder": "Random",
       "defaultCardFormat": "Poster",
@@ -114,13 +114,13 @@ window.KefinTweaksDefaultConfig = {
         {
           "id": "halloween",
           "name": "Halloween",
-          "enabled": true,
+          "enabled": false,
           "startDate": "10-01",
           "endDate": "10-31",
           "sections": [
             {
               "id": "halloween-tag",
-              "enabled": true,
+              "enabled": false,
               "name": "Halloween Movies",
               "type": "Tag",
               "source": "halloween",
@@ -132,7 +132,7 @@ window.KefinTweaksDefaultConfig = {
             },
             {
               "id": "halloween-horror",
-              "enabled": true,
+              "enabled": false,
               "name": "Horror Genre",
               "type": "Genre",
               "source": "Horror",
@@ -144,7 +144,7 @@ window.KefinTweaksDefaultConfig = {
             },
             {
               "id": "halloween-thriller",
-              "enabled": true,
+              "enabled": false,
               "name": "Thriller Genre",
               "type": "Genre",
               "source": "Thriller",
@@ -159,14 +159,14 @@ window.KefinTweaksDefaultConfig = {
         {
           "id": "thanksgiving",
           "name": "Thanksgiving",
-          "enabled": true,
+          "enabled": false,
           "startDate": "11-20",
           "endDate": "11-30",
           "order": 50,
           "sections": [
             {
               "id": "seasonal-2-section-0",
-              "enabled": true,
+              "enabled": false,
               "name": "Thanksgiving Movies",
               "type": "Tag",
               "source": "thanksgiving",
@@ -184,7 +184,7 @@ window.KefinTweaksDefaultConfig = {
             },
             {
               "id": "seasonal-2-section-1",
-              "enabled": true,
+              "enabled": false,
               "name": "Thanksgiving Episodes",
               "type": "Parent",
               "source": "",
@@ -205,13 +205,13 @@ window.KefinTweaksDefaultConfig = {
         {
           "id": "christmas",
           "name": "Christmas",
-          "enabled": true,
+          "enabled": false,
           "startDate": "12-01",
           "endDate": "12-31",
           "sections": [
             {
               "id": "seasonal-1-section-0",
-              "enabled": true,
+              "enabled": false,
               "name": "Christmas Movies",
               "type": "Tag",
               "source": "christmas",
@@ -230,7 +230,7 @@ window.KefinTweaksDefaultConfig = {
             },
             {
               "id": "seasonal-1-section-1",
-              "enabled": true,
+              "enabled": false,
               "name": "Christmas Episodes",
               "type": "Parent",
               "source": "",
@@ -385,6 +385,7 @@ window.KefinTweaksDefaultConfig = {
       },
       "randomizeOrder": false
     },
+    "removeConflictingSections": true,
     "customSections": []
   },
   "exclusiveElsewhere": {
