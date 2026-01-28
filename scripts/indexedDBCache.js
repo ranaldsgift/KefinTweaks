@@ -87,6 +87,43 @@
             }
         }
 
+        // Get cached data entry (payload + metadata) if valid
+        async getCacheEntry(cacheName, userId = null) {
+            const key = this.getCacheKey(cacheName, userId);
+            
+            try {
+                const db = await this.openDB();
+                const transaction = db.transaction([STORE_NAME], 'readonly');
+                const store = transaction.objectStore(STORE_NAME);
+                const request = store.get(key);
+                
+                return new Promise((resolve) => {
+                    request.onsuccess = () => {
+                        const data = request.result;
+                        if (!data) {
+                            resolve(null);
+                            return;
+                        }
+                        
+                        // Return full entry including timestamp and ttl
+                        resolve({
+                            payload: data.payload,
+                            timestamp: data.timestamp,
+                            ttl: data.ttl || this.ttl
+                        });
+                    };
+                    
+                    request.onerror = () => {
+                        WARN('Error getting cache entry:', request.error);
+                        resolve(null);
+                    };
+                });
+            } catch (error) {
+                ERR('Error in getCacheEntry:', error);
+                return null;
+            }
+        }
+
         // Get cached data if valid
         async get(cacheName, userId = null) {
             if (!(await this.isCacheValid(cacheName, userId))) {
@@ -220,8 +257,18 @@
         }
     }
 
+    let _instance = null;
+
+    function getIndexedDBCache() {
+        if (!_instance) {
+            _instance = new IndexedDBCache();
+            LOG('IndexedDBCache instance created');
+        }
+        return _instance;
+    }
+
     // Create global instance
-    window.IndexedDBCache = IndexedDBCache;
+    window.IndexedDBCache = getIndexedDBCache();
     
     LOG('IndexedDBCache manager loaded');
     
