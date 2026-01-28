@@ -9,6 +9,10 @@
     const WARN = (...args) => console.warn('[KefinTweaks SeriesInfo]', ...args);
     const ERR = (...args) => console.error('[KefinTweaks SeriesInfo]', ...args);
 
+    const state = {
+        use24HourTimeFormat: false,
+    }
+
     /**
      * Parses a runtime string (e.g., "42m", "1h 5m") into total minutes
      * @param {string} runtimeStr - Runtime string like "42m" or "1h 5m"
@@ -147,7 +151,7 @@
         const timeStr = endTime.toLocaleTimeString([], { 
             hour: 'numeric', 
             minute: '2-digit',
-            hour12: true 
+            hour12: !state.use24HourTimeFormat
         });
 
         // Check if end date is the same as current day
@@ -186,7 +190,7 @@
         const timeStr = endTime.toLocaleTimeString([], { 
             hour: 'numeric', 
             minute: '2-digit',
-            hour12: true 
+            hour12: !state.use24HourTimeFormat
         });
 
         // Check if end date is the same as current day
@@ -211,7 +215,7 @@
      * @param {Object} item - Series item object
      * @param {HTMLElement} miscInfoContainer - The .itemMiscInfo container
      */
-    function addSeriesInfo(item, miscInfoContainer) {
+    async function addSeriesInfo(item, miscInfoContainer) {
         // Check if already added
         if (miscInfoContainer.querySelector('.kt-series-info')) {
             LOG('Series info already added, skipping');
@@ -223,8 +227,9 @@
         infoContainer.style.display = 'flex';
         infoContainer.style.margin = '0 1em 0 0';
 
+        let childCount = item.ChildCount || 0;
+
         // Seasons count (only show if more than 1 season)
-        const childCount = item.ChildCount || 0;
         if (childCount > 1) {
             const seasonsDiv = document.createElement('div');
             seasonsDiv.className = 'mediaInfoItem';
@@ -338,7 +343,7 @@
         if (item.Type === 'Series') {
             addSeriesInfo(item, miscInfoContainer);
         } else if (item.Type === 'Season') {
-            await addSeasonInfo(item, miscInfoContainer, activePage);
+            addSeasonInfo(item, miscInfoContainer, activePage);
         }
     }
 
@@ -351,6 +356,19 @@
             setTimeout(initializeSeriesInfoHook, 1000);
             return;
         }
+
+        // Get the use24HourTime setting from the configuration
+        const config = window.KefinTweaksConfig || {};
+        let seriesInfoConfig = config.seriesInfo || null;
+
+        if (seriesInfoConfig === null) {
+            // Use the browser's default time format
+            seriesInfoConfig = {
+                use24HourTimeFormat: Intl.DateTimeFormat().resolvedOptions().timeStyle === 'short'
+            };
+        }
+
+        state.use24HourTimeFormat = seriesInfoConfig.use24HourTimeFormat === true;
 
         LOG('Registering series info handler with KefinTweaksUtils');
 
