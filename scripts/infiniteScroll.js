@@ -225,7 +225,6 @@
         for (const match of hashMatches) {
             const pageFromHash = match.replace('#/', '');
             if (SUPPORTED_PAGES.includes(pageFromHash)) {
-                LOG('Found supported page:', pageFromHash);
                 return pageFromHash;
             }
         }
@@ -388,9 +387,9 @@
         
         let activeTab = null;
         if (page === 'tv.html' || page === 'tv') {
-            activeTab = document.querySelector("#seriesTab.is-active");
+            activeTab = libraryPage.querySelector("#seriesTab.is-active");
         } else if (page === 'movies.html' || page === 'movies') {
-            activeTab = document.querySelector("#moviesTab.is-active");
+            activeTab = libraryPage.querySelector("#moviesTab.is-active");
         }
         
         if (!activeTab) {
@@ -749,9 +748,9 @@
         
         // Double-check that we have the correct active tab
         let activeTab = null;
-        if (page === 'tv.html') {
+        if (page === 'tv.html' || page === 'tv') {
             activeTab = document.querySelector("#seriesTab.is-active");
-        } else if (page === 'movies.html') {
+        } else if (page === 'movies.html' || page === 'movies') {
             activeTab = document.querySelector("#moviesTab.is-active");
         }
         
