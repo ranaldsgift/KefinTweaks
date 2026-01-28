@@ -103,10 +103,93 @@ window.ModalSystem = (function() {
 
         // Create scrollable content area
         const dialogContent = document.createElement('div');
-        dialogContent.style.padding = title || footer ? '1.25em 1.5em' : '1.25em 1.5em 1.5em';
+        dialogContent.style.padding = title || footer ? '1.25em 1.5em 0' : '1.25em 1.5em 1.5em';
         dialogContent.style.overflowY = 'auto';
         dialogContent.style.flex = '1';
         dialogContent.style.minHeight = '0';
+        
+        // Helper function to check if an element is scrollable
+        const isScrollable = (element) => {
+            if (!element || element === document.body || element === document.documentElement) {
+                return false;
+            }
+            const style = window.getComputedStyle(element);
+            const overflowY = style.overflowY;
+            const overflow = style.overflow;
+            const hasScrollableContent = element.scrollHeight > element.clientHeight;
+            return (overflowY === 'auto' || overflowY === 'scroll' || overflow === 'auto' || overflow === 'scroll') && hasScrollableContent;
+        };
+
+        // Helper function to find the closest scrollable parent
+        const findClosestScrollable = (element, stopAt = null) => {
+            let current = element;
+            while (current && current !== stopAt && current !== document.body && current !== document.documentElement) {
+                if (isScrollable(current)) {
+                    return current;
+                }
+                current = current.parentElement;
+            }
+            return null;
+        };
+
+        // Helper function to check if element can scroll in direction
+        const canScrollInDirection = (element, delta) => {
+            if (!element) return false;
+            const scrollTop = element.scrollTop;
+            const scrollHeight = element.scrollHeight;
+            const clientHeight = element.clientHeight;
+            
+            // Scrolling down (positive delta)
+            if (delta > 0) {
+                return scrollTop + clientHeight < scrollHeight - 1; // -1 for rounding
+            }
+            // Scrolling up (negative delta)
+            else {
+                return scrollTop > 0;
+            }
+        };
+
+        // Add scroll trap to prevent body scroll when scrolling within modal
+        const wheelHandler = (e) => {
+            const element = dialogContent;
+            const delta = e.deltaY;
+
+            // Find if the event originated from a child scrollable element
+            const childScrollable = findClosestScrollable(e.target, element);
+            
+            // If event is from a child scrollable element
+            if (childScrollable && childScrollable !== element) {
+                // Check if the child can scroll in the direction of the wheel
+                if (canScrollInDirection(childScrollable, delta)) {
+                    // Let the child handle the scroll, but stop propagation to prevent body scroll
+                    e.stopPropagation();
+                    return; // Don't prevent default, let child scroll
+                }
+                // Child is at boundary, prevent default to stop body scroll
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+
+            // Event is on the modal content itself
+            const scrollTop = element.scrollTop;
+            const scrollHeight = element.scrollHeight;
+            const clientHeight = element.clientHeight;
+
+            // At top and scrolling up
+            if (delta < 0 && scrollTop === 0) {
+                e.preventDefault();
+            }
+            // At bottom and scrolling down
+            else if (delta > 0 && scrollTop + clientHeight >= scrollHeight) {
+                e.preventDefault();
+            }
+            
+            // Stop propagation to prevent body scroll
+            e.stopPropagation();
+        };
+        
+        dialogContent.addEventListener('wheel', wheelHandler, { passive: false });
 
         // Add content
         if (content) {
@@ -121,7 +204,7 @@ window.ModalSystem = (function() {
         let dialogFooter = null;
         if (footer) {
             dialogFooter = document.createElement('div');
-            dialogFooter.className = 'formDialogFooter';
+            dialogFooter.className = 'formDialogFooter kefinModalFooter';
             dialogFooter.style.padding = '1.25em 1.5em';
             dialogFooter.style.borderTop = '1px solid rgba(255,255,255,0.1)';
             dialogFooter.style.flexShrink = '0';
@@ -161,7 +244,8 @@ window.ModalSystem = (function() {
             updateContent: (newContent) => updateModalContent(id, newContent),
             addEventListener: (event, handler) => {
                 dialog.addEventListener(event, handler);
-            }
+            },
+            _wheelHandler: wheelHandler
         };
 
         // Store modal instance
@@ -206,6 +290,11 @@ window.ModalSystem = (function() {
         // Remove escape handler if it exists
         if (modal._escapeHandler) {
             document.removeEventListener('keydown', modal._escapeHandler);
+        }
+        
+        // Remove wheel handler if it exists
+        if (modal._wheelHandler && modal.dialogContent) {
+            modal.dialogContent.removeEventListener('wheel', modal._wheelHandler);
         }
 
         // Remove from DOM
