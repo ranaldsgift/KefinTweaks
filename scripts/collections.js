@@ -618,7 +618,7 @@
 
                 // Small delay to ensure details DOM is ready
                 setTimeout(async () => {
-                    if (item && item.Id) {
+                    if (item && item.Id && item.Type === 'BoxSet') {
                         await addCollectionSorting(item);
                     }
                 }, 100);
