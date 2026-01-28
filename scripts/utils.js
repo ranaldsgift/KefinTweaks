@@ -34,9 +34,11 @@
                         ERR('Error in original onViewShow handler:', err);
                     }
                 }
+
+                const view = getCurrentView() ?? args[0];
                 
                 // Call our registered handlers
-                notifyHandlers(args[0], args[1], window.location.hash);
+                notifyHandlers(view, args[1], window.location.hash);
             };
             
             LOG('Hooked into Emby.Page.onViewShow');
