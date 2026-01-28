@@ -4,6 +4,10 @@
 
 (function() {
     'use strict';
+
+    const state = {
+        useEpisodeImages: false,
+    };
     
     /**
      * Helper function to shuffle array (Fisher-Yates)
@@ -76,9 +80,414 @@
         const formats = ['portrait', 'thumb'];
         return formats[Math.floor(Math.random() * formats.length)];
     }
+
+    function flattenSeriesEpisodes(items) {
+        if (!items || items.length === 0) return items;
+
+        // Keep only the first item in the array for any given series
+        const seriesMap = new Map();
+        items.forEach(item => {
+            if (item.Type !== 'Episode') {
+                return;
+            }
+
+            if (seriesMap.has(item.SeriesId)) {
+                return;
+            }
+
+            seriesMap.set(item.SeriesId, item);
+        });
+        
+        return Array.from(seriesMap.values());
+    }
+
+    function formatAirDate(premiereDate) {
+        if (!premiereDate) return '';
+
+        // Ignore timezone offset
+        const date = new Date(premiereDate.replace('Z', ''));
+
+        // Use format: Tues Jan 4
+        const options = { weekday: 'short', month: 'short', day: 'numeric' };
+        return date.toLocaleDateString('en-US', options);
+    }
+
+    function deduplicateItems(items) {
+        const deduplicated = [];
+        const ids = new Set();
+        for (const item of items) {
+            if (!item.ProviderIds) {
+                deduplicated.push(item);
+                continue;
+            }
+
+            if (item.ProviderIds.Imdb && ids.has(item.ProviderIds.Imdb)) continue;
+            if (item.ProviderIds.Tmdb && ids.has(item.ProviderIds.Tmdb)) continue;
+            if (item.ProviderIds.Tvdb && ids.has(item.ProviderIds.Tvdb)) continue;
+
+            deduplicated.push(item);
+            ids.add(item.ProviderIds.Imdb);
+            ids.add(item.ProviderIds.Tmdb);
+            ids.add(item.ProviderIds.Tvdb);
+        }
+        return deduplicated;
+    }
+
+    /**
+     * Merges NextUp and ContinueWatching items chronologically by LastPlayedDate
+     * Preserves NextUp's internal order and assigns LastPlayedDate to items without it
+     * @param {Array} nextUpItems - Array of Episode items from NextUp endpoint (already ordered)
+     * @param {Array} continueWatchingItems - Array of Movie items from Continue Watching endpoint
+     * @returns {Array} - Merged array sorted by LastPlayedDate (descending)
+     */
+    function mergeNextUpAndContinueWatching(nextUpItems, continueWatchingItems) {
+        if (!nextUpItems || nextUpItems.length === 0) {
+            return continueWatchingItems || [];
+        }
+        if (!continueWatchingItems || continueWatchingItems.length === 0) {
+            return nextUpItems || [];
+        }
+
+        // 1. Assign LastPlayedDate to NextUp items without it
+        // Items without LastPlayedDate inherit the date from the next item that has one
+        const processedNextUp = [...nextUpItems];
+        for (let i = processedNextUp.length - 1; i >= 0; i--) {
+            const item = processedNextUp[i];
+            if (!item.UserData || !item.UserData.LastPlayedDate) {
+                // Look ahead to find next item with LastPlayedDate
+                for (let j = i + 1; j < processedNextUp.length; j++) {
+                    if (processedNextUp[j].UserData && processedNextUp[j].UserData.LastPlayedDate) {
+                        // Assign the date from the next item
+                        if (!item.UserData) item.UserData = {};
+                        item.UserData.LastPlayedDate = processedNextUp[j].UserData.LastPlayedDate;
+                        break;
+                    }
+                }
+                // If no date found ahead, assign null (will be placed at end)
+                if (!item.UserData || !item.UserData.LastPlayedDate) {
+                    if (!item.UserData) item.UserData = {};
+                    item.UserData.LastPlayedDate = null;
+                }
+            }
+        }
+
+        // 2. Sort ContinueWatching items by LastPlayedDate (descending)
+        const sortedContinueWatching = [...continueWatchingItems, ...processedNextUp].sort((a, b) => {
+            const dateA = a.UserData?.LastPlayedDate ? new Date(a.UserData.LastPlayedDate).getTime() : 0;
+            const dateB = b.UserData?.LastPlayedDate ? new Date(b.UserData.LastPlayedDate).getTime() : 0;
+            return dateB - dateA; // Descending
+        });
+
+        return sortedContinueWatching;
+    }
+
+    function postProcessItems(sectionConfig, itemsData) {
+        let processed = itemsData?.Items || itemsData || [];
+
+        // Check if the IsUnplayed filter is set on any of the queries
+        const isUnplayedFilter = sectionConfig.queries?.some(query => query.queryOptions?.IsUnplayed === true || query.queryOptions?.Filters?.includes('IsUnplayed'));
+        if (isUnplayedFilter) {
+            processed = processed.filter(item => item.UserData?.Played === false);
+        }
+
+        // Check if the IsPlayed filter is set on any of the queries
+        const isPlayedFilter = sectionConfig.queries?.some(query => query.queryOptions?.IsPlayed === true || query.queryOptions?.Filters?.includes('IsPlayed'));
+        if (isPlayedFilter) {
+            processed = processed.filter(item => item.UserData?.Played === true);
+        }
+
+        // Check if the IsResumable filter is set on any of the queries
+        const isResumableFilter = sectionConfig.queries?.some(query => query.queryOptions?.IsResumable === true || query.queryOptions?.Filters?.includes('IsResumable'));
+        if (isResumableFilter) {
+            processed = processed.filter(item => item.UserData?.PlayedPercentage && item.UserData?.PlayedPercentage !== 100 && item.UserData?.PlayedPercentage > 0);
+        }
+                 
+        // Flatten Series Episodes
+        if (sectionConfig.flattenSeries === true) {
+            processed = flattenSeriesEpisodes(processed);
+        }
+
+/*         if (sectionConfig.id === 'popularTVNetworks') {
+            // Sort items randomly
+            processed = shuffle(processed);
+        } */
+
+        if (sectionConfig.id === 'continueWatchingAndNextUp') {
+            // Get the movies from the items, and the rest as the episodes, then use mergeNextUpAndContinueWatching to merge them
+            const movies = processed.filter(item => item.Type === 'Movie');
+            const episodes = processed.filter(item => item.Type !== 'Movie');
+            processed = mergeNextUpAndContinueWatching(episodes, movies);
+        }
+
+        if (sectionConfig.id === 'upcoming') {
+            // Remove items which aired before today
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            processed = processed.filter(item => {
+                if (!item.PremiereDate || item.LocationType !== 'Virtual')
+                    return false;
+                const premiereDate = new Date(item.PremiereDate);
+                premiereDate.setHours(0, 0, 0, 0);
+                return premiereDate >= today;
+            });
+        }
+
+        // Add Custom Secondary Text for Recently Released Movies
+        if (sectionConfig.id === 'recentlyReleased.movies' || sectionConfig.id === 'upcoming' || sectionConfig.id === 'recentlyReleased.episodes') {
+            processed.forEach(item => {
+                if (item.PremiereDate) {
+                    item.CustomFooterText = formatAirDate(item.PremiereDate);
+                }
+            });
+        }
+
+        // Sort items by UserData.PlayedPercentage if PlayedPercentage is set as the SortBy
+        if (sectionConfig.queries?.[0]?.queryOptions?.SortBy === 'PlayedPercentage') {
+            processed = processed.sort((a, b) => {
+                const playedPercentageA = a.UserData?.PlayedPercentage || 0;
+                const playedPercentageB = b.UserData?.PlayedPercentage || 0;
+                return playedPercentageB - playedPercentageA;
+            });
+
+            // Remove any items which have no UserData.PlayedPercentage
+            processed = processed.filter(item => item.UserData?.PlayedPercentage && item.UserData?.PlayedPercentage > 0);
+        }
+
+        const limit = sectionConfig.itemLimit || sectionConfig.queries?.[0]?.queryOptions?.Limit || 0;
+
+        // Apply local limits for non-API sources
+        if (limit > 0) {
+            processed = processed.slice(0, limit);
+        }
+
+        // Deduplicate items based on ProviderIds. Look for match imdb, tmdb or tvdb ids
+        processed = deduplicateItems(processed);
+
+        return processed;
+    }
+
+    /**
+     * Refresh section queries by re-executing them without cache
+     * @param {Object} sectionConfig - Section configuration with queries array
+     * @returns {Promise<Array>} - Processed items array
+     */
+    async function refreshSectionQueries(sectionConfig) {
+        if (!sectionConfig.queries || !Array.isArray(sectionConfig.queries) || sectionConfig.queries.length === 0) {
+            console.warn(`[KefinTweaks CardBuilder] Section ${sectionConfig.id} has no queries array`);
+            return [];
+        }
+
+        const userId = ApiClient.getCurrentUserId();
+        const serverUrl = ApiClient.serverAddress();
+        const ApiHelper = window.apiHelper;
+        const results = [];
+
+        // Process each query in the queries array
+        for (const query of sectionConfig.queries) {
+            let queryResult;
+            
+            if (query.dataSource) {
+                // Handle cache-based data sources
+                queryResult = await ApiHelper.fetchFromDataSource(query.dataSource, query.queryOptions || {}, false);
+            } else {
+                // Build and execute query
+                const queryUrl = ApiHelper.buildQueryFromSection(query, userId, serverUrl);
+                
+                if (typeof queryUrl === 'string') {
+                    // Standard query - use useCache: false to bypass cache
+                    // When useCache is false, getQuery returns a Promise<data> directly
+                    const data = await ApiHelper.getQuery(queryUrl, {
+                        useCache: false
+                    });
+                    // Wrap in expected format for consistency
+                    queryResult = {
+                        data: data,
+                        dataPromise: Promise.resolve(data),
+                        isStalePromise: Promise.resolve(false)
+                    };
+                } else {
+                    console.warn(`[KefinTweaks CardBuilder] Invalid query URL for section ${sectionConfig.id}`);
+                    continue;
+                }
+            }
+            
+            results.push(queryResult);
+        }
+
+        // If multiple queries, merge results using section-level sortBy/sortOrder
+        let finalResult;
+        if (results.length > 1) {
+            finalResult = ApiHelper.mergeMultiQueryResults(results, sectionConfig);
+            // Extract items from merged result
+            const items = finalResult.result?.data?.Items || finalResult.result?.data || [];
+            return items;
+        } else if (results.length === 1) {
+            // Single query result
+            const data = results[0].data || results[0];
+            const items = data?.Items || data || [];
+            return postProcessItems(sectionConfig, items);
+        }
+
+        return [];
+    }
+
+    /**
+     * Show checkmark icon temporarily, then revert to refresh icon
+     * @param {HTMLElement} button - The refresh button element
+     */
+    async function showRefreshComplete(button) {
+        // Wait a brief moment for the spinning animation to complete smoothly
+        // This ensures the transition from spinning to checkmark looks natural
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        
+        // Fade out current icon
+/*         button.classList.add('icon-fade-out');
+        
+        // Wait for fade out to complete
+        await new Promise(resolve => setTimeout(resolve, 200));*/
+        
+        // Change to checkmark icon
+        button.classList.remove('refresh', 'icon-fade-out'); 
+        button.classList.add('check_circle', 'icon-fade-in');
+        
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        await new Promise(resolve => setTimeout(resolve, 0));
+        
+        // Wait for fade in to complete
+        await new Promise(resolve => setTimeout(resolve, 200));
+        button.classList.remove('icon-fade-in');
+        
+        // After 1.5 seconds, fade out checkmark and fade in refresh icon
+        setTimeout(async () => {
+            // Fade out checkmark
+            button.classList.add('icon-fade-out');
+            await new Promise(resolve => setTimeout(resolve, 200));
+            
+            // Change to refresh icon
+            button.classList.remove('check_circle', 'icon-fade-out');
+            button.classList.add('refresh', 'icon-fade-in');
+            
+            // Wait for fade in to complete
+            await new Promise(resolve => setTimeout(resolve, 200));
+            button.classList.remove('icon-fade-in');
+        }, 1500);
+    }
+
+    /**
+     * Create refresh button for progressive sections
+     * @param {Object} sectionConfig - Section configuration
+     * @param {HTMLElement} sectionElement - The section element to refresh
+     * @returns {HTMLElement} - The refresh button element
+     */
+    function createRefreshButton(sectionConfig, sectionElement) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'section-refresh-button material-icons refresh';
+        button.title = 'Refresh Section';
+        button.setAttribute('aria-label', 'Refresh Section');
+        
+        // Click handler
+        button.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            // Set refreshing state
+            sectionElement.dataset.refreshing = 'true';
+            
+            try {
+                // Refresh the queries
+                const freshItems = await refreshSectionQueries(sectionConfig);
+                
+                if (freshItems.length === 0) {
+                    // If no items, remove section
+                    sectionElement.remove();
+                    return;
+                }
+                
+                // Get card format from current section
+                let finalCardFormat = sectionConfig.cardFormat;
+                const currentCardFormat = sectionElement.getAttribute('data-card-format');
+                if (currentCardFormat) {
+                    finalCardFormat = currentCardFormat;
+                }
+                
+                // Create new content
+                let content = null;
+                if (sectionConfig.spotlight || sectionConfig.renderMode === 'Spotlight') {
+                    content = createSpotlightSection(freshItems, sectionConfig.name, { 
+                        viewMoreUrl: sectionConfig.viewMoreUrl, 
+                        ...sectionConfig.spotlightConfig
+                    });
+                } else {
+                    content = createScrollableContainer(freshItems, sectionConfig.name, sectionConfig.viewMoreUrl, sectionConfig.overflowCard, finalCardFormat, sectionConfig.forcedImageType);
+                }
+                
+                // Preserve all styles, classes, and attributes
+                content.style.cssText = sectionElement.style.cssText;
+                content.className = sectionElement.className;
+                Array.from(sectionElement.attributes).forEach(attr => {
+                    content.setAttribute(attr.name, attr.value);
+                });
+                
+                // Preserve data-expanded state from old itemsContainer to new one
+                const oldItemsContainer = sectionElement.querySelector('.itemsContainer');
+                const newItemsContainer = content.querySelector('.itemsContainer');
+                if (oldItemsContainer && newItemsContainer) {
+                    const isExpanded = oldItemsContainer.getAttribute('data-expanded') === 'true';
+                    if (isExpanded) {
+                        newItemsContainer.setAttribute('data-expanded', 'true');
+                        // Also update the show-all-button text if it exists
+                        const showAllButton = content.querySelector('.show-all-button');
+                        if (showAllButton) {
+                            showAllButton.textContent = 'Collapse';
+                            showAllButton.title = 'Show items in scrollable layout';
+                        }
+                        // Hide scroll buttons if they exist
+                        const scrollButtons = content.querySelector('.emby-scrollbuttons');
+                        if (scrollButtons) {
+                            scrollButtons.style.display = 'none';
+                        }
+                    }
+                }
+                
+                // Replace the section element
+                sectionElement.replaceWith(content);
+                
+                // Add refresh button to new content
+                const sectionTitleContainer = content.querySelector('.sectionTitleContainer');
+                let newButton = null;
+                if (sectionTitleContainer) {
+                    newButton = createRefreshButton(sectionConfig, content);
+                    sectionTitleContainer.appendChild(newButton);
+                }
+                
+                // Set refreshing state to false
+                content.dataset.refreshing = 'false';
+                
+                // Show checkmark on the new button
+                if (newButton) {
+                    showRefreshComplete(newButton);
+                }
+                
+            } catch (error) {
+                console.error('[KefinTweaks CardBuilder] Error refreshing section:', error);
+                sectionElement.dataset.refreshing = 'false';
+            }
+        });
+        
+        return button;
+    }
     
     // Main card builder object
     const cardBuilder = {
+        /**
+         * Post-processes items for a section
+         * @param {Object} sectionConfig - Section configuration
+         * @param {Array} itemsData - Array of Jellyfin items
+         * @returns {Array} - Post-processed array of Jellyfin items
+         */
+        postProcessItems: postProcessItems,
+
         /**
          * Main entry point function to build a Jellyfin card
          * @param {Object} item - The Jellyfin item object
@@ -102,7 +511,7 @@
          * @param {string} sortOrderDirection - Direction: 'Ascending' or 'Descending'
          * @returns {HTMLElement} - The constructed scrollable container
          */
-        renderCards: function(items, title, viewMoreUrl = null, overflowCard = false, cardFormat = null, sortOrder = null, sortOrderDirection = 'Ascending') {
+        renderCards: function(items, title, viewMoreUrl = null, overflowCard = false, cardFormat = null, sortOrder = null, sortOrderDirection = 'Ascending', forcedImageType = null) {
             // Handle Random card format - pick one format for entire section
             let finalCardFormat = cardFormat;
             if (cardFormat === 'random' || cardFormat === 'Random') {
@@ -117,7 +526,8 @@
                 sortedItems = shuffle([...items]);
             }
             
-            return createScrollableContainer(sortedItems, title, viewMoreUrl, overflowCard, finalCardFormat);
+            const container = createScrollableContainer(sortedItems, title, viewMoreUrl, overflowCard, finalCardFormat, forcedImageType);
+            return container;
         },
 
         /**
@@ -131,6 +541,483 @@
          * @param {string} sortOrderDirection - Direction: 'Ascending' or 'Descending'
          * @returns {Promise<HTMLElement>} - The constructed scrollable container
          */
+        /**
+         * Renders cards progressively with skeleton loading state
+         * @param {Promise<Array>} itemsPromise - Promise that resolves to array of Jellyfin items
+         * @param {string} title - Title for the scrollable container
+         * @param {string|Function} viewMoreUrl - Optional URL to make title clickable
+         * @param {boolean} overflowCard - Use overflow card classes instead of normal card classes
+         * @param {string} cardFormat - Override card format: 'portrait', 'backdrop', 'thumb', 'square', or 'random'
+         * @param {string} sortOrder - Sort order: 'Random', 'ReleaseDate', 'CriticRating', 'CommunityRating', 'SortTitle', 'DateAdded'
+         * @param {string} sortOrderDirection - Direction: 'Ascending' or 'Descending'
+         * @returns {HTMLElement} - The constructed scrollable container (initially with skeletons)
+         */
+        renderProgressivelyEnhancedCards: async function(itemsPromise, title, viewMoreUrl = null, overflowCard = false, cardFormat = null, sortOrder = null, sortOrderDirection = 'Ascending', forcedImageType = null, minimumItems = -1) {
+            // Handle Random card format - Must resolve ONCE for both skeleton and real cards
+            let resolvedFormat = cardFormat;
+            if (cardFormat === 'random' || cardFormat === 'Random') {
+                resolvedFormat = getRandomCardFormat();
+            }
+
+            // Check if promise is already fulfilled
+            if (await promiseState(itemsPromise) === 'fulfilled') {
+                // Resolve the promise and get the items
+                const items = await itemsPromise;
+                // Replace the skeleton with the real cards
+                const container = createScrollableContainer(items, title, viewMoreUrl, overflowCard, resolvedFormat, forcedImageType);
+                return container;
+            }
+
+            // Create skeleton container immediately using the resolved format
+            const skeletonContainer = createProgressivelyEnhancedScrollableContainer(title, viewMoreUrl, resolvedFormat, overflowCard);
+            const randomId = Math.random().toString(36).substring(2, 15);
+            skeletonContainer.setAttribute('data-skeleton-id', randomId);
+            
+            // When promise resolves, replace skeletons with real cards
+            itemsPromise.then(async items => {
+                // Remove the skeleton container if it exists
+                let skeletonContaineElement = document.querySelector(`[data-skeleton-id="${randomId}"]`);
+
+                // Let's try to find the skeleton 20 times every 100ms
+                for (let i = 0; i < 20; i++) {
+                    skeletonContaineElement = document.querySelector(`[data-skeleton-id="${randomId}"]`);
+                    if (skeletonContaineElement) {
+                        break;
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 150));
+                }
+
+                if (!items || items.length === 0) {
+                    // Remove container if no items
+                    skeletonContaineElement.remove();
+                    return;
+                }
+
+                if (items.length < minimumItems) {
+                    // Remove container if not enough items
+                    skeletonContaineElement.remove();
+                    return;
+                }
+
+                // Sort items if needed
+                let sortedItems = items;
+                if (sortOrder && sortOrder !== 'Random') {
+                    sortedItems = sortItems(items, sortOrder, sortOrderDirection);
+                } else if (sortOrder === 'Random') {
+                    sortedItems = shuffle([...items]);
+                }
+
+                // Generate real cards container (off-DOM) using the SAME resolved format
+                const realContainer = createScrollableContainer(sortedItems, title, viewMoreUrl, overflowCard, resolvedFormat, forcedImageType);
+
+                // Copy critical attributes to preserve layout/order
+                if (skeletonContaineElement.style.order) {
+                    realContainer.style.order = skeletonContainer.style.order;
+                }
+                if (skeletonContaineElement.hasAttribute('data-section-id')) {
+                    realContainer.setAttribute('data-section-id', skeletonContainer.getAttribute('data-section-id'));
+                }
+                
+                // Replace content of skeleton container with real content
+                // This preserves the container element itself and its layout properties (like order)
+                skeletonContaineElement.replaceWith(realContainer);
+            }).catch(error => {
+                console.error('[KefinTweaks CardBuilder] Error loading items for progressive enhancement:', error);
+                // Optionally remove skeleton on error or show error state
+                if (skeletonContaineElement) {
+                    skeletonContaineElement.remove();
+                }
+            });
+
+            return skeletonContainer;
+        },
+
+        /**
+         * Renders a progressive section (Cards or Spotlight)
+         * @param {HTMLElement} container - The parent container to append the section to
+         * @param {Array|Promise} itemsOrPromises - Data array or Promise resolving to items
+         * @param {string} title - Section title
+         * @param {Object} options - Configuration options
+         */
+        renderProgressiveSections: async function(container, sections, options = {}) {
+            const { revealSectionsSequentially = false } = options;
+
+            const renderProgressiveSectionsStartTime = performance.now();
+
+            // Get the HTML for all of the progressive sections and append it to the container at once
+            let sectionElements = [];
+            const fragment = document.createDocumentFragment();
+            for (const sectionPromise of sections) {
+                const sectionPromiseStartTime = performance.now();
+                const section = await sectionPromise;
+                const sectionPromiseEndTime = performance.now();
+                const sectionPromiseDuration = sectionPromiseEndTime - sectionPromiseStartTime;
+                console.log(`Section promise initialization time: ${sectionPromiseDuration.toFixed(2)}ms`);
+                
+                const sectionStartTime = performance.now();
+
+                const sectionConfig = section.config;
+
+                // Skip if the section is not enabled
+                if (!sectionConfig.enabled) {
+                    console.log(`[KefinTweaks CardBuilder] Section ${sectionConfig.id} is not enabled, skipping...`);
+                    continue;
+                }
+
+                // Handle Random card format - pick one format for entire section
+                let finalCardFormat = sectionConfig.cardFormat;
+                if (finalCardFormat === 'random' || finalCardFormat === 'Random') {
+                    finalCardFormat = getRandomCardFormat();
+                }
+
+                let dataItems = section.result?.data?.Items ?? section.result?.data;
+                
+                // If the data is already available, we should render the section instead of the skeleton
+                if (dataItems && dataItems.length > 0) {
+                    let content = null;
+
+                    if (sectionConfig.spotlight || sectionConfig.renderMode === 'Spotlight') {
+                        content = createSpotlightSection(dataItems, sectionConfig.name, { 
+                            viewMoreUrl: sectionConfig.viewMoreUrl, 
+                            progressiveEnhancement: true,
+                            ...sectionConfig.spotlightConfig
+                        });
+                    } else {
+                        content = createScrollableContainer(dataItems, sectionConfig.name, sectionConfig.viewMoreUrl, sectionConfig.overflowCard, finalCardFormat, sectionConfig.forcedImageType);
+                    }
+
+                    content.setAttribute('data-section-id', sectionConfig.id);
+                    content.style.order = sectionConfig.order;
+                    
+                    // Add refresh button to rendered section
+                    const sectionTitleContainer = content.querySelector('.sectionTitleContainer');
+                    if (sectionTitleContainer) {
+                        const refreshButton = createRefreshButton(sectionConfig, content);
+                        sectionTitleContainer.appendChild(refreshButton);
+                    }
+                    
+                    sectionElements.push(content);
+                    //container.appendChild(content);
+                    //content.style.contentVisibility = 'hidden';
+
+                    if (revealSectionsSequentially) {
+                        content.classList.add('cardbuilder-section-reveal');
+                        content.style.display = 'none';
+                    }
+
+                    fragment.appendChild(content);
+                    const sectionEndTime = performance.now();
+                    const sectionDuration = sectionEndTime - sectionStartTime;
+                    console.log(`Section ${sectionConfig.id} progressive initialization time: ${sectionDuration.toFixed(2)}ms`);
+                    continue;
+                }
+
+                // Otherwise, we need to create a skeleton section
+
+                let sectionElement = null;
+                if (sectionConfig.spotlight || sectionConfig.renderMode === 'Spotlight') {
+                    sectionElement = createSkeletonSpotlightSection(sectionConfig.name, { viewMoreUrl: sectionConfig.viewMoreUrl });
+                } else {
+                    sectionElement = createProgressivelyEnhancedScrollableContainer(sectionConfig.name, sectionConfig.viewMoreUrl, sectionConfig.cardFormat, sectionConfig.overflowCard);
+                }
+                sectionElement.setAttribute('data-section-id', sectionConfig.id);
+                sectionElement.style.order = sectionConfig.order;
+                sectionElements.push(sectionElement);
+                //container.appendChild(sectionElement);
+                
+                // set section element content-visibility to hidden
+                //sectionElement.style.contentVisibility = 'hidden';
+
+                if (revealSectionsSequentially) {
+                    sectionElement.classList.add('cardbuilder-section-reveal');
+                    sectionElement.style.display = 'none';
+                }
+
+                fragment.appendChild(sectionElement);
+                const sectionEndTime = performance.now();
+                const sectionDuration = sectionEndTime - sectionStartTime;
+                console.log(`Section ${sectionConfig.id} progressive initialization time: ${sectionDuration.toFixed(2)}ms`);
+            }
+
+            container.appendChild(fragment);
+
+            /* for (const sectionElement of sectionElements) {
+                sectionElement.style.contentVisibility = 'hidden';
+                container.appendChild(sectionElement);
+                await new Promise(resolve => requestAnimationFrame(resolve));
+                await new Promise(resolve => setTimeout(resolve, 0));
+            } */
+
+/*             for (const sectionElement of sectionElements) {
+                container.appendChild(sectionElement);
+            } */
+
+            // Append all of the section elements to the container at once
+            //container.append(...sectionElements);
+
+            // Wait 5 seconds
+            //await new Promise(resolve => setTimeout(resolve, 500));
+
+            // Set up section reveal animations if enabled
+            if (revealSectionsSequentially) {
+                initializeSectionRevealObserver();
+                sectionElements.forEach(section => {
+                    section.style.display = '';
+                    observeSectionForReveal(section);
+                });
+            }
+
+            for (let index = 0; index < sectionElements.length; index++) {
+                const sectionStartTime = performance.now();
+
+                const sectionElement = sectionElements[index];
+                const section = await sections[index];
+
+                section.result?.isStalePromise?.then(async isStale => {
+                    if (isStale) {
+                        // Add refreshing state to the section element
+                        sectionElement.dataset.refreshing = 'true';
+                        return;
+                    }
+                });
+
+                section.result?.dataPromise?.then(async result => {
+                    // Remove refreshing state from the section element
+                    sectionElement.dataset.refreshing = 'false';
+
+                    const sectionConfig = section.config;
+                    let items = result?.Items ?? result ?? [];
+
+                    // Check if the data is stale if it was previously available first
+                    const dataItems = section.result?.data?.Items ?? section.result?.data ?? [];
+
+                    let itemsMatch = true;
+
+                    // Check if the items in the section are the same as the items in the data
+                    const itemsInSection = sectionElement.querySelectorAll('.itemsContainer .card[data-id]');
+                    
+                    // Check that each item appears in order in the section by going through the itemsInSection and making sure the itemsInData index matches
+                    for (let i = 0; i < itemsInSection.length; i++) {
+                        const itemInSection = itemsInSection[i];
+                        const item = items[i];
+                        if (item && itemInSection && itemInSection.getAttribute('data-id') !== item.Id) {
+                            itemsMatch = false;
+                            break;
+                        }
+                    }
+
+                    if (items.length !== dataItems.length) {
+                        itemsMatch = false;
+                    }
+
+                    for (const item of items) {
+                        const dataItem = dataItems.find(dataItem => dataItem.Id === item.Id);
+                        if (!dataItem) {
+                            itemsMatch = false;
+                            break;
+                        }
+
+                        if (dataItem.UserData) {
+                            for (const key in dataItem.UserData) {
+                                if (dataItem.UserData[key] !== item.UserData[key]) {
+                                    itemsMatch = false;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    const shouldRefresh = !itemsMatch;
+
+                    // If there are no items, remove any existing section element
+                    if (items.length === 0) {
+                        sectionElement.remove();
+                        return;
+                    }
+
+                    if (!shouldRefresh) {
+                        return;
+                    }
+
+                    let content = null;
+
+                    let finalCardFormat = sectionConfig.cardFormat;
+
+                    // Get card format from skeleton container
+                    const skeletonCardFormat = sectionElement.getAttribute('data-card-format');
+                    if (skeletonCardFormat) {
+                        finalCardFormat = skeletonCardFormat;
+                    }
+
+                    //items = postProcessItems(sectionConfig, items);
+
+                    if (sectionConfig.spotlight || sectionConfig.renderMode === 'Spotlight') {
+                        content = createSpotlightSection(items, sectionConfig.name, { 
+                            viewMoreUrl: sectionConfig.viewMoreUrl, 
+                            ...sectionConfig.spotlightConfig
+                        });
+                    } else {
+                        content = createScrollableContainer(items, sectionConfig.name, sectionConfig.viewMoreUrl, sectionConfig.overflowCard, finalCardFormat, sectionConfig.forcedImageType);
+                    }
+
+                    //content.setAttribute('data-section-id', sectionConfig.id);
+                    //content.style.order = sectionConfig.order;
+                    //content.setAttribute('data-card-format', finalCardFormat);
+                    //content.style.contentVisibility = sectionElement.style.contentVisibility ?? 'hidden';
+
+                    // Ensure all styles and classes and attributes are retained in the new content
+                    content.style.cssText = sectionElement.style.cssText;
+                    content.className = sectionElement.className;
+                    Array.from(sectionElement.attributes).forEach(attr => {
+                        content.setAttribute(attr.name, attr.value);
+                    });
+
+                    // Preserve data-expanded state from old itemsContainer to new one
+                    const oldItemsContainer = sectionElement.querySelector('.itemsContainer');
+                    const newItemsContainer = content.querySelector('.itemsContainer');
+                    if (oldItemsContainer && newItemsContainer) {
+                        const isExpanded = oldItemsContainer.getAttribute('data-expanded') === 'true';
+                        if (isExpanded) {
+                            newItemsContainer.setAttribute('data-expanded', 'true');
+                            // Also update the show-all-button text if it exists
+                            const showAllButton = content.querySelector('.show-all-button');
+                            if (showAllButton) {
+                                showAllButton.textContent = 'Collapse';
+                                showAllButton.title = 'Show items in scrollable layout';
+                            }
+                            // Hide scroll buttons if they exist
+                            const scrollButtons = content.querySelector('.emby-scrollbuttons');
+                            if (scrollButtons) {
+                                scrollButtons.style.display = 'none';
+                            }
+                        }
+                    }
+
+                    // Add refresh button to new content
+                    const sectionTitleContainer = content.querySelector('.sectionTitleContainer');
+                    if (sectionTitleContainer) {
+                        const refreshButton = createRefreshButton(sectionConfig, content);
+                        sectionTitleContainer.appendChild(refreshButton);
+                    }
+
+                    sectionElement.replaceWith(content);
+                    
+                    // If revealSectionsSequentially is enabled and section hasn't been revealed yet, re-observe it
+                    if (revealSectionsSequentially && content.classList.contains('cardbuilder-section-reveal') && !content.classList.contains('in-viewport')) {
+                        observeSectionForReveal(content);
+                    }
+                });
+                const sectionEndTime = performance.now();
+                const sectionDuration = sectionEndTime - sectionStartTime;
+                console.log(`Section ${index} progressive initialization time: ${sectionDuration.toFixed(2)}ms`);
+            }
+            const renderProgressiveSectionsEndTime = performance.now();
+            const renderProgressiveSectionsDuration = renderProgressiveSectionsEndTime - renderProgressiveSectionsStartTime;
+            console.log(`Render progressive sections initialization time: ${renderProgressiveSectionsDuration.toFixed(2)}ms`);
+        },       
+
+        /**
+         * Unified function to render progressive sections (Cards or Spotlight)
+         * @param {HTMLElement} container - The parent container to append the section to
+         * @param {Array|Promise} itemsOrPromise - Data array or Promise resolving to items
+         * @param {string} title - Section title
+         * @param {Object} options - Configuration options
+         */
+        renderProgressiveCards: function(container, itemsOrPromise, title, options = {}) {
+            const {
+                spotlight = false,
+                viewMoreUrl = null,
+                cardFormat = null,
+                overflowCard = false,
+                sortOrder = null,
+                sortOrderDirection = 'Ascending',
+                forcedImageType = null,
+                sectionId = null,
+                order = null,
+                expectedItemType = null,
+                minimumItems = 1
+            } = options;
+
+            // Handle Random card format once
+            let resolvedFormat = cardFormat;
+            if (cardFormat === 'random' || cardFormat === 'Random') {
+                resolvedFormat = getRandomCardFormat();
+            }
+
+            // Function to setup attributes
+            const setupElement = (el) => {
+                if (sectionId) el.setAttribute('data-section-id', sectionId);
+                if (order !== null) el.style.order = order;
+                // Stamp resolved format for consistency on updates
+                if (resolvedFormat && !spotlight) el.setAttribute('data-card-format', resolvedFormat);
+            };
+
+            // Helper to render final content
+            const renderContent = (items) => {
+                if (!items || items.length < minimumItems) return null;
+
+                // Sort items
+                let sortedItems = items;
+                if (sortOrder && sortOrder !== 'Random') {
+                    sortedItems = sortItems(items, sortOrder, sortOrderDirection);
+                } else if (sortOrder === 'Random') {
+                    sortedItems = shuffle([...items]);
+                }
+
+                if (spotlight) {
+                    return createSpotlightSection(sortedItems, title, { viewMoreUrl });
+                } else {
+                    return createScrollableContainer(sortedItems, title, viewMoreUrl, overflowCard, resolvedFormat, forcedImageType);
+                }
+            };
+
+            // Handle Promise
+            if (itemsOrPromise && typeof itemsOrPromise.then === 'function') {
+                // Render Skeleton
+                let skeleton;
+                if (spotlight) {
+                    skeleton = createSkeletonSpotlightSection(title, { viewMoreUrl });
+                } else {
+                    skeleton = createProgressivelyEnhancedScrollableContainer(title, viewMoreUrl, resolvedFormat, overflowCard);
+                }
+                setupElement(skeleton);
+                container.appendChild(skeleton);
+
+                // Handle Resolution
+                itemsOrPromise.then(items => {
+                    const content = renderContent(items);
+                    if (content) {
+                        setupElement(content);
+                        // Copy of any existing data attributes to the new content
+                        Array.from(skeleton.attributes).forEach(attr => {
+                            content.setAttribute(attr.name, attr.value);
+                        });
+                        skeleton.replaceWith(content);
+                        // Update skeleton inner HTML with the content
+                        //skeleton.innerHTML = content.innerHTML;
+                    } else {
+                        skeleton.remove();
+                    }
+                }).catch(err => {
+                    console.error('[CardBuilder] Error loading items:', err);
+                    skeleton.remove();
+                });
+
+                return skeleton;
+            } 
+            
+            // Handle Direct Array
+            else {
+                const items = Array.isArray(itemsOrPromise) ? itemsOrPromise : [];
+                const content = renderContent(items);
+                if (content) {
+                    setupElement(content);
+                    container.appendChild(content);
+                    return content;
+                }
+            }
+        },
+
         renderCardsFromIds: async function(itemIds, title, viewMoreUrl = null, overflowCard = false, cardFormat = null, sortOrder = null, sortOrderDirection = 'Ascending') {
             const LOG = (...args) => console.log('[KefinTweaks CardBuilder]', ...args);
             
@@ -163,7 +1050,8 @@
                     sortedItems = shuffle([...items]);
                 }
                 
-                return createScrollableContainer(sortedItems, title, viewMoreUrl, overflowCard, finalCardFormat);
+                const container = createScrollableContainer(sortedItems, title, viewMoreUrl, overflowCard, finalCardFormat);
+                return container;
             } catch (error) {
                 console.error('[KefinTweaks CardBuilder] Error fetching items:', error);
                 return createScrollableContainer([], title, viewMoreUrl, overflowCard, cardFormat);
@@ -172,13 +1060,63 @@
         
         /**
          * Renders a spotlight section (Netflix-style slim banner carousel)
-         * @param {Array} items - Array of Jellyfin item objects
+         * @param {Array|Promise<Array>} items - Array of Jellyfin item objects or Promise resolving to array
          * @param {string} title - Title for the spotlight section
          * @param {Object} options - Options for the spotlight carousel
+         * @param {boolean} options.progressiveEnhancement - If true and items is a Promise, render skeleton first
          * @returns {HTMLElement} - The constructed spotlight container
          */
         renderSpotlightSection: function(items, title, options = {}) {
-            return createSpotlightSection(items, title, options);
+            const { progressiveEnhancement = false } = options;
+            
+            // If progressive enhancement is enabled and items is a Promise
+            if (progressiveEnhancement && items && typeof items.then === 'function') {
+                // Create skeleton spotlight section immediately
+                const skeletonSpotlightContainer = createSkeletonSpotlightSection(title, options);
+
+                // Add identifying data-id
+                const randomId = Math.random().toString(36).substring(2, 15);
+                skeletonSpotlightContainer.setAttribute('data-skeleton-id', randomId);
+                
+                // When promise resolves, replace skeleton with real spotlight
+                items.then(async items => {
+                    // Remove the skeleton container if it exists
+                    let skeletonContainerElement = document.querySelector(`[data-skeleton-id="${randomId}"]`);
+    
+                    // Let's try to find the skeleton 20 times every 100ms
+                    for (let i = 0; i < 20; i++) {
+                        skeletonContainerElement = document.querySelector(`[data-skeleton-id="${randomId}"]`);
+                        if (skeletonContainerElement) {
+                            break;
+                        }
+                        await new Promise(resolve => setTimeout(resolve, 150));
+                    }
+
+                    // Generate real spotlight section
+                    const realContainer = createSpotlightSection(items, title, options);
+                    
+                    // Copy critical attributes to preserve layout/order
+                    if (skeletonContainerElement.style.order) {
+                        realContainer.style.order = skeletonContainer.style.order;
+                    }
+                    if (skeletonContainerElement.hasAttribute('data-section-id')) {
+                        realContainer.setAttribute('data-section-id', skeletonContainerElement.getAttribute('data-section-id'));
+                    }
+                    
+                    // Replace skeleton container with real container
+                    skeletonContainerElement.replaceWith(realContainer);
+                }).catch(error => {
+                    console.error('[KefinTweaks CardBuilder] Error loading items for spotlight progressive enhancement:', error);
+                    // Optionally remove skeleton on error or show error state
+                    skeletonSpotlightContainer.remove();
+                });
+
+                return skeletonSpotlightContainer;
+            }
+            
+            // Normal rendering (items is already an array)
+            const container = createSpotlightSection(items, title, options);
+            return container;
         },
         
         /**
@@ -190,7 +1128,8 @@
          */
         sortItems: function(items, sortOrder, sortOrderDirection) {
             return sortItems(items, sortOrder, sortOrderDirection);
-        }
+        },
+        
     };
 
     /**
@@ -199,19 +1138,26 @@
      * @param {boolean} overflowCard - Use overflow card classes instead of normal card classes
      * @param {string} cardFormat - Override card format: 'portrait', 'backdrop', 'thumb', or 'square'
      * @param {string} customFooterText - Optional custom footer text (e.g., air date for episodes)
+     * @param {string} forcedImageType - Force specific image type (e.g., 'Primary')
      * @returns {HTMLElement} - The constructed card element
      */
-    function createJellyfinCardElement(item, overflowCard = false, cardFormat = null, customFooterText = null) {
+    function createJellyfinCardElement(item, overflowCard = false, cardFormat = null, customFooterText = null, forcedImageType = null) {
         const serverId = ApiClient.serverId();
         const serverAddress = ApiClient.serverAddress();
         
         // Determine card type based on cardFormat override or item type
         let cardClass, padderClass, imageParams;
         cardFormat = cardFormat?.toLowerCase() || null;
+        forcedImageType = forcedImageType?.toLowerCase() || null;
+        
+        // Use custom footer text from item property if not explicitly provided
+        if (!customFooterText && item.CustomFooterText) {
+            customFooterText = item.CustomFooterText;
+        }
         
         if (cardFormat) {
             // Use specified cardFormat
-            if (cardFormat === 'backdrop' || cardFormat === 'thumb') {
+            if (cardFormat === 'backdrop' || cardFormat === 'thumb' || forcedImageType) {
                 cardClass = overflowCard ? 'overflowBackdropCard' : 'backdropCard';
                 padderClass = 'cardPadder-backdrop';
                 imageParams = 'fillHeight=267&fillWidth=474';
@@ -253,6 +1199,10 @@
         card.setAttribute('data-type', item.Type);
         card.setAttribute('data-mediatype', item.MediaType || 'Video');
         card.setAttribute('data-prefix', item.Name?.startsWith('The ') ? 'THE' : '');
+
+        if (item.UserData?.PlaybackPositionTicks && item.UserData?.PlaybackPositionTicks > 0) {
+            card.setAttribute('data-positionticks', item.UserData?.PlaybackPositionTicks);
+        }
 
         // Card box container
         const cardBox = document.createElement('div');
@@ -304,8 +1254,12 @@
         cardImageContainer.setAttribute('aria-label', item.Name || 'Unknown');
 
         // Force specific image if card format is specified
+/*         if (forcedImageType === 'Primary' && item.ImageTags?.Primary) {
+             const imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.ImageTags.Primary}`;
+             cardImageContainer.style.backgroundImage = `url("${imageUrl}")`;
+        } else  */
+        let imageUrl = '';
         if (cardFormat === 'backdrop') {
-            let imageUrl = '';
             if (item.BackdropImageTags[0]) {
                 imageUrl = `${serverAddress}/Items/${item.Id}/Images/Backdrop?${imageParams}&quality=96&tag=${item.BackdropImageTags[0]}`;
             } else if (item.ParentBackdropImageTags && item.ParentBackdropImageTags[0]) {
@@ -315,26 +1269,29 @@
             } else {
                 imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.ImageTags?.Primary}`;
             }
-            cardImageContainer.style.backgroundImage = `url("${imageUrl}")`;
         } else if (cardFormat === 'square') {
             if (item.Type === 'Season' || item.Type === 'Series' || item.Type === 'Movie') {
-                const imageUrl = item.BackdropImageTags[0] ? `${serverAddress}/Items/${item.Id}/Images/Backdrop?${imageParams}&quality=96&tag=${item.BackdropImageTags[0]}` : `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.ImageTags?.Primary}`;
-                cardImageContainer.style.backgroundImage = `url("${imageUrl}")`;
-            } else {
-                const imageUrl = item.PrimaryImageTags[0] ? `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.PrimaryImageTags[0]}` : `${serverAddress}/Items/${item.Id}/Images/Thumb?${imageParams}&quality=96&tag=${item.ImageTags?.Thumb}`;
-                cardImageContainer.style.backgroundImage = `url("${imageUrl}")`;
+                imageUrl = item.BackdropImageTags && item.BackdropImageTags[0] ? `${serverAddress}/Items/${item.Id}/Images/Backdrop?${imageParams}&quality=96&tag=${item.BackdropImageTags[0]}` : item.ImageTags?.Primary ? `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.ImageTags?.Primary}` : '';
+            } else if (item.ImageTags?.Primary) {
+                imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.ImageTags?.Primary}`;
+            } else if (item.SeriesPrimaryImageTag) {
+                imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.SeriesPrimaryImageTag}`;
+            } else if (item.BackdropImageTags && item.BackdropImageTags[0]) {
+                imageUrl = `${serverAddress}/Items/${item.Id}/Images/Backdrop?${imageParams}&quality=96&tag=${item.BackdropImageTags[0]}`;
+            } else if (item.ImageTags?.Thumb) {
+                imageUrl = `${serverAddress}/Items/${item.Id}/Images/Thumb?${imageParams}&quality=96&tag=${item.ImageTags?.Thumb}`;
             }
-        } else if (cardFormat === 'portrait') {
+        } else if (cardFormat === 'portrait' || cardFormat === 'poster') {
             if (item.Type === 'Episode' && item.SeriesPrimaryImageTag) {
-                const imageUrl = `${serverAddress}/Items/${item.SeriesId}/Images/Primary?${imageParams}&quality=96&tag=${item.SeriesPrimaryImageTag}`;
-                cardImageContainer.style.backgroundImage = `url("${imageUrl}")`;
+                imageUrl = `${serverAddress}/Items/${item.SeriesId}/Images/Primary?${imageParams}&quality=96&tag=${item.SeriesPrimaryImageTag}`;                
             } else {
-                const imageUrl = item.ImageTags?.Primary ? `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.ImageTags?.Primary}` : `${serverAddress}/Items/${item.Id}/Images/Thumb?${imageParams}&quality=96&tag=${item.ImageTags?.Thumb}`;
-                cardImageContainer.style.backgroundImage = `url("${imageUrl}")`;
+                imageUrl = item.ImageTags?.Primary ? `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.ImageTags?.Primary}` : `${serverAddress}/Items/${item.Id}/Images/Thumb?${imageParams}&quality=96&tag=${item.ImageTags?.Thumb}`;                
             }
         } else if (cardFormat === 'thumb') {
-            let imageUrl = '';
-            if (item.ImageTags?.Thumb) {
+
+            if (forcedImageType && state.useEpisodeImages && item.Type === 'Episode') {
+                imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.ImageTags?.Primary}`;
+            } else if (item.ImageTags?.Thumb) {
                 imageUrl = `${serverAddress}/Items/${item.Id}/Images/Thumb?${imageParams}&quality=96&tag=${item.ImageTags?.Thumb}`;
             } else if (item.ParentThumbImageTag) {
                 imageUrl = `${serverAddress}/Items/${item.SeriesId}/Images/Thumb?${imageParams}&quality=96&tag=${item.ParentThumbImageTag}`;
@@ -345,9 +1302,7 @@
             } else if (item.ImageTags?.Primary) {
                 imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.ImageTags.Primary}`;
             }
-            cardImageContainer.style.backgroundImage = `url("${imageUrl}")`;
         } else if (item.ImageTags?.Primary) {
-            let imageUrl;
             if (item.IsJellyseerr) {
                 // Jellyseerr items use external image URLs
                 imageUrl = item.ImageTags.Primary.startsWith('http') 
@@ -357,22 +1312,17 @@
                 // Regular Jellyfin items
                 imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.ImageTags.Primary}`;
             }
-            cardImageContainer.style.backgroundImage = `url("${imageUrl}")`;
         } else if (item.ImageTags?.Thumb) {
-            const imageUrl = `${serverAddress}/Items/${item.Id}/Images/Thumb?${imageParams}&quality=96&tag=${item.ImageTags.Thumb}`;
-            cardImageContainer.style.backgroundImage = `url("${imageUrl}")`;
+            imageUrl = `${serverAddress}/Items/${item.Id}/Images/Thumb?${imageParams}&quality=96&tag=${item.ImageTags.Thumb}`;
         } else if ((item.Type === 'Season') && item.SeriesPrimaryImageTag) {
-            const imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.SeriesPrimaryImageTag}`;
-            cardImageContainer.style.backgroundImage = `url("${imageUrl}")`;
+            imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.SeriesPrimaryImageTag}`;
         } else if ((item.Type === 'Episode') && item.ParentThumbImageTag) {
-            const imageUrl = `${serverAddress}/Items/${item.ParentThumbItemId}/Images/Thumb?${imageParams}&quality=96&tag=${item.ParentThumbImageTag}`;
-            cardImageContainer.style.backgroundImage = `url("${imageUrl}")`;
+            imageUrl = `${serverAddress}/Items/${item.ParentThumbItemId}/Images/Thumb?${imageParams}&quality=96&tag=${item.ParentThumbImageTag}`;
         } else if (item.BackdropImageTags && item.BackdropImageTags.length > 0) {
-            const imageUrl = `${serverAddress}/Items/${item.Id}/Images/Backdrop?${imageParams}&quality=96&tag=${item.BackdropImageTags[0]}`;
-            cardImageContainer.style.backgroundImage = `url("${imageUrl}")`;
+            imageUrl = `${serverAddress}/Items/${item.Id}/Images/Backdrop?${imageParams}&quality=96&tag=${item.BackdropImageTags[0]}`;
         } else if (item.ParentBackdropImageTags && item.ParentBackdropImageTags.length > 0) {
-            const imageUrl = `${serverAddress}/Items/${item.ParentBackdropItemId}/Images/Backdrop?${imageParams}&quality=96&tag=${item.ParentBackdropImageTags[0]}`;
-            cardImageContainer.style.backgroundImage = `url("${imageUrl}")`;
+            imageUrl = `${serverAddress}/Items/${item.ParentBackdropItemId}/Images/Backdrop?${imageParams}&quality=96&tag=${item.ParentBackdropImageTags[0]}`;
+            
         } else {
             // No image - add icon as inner element
             const iconSpan = document.createElement('span');
@@ -400,10 +1350,20 @@
             
             cardImageContainer.appendChild(iconSpan);
         }
+        
+        if (imageUrl) {
+            // Use data-src for lazy loading instead of immediate backgroundImage
+            cardImageContainer.setAttribute('data-src', imageUrl);
+            // Add lazy class for styling/selection
+            cardImageContainer.classList.add('lazy');
+        }
+        //countIndicator indicator
+
+        
+        const cardIndicators = document.createElement('div');
+        cardIndicators.className = 'cardIndicators';
 
         if (item.UserData?.Played) {
-            const cardIndicators = document.createElement('div');
-            cardIndicators.className = 'cardIndicators';
             const playedIndicator = document.createElement('div');
             playedIndicator.className = 'playedIndicator indicator';
             const playedIndicatorIcon = document.createElement('span');
@@ -411,7 +1371,31 @@
             playedIndicatorIcon.setAttribute('aria-hidden', 'true');
             playedIndicator.appendChild(playedIndicatorIcon);
             cardIndicators.appendChild(playedIndicator);
+        }
+
+        if (item.UserData?.UnplayedItemCount && item.UserData?.UnplayedItemCount > 0) {
+            const unplayedIndicator = document.createElement('div');
+            unplayedIndicator.className = 'countIndicator indicator';
+            unplayedIndicator.textContent = item.UserData?.UnplayedItemCount;
+            cardIndicators.appendChild(unplayedIndicator);
+        }
+
+        if (cardIndicators.childElementCount > 0) {
             cardImageContainer.appendChild(cardIndicators);
+        }
+
+        if (item.UserData?.PlayedPercentage && item.UserData?.PlayedPercentage > 0) {
+            const innerCardFooter = document.createElement('div');
+            innerCardFooter.className = 'innerCardFooter fullInnerCardFooter innerCardFooterClear';
+            cardBox.appendChild(innerCardFooter);
+            const itemProgressBar = document.createElement('div');
+            itemProgressBar.className = 'itemProgressBar';
+            const itemProgressBarForeground = document.createElement('div');
+            itemProgressBarForeground.className = 'itemProgressBarForeground';
+            itemProgressBarForeground.style.width = `${item.UserData?.PlayedPercentage}%`;
+            itemProgressBar.appendChild(itemProgressBarForeground);
+            innerCardFooter.appendChild(itemProgressBar);
+            cardImageContainer.appendChild(innerCardFooter);
         }
 
         // Card overlay container
@@ -559,7 +1543,7 @@
             const secondaryText = document.createElement('div');
             secondaryText.className = 'cardText cardTextCentered cardText-secondary';
             const yearBdi = document.createElement('bdi');
-            yearBdi.textContent = item.ProductionYear || item.PremiereDate?.substring(0, 4) || '';
+            yearBdi.textContent = item.CustomFooterText || item.ProductionYear || item.PremiereDate?.substring(0, 4) || '';
             secondaryText.appendChild(yearBdi);
         }
 
@@ -608,7 +1592,7 @@
             const secondaryText = document.createElement('div');
             secondaryText.className = 'cardText cardTextCentered cardText-secondary';
             const yearBdi = document.createElement('bdi');
-            yearBdi.textContent = item.ProductionYear || item.PremiereDate?.substring(0, 4) || '';
+            yearBdi.textContent = item.CustomFooterText || item.ProductionYear || item.PremiereDate?.substring(0, 4) || '';
             secondaryText.appendChild(yearBdi);
             cardBox.appendChild(secondaryText);
         }
@@ -713,7 +1697,9 @@
             
             const itemDiv = document.createElement('div');
             itemDiv.className = 'spotlight-item';
+            itemDiv.setAttribute('data-id', item.Id);
             itemDiv.setAttribute('data-index', index);
+            itemDiv.setAttribute('data-item-type', itemType);
             if (index === 0) {
                 itemDiv.style.opacity = '1';
             } else {
@@ -747,9 +1733,9 @@
             if (hasLogo) {
                 // Use logo image instead of text title
                 const logoUrl = `${serverAddress}/Items/${item.Id}/Images/Logo?fillHeight=200&quality=96&tag=${item.ImageTags.Logo}`;
-                titleEl = document.createElement('img');
+                titleEl = document.createElement('div');
                 titleEl.className = 'spotlight-item-logo';
-                titleEl.src = logoUrl;
+                titleEl.style.backgroundImage = `url("${logoUrl}")`;
                 titleEl.alt = item.Name || 'Unknown';
             } else {
                 // Use text title as fallback
@@ -1452,10 +2438,15 @@
      * @param {string} cardFormat - Override card format: 'portrait', 'backdrop', or 'square'
      * @returns {HTMLElement} - The constructed scrollable container
      */
-    function createScrollableContainer(items, title, viewMoreUrl = null, overflowCard = false, cardFormat = null) {        
+    function createScrollableContainer(items, title, viewMoreUrl = null, overflowCard = false, cardFormat = null, forcedImageType = null) {        
         // Create the main vertical section container
         const verticalSection = document.createElement('div');
         verticalSection.className = 'verticalSection emby-scroller-container custom-scroller-container';
+        
+        // Persist the card format if provided (ensures consistency for random/updates)
+        if (cardFormat) {
+            verticalSection.setAttribute('data-card-format', cardFormat);
+        }
 
         // Create section title
         const sectionTitleContainer = document.createElement('div');
@@ -1496,23 +2487,24 @@
             sectionTitleContainer.appendChild(titleText);
         }
 
-        // Create "Show All" button (will be added after items are created)
+        // Create "Show All" button (always created, shown/hidden based on data-expandable attribute)
         const showAllButton = document.createElement('button');
         showAllButton.type = 'button';
         showAllButton.className = 'show-all-button';
-        showAllButton.style.cssText = 'margin-left: 10px; font-size: 12px; padding: 4px 8px; min-width: auto; background: transparent; border: 1px solid rgba(255, 255, 255, 0.3) !important; border-radius: 4px; cursor: pointer; color: var(--main-text, #fff) !important; margin-bottom: .35em; align-self: center;';
         showAllButton.textContent = 'Expand';
         showAllButton.title = 'Show all items';
+        sectionTitleContainer.appendChild(showAllButton);
 
         // Create scroller container
         const scroller = document.createElement('div');
         scroller.setAttribute('is', 'emby-scroller');
+
         scroller.setAttribute('data-horizontal', 'true');
         scroller.setAttribute('data-centerfocus', 'card');
         scroller.className = 'padded-top-focusscale padded-bottom-focusscale emby-scroller custom-scroller';
         scroller.setAttribute('data-scroll-mode-x', 'custom');
-		// Enable smooth native horizontal touch scrolling (no snapping, no buttons)
-		scroller.style.scrollSnapType = 'none';
+        // Enable mobile swipe scrolling
+        scroller.style.scrollSnapType = 'none';
 		// Allow both axes so vertical page scroll isn't blocked when gesture starts over the scroller
 		scroller.style.touchAction = 'auto';
 		// Keep horizontal scroll self-contained but allow vertical to bubble to page
@@ -1527,52 +2519,754 @@
         itemsContainer.className = 'focuscontainer-x itemsContainer scrollSlider animatedScrollX';
         itemsContainer.style.whiteSpace = 'nowrap';
 
+        // If the items contain more episodes than non-episodes, and the card format is Poster, set the forced image type to Primary
+        if (items.filter(item => item.Type === 'Episode').length > items.filter(item => item.Type !== 'Episode').length && cardFormat === 'Poster') {
+            forcedImageType = 'Primary';
+        }
+
         // Add items to container
         items.forEach((item, index) => {
-            const card = createJellyfinCardElement(item, overflowCard, cardFormat);
+            const card = createJellyfinCardElement(item, overflowCard, cardFormat, null, forcedImageType);
             card.setAttribute('data-index', index);
             itemsContainer.appendChild(card);
         });
 
         scroller.appendChild(itemsContainer);
 
-        // Add "Show All" button to title if there are more than 20 items
-        if (items.length > 20) {
-            sectionTitleContainer.appendChild(showAllButton);
+        // Create the left/right scroll buttons for the scroller
+
+/*         const scrollButtons = document.createElement('div');
+        //scrollButtons.setAttribute('is', 'emby-scrollbuttons');
+        scrollButtons.className = 'emby-scrollbuttons padded-right';
+
+        const leftButton = document.createElement('button');
+        leftButton.type = 'button';
+        //leftButton.setAttribute('is', 'paper-icon-button-light');
+        leftButton.setAttribute('data-ripple', 'false');
+        leftButton.setAttribute('data-direction', 'left');
+        leftButton.setAttribute('title', 'Previous');
+        leftButton.className = 'emby-scrollbuttons-button paper-icon-button-light';
+        leftButton.disabled = true;
+        const leftSpan = document.createElement('span');
+        leftSpan.className = 'material-icons chevron_left';
+        leftSpan.setAttribute('aria-hidden', 'true');
+        leftButton.appendChild(leftSpan);
+
+        leftButton.addEventListener('click', () => {
+            // Scroll backward by viewport width
+            const scrollAmount = scroller.clientWidth; // 80% of visible width
+            scroller.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
+        });
+
+        scrollButtons.appendChild(leftButton);
+
+        const rightButton = document.createElement('button');
+        rightButton.type = 'button';
+        //rightButton.setAttribute('is', 'paper-icon-button-light');
+        rightButton.setAttribute('data-ripple', 'false');
+        rightButton.setAttribute('data-direction', 'right');
+        rightButton.setAttribute('title', 'Next');
+        rightButton.className = 'emby-scrollbuttons-button paper-icon-button-light';
+        const rightSpan = document.createElement('span');
+        rightSpan.className = 'material-icons chevron_right';
+        rightSpan.setAttribute('aria-hidden', 'true');
+        rightButton.appendChild(rightSpan);
+
+        rightButton.addEventListener('click', () => {
+            // Scroll forward by width of the scroller parent
+            const paddingLeft = parseFloat(window.getComputedStyle(scroller).paddingLeft) || 0;
+            const paddingRight = parseFloat(window.getComputedStyle(scroller).paddingRight) || 0;
+            const scrollAmount = scroller.clientWidth - paddingLeft - paddingRight;
+            scroller.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+        });
+
+        scrollButtons.appendChild(rightButton);
+
+        // Update button states based on scroll position
+        function updateScrollButtons() {
+            const scrollLeft = scroller.scrollLeft;
+            const maxScroll = scroller.scrollWidth - scroller.clientWidth;
+            
+            // Disable left button at start
+            leftButton.disabled = scrollLeft <= 1; // 1px threshold for rounding
+            
+            // Disable right button at end
+            rightButton.disabled = scrollLeft >= maxScroll - 1;
         }
 
+        // Listen for scroll events to update button states
+        scroller.addEventListener('scroll', updateScrollButtons, { passive: true });
+
+        // Update on resize (for responsive layouts)
+        const resizeObserver = new ResizeObserver(() => updateScrollButtons());
+        resizeObserver.observe(scroller);
+
+        // Initial button state on creation
+        updateScrollButtons();
+
+        // Touch and drag support
+        let dragState = {
+            isDragging: false,
+            startX: 0,
+            startY: 0,
+            startScrollLeft: 0,
+            hasMoved: false,
+            lastX: 0,
+            lastTime: 0,
+            velocity: 0,
+            momentumId: null
+        };
+
+        function onDragStart(e) {
+            // Only handle left mouse button for drag (button 0)
+            // Allow middle click (button 1) and right click (button 2) to work normally
+            if (e.type === 'mousedown' && e.button !== 0) {
+                return;
+            }
+            
+            // Get initial touch/mouse position
+            const point = e.touches ? e.touches[0] : e;
+            
+            // Cancel any existing momentum animation
+            if (dragState.momentumId !== null) {
+                cancelAnimationFrame(dragState.momentumId);
+                dragState.momentumId = null;
+            }
+            
+            dragState.isDragging = true;
+            dragState.startX = point.clientX;
+            dragState.startY = point.clientY;
+            dragState.startScrollLeft = scroller.scrollLeft;
+            dragState.hasMoved = false;
+            dragState.lastX = point.clientX;
+            dragState.lastTime = Date.now();
+            dragState.velocity = 0;
+            
+            // Add move and end listeners
+            if (e.touches) {
+                document.addEventListener('touchmove', onDragMove, { passive: false });
+                document.addEventListener('touchend', onDragEnd, { passive: true });
+            } else {
+                document.addEventListener('mousemove', onDragMove);
+                document.addEventListener('mouseup', onDragEnd);
+                e.preventDefault(); // Prevent text selection on mouse drag
+            }
+        }
+
+        function onDragMove(e) {
+            if (!dragState.isDragging) return;
+            
+            const point = e.touches ? e.touches[0] : e;
+            const deltaX = dragState.startX - point.clientX;
+            const deltaY = dragState.startY - point.clientY;
+            
+            // Directional check: require horizontal movement to be dominant
+            // Only trigger horizontal scroll if:
+            // 1. Moved more than 10px horizontally (increased threshold)
+            // 2. Horizontal movement is greater than vertical movement (directional check)
+            if (Math.abs(deltaX) > 10 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
+                dragState.hasMoved = true;
+                scroller.scrollLeft = dragState.startScrollLeft + deltaX;
+                
+                // Calculate velocity for momentum scrolling
+                const currentTime = Date.now();
+                const timeDelta = currentTime - dragState.lastTime;
+                if (timeDelta > 0) {
+                    const positionDelta = point.clientX - dragState.lastX;
+                    dragState.velocity = positionDelta / timeDelta; // pixels per millisecond
+                }
+                dragState.lastX = point.clientX;
+                dragState.lastTime = currentTime;
+                
+                // Prevent default to stop page scrolling on touch
+                if (e.touches) {
+                    e.preventDefault();
+                }
+            }
+        }
+
+        function onDragEnd(e) {
+            if (!dragState.isDragging) return;
+            
+            // Clean up listeners
+            if (e.type === 'touchend') {
+                document.removeEventListener('touchmove', onDragMove);
+                document.removeEventListener('touchend', onDragEnd);
+            } else {
+                document.removeEventListener('mousemove', onDragMove);
+                document.removeEventListener('mouseup', onDragEnd);
+            }
+            
+            // If user dragged, prevent click events from firing
+            if (dragState.hasMoved) {
+                // Temporarily disable clicks on the scroller
+                scroller.style.pointerEvents = 'none';
+                requestAnimationFrame(() => {
+                    scroller.style.pointerEvents = '';
+                });
+            }
+            
+            dragState.isDragging = false;
+            
+            // Apply momentum scrolling if there's sufficient velocity
+            const friction = 0.93; // Higher = slides longer
+            const velocityThreshold = 0.1; // pixels per millisecond
+            
+            if (Math.abs(dragState.velocity) > velocityThreshold) {
+                const step = () => {
+                    if (Math.abs(dragState.velocity) > velocityThreshold) {
+                        const maxScroll = scroller.scrollWidth - scroller.clientWidth;
+                        const currentScroll = scroller.scrollLeft;
+                        const newScroll = currentScroll - dragState.velocity * 16; // 16ms approx for 60fps
+                        
+                        // Apply scroll with boundary checking
+                        if (newScroll <= 0) {
+                            scroller.scrollLeft = 0;
+                            dragState.velocity = 0;
+                        } else if (newScroll >= maxScroll) {
+                            scroller.scrollLeft = maxScroll;
+                            dragState.velocity = 0;
+                        } else {
+                            scroller.scrollLeft = newScroll;
+                            dragState.velocity *= friction; // Apply deceleration
+                            dragState.momentumId = requestAnimationFrame(step);
+                        }
+                    } else {
+                        dragState.velocity = 0;
+                        dragState.momentumId = null;
+                    }
+                };
+                
+                dragState.momentumId = requestAnimationFrame(step);
+            } else {
+                dragState.velocity = 0;
+                dragState.momentumId = null;
+            }
+        }
+
+        // Attach drag start listeners
+        scroller.addEventListener('touchstart', onDragStart, { passive: true });
+        scroller.addEventListener('mousedown', onDragStart); */
+
+        // Overflow detection will be handled by ResizeObserver below
+
         // Toggle between scroll and grid view
-        let isShowingAll = false;
-        const originalItemsContainerStyle = itemsContainer.style.cssText;
-        
         showAllButton.addEventListener('click', () => {
+            const performanceTimerStart = performance.now();
+
             // Find the scroll buttons for this container
             const scrollerContainer = showAllButton.closest('.emby-scroller-container');
+
+            const performanceTimerEnd = performance.now();
+            const performanceTime = performanceTimerEnd - performanceTimerStart;
+            console.log(`[KefinTweaks CardBuilder] Time to find scroller container: ${performanceTime}ms`);
+
+            const performanceTimerStart2 = performance.now();
+
             const scrollButtons = scrollerContainer ? scrollerContainer.querySelector('.emby-scrollbuttons') : null;
-            
-            if (isShowingAll) {
+        
+            const performanceTimerEnd2 = performance.now();
+            const performanceTime2 = performanceTimerEnd2 - performanceTimerStart2;
+            console.log(`[KefinTweaks CardBuilder] Time to find scroll buttons: ${performanceTime2}ms`);
+
+            const performanceTimerStart3 = performance.now();
+
+            const isExpanded = itemsContainer.getAttribute('data-expanded') === 'true';
+
+            if (isExpanded) {
                 // Switch back to scroll view
-                itemsContainer.style.cssText = originalItemsContainerStyle;
+                itemsContainer.removeAttribute('data-expanded');
                 if (scrollButtons) scrollButtons.style.display = '';
                 showAllButton.textContent = 'Expand';
                 showAllButton.title = 'Show all items in a grid layout';
-                isShowingAll = false;
             } else {
                 // Switch to grid view
-                itemsContainer.style.cssText = 'display: flex; flex-wrap: wrap; gap: 12px; white-space: normal; transform: none !important; transition: none !important;';
+                itemsContainer.setAttribute('data-expanded', 'true');
                 if (scrollButtons) scrollButtons.style.display = 'none';
                 showAllButton.textContent = 'Collapse';
                 showAllButton.title = 'Show items in scrollable layout';
-                isShowingAll = true;
             }
+
+            const performanceTimerEnd3 = performance.now();
+            const performanceTime3 = performanceTimerEnd3 - performanceTimerStart3;
+            console.log(`[KefinTweaks CardBuilder] Time to switch view: ${performanceTime3}ms`);
+        });
+
+        // Check if items container overflows the scroller width
+        // Only sets data-expandable if it doesn't already exist (one-time check)
+        function checkOverflow(forceUpdate = false) {
+            // Only update if data-expandable doesn't exist, or if forceUpdate is true (window resize)
+            if (!forceUpdate && verticalSection.hasAttribute('data-expandable')) {
+                return; // Already set, don't update
+            }
+            
+            const hasOverflow = itemsContainer.scrollWidth > scroller.clientWidth;
+            verticalSection.setAttribute('data-expandable', hasOverflow ? 'true' : 'false');
+        }
+
+        // Track window size to detect actual window resize events
+        let lastWindowWidth = window.innerWidth;
+        let lastWindowHeight = window.innerHeight;
+
+        // Window resize handler - only update data-expandable on actual window resize
+        let windowResizeTimer = null;
+        function handleWindowResize() {
+            const currentWidth = window.innerWidth;
+            const currentHeight = window.innerHeight;
+            
+            // Only update if window size actually changed
+            if (currentWidth !== lastWindowWidth || currentHeight !== lastWindowHeight) {
+                lastWindowWidth = currentWidth;
+                lastWindowHeight = currentHeight;
+                
+                // Debounce window resize checks
+                clearTimeout(windowResizeTimer);
+                windowResizeTimer = setTimeout(() => {
+                    checkOverflow(true); // Force update on window resize
+                }, 100); // 100ms debounce
+            }
+        }
+
+        // Listen for window resize events
+        window.addEventListener('resize', handleWindowResize);
+
+        // Initial overflow check after cards are rendered
+        // Use requestAnimationFrame to ensure layout is complete, then a small delay for images
+        requestAnimationFrame(() => {
+            setTimeout(() => {
+                checkOverflow(false); // Initial check - only set if doesn't exist
+            }, 200); // Allow time for images to load and affect card dimensions
         });
 
         // Assemble the section
+        verticalSection.appendChild(sectionTitleContainer);
+        //verticalSection.appendChild(scrollButtons);
+        verticalSection.appendChild(scroller);
+
+        return verticalSection;
+    }
+
+    /**
+     * Creates a skeleton card element for loading states
+     * @param {string} cardFormat - Card format: 'portrait', 'backdrop', 'thumb', or 'square'
+     * @param {boolean} overflowCard - Use overflow card classes
+     * @returns {HTMLElement} - Skeleton card element
+     */
+    function createSkeletonCard(cardFormat = null, overflowCard = false) {
+        const card = document.createElement('div');
+        
+        // Determine card classes based on format
+        let cardClass, padderClass;
+        cardFormat = cardFormat?.toLowerCase() || 'portrait';
+        
+        if (cardFormat === 'backdrop' || cardFormat === 'thumb') {
+            cardClass = overflowCard ? 'overflowBackdropCard' : 'backdropCard';
+            padderClass = 'cardPadder-backdrop';
+        } else if (cardFormat === 'square') {
+            cardClass = overflowCard ? 'overflowSquareCard' : 'squareCard';
+            padderClass = 'cardPadder-square';
+        } else {
+            // portrait (default)
+            cardClass = overflowCard ? 'overflowPortraitCard' : 'portraitCard';
+            padderClass = 'cardPadder-portrait';
+        }
+        
+        card.className = `card ${cardClass} skeleton-card`;
+        card.setAttribute('data-skeleton', 'true');
+        
+        const cardBox = document.createElement('div');
+        cardBox.className = 'cardBox cardBox-bottompadded';
+        
+        const cardScalable = document.createElement('div');
+        cardScalable.className = 'cardScalable';
+        
+        const cardPadder = document.createElement('div');
+        cardPadder.className = `cardPadder ${padderClass} skeleton-padder`;
+        cardPadder.style.cssText = 'background: linear-gradient(90deg, rgba(255,255,255,0.1) 25%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.1) 75%); background-size: 200% 100%; animation: skeleton-loading 1.5s ease-in-out infinite;';
+        
+        cardScalable.appendChild(cardPadder);
+        cardBox.appendChild(cardScalable);
+        card.appendChild(cardBox);
+        
+        return card;
+    }
+
+    /**
+     * Creates a skeleton spotlight section for progressive enhancement
+     * @param {string} title - Title for the spotlight section
+     * @param {Object} options - Options for the spotlight carousel
+     * @returns {HTMLElement} - Skeleton spotlight container
+     */
+    function createSkeletonSpotlightSection(title, options = {}) {
+        const { viewMoreUrl = null } = options;
+        
+        // Create main container (same structure as real spotlight)
+        const container = document.createElement('div');
+        container.className = 'spotlight-section padded-left';
+        
+        // Create banner container
+        const bannerContainer = document.createElement('div');
+        bannerContainer.className = 'spotlight-banner-container';
+        
+        // Add section title
+        if (title) {
+            let sectionTitleEl;
+            
+            if (viewMoreUrl) {
+                const titleLink = document.createElement('a');
+                titleLink.className = 'spotlight-section-title spotlight-title-link';
+                titleLink.textContent = title;
+                titleLink.title = 'See All';
+                titleLink.style.textDecoration = 'none';
+                
+                if (typeof viewMoreUrl === 'function') {
+                    titleLink.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        viewMoreUrl();
+                    });
+                } else {
+                    titleLink.href = viewMoreUrl;
+                    titleLink.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                    });
+                }
+                
+                sectionTitleEl = titleLink;
+            } else {
+                sectionTitleEl = document.createElement('div');
+                sectionTitleEl.className = 'spotlight-section-title';
+                sectionTitleEl.textContent = title;
+            }
+            
+            bannerContainer.appendChild(sectionTitleEl);
+        }
+        
+        // Create skeleton item (single placeholder)
+        const itemsContainer = document.createElement('div');
+        itemsContainer.className = 'spotlight-items-container';
+        
+        const skeletonItem = document.createElement('div');
+        skeletonItem.className = 'spotlight-item skeleton-spotlight-item';
+        skeletonItem.setAttribute('data-index', '0');
+        skeletonItem.style.opacity = '1';
+        skeletonItem.style.cssText += 'background: linear-gradient(90deg, rgba(255,255,255,0.1) 25%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.1) 75%); background-size: 200% 100%; animation: skeleton-loading 1.5s ease-in-out infinite;';
+        
+        itemsContainer.appendChild(skeletonItem);
+        bannerContainer.appendChild(itemsContainer);
+        container.appendChild(bannerContainer);
+        
+        return container;
+    }
+
+    /**
+     * Creates a scrollable container with skeleton cards for progressive enhancement
+     * @param {string} title - Title for the scrollable container
+     * @param {string|Function} viewMoreUrl - Optional URL to make title clickable
+     * @param {string} cardFormat - Card format: 'portrait', 'backdrop', 'thumb', or 'square'
+     * @param {boolean} overflowCard - Use overflow card classes
+     * @returns {HTMLElement} - Container with skeleton cards
+     */
+    function createProgressivelyEnhancedScrollableContainer(title, viewMoreUrl = null, cardFormat = null, overflowCard = false) {
+        // Create the main vertical section container (same structure as createScrollableContainer)
+        const verticalSection = document.createElement('div');
+        verticalSection.className = 'verticalSection custom-scroller-container';
+        
+        // Persist the card format if provided (ensures consistency for random/updates)
+        if (cardFormat) {
+            verticalSection.setAttribute('data-card-format', cardFormat);
+        }
+
+        // Create section title
+        const sectionTitleContainer = document.createElement('div');
+        sectionTitleContainer.className = 'sectionTitleContainer sectionTitleContainer-cards padded-left';
+        
+        if (viewMoreUrl) {
+            const titleLink = document.createElement('a');
+            titleLink.className = 'sectionTitle-link sectionTitleTextButton';
+            titleLink.style.cssText = 'text-decoration: none; cursor: pointer; display: flex; align-items: center;';
+            
+            if (typeof viewMoreUrl === 'function') {
+                titleLink.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    viewMoreUrl();
+                });
+            } else {
+                titleLink.href = viewMoreUrl;
+            }
+            
+            const titleText = document.createElement('h2');
+            titleText.className = 'sectionTitle sectionTitle-cards';
+            titleText.textContent = title;
+            
+            const chevronIcon = document.createElement('span');
+            chevronIcon.className = 'material-icons chevron_right';
+            chevronIcon.setAttribute('aria-hidden', 'true');
+            
+            titleLink.appendChild(titleText);
+            titleLink.appendChild(chevronIcon);
+            sectionTitleContainer.appendChild(titleLink);
+        } else {
+            const titleText = document.createElement('h2');
+            titleText.className = 'sectionTitle sectionTitle-cards';
+            titleText.textContent = title;
+            sectionTitleContainer.appendChild(titleText);
+        }
+
+        // Create scroller container
+        const scroller = document.createElement('div');
+        scroller.setAttribute('data-horizontal', 'true');
+        scroller.setAttribute('data-centerfocus', 'card');
+        scroller.className = 'padded-top-focusscale padded-bottom-focusscale emby-scroller custom-scroller';
+        scroller.setAttribute('data-scroll-mode-x', 'custom');
+        scroller.style.scrollSnapType = 'none';
+        scroller.style.touchAction = 'auto';
+        scroller.style.overscrollBehaviorX = 'contain';
+        scroller.style.overscrollBehaviorY = 'auto';
+        scroller.style.webkitOverflowScrolling = 'touch';
+
+        // Create items container
+        const itemsContainer = document.createElement('div');
+        itemsContainer.className = 'focuscontainer-x itemsContainer scrollSlider animatedScrollX';
+        itemsContainer.style.whiteSpace = 'nowrap';
+
+        // Add skeleton cards (enough to fill viewport width)
+        const skeletonCount = (cardFormat === 'backdrop' || cardFormat === 'thumb') ? 8 : 10;
+        for (let i = 0; i < skeletonCount; i++) {
+            const skeletonCard = createSkeletonCard(cardFormat, overflowCard);
+            skeletonCard.setAttribute('data-index', i);
+            itemsContainer.appendChild(skeletonCard);
+        }
+
+        scroller.appendChild(itemsContainer);
         verticalSection.appendChild(sectionTitleContainer);
         verticalSection.appendChild(scroller);
 
         return verticalSection;
     }
+
+
+    /**
+     * Measures the width of an element
+     * @param {HTMLElement} el - Element to measure
+     * @returns {number} - Width of the element
+     */
+    function measure(el) {
+        if (!el) {
+            return 0;
+        }
+
+
+        let measureRoot = document.querySelector('#measure-root');
+        if (!measureRoot) {
+            measureRoot = document.createElement('div');
+            measureRoot.id = 'measure-root';        
+            measureRoot.style.cssText = 'position: absolute; visibility: hidden; contain: layout style paint; white-space: nowrap; pointer-events: none;';
+            document.body.appendChild(measureRoot);
+        }
+
+        const clonedEl = el.cloneNode(true);
+        measureRoot.appendChild(clonedEl);
+        const width = clonedEl.getBoundingClientRect().width;
+        measureRoot.removeChild(clonedEl);
+        return width;
+      }
+
+    /**
+     * Checks the state of a promise
+     * @param {Promise} p - Promise to check
+     * @returns {string} - State of the promise: 'pending', 'fulfilled', or 'rejected'
+     */
+    function promiseState(p) {
+        const t = {};
+        return Promise.race([p, t])
+          .then(v => (v === t)? "pending" : "fulfilled", () => "rejected");
+      }
+
+    // Add skeleton loading animation CSS if not already present
+    if (!document.getElementById('skeleton-animation-style')) {
+        const style = document.createElement('style');
+        style.id = 'skeleton-animation-style';
+        style.textContent = `
+            @keyframes skeleton-loading {
+                0% { background-position: 200% 0; }
+                100% { background-position: -200% 0; }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // Smart Lazy Image Loading with Global Observers
+    let lazyImageObserver = null;
+    let lazyMutationObserver = null;
+    
+    /**
+     * Initialize the global IntersectionObserver for lazy loading images
+     * Watches when elements enter the viewport and loads their images
+     */
+    function initLazyImageObserver() {
+        if (lazyImageObserver) return; // Already initialized
+        
+        const observerOptions = {
+            threshold: 0.1, // Trigger when 10% of element is visible
+            rootMargin: '100px' // Start loading 100px before element enters viewport
+        };
+        
+        lazyImageObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const cardImageContainer = entry.target;
+                    const imageUrl = cardImageContainer.getAttribute('data-src');
+                    
+                    if (imageUrl) {
+                        // Load the image
+                        cardImageContainer.style.backgroundImage = `url("${imageUrl}")`;
+                        // Remove lazy class and add loaded class
+                        cardImageContainer.classList.remove('lazy');
+                        cardImageContainer.classList.add('lazy-loaded');
+                        // Remove data-src to prevent re-loading
+                        cardImageContainer.removeAttribute('data-src');
+                        // Unobserve this element
+                        lazyImageObserver.unobserve(cardImageContainer);
+                    }
+                }
+            });
+        }, observerOptions);
+    }
+    
+    /**
+     * Initialize the global MutationObserver to detect new elements
+     * Automatically adds new cardImageContainer elements with data-src to the IntersectionObserver
+     */
+    function initLazyMutationObserver() {
+        if (lazyMutationObserver) return; // Already initialized
+        
+        if (!lazyImageObserver) {
+            initLazyImageObserver();
+        }
+        
+        lazyMutationObserver = new MutationObserver((mutations) => {
+            mutations.forEach(mutation => {
+                mutation.addedNodes.forEach(node => {
+                    // Check if the added node itself is a cardImageContainer with data-src
+                    if (node.nodeType === 1 && // Element node
+                        node.classList && 
+                        node.classList.contains('cardImageContainer') &&
+                        node.hasAttribute('data-src')) {
+                        lazyImageObserver.observe(node);
+                    }
+                    
+                    // Check for cardImageContainer descendants
+                    if (node.nodeType === 1 && node.querySelectorAll) {
+                        const lazyImages = node.querySelectorAll('.cardImageContainer[data-src]');
+                        lazyImages.forEach(img => {
+                            lazyImageObserver.observe(img);
+                        });
+                    }
+                });
+            });
+        });
+    }
+    
+    /**
+     * Initialize the smart lazy loading system
+     * Scans existing elements and starts both observers
+     */
+    function initSmartLazyLoading() {
+        if (typeof IntersectionObserver === 'undefined' || typeof MutationObserver === 'undefined') {
+            return; // Browser doesn't support observers
+        }
+        
+        // Initialize observers
+        initLazyImageObserver();
+        initLazyMutationObserver();
+        
+        // Scan existing elements with data-src
+        const existingLazyImages = document.querySelectorAll('.cardImageContainer[data-src]');
+        existingLazyImages.forEach(img => {
+            lazyImageObserver.observe(img);
+        });
+        
+        // Start watching for new elements
+        if (document.body) {
+            lazyMutationObserver.observe(document.body, {
+                childList: true,
+                subtree: true
+            });
+        } else {
+            // If body isn't ready, wait for DOMContentLoaded
+            document.addEventListener('DOMContentLoaded', () => {
+                if (lazyMutationObserver && document.body) {
+                    lazyMutationObserver.observe(document.body, {
+                        childList: true,
+                        subtree: true
+                    });
+                }
+            });
+        }
+    }
+    
+    // Initialize smart lazy loading on module load
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initSmartLazyLoading);
+    } else {
+        initSmartLazyLoading();
+    }
+
+    // Progressive Section Reveal with IntersectionObserver
+    let sectionRevealObserver = null;
+    
+    /**
+     * Initialize the global IntersectionObserver for section reveal animations
+     * Watches when sections enter the viewport and triggers fade-in animations
+     */
+    function initializeSectionRevealObserver() {
+        if (sectionRevealObserver) return; // Already initialized
+        
+        if (typeof IntersectionObserver === 'undefined') {
+            return; // Browser doesn't support IntersectionObserver
+        }
+        
+        const observerOptions = {
+            threshold: 0.1, // Trigger when 10% of section is visible
+            rootMargin: '0px 0px -50px 0px' // Trigger slightly before fully in view
+        };
+        
+        sectionRevealObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    // Add in-viewport class to trigger animation
+                    entry.target.classList.add('in-viewport');
+                    // Unobserve after animation is triggered (one-time animation)
+                    sectionRevealObserver.unobserve(entry.target);
+                }
+            });
+        }, observerOptions);
+    }
+    
+    /**
+     * Observe a section element for viewport entry to trigger reveal animation
+     * @param {HTMLElement} sectionElement - The section element to observe
+     */
+    function observeSectionForReveal(sectionElement) {
+        if (!sectionElement) return;
+        
+        // Initialize observer if not already done
+        if (!sectionRevealObserver) {
+            initializeSectionRevealObserver();
+        }
+        
+        // Only observe if observer was successfully created
+        if (sectionRevealObserver) {
+            sectionRevealObserver.observe(sectionElement);
+        }
+    }
+
+    function initialize() {
+        state.useEpisodeImages = window.userHelper.useEpisodeImages();
+    }
+
+    initialize();
 
     // Expose the cardBuilder to the global window object
     window.cardBuilder = cardBuilder;
