@@ -1232,7 +1232,7 @@
 
         const css = `
         .itemsContainer:not([data-sort-key="default"]) .listViewDragHandle {
-            pointer-events: none;
+            display: none;
         }
         `;
 
