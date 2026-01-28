@@ -1,0 +1,13 @@
+div#upcomingItems {
+  display: grid;
+  grid-template-columns: repeat(7, 14.285%);
+}
+
+div#upcomingItems .itemsContainer {
+  display: flex;
+  flex-direction: column;
+}
+
+div#upcomingItems .itemsContainer .card {
+  width: 100%;
+}

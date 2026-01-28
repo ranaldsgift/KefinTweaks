@@ -75,6 +75,21 @@
                 name: 'Animated Overlay',
                 url: 'https://cdn.jsdelivr.net/gh/LitCastVlog/Flow@main/CSS/ScyFlow-AnimatedOverlay.css',
                 enabled: false
+            },
+            {
+                name: 'Wrap Items In Home Sections',
+                url: `${getKefinTweaksRoot()}skins/optional/global/wrapHomeScrollerItems.css`,
+                enabled: false
+            },
+            {
+                name: 'Genre Thumbnails',
+                url: `${getKefinTweaksRoot()}skins/optional/global/genreThumbnails.css`,
+                enabled: false
+            },
+            {
+                name: 'Upcoming Calendar View',
+                url: `${getKefinTweaksRoot()}skins/optional/global/upcomingCalendar.css`,
+                enabled: false
             }
         ],
         
