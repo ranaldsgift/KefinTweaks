@@ -715,7 +715,8 @@
      * Processes a series page to add episodes section
      * @param {string} seriesId - The series ID
      */
-    async function processSeriesPage(seriesId) {
+    async function processSeriesPage(series) {
+        const seriesId = series.Id;
         const activePage = document.querySelector('.libraryPage:not(.hide)');
         if (!activePage) {
             WARN('Active page not found');
@@ -859,7 +860,7 @@
                     
                     // Small delay to ensure page is ready
                     setTimeout(async () => {
-                        await processSeriesPage(item.Id);
+                        await processSeriesPage(item);
                     }, 100);
                 }
             },
