@@ -152,7 +152,7 @@ div#discovery-loading-indicator:not(.show)::after {
     display: block;
     visibility: visible;
     order: 99998 !important;
-    margin: 0 auto;
+    margin: 2em auto;
 }
 
 .sections.loading-discovery .load-more-discovery-btn {
@@ -200,20 +200,20 @@ div#discovery-loading-indicator:not(.show)::after {
 }
 
 /* Hide next up section if next up if KefinTweaks next up section is present */
-.homeSectionsContainer:has([data-section-id="nextUp"]) > div:nth-child(-n+10):has(a[href*="nextup"]) {
+/* .homeSectionsContainer:has([data-section-id="nextUp"]) > div:nth-child(-n+10):has(a[href*="nextup"]) {
     display: none;
-}
+} */
 /* Hide continue watching section if continue watching if KefinTweaks continue watching section is present */
-.homeSectionsContainer:has([data-section-id="continueWatching"]) > div:nth-child(-n+10):has([data-positionticks][data-mediatype="Video"]) {
+/* .homeSectionsContainer:has([data-section-id="continueWatching"]) > div:nth-child(-n+10):has([data-positionticks][data-mediatype="Video"]) {
     display: none;
-}
+} */
 /* Hide recently added section if recently added if KefinTweaks recently added section is present */
-.homeSectionsContainer:has([data-section-id*="recently-added"]) > div:nth-child(-n+10):has(a[href*="movies&tab=1"]),
+/* .homeSectionsContainer:has([data-section-id*="recently-added"]) > div:nth-child(-n+10):has(a[href*="movies&tab=1"]),
 .homeSectionsContainer:has([data-section-id*="recently-added"]) > div:nth-child(-n+10):has(a[href*="tv&tab=1"]),
 .homeSectionsContainer:has([data-section-id*="recently-added"]) > div:nth-child(-n+10):has(a[href*="music&tab=1"])
   {
     display: none;
-}
+} */
 
 /* Hide scroll buttons on mobile and tablet layouts */
 @media (max-width: 768px) {
@@ -275,4 +275,8 @@ div#discovery-loading-indicator:not(.show)::after {
 
 .homeSectionsContainer [data-section-id="popularTVNetworks"] .card .cardText {
     visibility: hidden;
+}
+
+.homeSectionsContainer:not(.kefinHomeSectionsContainer) {
+    display: none !important;
 }

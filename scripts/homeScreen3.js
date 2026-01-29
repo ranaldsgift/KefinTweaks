@@ -316,11 +316,24 @@
         if (window.migrateHomeScreenConfig) {
             await window.migrateHomeScreenConfig();
         }
-
+        
         const container = document.querySelector('.homePage:not(.hide) #homeTab .sections');
         if (!container) {
             LOG('Home sections container not found');
             return;
+        }
+
+        // Create Kefin home sections container as a sibling of the Jellyfin sections container
+        let kefinHomeSectionsContainer = document.querySelector('.homePage:not(.hide) #homeTab .kefinHomeSectionsContainer');
+        if (!kefinHomeSectionsContainer) {
+            kefinHomeSectionsContainer = document.createElement('div');
+            kefinHomeSectionsContainer.className = 'sections homeSectionsContainer kefinHomeSectionsContainer';
+            if (container.parentNode) {
+                container.parentNode.insertBefore(kefinHomeSectionsContainer, container.nextSibling);
+            } else {
+                LOG('Sections container has no parent node; appending Kefin container to body as fallback');
+                document.body.appendChild(kefinHomeSectionsContainer);
+            }
         }
 
         // If we've already initialized and Jellyfin has completed its render, avoid re-running
@@ -390,28 +403,40 @@
         // Set flag to indicate we've started initializing this container
         container.dataset.kefinHomeScreen = 'true';
 
-        // Set up mutation observer BEFORE rendering, so we can react when Jellyfin overwrites the container
+        // Set up mutation observer BEFORE rendering, so we can react when Jellyfin renders home sections
         const handleJellyfinRender = async () => {
-            if (!container.dataset.sectionsPrerendered) {
-                LOG('Jellyfin rendering detected, sections not pre-rendered yet, skipping');
+            const jellyHome = document.querySelector('.homePage:not(.hide) #homeTab .homeSectionsContainer');
+            const kefinHome = document.querySelector('.homePage:not(.hide) #homeTab .kefinHomeSectionsContainer');
+
+            if (!jellyHome || !kefinHome) {
+                LOG('Jellyfin render detected but required containers not found; skipping Jellyfin section mirroring');
                 return;
             }
 
-            LOG('Jellyfin rendering detected, re-rendering from cache');
-            await renderHomeSections(filteredHomeSections, container, true); // useCache = true
-            await setupDiscoveryInteraction(container);
+            // Remove any previously cloned Jellyfin sections from our container
+            kefinHome.querySelectorAll('[data-jellyfin-section-clone="true"]').forEach(el => el.remove());
+
+            // Copy Jellyfin .sectionN containers into the Kefin container
+            const jellySections = jellyHome.querySelectorAll('.section0, .section1, .section2, .section3, .section4, .section5, .section6, .section7, .section8');
+
+            jellySections.forEach(sectionEl => {
+                const clone = sectionEl.cloneNode(true);
+                clone.dataset.jellyfinSectionClone = 'true';
+                kefinHome.appendChild(clone);
+            });
+
             performanceMetrics.recoveryRenderEnd = performance.now();
             if (performanceMetrics.jellyfinDetected) {
-                LOG(`Home Screen v3 recovery render duration: ${(performanceMetrics.recoveryRenderEnd - performanceMetrics.jellyfinDetected).toFixed(2)}ms`);
+                LOG(`Home Screen v3 Jellyfin section mirroring duration: ${(performanceMetrics.recoveryRenderEnd - performanceMetrics.jellyfinDetected).toFixed(2)}ms`);
             }
         };
 
         const observer = observeContainerMutations(container, handleJellyfinRender);
 
-        // Initial render directly into .sections (no waiting for Jellyfin)
+        // Initial render directly into Kefin container (no waiting for Jellyfin)
         performanceStartTime = performance.now();
         LOG('Rendering Standard/Seasonal Sections (initial render)...');
-        await renderHomeSections(filteredHomeSections, container, false);
+        await renderHomeSections(filteredHomeSections, kefinHomeSectionsContainer, false);
         performanceEndTime = performance.now();
         performanceDuration = performanceEndTime - performanceStartTime;
         LOG(`Home Screen v3 Render home sections (initial) initialization time: ${performanceDuration.toFixed(2)}ms`);
@@ -422,7 +447,7 @@
         LOG(`Home Screen v3 load time initialization: ${(performanceTimer.loadTimeEnd - performanceTimer.loadTimeStart).toFixed(2)}ms`);
         
         LOG('Initializing Discovery Sections...');
-        await setupDiscoveryInteraction(container);
+        await setupDiscoveryInteraction(kefinHomeSectionsContainer);
 
         // If Jellyfin hasn't rendered after 5 seconds, assume it won't and clean up the observer
         setTimeout(() => {
@@ -1943,7 +1968,7 @@
             const activeTab = document.querySelector('.headerTabs .emby-tab-button-active').getAttribute('data-index');
             if (activeTab !== '0') return;
 
-            const activeContainer = document.querySelector('.libraryPage:not(.hide) .homeSectionsContainer');
+            const activeContainer = document.querySelector('.libraryPage:not(.hide) .kefinHomeSectionsContainer');
             if (!activeContainer) return;
 
 
