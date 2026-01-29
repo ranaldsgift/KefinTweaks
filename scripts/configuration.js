@@ -297,7 +297,7 @@
         footer.style.display = 'flex';
         footer.style.gap = '0.75em';
         footer.innerHTML = `
-            <button class="emby-button raised block button-submit" id="generateExportBtn" style="padding: 0.75em 2em;">Generate JSON</button>
+            <button class="emby-button raised button-submit" id="generateExportBtn" style="padding: 0.75em 2em;">Generate JSON</button>
             <button class="emby-button raised" onclick="window.ModalSystem.close('kefinTweaksExportModal')">Close</button>
         `;
 
@@ -398,7 +398,7 @@
         footer.style.display = 'flex';
         footer.style.gap = '0.75em';
         footer.innerHTML = `
-            <button class="emby-button raised block button-submit" id="confirmCommunityImportBtn" style="padding: 0.75em 2em; display: none;">Import Selected</button>
+            <button class="emby-button raised button-submit" id="confirmCommunityImportBtn" style="padding: 0.75em 2em; display: none;">Import Selected</button>
             <button class="emby-button raised" onclick="window.ModalSystem.close('kefinTweaksCommunityImportModal')">Cancel</button>
         `;
 
@@ -508,8 +508,8 @@
         footer.style.display = 'flex';
         footer.style.gap = '0.75em';
         footer.innerHTML = `
-            <button class="emby-button raised block button-submit" id="loadImportBtn" style="padding: 0.75em 2em;">Load</button>
-            <button class="emby-button raised block button-submit" id="confirmImportBtn" style="padding: 0.75em 2em; display: none;">Import Selected</button>
+            <button class="emby-button raised button-submit" id="loadImportBtn" style="padding: 0.75em 2em;">Load</button>
+            <button class="emby-button raised button-submit" id="confirmImportBtn" style="padding: 0.75em 2em; display: none;">Import Selected</button>
             <button class="emby-button raised" onclick="window.ModalSystem.close('kefinTweaksImportModal')">Cancel</button>
         `;
 
@@ -876,7 +876,7 @@
         const isEnabled = window.KefinTweaksConfigEnabled !== false;
         
         return `
-            <div class="paperList" style="margin-bottom: 2em;">
+            <div class="paperList" style="padding: 0.2em 1em;">
                 <div class="listItem">
                     <div class="listItemContent" style="display: flex; gap: 1em; align-items: center; flex-wrap: wrap;">
                         <label class="checkboxContainer" style="display: flex; align-items: center; gap: 0.75em; cursor: pointer;">
@@ -886,11 +886,17 @@
                         <button class="emby-button raised" id="changeKefinTweaksSourceBtn" style="padding: 0.75em 2em; font-size: 1em;" title="Switch between the Latest, Development, Version specific branches or point to your own self hosted location!">
                             <span>Plugin Settings</span>
                         </button>
+                        <button class="emby-button raised" id="exportConfigBtn" style="padding: 0.75em 2em; font-size: 1em;">
+                            <span>Export</span>
+                        </button>
+                        <button class="emby-button raised" id="importConfigBtn" style="padding: 0.75em 2em; font-size: 1em;">
+                            <span>Import</span>
+                        </button>
                     </div>
                 </div>
             </div>
 
-            <div class="paperList" style="margin-bottom: 2em;">
+            <div class="paperList" style="margin-bottom: 1em;">
                 <div class="listItem" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 1em; margin-bottom: 1em;">
                     <div class="listItemContent">
                         <h3 class="listItemBodyText" style="margin-bottom: 0.25em;">Feature Configuration</h3>
@@ -2464,17 +2470,11 @@
         footer.style.gap = '0.75em';
         footer.style.alignItems = 'center';
         footer.innerHTML = `
-            <button class="emby-button raised block button-submit" id="saveConfigBtn" style="padding: 0.75em 2em; font-size: 1em; font-weight: 500;">
-                <span>Save</span>
-            </button>
             <button class="emby-button raised" id="resetConfigBtn" style="padding: 0.75em 2em; font-size: 1em;">
-                <span>Defaults</span>
+                <span>Restore Defaults</span>
             </button>
-            <button class="emby-button raised" id="exportConfigBtn" style="padding: 0.75em 2em; font-size: 1em;">
-                <span>Export</span>
-            </button>
-            <button class="emby-button raised" id="importConfigBtn" style="padding: 0.75em 2em; font-size: 1em;">
-                <span>Import</span>
+            <button class="emby-button raised button-submit" id="saveConfigBtn" style="padding: 0.75em 2em; font-size: 1em; font-weight: 500;">
+                <span>Save</span>
             </button>
         `;
 
@@ -4740,13 +4740,13 @@
         }
 
         // Export button handler
-        const exportBtn = modalInstance.dialogFooter?.querySelector('#exportConfigBtn');
+        const exportBtn = modalInstance.dialog?.querySelector('#exportConfigBtn');
         if (exportBtn) {
             exportBtn.addEventListener('click', () => handleExportConfig(config));
         }
 
         // Import button handler
-        const importBtn = modalInstance.dialogFooter?.querySelector('#importConfigBtn');
+        const importBtn = modalInstance.dialog?.querySelector('#importConfigBtn');
         if (importBtn) {
             importBtn.addEventListener('click', () => handleImportConfig(modalInstance));
         }
