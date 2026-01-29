@@ -1,0 +1,95 @@
+[data-modal-id="kefin-homescreen-config-main"] .config-tab-content details {
+    max-height: calc(90vh - 19em);
+    overflow: auto;
+}
+[data-type="Collections"], [data-type="Playlists"], [data-type="Generic Parent"] {
+    display: none;
+}
+[data-parent-item-type="Collection"] [data-type="Collections"] {
+    display: block;
+}
+[data-parent-item-type="Playlist"] [data-type="Playlists"] {
+    display: block;
+}
+[data-parent-item-type="Generic Parent"] [data-type="Generic Parent"] {
+    display: block;
+}
+
+[data-modal-id="kefin-homescreen-config-main"] details[open] summary.listItemBodyText::after {
+    content: '';
+}
+
+[data-modal-id="kefin-homescreen-config-main"] #section-content {
+    padding-right: 1em;
+}
+
+[data-modal-id="kefin-homescreen-config-main"] div#section-content {
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 4px;
+    padding: 0.75em;
+    max-height: calc(90vh - 19em);
+    overflow: auto;
+}
+
+div#order-sections-container .editable-group-name {
+    pointer-events: none;
+}
+
+.section-group[data-section-type-seasonal="false"] .section-row[data-section-type="Seasonal"] {
+    display: none !important;
+}
+.section-group[data-section-type-default="false"] .section-row[data-section-type="Default"] {
+    display: none !important;
+}
+.section-group[data-section-type-custom="false"] .section-row[data-section-type="Custom"] {
+    display: none !important;
+}
+
+div#discovery-sections-list .section-preview-btn {
+    display: none;
+}
+
+.listItem.section-row:has(.discovery-tag) {
+    box-shadow: black inset 1px 1px 2px 1px;
+}
+
+div#order-sections-container .section-group .group-sections-list {
+    max-height: calc(90vh - 25em);
+    overflow: auto;
+    margin-bottom: -1em;
+}
+
+span.listItemBodyText.secondary.discovery-tag {
+    background: #3F51B5;
+    padding: 2px 5px;
+}
+span.listItemBodyText.secondary.spotlight-tag {
+    background: #501515;
+    padding: 2px 5px;
+}
+span.listItemBodyText.secondary.seasonal-tag {
+    background: #3b5562;
+    padding: 2px 5px;
+}
+
+.discovery-tag, .spotlight-tag, .seasonal-tag {
+    color: rgba(255, 255, 255, 0.9) !important;    
+    border-radius: 5px;
+}
+
+.homeScreenSettingsContainer:has(#kefin-user-home-sections-editor) form>div:first-child {
+    display: none;
+}
+
+.homeScreenSettingsContainer form {
+    display: flex;
+    flex-direction: column;
+}
+
+.homeScreenSettingsContainer form > * {
+    order: 2;
+}
+
+.homeScreenSettingsContainer #kefin-user-home-sections-editor {
+    order: 1;
+}

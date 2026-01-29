@@ -21,6 +21,7 @@
 .sections.homeSectionsContainer {
     display: flex;
     flex-direction: column;
+    padding-bottom: 100px;
 }
 
 .homeSectionsContainer > .section0 {
@@ -96,7 +97,7 @@
     margin-top: 0;
 }
 
-div#discovery-loading-indicator:not(.show)::before {
+/* div#discovery-loading-indicator:not(.show)::before {
     content: 'Loading...';
     position: absolute;
     top: 50%;
@@ -107,7 +108,7 @@ div#discovery-loading-indicator:not(.show)::before {
     visibility: visible;
     text-align: center;
     opacity: 1;
-}
+} */
 
 #indexPage[data-discovery-ready] div#discovery-loading-indicator:not(.show)::before {
     content: 'Discover More';
@@ -126,13 +127,13 @@ div#discovery-loading-indicator:not(.show)::after {
     opacity: 1;
 }
 
-.libraryPage:has(.load-more-discovery-btn) div#discovery-loading-indicator {
-    opacity: 0;
+[data-loading-discovery="true"] div#discovery-loading-indicator {
+    display: flex;
 }
 
-#indexPage[data-discovery-ready]:not([data-infinite-scroll='true']) div#discovery-loading-indicator {
+/* #indexPage[data-discovery-ready]:not([data-infinite-scroll='true']) div#discovery-loading-indicator {
     display: none;
-}
+} */
 
 #indexPage:not([data-discovery-ready]) div#discovery-loading-indicator:not(.show)::after {
     content: '';
@@ -144,4 +145,134 @@ div#discovery-loading-indicator:not(.show)::after {
 }
 .spotlight-section {
     width: calc(100% - (2 * max(env(safe-area-inset-left),3.3%)));
+}
+
+
+.load-more-discovery-btn {
+    display: block;
+    visibility: visible;
+    order: 99998 !important;
+    margin: 0 auto;
+}
+
+.sections.loading-discovery .load-more-discovery-btn {
+    visibility: hidden !important;
+}
+
+/* Discovery section loading indicator */
+.sections.loading-discovery .discovery-loading-indicator {
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+.discovery-loading-indicator, .load-more-discovery-btn {
+    height: 50px;
+}
+
+.discovery-loading-indicator {
+    display: none;
+    opacity: 1;
+    flex-direction: column;
+    gap: 10px;
+    justify-content: center;
+    align-items: center;
+    border-radius: 8px;
+    font-size: 14px;
+    color: #666;
+    transition: opacity 0.3s ease;
+    order: 99999 !important;
+    position: relative;
+    justify-content: start;
+}
+
+.discovery-loading-indicator .spinner {
+    width: 30px;
+    height: 30px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: var(--theme-primary-color, #3498db);
+    border-radius: 50%;
+    animation: discovery-spin 1s linear infinite;
+}
+
+@keyframes discovery-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Hide next up section if next up if KefinTweaks next up section is present */
+.homeSectionsContainer:has([data-section-id="nextUp"]) > div:nth-child(-n+10):has(a[href*="nextup"]) {
+    display: none;
+}
+/* Hide continue watching section if continue watching if KefinTweaks continue watching section is present */
+.homeSectionsContainer:has([data-section-id="continueWatching"]) > div:nth-child(-n+10):has([data-positionticks][data-mediatype="Video"]) {
+    display: none;
+}
+/* Hide recently added section if recently added if KefinTweaks recently added section is present */
+.homeSectionsContainer:has([data-section-id*="recently-added"]) > div:nth-child(-n+10):has(a[href*="movies&tab=1"]),
+.homeSectionsContainer:has([data-section-id*="recently-added"]) > div:nth-child(-n+10):has(a[href*="tv&tab=1"]),
+.homeSectionsContainer:has([data-section-id*="recently-added"]) > div:nth-child(-n+10):has(a[href*="music&tab=1"])
+  {
+    display: none;
+}
+
+/* Hide scroll buttons on mobile and tablet layouts */
+@media (max-width: 768px) {
+    .emby-scrollbuttons {
+        display: none !important;
+    }
+}
+
+/* Hide scroll buttons on mobile using Jellyfin's layout classes */
+.layout-mobile .emby-scrollbuttons,
+.layout-tv .emby-scrollbuttons {
+    display: none !important;
+}
+
+.load-more-discovery-btn {
+    display: block;
+}
+
+.sections[data-loading-discovery="true"] .load-more-discovery-btn {
+    display: none !important;
+}
+
+.sections[data-loading-discovery="true"] .discovery-loading-indicator {
+    display: flex !important;
+    opacity: 1 !important;
+}
+
+.discovery-loading-indicator {
+    display: none;
+    opacity: 0;
+    flex-direction: column;
+    gap: 10px;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    color: #666;
+    transition: opacity 0.3s ease;
+    order: 99999 !important;
+    position: relative;
+    justify-content: start; 
+    min-height: 200px;
+}
+
+.discovery-loading-indicator .spinner {
+    width: 30px;
+    height: 30px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: var(--theme-primary-color, #3498db);
+    border-radius: 50%;
+    animation: discovery-spin 1s linear infinite;
+}
+
+@keyframes discovery-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.homeSectionsContainer [data-section-id="popularTVNetworks"] .card .cardText {
+    visibility: hidden;
 }

@@ -63,7 +63,6 @@
         search: true,             // Enhanced search functionality
         headerTabs: true,         // Header tab enhancements
         customMenuLinks: true,    // Custom menu links functionality
-        exclusiveElsewhere: true, // Exclusive elsewhere branding
         updoot: false,             // Upvote functionality
         backdropLeakFix: true,    // Memory leak fixes
         dashboardButtonFix: true, // Dashboard button fix
@@ -108,6 +107,104 @@
             description: 'Default skin configuration for KefinTweaks'
         },
         {
+            name: 'ui',
+            script: 'ui.js',
+            css: null,
+            dependencies: [],
+            description: 'UI helper functions for KefinTweaks'
+        },
+        {
+            name: 'homeScreenConfig',
+            script: 'homeScreenConfig.js',
+            css: null,
+            dependencies: [],
+            description: 'Default home screen configuration for KefinTweaks'
+        },
+        {
+            name: 'homeScreenConfig2',
+            script: 'homeScreenConfig2.js',
+            css: null,
+            dependencies: [],
+            description: 'Default home screen configuration for KefinTweaks'
+        },
+        {
+            name: 'homeScreen-migration',
+            script: '../configuration/homeScreen-migration.js',
+            css: null,
+            dependencies: [],
+            description: 'Home screen migration for KefinTweaks'
+        },
+        {
+            name: 'homeScreen-configuration',
+            script: '../configuration/homeScreen-configuration.js',
+            css: '../configuration/homeScreen-configuration.css',
+            dependencies: ['modal', 'toaster', 'utils', 'cardBuilder', 'ui'],
+            description: 'Home screen configuration for KefinTweaks'
+        },
+        {
+            name: 'search-configuration',
+            script: '../configuration/search-configuration.js',
+            css: null,
+            dependencies: ['modal', 'toaster', 'utils'],
+            description: 'Search configuration for KefinTweaks'
+        },
+        {
+            name: 'seriesEpisodes-configuration',
+            script: '../configuration/seriesEpisodes-configuration.js',
+            css: null,
+            dependencies: ['modal', 'toaster', 'utils'],
+            description: 'Series episodes configuration for KefinTweaks'
+        },
+        {
+            name: 'seriesInfo-configuration',
+            script: '../configuration/seriesInfo-configuration.js',
+            css: null,
+            dependencies: ['modal', 'toaster', 'utils'],
+            description: 'Series info configuration for KefinTweaks'
+        },
+        {
+            name: 'skinManager-configuration',
+            script: '../configuration/skinManager-configuration.js',
+            css: null,
+            dependencies: ['modal', 'toaster', 'utils'],
+            description: 'Skin manager configuration for KefinTweaks'
+        },
+        {
+            name: 'customMenuLinks-configuration',
+            script: '../configuration/customMenuLinks-configuration.js',
+            css: null,
+            dependencies: ['modal', 'toaster', 'utils'],
+            description: 'Custom menu links configuration for KefinTweaks'
+        },
+        {
+            name: 'homeScreenConfigCommunity',
+            script: 'homeScreenConfig-community.js',
+            css: null,
+            dependencies: [],
+            description: 'Community home screen sections for KefinTweaks'
+        },
+        {
+            name: 'peopleCache',
+            script: 'peopleCache.js',
+            css: null,
+            dependencies: [],
+            description: 'People cache for KefinTweaks'
+        },
+        {
+            name: 'studiosCache',
+            script: 'studiosCache.js',
+            css: null,
+            dependencies: [],
+            description: 'Studios cache for KefinTweaks'
+        },
+        {
+            name: 'moviesCache',
+            script: 'moviesCache.js',
+            css: null,
+            dependencies: [],
+            description: 'Movies cache for KefinTweaks'
+        },
+        {
             name: 'skinManager',
             script: 'skinManager.js',
             css: 'defaultSkin.css',
@@ -119,14 +216,14 @@
             name: 'apiHelper',
             script: 'apiHelper.js',
             css: null,
-            dependencies: [],
+            dependencies: ['dataHelper'],
             description: 'API helper functions for common Jellyfin operations'
         },
         {
             name: 'cardBuilder',
             script: 'cardBuilder.js',
             css: 'cardBuilder.css',
-            dependencies: ['apiHelper'],
+            dependencies: ['apiHelper', 'userHelper'],
             description: 'Core card building functionality (required by other scripts)'
         },
         {
@@ -151,6 +248,27 @@
             description: 'Generic modal system for Jellyfin-style dialogs'
         },
         {
+            name: 'userHelper',
+            script: 'userHelper.js',
+            css: null,
+            dependencies: [],
+            description: 'User helper functions for Jellyfin operations'
+        },
+        {
+            name: 'dataHelper',
+            script: '../helpers/dataHelper.js',
+            css: null,
+            dependencies: [],
+            description: 'Data helper functions for Jellyfin operations'
+        },
+        {
+            name: 'websocketHelper',
+            script: '../helpers/websocketHelper.js',
+            css: null,
+            dependencies: [],
+            description: 'WebSocket helper functions for Jellyfin operations'
+        },
+        {
             name: 'toaster',
             script: 'toaster.js',
             css: null,
@@ -166,9 +284,10 @@
         },
         {
             name: 'homeScreen',
-            script: 'homeScreen.js',
+            script: 'homeScreen3.js',
             css: 'homeScreen.css',
-            dependencies: ['cardBuilder', 'localStorageCache', 'utils'],
+            dependencies: ['cardBuilder', 'localStorageCache', 'utils', 'homeScreenConfig', 'homeScreenConfig2', 'homeScreen-configuration', 'peopleCache', 'studiosCache', 'moviesCache', 'indexedDBCache', 'homeScreenConfigCommunity', 'dataHelper', 'apiHelper', 'websocketHelper', 'homeScreen-migration', 'homeScreen-user-configuration'],
+            priority: true, // Load immediately after dependencies to reduce UI disruption
             description: 'Adds custom home screen sections'
         },
         {
@@ -191,13 +310,6 @@
             css: null,
             dependencies: ['utils'],
             description: 'Load and add custom menu links from configuration'
-        },
-        {
-            name: 'exclusiveElsewhere',
-            script: 'exclusiveElsewhere.js',
-            css: null,
-            dependencies: [],
-            description: 'Modifies the behavior of the Jellyfin Enhanced Elsewhere functionality to add custom branding when items are not available on streaming services'
         },
         {
             name: 'backdropLeakFix',
@@ -604,7 +716,7 @@
     }
 
     async function loadConfigurationJS() {
-        const configDependencyNames = ['modal', 'toaster', 'utils'];
+        const configDependencyNames = ['modal', 'toaster', 'utils', 'homeScreen-configuration', 'search-configuration', 'seriesEpisodes-configuration', 'seriesInfo-configuration', 'skinManager-configuration', 'customMenuLinks-configuration'];
         for (const depName of configDependencyNames) {
             const depScript = SCRIPT_DEFINITIONS.find(script => script.name === depName);
             if (depScript) {

@@ -145,55 +145,67 @@
         });
     }
 
+    // Migrate legacy homeScreen config to new homeScreenConfig format
+    async function migrateLegacyHomeScreenConfig() {
+        return await window.migrateHomeScreenConfig();
+    }
+
     // Get KefinTweaks configuration from JS Injector or load defaults
     async function getKefinTweaksConfig() {
         try {
+            await migrateLegacyHomeScreenConfig();
             // First, try to get config from JS Injector
-            const pluginId = await findJavaScriptInjectorPlugin();
+/*             const pluginId = await findJavaScriptInjectorPlugin();
             const injectorConfig = await getJavaScriptInjectorConfig(pluginId);
             
             // Find KefinTweaks-Config script
             const kefinTweaksScript = injectorConfig.CustomJavaScripts?.find(
                 script => script.Name === 'KefinTweaks-Config'
-            );
+            ); */
             
-            if (kefinTweaksScript && kefinTweaksScript.Script) {
+/*             if (kefinTweaksScript && kefinTweaksScript.Script) {
                 // Extract config from script content
                 // The script should contain: window.KefinTweaksConfig = {...};
                 const scriptMatch = kefinTweaksScript.Script.match(/window\.KefinTweaksConfig\s*=\s*({[\s\S]*});/);
                 if (scriptMatch && scriptMatch[1]) {
                     try {
-                        const config = JSON.parse(scriptMatch[1]);
+                        let config = JSON.parse(scriptMatch[1]);
                         // Store enabled state globally for use in modal (defaults to true if not set)
                         window.KefinTweaksConfigEnabled = config.enabled !== false;
                         console.log('[KefinTweaks Configuration] Loaded config from JS Injector:', config);
+                        
+                        // Run migration if needed
+                        config = await migrateLegacyHomeScreenConfig();
+                        
                         return config;
                     } catch (parseError) {
                         console.error('[KefinTweaks Configuration] Error parsing config from script:', parseError);
                     }
                 }
-        }
+            } */
 
             // If no config found in JS Injector, load defaults
-            console.log('[KefinTweaks Configuration] No config found in JS Injector, loading defaults');
-        const rawDefaultConfig = await loadDefaultConfig();
-        const defaultConfig = JSON.parse(JSON.stringify(rawDefaultConfig));
+/*             console.log('[KefinTweaks Configuration] No config found in JS Injector, loading defaults');
+            const rawDefaultConfig = await loadDefaultConfig();
+            const defaultConfig = JSON.parse(JSON.stringify(rawDefaultConfig));
 
-        const currentConfigSource = currentLoadedConfig || window.KefinTweaksCurrentConfig || window.KefinTweaksConfig || {};
-        const currentKefinRoot = currentConfigSource.kefinTweaksRoot || defaultConfig.kefinTweaksRoot;
-        defaultConfig.kefinTweaksRoot = currentKefinRoot;
-        // Ensure enabled field is set (defaults to true if not present)
-        if (defaultConfig.enabled === undefined) {
-            defaultConfig.enabled = true;
-        }
-        // Store enabled state globally for use in modal
-        window.KefinTweaksConfigEnabled = defaultConfig.enabled !== false;
-        // Note: scriptRoot is no longer used - scripts are loaded from kefinTweaksRoot + '/scripts/'
+            const currentConfigSource = currentLoadedConfig || window.KefinTweaksCurrentConfig || window.KefinTweaksConfig || {};
+            const currentKefinRoot = currentConfigSource.kefinTweaksRoot || defaultConfig.kefinTweaksRoot;
+            defaultConfig.kefinTweaksRoot = currentKefinRoot;
+            // Ensure enabled field is set (defaults to true if not present)
+            if (defaultConfig.enabled === undefined) {
+                defaultConfig.enabled = true;
+            }
+            // Store enabled state globally for use in modal
+            window.KefinTweaksConfigEnabled = defaultConfig.enabled !== false;
 
-            // Save defaults to JS Injector for future use
-            await saveConfigToJavaScriptInjector(defaultConfig);
+            // Run migration if needed
+            const migratedConfig = await migrateLegacyHomeScreenConfig(defaultConfig);
             
-            return defaultConfig;
+            // Save migrated config to JS Injector for future use
+            await saveConfigToJavaScriptInjector(migratedConfig); */
+            
+            return window.KefinTweaksConfig;
         } catch (error) {
             console.error('[KefinTweaks Configuration] Error getting config, falling back to defaults:', error);
             // Fallback to defaults if anything fails
@@ -215,6 +227,432 @@
                 };
             }
         }
+    }
+
+    // Import/Export Logic
+    async function showExportDialog(config) {
+        const customSections = config.homeScreen?.customSections || [];
+        const seasonalSeasons = config.homeScreen?.seasonal?.seasons || [];
+        
+        if (customSections.length === 0 && seasonalSeasons.length === 0) {
+            alert('No custom sections or seasonal configurations found to export.');
+            return;
+        }
+
+        const content = document.createElement('div');
+        content.innerHTML = `
+            <div class="content-primary">
+                <div class="listItemBodyText" style="margin-bottom: 1em;">Select sections to export:</div>
+                
+                ${customSections.length > 0 ? `
+                <div style="margin-bottom: 1.5em;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5em;">
+                        <h3 class="listItemBodyText" style="margin: 0;">Custom Sections</h3>
+                        <div>
+                            <button type="button" class="emby-button" onclick="this.closest('.content-primary').querySelectorAll('.export-custom-check').forEach(c => c.checked = true)" style="font-size: 0.9em;">Select All</button>
+                            <button type="button" class="emby-button" onclick="this.closest('.content-primary').querySelectorAll('.export-custom-check').forEach(c => c.checked = false)" style="font-size: 0.9em;">Deselect All</button>
+                        </div>
+                    </div>
+                    <div style="background: rgba(0,0,0,0.2); border-radius: 4px; padding: 0.5em;">
+                        ${customSections.map((section, i) => `
+                            <label class="checkboxContainer" style="display: flex; align-items: center; padding: 0.5em;">
+                                <input type="checkbox" class="export-custom-check" data-index="${i}" checked>
+                                <span class="listItemBodyText" style="margin-left: 0.5em;">${section.name || 'Unnamed Section'}</span>
+                            </label>
+                        `).join('')}
+                    </div>
+                </div>` : ''}
+
+                ${seasonalSeasons.length > 0 ? `
+                <div style="margin-bottom: 1.5em;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5em;">
+                        <h3 class="listItemBodyText" style="margin: 0;">Seasonal Seasons</h3>
+                        <div>
+                            <button type="button" class="emby-button" onclick="this.closest('.content-primary').querySelectorAll('.export-seasonal-check').forEach(c => c.checked = true)" style="font-size: 0.9em;">Select All</button>
+                            <button type="button" class="emby-button" onclick="this.closest('.content-primary').querySelectorAll('.export-seasonal-check').forEach(c => c.checked = false)" style="font-size: 0.9em;">Deselect All</button>
+                        </div>
+                    </div>
+                    <div style="background: rgba(0,0,0,0.2); border-radius: 4px; padding: 0.5em;">
+                        ${seasonalSeasons.map((season, i) => `
+                            <label class="checkboxContainer" style="display: flex; align-items: center; padding: 0.5em;">
+                                <input type="checkbox" class="export-seasonal-check" data-index="${i}" checked>
+                                <span class="listItemBodyText" style="margin-left: 0.5em;">${season.name || 'Unnamed Season'}</span>
+                            </label>
+                        `).join('')}
+                    </div>
+                </div>` : ''}
+                
+                <div id="exportOutputContainer" style="display: none; margin-top: 1.5em;">
+                    <div class="listItemBodyText" style="margin-bottom: 0.5em;">Export JSON:</div>
+                    <textarea id="exportOutput" class="fld emby-textarea" readonly style="width: 100%; height: 200px; font-family: monospace;"></textarea>
+                    <div style="display: flex; gap: 1em; margin-top: 0.5em;">
+                        <button type="button" class="emby-button raised" id="copyExportBtn">Copy to Clipboard</button>
+                        <button type="button" class="emby-button raised" id="downloadExportBtn">Download .json</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        const footer = document.createElement('div');
+        footer.style.display = 'flex';
+        footer.style.gap = '0.75em';
+        footer.innerHTML = `
+            <button class="emby-button raised block button-submit" id="generateExportBtn" style="padding: 0.75em 2em;">Generate JSON</button>
+            <button class="emby-button raised" onclick="window.ModalSystem.close('kefinTweaksExportModal')">Close</button>
+        `;
+
+        window.ModalSystem.create({
+            id: 'kefinTweaksExportModal',
+            title: 'Export Custom Sections',
+            content: content,
+            footer: footer,
+            closeOnBackdrop: true,
+            closeOnEscape: true,
+            onOpen: (modalInstance) => {
+                const generateBtn = modalInstance.dialogFooter.querySelector('#generateExportBtn');
+                generateBtn.addEventListener('click', () => {
+                    const selectedCustomIndices = Array.from(content.querySelectorAll('.export-custom-check:checked')).map(c => parseInt(c.dataset.index));
+                    const selectedSeasonalIndices = Array.from(content.querySelectorAll('.export-seasonal-check:checked')).map(c => parseInt(c.dataset.index));
+                    
+                    if (selectedCustomIndices.length === 0 && selectedSeasonalIndices.length === 0) {
+                        alert('Please select at least one item to export.');
+                        return;
+                    }
+
+                    const exportData = {
+                        meta: {
+                            version: '1.0',
+                            date: new Date().toISOString(),
+                            source: 'KefinTweaks'
+                        },
+                        customSections: selectedCustomIndices.map(i => customSections[i]),
+                        seasonalSeasons: selectedSeasonalIndices.map(i => seasonalSeasons[i])
+                    };
+
+                    const json = JSON.stringify(exportData, null, 2);
+                    const outputContainer = content.querySelector('#exportOutputContainer');
+                    const output = content.querySelector('#exportOutput');
+                    
+                    output.value = json;
+                    outputContainer.style.display = 'block';
+                    generateBtn.style.display = 'none';
+                    
+                    content.querySelector('#copyExportBtn').addEventListener('click', () => {
+                        output.select();
+                        document.execCommand('copy');
+                        if (window.KefinTweaksToaster && window.KefinTweaksToaster.toast) {
+                            window.KefinTweaksToaster.toast('Copied to clipboard');
+                        }
+                    });
+                    
+                    content.querySelector('#downloadExportBtn').addEventListener('click', () => {
+                        const blob = new Blob([json], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `kefin-tweaks-export-${new Date().toISOString().slice(0,10)}.json`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    });
+                });
+            }
+        });
+    }
+
+
+    async function showCommunityImportDialog(config, saveConfigCallback) {
+        // Ensure community config is available
+        if (!window.KefinCommunityConfig) {
+            alert('Community configuration not loaded. Please ensure homeScreenConfig-community.js is loaded.');
+            return;
+        }
+
+        const communityCollections = window.KefinCommunityConfig.collections || [];
+        
+        const content = document.createElement('div');
+        content.innerHTML = `
+            <div class="content-primary">
+                <div class="listItemBodyText" style="margin-bottom: 1em;">Select Home Screen Sections to import:</div>
+                <div class="listItemBodyText" style="margin-bottom: 1em;">These sections are created and submitted by community members like you!</div>
+                <div class="listItemBodyText secondary" style="margin-bottom: 1.5em;">Submit your own Home Screen Sections <a href="https://github.com/ranaldsgift/KefinTweaks/discussions/64" target="_blank" class="button-link">here.</a></div>
+                
+                <div style="margin-bottom: 1.5em;">
+                    <select id="communityCollectionSelect" class="emby-select-withcolor emby-select" style="width: 100%; padding: 0.5em; background: rgba(255,255,255,0.1); color: inherit; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px;">
+                        <option value="">Select a collection...</option>
+                        ${communityCollections.map((c, i) => `<option value="${i}">${c.name} by ${c.author}</option>`).join('')}
+                    </select>
+                </div>
+                
+                <div id="collectionDescription" style="margin-bottom: 1.5em; font-style: italic; color: #ccc; display: none; padding: 1em; background: rgba(0,0,0,0.2); border-radius: 4px;"></div>
+
+                <div id="importSelectionContainer" style="display: none; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 1em;">
+                    <div class="listItemBodyText" style="margin-bottom: 1em; font-weight: bold;">Sections in this collection:</div>
+                    <div id="importSelectionList"></div>
+                </div>
+            </div>
+        `;
+
+        const footer = document.createElement('div');
+        footer.style.display = 'flex';
+        footer.style.gap = '0.75em';
+        footer.innerHTML = `
+            <button class="emby-button raised block button-submit" id="confirmCommunityImportBtn" style="padding: 0.75em 2em; display: none;">Import Selected</button>
+            <button class="emby-button raised" onclick="window.ModalSystem.close('kefinTweaksCommunityImportModal')">Cancel</button>
+        `;
+
+        let selectedCollection = null;
+
+        window.ModalSystem.create({
+            id: 'kefinTweaksCommunityImportModal',
+            title: 'Import Community Sections',
+            content: content,
+            footer: footer,
+            closeOnBackdrop: false,
+            closeOnEscape: true,
+            onOpen: (modalInstance) => {
+                const select = content.querySelector('#communityCollectionSelect');
+                const descContainer = content.querySelector('#collectionDescription');
+                const selectionContainer = content.querySelector('#importSelectionContainer');
+                const selectionList = content.querySelector('#importSelectionList');
+                const confirmBtn = modalInstance.dialogFooter.querySelector('#confirmCommunityImportBtn');
+
+                select.addEventListener('change', () => {
+                    const index = select.value;
+                    if (index === '') {
+                        selectedCollection = null;
+                        descContainer.style.display = 'none';
+                        selectionContainer.style.display = 'none';
+                        confirmBtn.style.display = 'none';
+                        return;
+                    }
+
+                    selectedCollection = communityCollections[parseInt(index)];
+                    
+                    // Show description
+                    descContainer.textContent = selectedCollection.description || 'No description.';
+                    descContainer.style.display = 'block';
+
+                    // Render sections list
+                    let html = '';
+                    if (selectedCollection.sections && selectedCollection.sections.length > 0) {
+                        html += `
+                            <div style="background: rgba(0,0,0,0.2); border-radius: 4px; padding: 0.5em;">
+                                ${selectedCollection.sections.map((s, i) => `
+                                    <label class="checkboxContainer" style="display: flex; align-items: center; padding: 0.5em;">
+                                        <input type="checkbox" class="import-community-check" data-index="${i}" checked>
+                                        <span class="listItemBodyText" style="margin-left: 0.5em;">${s.name || 'Unnamed'} (${s.type})</span>
+                                    </label>
+                                `).join('')}
+                            </div>`;
+                    } else {
+                        html = '<div class="listItemBodyText secondary">No sections found in this collection.</div>';
+                    }
+
+                    selectionList.innerHTML = html;
+                    selectionContainer.style.display = 'block';
+                    confirmBtn.style.display = 'inline-block';
+                });
+
+                confirmBtn.addEventListener('click', async () => {
+                    if (!selectedCollection) return;
+
+                    const selectedIndices = Array.from(content.querySelectorAll('.import-community-check:checked')).map(c => parseInt(c.dataset.index));
+                    
+                    if (selectedIndices.length === 0) {
+                        alert('Please select at least one section to import.');
+                        return;
+                    }
+
+                    // Import logic
+                    if (!config.homeScreen) config.homeScreen = {};
+                    if (!config.homeScreen.customSections) config.homeScreen.customSections = [];
+                    
+                    let importedCount = 0;
+                    selectedIndices.forEach(i => {
+                        const section = JSON.parse(JSON.stringify(selectedCollection.sections[i])); // Deep copy
+                        // Regenerate ID to avoid collision
+                        if (section.id) section.id = `${section.id}_community_${Date.now()}_${Math.floor(Math.random()*1000)}`;
+                        config.homeScreen.customSections.push(section);
+                        importedCount++;
+                    });
+
+                    if (importedCount > 0) {
+                        await saveConfigCallback(config);
+                        alert(`Successfully imported ${importedCount} sections. The page will reload.`);
+                        window.location.reload();
+                    } else {
+                        window.ModalSystem.close('kefinTweaksCommunityImportModal');
+                    }
+                });
+            }
+        });
+    }
+
+    async function showImportDialog(config, saveConfigCallback) {
+        const content = document.createElement('div');
+        content.innerHTML = `
+            <div class="content-primary">
+                <div class="listItemBodyText" style="margin-bottom: 1em;">Paste JSON content or a URL (Raw GitHub, Gist, Pastebin):</div>
+                <textarea id="importInput" class="fld emby-textarea" style="width: 100%; height: 150px; font-family: monospace;" placeholder='{"customSections": [...]} or https://...'></textarea>
+                
+                <div id="importSelectionContainer" style="display: none; margin-top: 1.5em; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 1em;">
+                    <div class="listItemBodyText" style="margin-bottom: 1em; font-weight: bold;">Found items to import:</div>
+                    <div id="importSelectionList"></div>
+                </div>
+            </div>
+        `;
+
+        const footer = document.createElement('div');
+        footer.style.display = 'flex';
+        footer.style.gap = '0.75em';
+        footer.innerHTML = `
+            <button class="emby-button raised block button-submit" id="loadImportBtn" style="padding: 0.75em 2em;">Load</button>
+            <button class="emby-button raised block button-submit" id="confirmImportBtn" style="padding: 0.75em 2em; display: none;">Import Selected</button>
+            <button class="emby-button raised" onclick="window.ModalSystem.close('kefinTweaksImportModal')">Cancel</button>
+        `;
+
+        let parsedData = null;
+
+        window.ModalSystem.create({
+            id: 'kefinTweaksImportModal',
+            title: 'Import Custom Sections',
+            content: content,
+            footer: footer,
+            closeOnBackdrop: false,
+            closeOnEscape: true,
+            onOpen: (modalInstance) => {
+                const loadBtn = modalInstance.dialogFooter.querySelector('#loadImportBtn');
+                const confirmBtn = modalInstance.dialogFooter.querySelector('#confirmImportBtn');
+                const input = content.querySelector('#importInput');
+                const selectionContainer = content.querySelector('#importSelectionContainer');
+                const selectionList = content.querySelector('#importSelectionList');
+
+                loadBtn.addEventListener('click', async () => {
+                    const rawInput = input.value.trim();
+                    if (!rawInput) return;
+
+                    loadBtn.disabled = true;
+                    loadBtn.textContent = 'Loading...';
+
+                    try {
+                        let jsonStr = rawInput;
+                        // Check if URL
+                        if (rawInput.startsWith('http://') || rawInput.startsWith('https://')) {
+                            const res = await fetch(rawInput);
+                            if (!res.ok) throw new Error(`Failed to fetch URL: ${res.status}`);
+                            jsonStr = await res.text();
+                        }
+
+                        parsedData = JSON.parse(jsonStr);
+                        if (!parsedData.customSections && !parsedData.seasonalSeasons && !Array.isArray(parsedData)) {
+                            throw new Error('Invalid format: No sections found.');
+                        }
+                        
+                        // Handle legacy/array-only format if necessary (assume customSections)
+                        if (Array.isArray(parsedData)) {
+                            parsedData = { customSections: parsedData };
+                        }
+
+                        // Render selection
+                        let html = '';
+                        if (parsedData.customSections && parsedData.customSections.length > 0) {
+                            html += `
+                                <div style="margin-bottom: 1em;">
+                                    <h3 class="listItemBodyText">Custom Sections</h3>
+                                    <div style="background: rgba(0,0,0,0.2); border-radius: 4px; padding: 0.5em;">
+                                        ${parsedData.customSections.map((s, i) => `
+                                            <label class="checkboxContainer" style="display: flex; align-items: center; padding: 0.5em;">
+                                                <input type="checkbox" class="import-custom-check" data-index="${i}" checked>
+                                                <span class="listItemBodyText" style="margin-left: 0.5em;">${s.name || 'Unnamed'}</span>
+                                            </label>
+                                        `).join('')}
+                                    </div>
+                                </div>`;
+                        }
+                        if (parsedData.seasonalSeasons && parsedData.seasonalSeasons.length > 0) {
+                            html += `
+                                <div style="margin-bottom: 1em;">
+                                    <h3 class="listItemBodyText">Seasonal Seasons</h3>
+                                    <div style="background: rgba(0,0,0,0.2); border-radius: 4px; padding: 0.5em;">
+                                        ${parsedData.seasonalSeasons.map((s, i) => `
+                                            <label class="checkboxContainer" style="display: flex; align-items: center; padding: 0.5em;">
+                                                <input type="checkbox" class="import-seasonal-check" data-index="${i}" checked>
+                                                <span class="listItemBodyText" style="margin-left: 0.5em;">${s.name || 'Unnamed'}</span>
+                                            </label>
+                                        `).join('')}
+                                    </div>
+                                </div>`;
+                        }
+
+                        if (!html) throw new Error('No valid sections found in data.');
+
+                        selectionList.innerHTML = html;
+                        selectionContainer.style.display = 'block';
+                        loadBtn.style.display = 'none';
+                        confirmBtn.style.display = 'inline-block';
+                        input.disabled = true;
+
+                    } catch (err) {
+                        alert('Error loading data: ' + err.message);
+                        loadBtn.disabled = false;
+                        loadBtn.textContent = 'Load';
+                    }
+                });
+
+                confirmBtn.addEventListener('click', async () => {
+                    if (!parsedData) return;
+
+                    const selectedCustomIndices = Array.from(content.querySelectorAll('.import-custom-check:checked')).map(c => parseInt(c.dataset.index));
+                    const selectedSeasonalIndices = Array.from(content.querySelectorAll('.import-seasonal-check:checked')).map(c => parseInt(c.dataset.index));
+
+                    // Import logic
+                    if (!config.homeScreen) config.homeScreen = {};
+                    
+                    let importedCount = 0;
+
+                    // Import Custom Sections
+                    if (selectedCustomIndices.length > 0 && parsedData.customSections) {
+                        if (!config.homeScreen.customSections) config.homeScreen.customSections = [];
+                        
+                        selectedCustomIndices.forEach(i => {
+                            const section = parsedData.customSections[i];
+                            // Regenerate ID to avoid collision
+                            if (section.id) section.id = `${section.id}_imported_${Date.now()}_${Math.floor(Math.random()*1000)}`;
+                            config.homeScreen.customSections.push(section);
+                            importedCount++;
+                        });
+                    }
+
+                    // Import Seasonal Seasons
+                    if (selectedSeasonalIndices.length > 0 && parsedData.seasonalSeasons) {
+                        if (!config.homeScreen.seasonal) config.homeScreen.seasonal = {};
+                        if (!config.homeScreen.seasonal.seasons) config.homeScreen.seasonal.seasons = [];
+                        
+                        selectedSeasonalIndices.forEach(i => {
+                            const season = parsedData.seasonalSeasons[i];
+                            // Regenerate IDs for internal sections if needed?
+                            if (season.sections) {
+                                season.sections.forEach(s => {
+                                    if (s.id) s.id = `${s.id}_imported_${Date.now()}_${Math.floor(Math.random()*1000)}`;
+                                });
+                            }
+                            config.homeScreen.seasonal.seasons.push(season);
+                            importedCount++;
+                        });
+                    }
+
+                    if (importedCount > 0) {
+                        await saveConfigCallback(config);
+                        alert(`Successfully imported ${importedCount} items. The page will reload.`);
+                        window.location.reload();
+                    } else {
+                        window.ModalSystem.close('kefinTweaksImportModal');
+                    }
+                });
+            }
+        });
     }
 
     // Inject responsive CSS for the configuration modal
@@ -434,43 +872,6 @@
     // Build the configuration page content
     function buildConfigPageContent(config, libraries = []) {
         const scripts = config.scripts || {};
-        const homeScreen = config.homeScreen || {};
-        const exclusiveElsewhere = config.exclusiveElsewhere || {};
-        const search = config.search || {};
-        const flattenSingleSeasonShows = config.flattenSingleSeasonShows || {};
-        const customMenuLinks = config.customMenuLinks || [];
-        // Reconstruct full skin list (enabled + disabled) for configuration
-        // We can't use window.KefinTweaksSkinConfig directly because it filters out disabled skins
-        const defaultSkins = window.KefinTweaksDefaultSkinsConfig?.skins || [];
-        const adminSkins = config.skins || [];
-        
-        const mergedSkins = [];
-        
-        // 1. Add all default skins first
-        defaultSkins.forEach(skin => {
-            mergedSkins.push({ ...skin, enabled: true });
-        });
-        
-        // 2. Override/Add with admin skins
-        adminSkins.forEach(adminSkin => {
-            const existingIndex = mergedSkins.findIndex(s => s.name === adminSkin.name);
-            if (existingIndex >= 0) {
-                // Override existing default skin
-                mergedSkins[existingIndex] = { ...mergedSkins[existingIndex], ...adminSkin };
-            } else {
-                // Add new admin skin
-                mergedSkins.push({ ...adminSkin });
-            }
-        });
-        
-        const skins = mergedSkins;
-        const themes = config.themes || [];
-
-        // Get all skin names for autocomplete
-        const allSkinNames = skins.map(skin => skin.name).filter(Boolean);
-        
-        // Get skin source info for visual distinctions
-        const skinSources = window.KefinTweaksSkinManager?.getAllSkinSources?.() || {};
 
         const isEnabled = window.KefinTweaksConfigEnabled !== false;
         
@@ -501,211 +902,6 @@
                 </div>
             </div>
 
-            <div class="paperList" style="margin-bottom: 2em;">
-                <div class="listItem" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 1em; margin-bottom: 1em;">
-                    <div class="listItemContent">
-                        <h3 class="listItemBodyText" style="margin-bottom: 0.25em;">Home Screen Configuration</h3>
-                        <div class="listItemBodyText secondary">Configure custom home screen sections and discovery features</div>
-                    </div>
-                </div>
-                <div style="display: grid; grid-template-columns: 1fr; gap: 0.5em;">
-                    ${buildHomeScreenConfig(homeScreen, libraries)}
-                </div>
-            </div>
-
-            <div class="paperList" id="configSection_exclusiveElsewhere" style="margin-bottom: 2em; ${scripts.exclusiveElsewhere === false ? 'display: none;' : ''}">
-                <div class="listItem" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 1em; margin-bottom: 1em;">
-                    <div class="listItemContent">
-                        <h3 class="listItemBodyText" style="margin-bottom: 0.25em;">Exclusive Elsewhere Configuration</h3>
-                        <div class="listItemBodyText secondary">Configure exclusive elsewhere branding behavior</div>
-                    </div>
-                </div>
-                ${buildExclusiveElsewhereConfig(exclusiveElsewhere)}
-            </div>
-
-            <div class="paperList" id="configSection_search" style="margin-bottom: 2em; ${scripts.search === false ? 'display: none;' : ''}">
-                <div class="listItem" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 1em; margin-bottom: 1em;">
-                    <div class="listItemContent">
-                        <h3 class="listItemBodyText" style="margin-bottom: 0.25em;">Search Configuration</h3>
-                        <div class="listItemBodyText secondary">Configure search functionality</div>
-                    </div>
-                </div>
-                ${buildSearchConfig(search)}
-            </div>
-
-            <div class="paperList" id="configSection_flattenSingleSeasonShows" style="margin-bottom: 2em; ${scripts.flattenSingleSeasonShows === false ? 'display: none;' : ''}">
-                <div class="listItem" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 1em; margin-bottom: 1em;">
-                    <div class="listItemContent">
-                        <h3 class="listItemBodyText" style="margin-bottom: 0.25em;">Episodes On Series Page Configuration</h3>
-                        <div class="listItemBodyText secondary">Configure episodes display on series pages</div>
-                    </div>
-                </div>
-                ${buildFlattenShowsConfig(flattenSingleSeasonShows)}
-            </div>
-
-            <div class="paperList" id="configSection_skin" style="margin-bottom: 2em; ${scripts.skinManager === false ? 'display: none;' : ''}">
-                <div class="listItem" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 1em; margin-bottom: 1em;">
-                    <div class="listItemContent">
-                        <h3 class="listItemBodyText" style="margin-bottom: 0.25em;">Skin Configuration</h3>
-                        <div class="listItemBodyText secondary">Configure default skin and available skins for all users</div>
-                    </div>
-                </div>
-                <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
-                    <div class="listItemContent">
-                        <div class="listItemBodyText" style="margin-bottom: 0.5em;">Default Skin</div>
-                        <select id="defaultSkin" class="fld emby-select-withcolor emby-select emby-select-withcolor emby-select-withcolor" style="width: 100%; max-width: 400px;">
-                            ${allSkinNames.map(name => `<option value="${name}" ${config.defaultSkin === name ? 'selected' : ''}>${name}</option>`).join('')}
-                            ${allSkinNames.length === 0 ? '<option value="">No skins available</option>' : ''}
-                        </select>
-                        <div class="listItemBodyText secondary" style="margin-top: 0.5em; font-size: 0.9em;">Select a default skin for all users</div>
-                    </div>
-                </div>
-                <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
-                    <div class="listItemContent" style="width: 100%;">
-                        <h3 class="listItemBodyText" style="margin-bottom: 0.5em;">Enable/Disable Skins</h3>
-                        <div class="listItemBodyText secondary" style="margin-bottom: 1em; font-size: 0.9em;">Disabled skins will not appear in the appearance dropdowns for users</div>
-                        <div class="listItemBodyText secondary" style="margin-bottom: 1em; font-size: 0.85em; color: rgba(255,255,255,0.7); line-height: 1.5;">
-                            All themes are created with love by community members like you. Don't forget to thank them for their work and time if you appreciate their creations.
-                            KefinTweaks has not contributed to the creation of any of the skins below and is only attempting to facilitate their accessibility.
-                        </div>
-                        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.5em;">
-                            ${buildSkinToggles(skins, skinSources)}
-                        </div>
-                    </div>
-                </div>
-                ${(() => {
-                    // Check if there are any overridden default skins
-                    const hasOverriddenSkins = Object.values(skinSources).some(source => source === 'overridden');
-                    if (hasOverriddenSkins) {
-                        return `
-                            <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
-                                <div class="listItemContent">
-                                    <div class="listItemBodyText secondary" style="margin-bottom: 0.75em; font-size: 0.9em;">Some default skins have been overridden by custom configurations. Click the button below to remove custom skins that override defaults.</div>
-                                    <button type="button" id="removeDuplicateDefaultsBtn" class="emby-button raised" style="padding: 0.5em 1.5em; font-size: 0.9em;">
-                                        <span>Remove Custom Skins Overriding Defaults</span>
-                                    </button>
-                                </div>
-                            </div>
-                        `;
-                    }
-                    return '';
-                })()}
-                <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
-                    <div class="listItemContent">
-                        <h3 class="listItemBodyText" style="margin-bottom: 0.25em;">Optional CSS Modules</h3>
-                        <div class="listItemBodyText secondary" style="margin-bottom: 1em; font-size: 0.9em;">Configure default enabled/disabled state for optional CSS modules. These settings will be used when users haven't specified their own preferences.</div>
-                        <div class="listItemBodyText" style="margin-bottom: 0.5em;">Select Skin</div>
-                        <select id="optionalIncludesCategory" class="fld emby-select-withcolor emby-select emby-select-withcolor emby-select-withcolor" style="width: 100%; max-width: 400px; margin-bottom: 1em;">
-                            <option value="global">Global (applies to all skins)</option>
-                            ${buildOptionalIncludesSkinOptions(skins)}
-                        </select>
-                        <div id="optionalIncludesEditor" style="margin-top: 1em;">
-                            ${buildOptionalIncludesEditor('global', config, skins)}
-                        </div>
-                    </div>
-                </div>
-                <details class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0; margin-bottom: 1em; display: grid;">
-                    <summary class="listItemBodyText" style="font-weight: 500; cursor: pointer; padding: 0.75em; display: flex; align-items: center; gap: 0.5em; list-style: none; user-select: none;">
-                        <span class="material-icons" style="font-size: 1.2em; transition: transform 0.2s;">chevron_right</span>
-                        <span>Skins JSON</span>
-                    </summary>
-                    <div style="padding: 0.75em; border-top: 1px solid rgba(255,255,255,0.1);">
-                        <div class="listItemContent">
-                            <div class="listItemBodyText secondary" style="margin-bottom: 0.75em; font-size: 0.9em;">Add additional skins that will be available to all users. Each skin can have multiple CSS files for different server versions. You can override the Default skins from KefinTweaks by specifying a custom configuration with that Skin Name in the configuration JSON below. Any skins that appear in this JSON and are named the same as the KefinTweaks default skins will override the default functionality. Default skins are not shown here as they are managed separately.</div>
-                            <textarea id="skinsJson" class="fld emby-textarea" rows="15" placeholder='[{"name":"Skin Name","author":"Author","url":[...]}]' style="width: 100%; font-family: monospace; font-size: 0.9em; line-height: 1.5;">${JSON.stringify(config.skins || [], null, 2)}</textarea>
-                            <details style="margin-top: 0.75em;">
-                                <summary class="listItemBodyText secondary" style="font-size: 0.9em; color: #4a9eff;">View Example Format</summary>
-                                <pre style="background: rgba(0,0,0,0.3); padding: 1em; border-radius: 4px; margin-top: 0.5em; overflow-x: auto; font-size: 0.85em; line-height: 1.6;">[
-  {
-    "name": "Custom Skin",
-    "author": "username",
-    "url": [
-      {
-        "majorServerVersions": [10, 11],
-        "urls": ["https://cdn.jsdelivr.net/gh/username/custom-theme.css"]
-      }
-    ],
-    "colorSchemes": []
-  },
-  {
-    "name": "Custom Skin 2",
-    "author": "username 2",
-    "url": [
-      {
-        "majorServerVersions": [10],
-        "urls": ["https://cdn.jsdelivr.net/gh/username/custom-theme2.css"]
-      }
-    ],
-    "colorSchemes": []
-  }
-]</pre>
-                            </details>
-                        </div>
-                    </div>
-                </details>
-            </div>
-
-            <div class="paperList" id="configSection_theme" style="margin-bottom: 2em; ${scripts.skinManager === false ? 'display: none;' : ''}">
-                <div class="listItem" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 1em; margin-bottom: 1em;">
-                    <div class="listItemContent">
-                        <h3 class="listItemBodyText" style="margin-bottom: 0.25em;">Theme Configuration</h3>
-                        <div class="listItemBodyText secondary">Configure additional themes available to all users</div>
-                    </div>
-                </div>
-                <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
-                    <div class="listItemContent">
-                        <div class="listItemBodyText" style="margin-bottom: 0.5em;">Themes JSON</div>
-                        <div class="listItemBodyText secondary" style="margin-bottom: 0.75em; font-size: 0.9em;">Add additional themes that will be available to all users. Each theme should have a name and URL pointing to a CSS file.</div>
-                        <textarea id="themesJson" class="fld emby-textarea" rows="12" placeholder='[{"name":"Theme Name","url":"https://..."}]' style="width: 100%; font-family: monospace; font-size: 0.9em; line-height: 1.5;">${JSON.stringify(themes, null, 2)}</textarea>
-                        <details style="margin-top: 0.75em;">
-                            <summary class="listItemBodyText secondary" style="font-size: 0.9em; color: #4a9eff;">View Example Format</summary>
-                            <pre style="background: rgba(0,0,0,0.3); padding: 1em; border-radius: 4px; margin-top: 0.5em; overflow-x: auto; font-size: 0.85em; line-height: 1.6;">[
-  {
-    "name": "Custom Dark Theme",
-    "url": "https://cdn.jsdelivr.net/gh/username/custom-dark-theme.css"
-  },
-  {
-    "name": "Custom Light Theme",
-    "url": "https://cdn.jsdelivr.net/gh/username/custom-light-theme.css"
-  }
-]</pre>
-                        </details>
-                    </div>
-                </div>
-            </div>
-
-            <div class="paperList" id="configSection_customMenuLinks" style="margin-bottom: 2em; ${scripts.customMenuLinks === false ? 'display: none;' : ''}">
-                <div class="listItem" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 1em; margin-bottom: 1em;">
-                    <div class="listItemContent">
-                        <h3 class="listItemBodyText" style="margin-bottom: 0.25em;">Custom Menu Links</h3>
-                        <div class="listItemBodyText secondary">Configure custom menu links to be added to the custom menu</div>
-                    </div>
-                </div>
-                <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
-                    <div class="listItemContent">
-                        <div class="listItemBodyText" style="margin-bottom: 0.5em;">Custom Menu Links JSON</div>
-                        <div class="listItemBodyText secondary" style="margin-bottom: 0.75em; font-size: 0.9em;">Add custom menu links that will appear in the custom menu. Use Material icon names for icons.</div>
-                        <textarea id="customMenuLinksJson" class="fld emby-textarea" rows="12" placeholder='[{"name":"Link Name","icon":"link","url":"#/..."}]' style="width: 100%; font-family: monospace; font-size: 0.9em; line-height: 1.5;">${JSON.stringify(customMenuLinks, null, 2)}</textarea>
-                        <details style="margin-top: 0.75em;">
-                            <summary class="listItemBodyText secondary" style="font-size: 0.9em; color: #4a9eff;">View Example Format</summary>
-                            <pre style="background: rgba(0,0,0,0.3); padding: 1em; border-radius: 4px; margin-top: 0.5em; overflow-x: auto; font-size: 0.85em; line-height: 1.6;">[
-  {
-    "name": "My Custom Link",
-    "icon": "link",
-    "url": "#/userpluginsettings.html?pageUrl=https://domain.com/custom-page",
-    "openInNewTab": false
-  },
-  {
-    "name": "External Link",
-    "icon": "open_in_new",
-    "url": "https://example.com",
-    "openInNewTab": true
-  }
-]</pre>
-                        </details>
-                    </div>
-                </div>
-            </div>
 
         `;
     }
@@ -975,6 +1171,9 @@
 
     // Build script toggle switches
     function buildScriptToggles(scripts) {
+        // Features that have configuration options (not just toggles)
+        const featuresWithConfig = new Set(['homeScreen', 'search', 'flattenSingleSeasonShows', 'skinManager', 'customMenuLinks', 'seriesInfo']);
+        
         const scriptNames = [
             { key: 'watchlist', label: 'Watchlist', desc: 'Allows your users to add items to their Watchlist. The Watchlist page shows an overview of all items on a user\'s Watchlist, as well as their Series Progress and Movie History. It also includes a Statistics page with an overview of your user watched stats.' },
             { key: 'homeScreen', label: 'Enhanced Home Screen', desc: 'Add custom home screen sections and a "discovery engine" to your Home Page. Create sections based on Genre, Tags, Playlists, Collections or Search Terms for specific Item Types. Use the "Spotlight" feature to highlight specific sections with an image carousel/slideshow.' },
@@ -998,12 +1197,20 @@
 
         return scriptNames.map(script => {
             const isEnabled = scripts[script.key] !== false; // Default to true if not set
+            const hasConfig = featuresWithConfig.has(script.key);
+            const configKey = script.key === 'flattenSingleSeasonShows' ? 'seriesEpisodes' : script.key;
+            
             return `
-                <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; background: rgba(255,255,255,0.02);">
+                <div class="listItem feature-card" data-feature-key="${script.key}" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; background: rgba(255,255,255,0.02); ${hasConfig ? 'cursor: pointer;' : ''}" ${hasConfig ? `onclick="openFeatureConfigurationModal(event, '${script.key}')"` : ''}>
                     <div class="listItemContent">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75em;">
                             <div class="listItemBodyText" style="font-weight: 500;">${script.label}</div>
-                            ${buildJellyfinCheckbox(`script_${script.key}`, isEnabled, '', { 'data-script-key': script.key })}
+                            <div style="display: flex; align-items: center; gap: 0.5em;">
+                                ${hasConfig ? `<button class="emby-button raised" data-feature-edit="${configKey}" style="padding: 0.35em 0.75em; font-size: 0.85em; min-width: auto;" title="Configure ${script.label}">
+                                    <span class="material-icons" style="font-size: 1.1em; vertical-align: middle;">edit</span>
+                                </button>` : ''}
+                                ${buildJellyfinCheckbox(`script_${script.key}`, isEnabled, '', { 'data-script-key': script.key })}
+                            </div>
                         </div>
                         <div class="listItemBodyText secondary" style="font-size: 0.9em; line-height: 1.4; width: 100%;">${script.desc}</div>
                     </div>
@@ -1011,6 +1218,54 @@
             `;
         }).join('');
     }
+
+    function openFeatureConfigurationModal(event, featureKey) {
+        // Check if the click target is the toggle switch or edit button
+        const target = event.target;
+        
+        // Check if clicking on the toggle switch (checkbox, label, or container)
+        const isCheckbox = target.closest('.checkboxContainer') || 
+                               target.closest('.emby-checkbox-label') || 
+                               target.closest('.emby-checkbox') ||
+                               target.getAttribute('is') === 'emby-checkbox' ||
+                               target.hasAttribute('data-embycheckbox');
+        
+        // Don't open modal if clicking on toggle switch or edit button
+        if (isCheckbox) {
+            return;
+        }
+        
+        // Get the feature key from the card if not provided
+        if (!featureKey) {
+            const featureCard = event.target.closest('.feature-card');
+            if (featureCard) {
+                featureKey = featureCard.getAttribute('data-feature-key');
+            }
+        }
+        
+        if (!featureKey) {
+            console.warn('[KefinTweaks Configuration] Could not determine feature key');
+            return;
+        }
+        
+        // Map feature key to config key (for flattenSingleSeasonShows -> seriesEpisodes)
+        const configKey = featureKey === 'flattenSingleSeasonShows' ? 'seriesEpisodes' : featureKey;
+        
+        // Open the appropriate configuration modal
+        if (window.KefinTweaksFeatureConfigs && window.KefinTweaksFeatureConfigs[configKey]) {
+            const configModule = window.KefinTweaksFeatureConfigs[configKey];
+            if (configModule.openConfigModal) {
+                configModule.openConfigModal();
+            } else {
+                console.warn(`[KefinTweaks Configuration] No openConfigModal function found for ${configKey}`);
+            }
+        } else {
+            console.warn(`[KefinTweaks Configuration] No configuration module found for ${configKey}`);
+        }
+    }
+    
+    // Expose function globally so it can be called from inline onclick handlers
+    window.openFeatureConfigurationModal = openFeatureConfigurationModal;
 
     // Helper function to build Include Item Types badge field
     function buildIncludeItemTypesField(prefix, sectionIndex, sanitizedPrefix, currentTypes, sourceType) {
@@ -1714,7 +1969,7 @@
             recentlyAddedInLibraryHtml = libraries.map(library => {
                 const libConfig = recentlyAddedInLibrary[library.Id] || {};
                 const prefix = `homeScreen_recentlyAddedInLibrary_${library.Id}`;
-                const defaultName = `Recently Added in ${library.Name}`;
+                const defaultName = `Recently Added ${library.Name}`;
                 
                 return `
                     <details class="listItem" style="display: grid; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0; gap: 0.5em;">
@@ -2085,6 +2340,28 @@
                     </button>
             </div>
             </details>
+
+            <!-- Import/Export Custom Sections -->
+            <details style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
+                <summary class="listItemBodyText" style="font-weight: 500; cursor: pointer; margin-bottom: 0.5em; display: flex; align-items: center; gap: 0.5em; border-radius: 0px !important;">
+                    <span class="material-icons" style="font-size: 1.2em; transition: transform 0.2s;">import_export</span>
+                    Import / Export Custom Sections
+                </summary>
+                <div style="padding: 0.75em 0 0 0;">
+                    <div class="listItemBodyText secondary" style="margin-bottom: 1em;">Share your custom home screen sections or import configurations from others.</div>
+                    <div style="display: flex; gap: 1em;">
+                        <button type="button" class="emby-button raised export-custom-sections-btn" style="padding: 0.75em 1.5em;">
+                            <span>Export Sections</span>
+                        </button>
+                        <button type="button" class="emby-button raised import-custom-sections-btn" style="padding: 0.75em 1.5em;">
+                            <span>Import Sections</span>
+                        </button>
+                        <button type="button" class="emby-button raised import-community-sections-btn" style="padding: 0.75em 1.5em;">
+                            <span>Import from Community</span>
+                        </button>
+                    </div>
+                </div>
+            </details>
         `;
     }
 
@@ -2171,16 +2448,13 @@
         currentLoadedConfig = config;
         window.KefinTweaksCurrentConfig = config;
 
-        // Fetch libraries for configuration
-        const libraries = await fetchLibraries();
-
         // Build the content (without title, as ModalSystem adds it)
         const content = document.createElement('div');
         content.className = 'modal-content-wrapper';
         content.id = MODAL_ID;
         content.innerHTML = `
             <div class="kefin-config-wrapper">
-                ${buildConfigPageContent(config, libraries)}
+                ${buildConfigPageContent(config)}
             </div>
         `;
 
@@ -2378,6 +2652,34 @@
             const addBtn = e.target.closest('.add-custom-section-btn');
             if (addBtn) {
                 addCustomSection();
+            }
+        });
+
+        // Export custom sections
+        modalInstance.dialogContent.addEventListener('click', (e) => {
+            const exportBtn = e.target.closest('.export-custom-sections-btn');
+            if (exportBtn) {
+                showExportDialog(config);
+            }
+        });
+
+        // Import custom sections
+        modalInstance.dialogContent.addEventListener('click', (e) => {
+            const importBtn = e.target.closest('.import-custom-sections-btn');
+            if (importBtn) {
+                showImportDialog(config, async (newConfig) => {
+                    await saveConfigToJavaScriptInjector(newConfig);
+                });
+            }
+        });
+
+        // Import community sections
+        modalInstance.dialogContent.addEventListener('click', (e) => {
+            const importBtn = e.target.closest('.import-community-sections-btn');
+            if (importBtn) {
+                showCommunityImportDialog(config, async (newConfig) => {
+                    await saveConfigToJavaScriptInjector(newConfig);
+                });
             }
         });
         
@@ -5061,18 +5363,8 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         
         // Collect all form values
         // Preserve existing kefinTweaksRoot from current config (no longer editable in UI)
-        const currentConfig = window.KefinTweaksCurrentConfig || {};
-        const config = {
-            kefinTweaksRoot: currentConfig.kefinTweaksRoot || '',
-            scripts: {},
-            homeScreen: {},
-            exclusiveElsewhere: {},
-            search: {},
-            defaultSkin: document.getElementById('defaultSkin')?.value || null,
-            skins: [],
-            themes: [],
-            customMenuLinks: []
-        };
+        const currentConfig = window.KefinTweaksCurrentConfig || window.KefinTweaksConfig || {};
+        const config = currentConfig;
         config.enabled = modalInstance.dialogContent.querySelector('#kefinTweaksEnabled')?.checked !== false;
         
         // Remove scriptRoot if it exists (legacy field, no longer used)
@@ -5085,312 +5377,6 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             const key = checkbox.getAttribute('data-script-key');
             config.scripts[key] = checkbox.checked;
         });
-
-        // Helper function to get section config
-        function getSectionConfig(prefix, includeSortOrderOrOptions = true, includeOrderFlag = true) {
-            let includeSortOrder = true;
-            let includeOrder = true;
-            let includeName = false;
-            let defaultName = '';
-
-            if (typeof includeSortOrderOrOptions === 'object') {
-                const opts = includeSortOrderOrOptions || {};
-                includeSortOrder = opts.includeSortOrder !== undefined ? opts.includeSortOrder : true;
-                includeOrder = opts.includeOrder !== undefined ? opts.includeOrder : true;
-                includeName = opts.includeName === true;
-                defaultName = opts.defaultName || '';
-            } else {
-                includeSortOrder = includeSortOrderOrOptions !== false;
-                includeOrder = includeOrderFlag !== false;
-            }
-
-            const config = {
-                itemLimit: parseInt(document.getElementById(`${prefix}_itemLimit`)?.value || '16', 10)
-            };
-
-            if (includeName) {
-                config.name = document.getElementById(`${prefix}_name`)?.value || defaultName || '';
-            }
-
-            if (includeSortOrder) {
-                config.sortOrder = document.getElementById(`${prefix}_sortOrder`)?.value || 'Random';
-                config.sortOrderDirection = document.getElementById(`${prefix}_sortOrderDirection`)?.value || 'Ascending';
-            }
-
-            config.cardFormat = document.getElementById(`${prefix}_cardFormat`)?.value || 'Poster';
-
-            if (includeOrder) {
-                config.order = parseInt(document.getElementById(`${prefix}_order`)?.value || '100', 10);
-            }
-
-            // Check for IsPlayed configuration
-            const isPlayedEnabledCheckbox = document.getElementById(`${prefix}_isPlayed_enabled`);
-            if (isPlayedEnabledCheckbox) {
-                if (isPlayedEnabledCheckbox.checked) {
-                    const isPlayedValueSelect = document.getElementById(`${prefix}_isPlayed_value`);
-                    config.isPlayed = isPlayedValueSelect?.value === 'true';
-                } else {
-                    config.isPlayed = null;
-                }
-            }
-
-            // Handle Min/Max Age In Days for Recently Released
-            if (prefix === 'homeScreen_recentlyReleased_movies') {
-                const minAge = document.getElementById(`${prefix}_minAgeInDays`)?.value;
-                const maxAge = document.getElementById(`${prefix}_maxAgeInDays`)?.value;
-                config.minAgeInDays = minAge !== '' ? parseInt(minAge, 10) : null;
-                config.maxAgeInDays = maxAge !== '' ? parseInt(maxAge, 10) : null;
-            }
-            if (prefix === 'homeScreen_recentlyReleased_episodes') {
-                const minAge = document.getElementById(`${prefix}_minAgeInDays`)?.value;
-                const maxAge = document.getElementById(`${prefix}_maxAgeInDays`)?.value;
-                config.minAgeInDays = minAge !== '' ? parseInt(minAge, 10) : null;
-                config.maxAgeInDays = maxAge !== '' ? parseInt(maxAge, 10) : null;
-            }
-
-            return config;
-        }
-        
-        // Collect seasonal seasons
-        function getSeasonalSeasons() {
-            const seasons = [];
-            const seasonItems = modalInstance.dialogContent.querySelectorAll('.seasonal-season-item');
-            seasonItems.forEach((item, seasonIndex) => {
-                // Try to find checkbox by ID first, then fall back to class selector
-                const enabledCheckbox = item.querySelector(`#seasonal-season-enabled-${seasonIndex}`) || item.querySelector('.seasonal-season-enabled[data-index="${seasonIndex}"]');
-                const enabled = enabledCheckbox?.checked !== false;
-                const name = item.querySelector('.seasonal-season-name')?.value || '';
-                const startDate = item.querySelector('.seasonal-season-startDate')?.value || '';
-                const endDate = item.querySelector('.seasonal-season-endDate')?.value || '';
-                const orderInput = item.querySelector(`.seasonal-season-order-input[data-index="${seasonIndex}"]`);
-                const order = orderInput ? parseInt(orderInput.value || '100', 10) : 100;
-                
-                // Collect nested sections
-                const sectionsList = item.querySelector(`.seasonal_season_sections_list[data-season-index="${seasonIndex}"]`);
-                const sections = [];
-                if (sectionsList) {
-                    const sectionItems = sectionsList.querySelectorAll('.seasonal_season_section_item');
-                    sectionItems.forEach((sectionItem, sectionItemIndex) => {
-                        const fullIndex = `${seasonIndex}_${sectionItemIndex}`;
-                        const sectionConfig = getSectionConfigFromUI(modalInstance.dialogContent, 'seasonal_season', fullIndex);
-                        if (sectionConfig) {
-                            sections.push(sectionConfig);
-                        }
-                    });
-                }
-                
-                const seasonConfig = {
-                    id: name.toLowerCase().replace(/\s+/g, '-') || `season-${seasonIndex}`,
-                    name: name,
-                    enabled: enabled,
-                    startDate: startDate,
-                    endDate: endDate,
-                    order: order,
-                    sections: sections
-                };
-                seasons.push(seasonConfig);
-            });
-            return seasons;
-        }
-        
-        // Collect custom sections
-        function getCustomSections() {
-            const sectionsList = modalInstance.dialogContent.querySelector('#customSections_list');
-            const sections = [];
-            
-            if (!sectionsList) {
-                return sections;
-            }
-            
-            const sectionItems = sectionsList.querySelectorAll('.customSection_section_item');
-            sectionItems.forEach((sectionItem, index) => {
-                const sectionIndex = sectionItem.getAttribute('data-section-index') ?? index;
-                const sectionConfig = getSectionConfigFromUI(modalInstance.dialogContent, 'customSection', sectionIndex);
-                if (sectionConfig) {
-                    sections.push(sectionConfig);
-                }
-            });
-            
-            return sections;
-        }
-
-        // Collect home screen config
-        config.homeScreen = {
-            defaultItemLimit: 16,
-            defaultSortOrder: 'Random',
-            defaultCardFormat: 'Poster',
-            recentlyReleased: {
-                enabled: document.getElementById('homeScreen_recentlyReleased_enabled')?.checked !== false,
-                movies: {
-                    enabled: document.getElementById('homeScreen_recentlyReleased_movies_enabled')?.checked !== false,
-                    ...getSectionConfig('homeScreen_recentlyReleased_movies', { includeName: true, defaultName: 'Recently Released Movies', includeSortOrder: true, includeOrder: true, includeIsPlayed: true, includePremiereDays: true })
-                },
-                episodes: {
-                    enabled: document.getElementById('homeScreen_recentlyReleased_episodes_enabled')?.checked !== false,
-                    ...getSectionConfig('homeScreen_recentlyReleased_episodes', { includeName: true, defaultName: 'Recently Aired Episodes', includeSortOrder: true, includeOrder: true, includeIsPlayed: true, includePremiereDays: true })
-                }
-            },
-            recentlyAddedInLibrary: (() => {
-                const libraryConfigs = {};
-                const libraryCheckboxes = modalInstance.dialogContent.querySelectorAll('.recently-added-library-enabled');
-                libraryCheckboxes.forEach(checkbox => {
-                    const libraryId = checkbox.getAttribute('data-library-id');
-                    if (libraryId) {
-                        const prefix = `homeScreen_recentlyAddedInLibrary_${libraryId}`;
-                        libraryConfigs[libraryId] = {
-                            enabled: checkbox.checked !== false,
-                            ...getSectionConfig(prefix, { 
-                                includeName: true, 
-                                defaultName: '', 
-                                includeSortOrder: false, 
-                                includeOrder: true
-                            })
-                        };
-                    }
-                });
-                return libraryConfigs;
-            })(),
-            trending: {
-                enabled: document.getElementById('homeScreen_trending_enabled')?.checked === true,
-                ...getSectionConfig('homeScreen_trending', { includeName: true, defaultName: 'Trending' })
-            },
-            popularTVNetworks: {
-                enabled: document.getElementById('homeScreen_popularTVNetworks_enabled')?.checked === true,
-                minimumShowsForNetwork: parseInt(document.getElementById('homeScreen_popularTVNetworks_minimumShowsForNetwork')?.value || '5'),
-                ...getSectionConfig('homeScreen_popularTVNetworks', { includeName: true, defaultName: 'Popular TV Networks' })
-            },
-            watchlist: {
-                enabled: document.getElementById('homeScreen_watchlist_enabled')?.checked === true,
-                ...getSectionConfig('homeScreen_watchlist', { includeName: true, defaultName: 'Watchlist' })
-            },
-            watchAgain: {
-                enabled: document.getElementById('homeScreen_watchAgain_enabled')?.checked === true,
-                ...getSectionConfig('homeScreen_watchAgain', { includeName: true, defaultName: 'Watch Again' })
-            },
-            upcoming: {
-                enabled: document.getElementById('homeScreen_upcoming_enabled')?.checked !== false,
-                ...getSectionConfig('homeScreen_upcoming', { includeSortOrder: false, includeName: true, defaultName: 'Upcoming' })
-            },
-            imdbTop250: {
-                enabled: document.getElementById('homeScreen_imdbTop250_enabled')?.checked !== false,
-                ...getSectionConfig('homeScreen_imdbTop250', { includeName: true, defaultName: 'IMDb Top 250' })
-            },
-            seasonal: {
-                enabled: document.getElementById('homeScreen_seasonal_enabled')?.checked !== false,
-                enableSeasonalAnimations: document.getElementById('homeScreen_seasonal_enableSeasonalAnimations')?.checked !== false,
-                enableSeasonalBackground: document.getElementById('homeScreen_seasonal_enableSeasonalBackground')?.checked !== false,
-                defaultItemLimit: 16,
-                defaultSortOrder: 'Random',
-                defaultCardFormat: 'Poster',
-                seasons: getSeasonalSeasons()
-            },
-            discovery: {
-                enabled: document.getElementById('homeScreen_discovery_enabled')?.checked !== false,
-                infiniteScroll: document.getElementById('homeScreen_discovery_infiniteScroll')?.checked !== false,
-                randomizeOrder: document.getElementById('homeScreen_discovery_randomizeOrder')?.checked === true,
-                minPeopleAppearances: parseInt(document.getElementById('homeScreen_discovery_minPeopleAppearances')?.value || '10'),
-                minGenreMovieCount: parseInt(document.getElementById('homeScreen_discovery_minGenreMovieCount')?.value || '50'),
-                spotlightDiscoveryChance: parseFloat(document.getElementById('homeScreen_discovery_spotlightDiscoveryChance')?.value || '0.5'),
-                renderSpotlightAboveMatching: document.getElementById('homeScreen_discovery_renderSpotlightAboveMatching')?.checked === true,
-                defaultItemLimit: parseInt(document.getElementById('homeScreen_discovery_itemLimit')?.value || '16'),
-                defaultSortOrder: document.getElementById('homeScreen_discovery_sortOrder')?.value || 'Random',
-                defaultCardFormat: document.getElementById('homeScreen_discovery_cardFormat')?.value || 'Poster',
-                sectionTypes: (() => {
-                    const sectionConfigs = {};
-                    DISCOVERY_SECTION_DEFINITIONS.forEach(section => {
-                        const prefix = `homeScreen_discovery_sectionTypes_${section.key}`;
-                        const collectedConfig = getSectionConfig(prefix, { includeName: true, includeOrder: true, includeSortOrder: false, defaultName: section.defaultName });
-                        collectedConfig.enabled = document.getElementById(`${prefix}_enabled`)?.checked !== false;
-                        if (section.extras?.minimumItems !== undefined) {
-                            const minimumValue = parseInt(document.getElementById(`${prefix}_minimumItems`)?.value || `${section.extras.minimumItems}`, 10);
-                            collectedConfig.minimumItems = Number.isFinite(minimumValue) ? minimumValue : section.extras.minimumItems;
-                        }
-                        sectionConfigs[section.key] = collectedConfig;
-                    });
-                    return sectionConfigs;
-                })()
-            },
-            customSections: getCustomSections()
-        };
-
-        // Collect exclusive elsewhere config
-        config.exclusiveElsewhere = {
-            hideServerName: document.getElementById('exclusiveElsewhere_hideServerName')?.checked === true
-        };
-
-        // Collect search config
-        config.search = {
-            enableJellyseerr: document.getElementById('search_enableJellyseerr')?.checked === true
-        };
-
-        // Collect flattenSingleSeasonShows config
-        config.flattenSingleSeasonShows = {
-            hideSingleSeasonContainer: document.getElementById('flattenSingleSeasonShows_hideSingleSeasonContainer')?.checked === true
-        };
-
-        // Parse JSON fields
-        const skinsFromJson = parseJSONField('skinsJson', []);
-        config.themes = parseJSONField('themesJson', []);
-        config.customMenuLinks = parseJSONField('customMenuLinksJson', []);
-        
-        // Collect optional includes configuration
-        if (overrideOptionalIncludes) {
-            config.optionalIncludes = overrideOptionalIncludes;
-        } else {
-            // Fallback: Use existing config.optionalIncludes to prevent data loss
-            // DOM scraping caused partial overwrites because it only found visible checkboxes for the current category
-            console.warn('[KefinTweaks Configuration] handleSaveConfig called without overrideOptionalIncludes - preserving existing optionalIncludes');
-            if (!config.optionalIncludes) {
-                config.optionalIncludes = [];
-            }
-        }
-
-        // Collect skin enabled toggles and merge with JSON skins
-        // Only save admin-configured skins (not defaults)
-        // Get default skin names to filter them out
-        const defaultSkinNames = new Set((window.KefinTweaksDefaultSkinsConfig?.skins || []).map(s => s.name));
-        
-        // Collect enabled states from toggles (for all skins, including defaults)
-        const skinEnabledStates = {};
-        modalInstance.dialogContent.querySelectorAll('[data-skin-name]').forEach(checkbox => {
-            const skinName = checkbox.getAttribute('data-skin-name');
-            skinEnabledStates[skinName] = checkbox.checked;
-        });
-
-        // Only save admin skins (from JSON textarea) - filter out any that match default names
-        // This ensures we don't accidentally save default skins
-        const customSkins = skinsFromJson
-            .filter(skin => !defaultSkinNames.has(skin.name)) // Exclude defaults
-            .map(skin => ({
-                ...skin,
-                enabled: skinEnabledStates[skin.name] !== false, // Default to true if not set
-                hidden: false // Explicitly set for admin skins
-            }));
-
-        // Handle disabled default skins
-        // We need to explicitly save them in config.skins with enabled: false to override the default
-        const disabledDefaultSkins = [];
-        defaultSkinNames.forEach(name => {
-            // If explicitly disabled in UI
-            if (skinEnabledStates[name] === false) {
-                disabledDefaultSkins.push({
-                    name: name,
-                    enabled: false
-                });
-            }
-        });
-
-        // Combine custom skins and disabled default skins
-        config.skins = [...customSkins, ...disabledDefaultSkins];
-        
-        // Note: Enabled states for default skins are collected but not saved in config.skins
-        // Default skins will use their default enabled state from skinConfig.js
-        // If we need to save enabled states for defaults, we'd need a separate field (future enhancement)
-
-        // Handle defaultSkin
-        if (config.defaultSkin === '') {
-            config.defaultSkin = null;
-        }
 
         console.log('[KefinTweaks Configuration] Configuration collected:', config);
 
@@ -5556,7 +5542,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         const pluginsSection = document.querySelector('ul[aria-labelledby="plugins-subheader"]');
         if (!pluginsSection) {
             console.log('[KefinTweaks Configuration] Plugins section not found, retrying...');
-            setTimeout(addConfigButtonToDashboard, 500);
+            //setTimeout(addConfigButtonToDashboard, 500);
             return;
         }
 
@@ -5583,7 +5569,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         const adminSection = document.querySelector('.adminSection.verticalSection');
         if (!adminSection) {
             console.log('[KefinTweaks Configuration] Administration section not found, retrying...');
-            setTimeout(addConfigButtonToAdminSection, 500);
+            //setTimeout(addConfigButtonToAdminSection, 500);
             return;
         }
 
@@ -5715,6 +5701,14 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         if (!window.ApiClient || !window.ApiClient._loggedIn) {
             setTimeout(initialize, 1000);
             return;
+        }
+
+        // Run migration check during initialization
+        try {
+            const config = await getKefinTweaksConfig();
+            // Migration is handled inside getKefinTweaksConfig
+        } catch (error) {
+            console.warn('[KefinTweaks Configuration] Error during initialization migration check:', error);
         }
 
         // Register view page handler

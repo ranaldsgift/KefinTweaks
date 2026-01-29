@@ -3,7 +3,7 @@
 .spotlight-section {
     position: relative;
     width: calc(100% - (2 * max(env(safe-area-inset-left), 3.3%)));
-    margin-bottom: 2em;
+    margin: 2em 0;
 }
 
 .spotlight-banner-container {
@@ -85,6 +85,9 @@
     object-fit: contain;
     margin-bottom: 16px;
     margin-top: 10px;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: left;
 }
 
 .spotlight-clearart {
@@ -407,4 +410,151 @@
         max-width: 100%;
         height: 125px;
     }
+}
+
+.skeleton-card {
+    margin-bottom: 45px !important;
+}
+
+[data-item-type="Movie"] .spotlight-item-logo {
+    height: 120px;
+    max-width: 310.2px;
+}
+
+[data-item-type="Movie"] .spotlight-tagline {
+    -webkit-line-clamp: 1;
+    min-height: 30px;
+    max-height: 30px;
+}   
+
+// Remove this if we switch back to Jellyfin's default scroll buttons
+.emby-scrollbuttons.padded-right {
+    -webkit-align-items: center;
+    align-items: center;
+    color: #fff;
+    display: -webkit-flex;
+    display: flex;
+    -webkit-justify-content: center;
+    justify-content: center;
+    min-height: 24px;
+    min-width: 104px;
+    padding-top: .85em;
+    position: absolute;
+    top: 0;
+    z-index: 1;
+}
+
+/* Progressive Section Reveal Animation */
+.cardbuilder-section-reveal {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1), 
+                transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* When section enters viewport, trigger animation */
+.cardbuilder-section-reveal.in-viewport {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.show-all-button {
+    margin-left: 10px;
+    font-size: 12px;
+    padding: 4px 8px;
+    min-width: auto;
+    background: transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    align-self: center;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    color: var(--main-text, #fff) !important;
+    position: relative;
+    top: -3px;
+    display: none; /* Hidden by default */
+}
+
+/* Show button when section is expandable */
+.emby-scroller-container[data-expandable="true"] .show-all-button {
+    display: initial !important;
+}
+
+/* Expanded grid view styles */
+.itemsContainer[data-expanded="true"] {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    white-space: normal !important;
+    transform: none !important;
+    transition: none !important;
+}
+
+/* Hide scroll buttons when expanded */
+.emby-scroller-container:has(.itemsContainer[data-expanded="true"]) .emby-scrollbuttons {
+    display: none !important;
+}
+
+/* Refresh Button Styles */
+.section-refresh-button {
+    margin-left: 8px;
+    padding: 4px;
+    min-width: auto;
+    width: 32px;
+    height: 32px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    display: inline-block;
+    align-items: center;
+    justify-content: center;
+    color: var(--main-text, rgba(255, 255, 255, 0.87));
+    border-radius: 50%;
+    font-size: 18px;
+    transition: transform 0.3s ease, color 0.3s ease, background 0.2s ease;
+    opacity: 0.65;
+}
+
+.section-refresh-button:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* Spinning animation when refreshing */
+[data-refreshing="true"] .section-refresh-button {
+    animation: spin 1s linear infinite;
+}
+
+/* Checkmark state - green color to indicate success */
+.section-refresh-button.check_circle {
+    animation: none;
+}
+
+/* Smooth transition when changing icons */
+.section-refresh-button.refresh,
+.section-refresh-button.check_circle {
+    transition: transform 0.3s ease, color 0.3s ease, background 0.2s ease;
+}
+
+/* Fade in/out transitions for icon changes */
+.section-refresh-button::after {
+    transition: opacity 0.2s ease;
+}
+
+.section-refresh-button.icon-fade-out::after {
+    opacity: 0;
+}
+
+.section-refresh-button.icon-fade-in::after {
+    opacity: 1;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+/* Ensure button remains visible when expanded (data-expandable takes precedence, but this ensures it) */
+.emby-scroller-container:has(.itemsContainer[data-expanded="true"]) .show-all-button {
+    display: initial !important;
 }
