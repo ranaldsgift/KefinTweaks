@@ -324,7 +324,7 @@
         }
 
         // Create Kefin home sections container as a sibling of the Jellyfin sections container
-        let kefinHomeSectionsContainer = document.querySelector('.homePage:not(.hide) #homeTab .kefinHomeSectionsContainer');
+        let kefinHomeSectionsContainer = container.classList.contains('homeSectionsContainer') ? container : document.querySelector('.homePage:not(.hide) #homeTab .kefinHomeSectionsContainer');
         if (!kefinHomeSectionsContainer) {
             kefinHomeSectionsContainer = document.createElement('div');
             kefinHomeSectionsContainer.className = 'sections homeSectionsContainer kefinHomeSectionsContainer';
@@ -431,7 +431,9 @@
             }
         };
 
-        const observer = observeContainerMutations(container, handleJellyfinRender);
+        if (!container.classList.contains('homeSectionsContainer')) {
+            const observer = observeContainerMutations(container, handleJellyfinRender);
+        }
 
         // Initial render directly into Kefin container (no waiting for Jellyfin)
         performanceStartTime = performance.now();
@@ -449,14 +451,14 @@
         LOG('Initializing Discovery Sections...');
         await setupDiscoveryInteraction(kefinHomeSectionsContainer);
 
-        // If Jellyfin hasn't rendered after 5 seconds, assume it won't and clean up the observer
+        /* // If Jellyfin hasn't rendered after 5 seconds, assume it won't and clean up the observer
         setTimeout(() => {
             if (!sectionCache.jellyfinHasRendered && observer) {
                 LOG('Jellyfin render timeout - assuming native sections disabled');
                 sectionCache.jellyfinHasRendered = true;
                 observer.disconnect();
             }
-        }, 5000);
+        }, 5000); */
     }
 
     function getHomeScreenConfig() {

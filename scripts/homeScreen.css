@@ -277,6 +277,10 @@ div#discovery-loading-indicator:not(.show)::after {
     visibility: hidden;
 }
 
-.homeSectionsContainer:not(.kefinHomeSectionsContainer) {
+/* .homeSectionsContainer:not(.kefinHomeSectionsContainer) {
+    display: none !important;
+} */
+
+.pageTabContent:has(.kefinHomeSectionsContainer) .homeSectionsContainer:not(.kefinHomeSectionsContainer) {
     display: none !important;
 }
