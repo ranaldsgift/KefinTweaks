@@ -765,7 +765,6 @@
     // Initialize infinite scroll
     async function initialize() {
         if (!shouldInitialize() || hasInitialized || isInitializing) {
-            LOG('Skipping initialization:', { shouldInit: shouldInitialize(), hasInitialized, isInitializing });
             return;
         }
         
