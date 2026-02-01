@@ -873,7 +873,7 @@
     function buildConfigPageContent(config, libraries = []) {
         const scripts = config.scripts || {};
 
-        const isEnabled = window.KefinTweaksConfigEnabled !== false;
+        const isEnabled = window.KefinTweaksConfig?.enabled !== false;
         
         return `
             <div class="paperList" style="padding: 0.2em 1em;">
