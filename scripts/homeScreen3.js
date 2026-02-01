@@ -324,7 +324,7 @@
         }
 
         // Create Kefin home sections container as a sibling of the Jellyfin sections container
-        let kefinHomeSectionsContainer = container.classList.contains('homeSectionsContainer') ? container : document.querySelector('.homePage:not(.hide) #homeTab .kefinHomeSectionsContainer');
+        let kefinHomeSectionsContainer = document.querySelector('.homePage:not(.hide) #homeTab .kefinHomeSectionsContainer');
         if (!kefinHomeSectionsContainer) {
             kefinHomeSectionsContainer = document.createElement('div');
             kefinHomeSectionsContainer.className = 'sections homeSectionsContainer kefinHomeSectionsContainer';
@@ -337,7 +337,7 @@
         }
 
         // If we've already initialized and Jellyfin has completed its render, avoid re-running
-        if (container.dataset.kefinHomeScreen && sectionCache.jellyfinHasRendered) {
+        if (container.dataset.kefinHomeScreen || kefinHomeSectionsContainer.dataset.kefinHomeScreen) {
             LOG('Home screen already initialized and Jellyfin has rendered');
             return;
         }
@@ -367,9 +367,10 @@
         const nextupSectionConfig = mergedHomeSections.find(s => s.id === 'nextUp');
         const continueWatchingSectionConfig = mergedHomeSections.find(s => s.id === 'continueWatching');
         const continueWatchingAndNextUpSectionConfig = mergedHomeSections.find(s => s.id === 'continueWatchingAndNextUp');
+        const recentlyAddedSectionConfig = mergedHomeSections.find(s => s.id.startsWith('recently-added-') && s.enabled === true);
         state.kefinNextUp = nextupSectionConfig?.enabled === true;
         state.kefinContinueWatching = continueWatchingSectionConfig?.enabled === true;
-        state.kefinLatestMedia = continueWatchingAndNextUpSectionConfig?.enabled === true;
+        state.kefinLatestMedia = recentlyAddedSectionConfig?.enabled === true;
 
         // Setup event listener for UserDataChanged
         if (window.ApiClient && window.ApiClient.addEventListener) {
@@ -400,9 +401,6 @@
         performanceDuration = performanceEndTime - performanceStartTime;
         LOG(`Home Screen v3 Load user home screen sections initialization time: ${performanceDuration.toFixed(2)}ms`);
 
-        // Set flag to indicate we've started initializing this container
-        container.dataset.kefinHomeScreen = 'true';
-
         // Set up mutation observer BEFORE rendering, so we can react when Jellyfin renders home sections
         const handleJellyfinRender = async () => {
             const jellyHome = document.querySelector('.homePage:not(.hide) #homeTab .homeSectionsContainer');
@@ -431,14 +429,20 @@
             }
         };
 
+        let containerForRender = container;
+
         if (!container.classList.contains('homeSectionsContainer')) {
             const observer = observeContainerMutations(container, handleJellyfinRender);
+            containerForRender = kefinHomeSectionsContainer;
         }
+
+        // Set flag to indicate we've started initializing this container
+        containerForRender.dataset.kefinHomeScreen = 'true';
 
         // Initial render directly into Kefin container (no waiting for Jellyfin)
         performanceStartTime = performance.now();
         LOG('Rendering Standard/Seasonal Sections (initial render)...');
-        await renderHomeSections(filteredHomeSections, kefinHomeSectionsContainer, false);
+        await renderHomeSections(filteredHomeSections, containerForRender, false);
         performanceEndTime = performance.now();
         performanceDuration = performanceEndTime - performanceStartTime;
         LOG(`Home Screen v3 Render home sections (initial) initialization time: ${performanceDuration.toFixed(2)}ms`);
@@ -449,7 +453,7 @@
         LOG(`Home Screen v3 load time initialization: ${(performanceTimer.loadTimeEnd - performanceTimer.loadTimeStart).toFixed(2)}ms`);
         
         LOG('Initializing Discovery Sections...');
-        await setupDiscoveryInteraction(kefinHomeSectionsContainer);
+        await setupDiscoveryInteraction(containerForRender);
 
         /* // If Jellyfin hasn't rendered after 5 seconds, assume it won't and clean up the observer
         setTimeout(() => {
@@ -863,9 +867,6 @@
     function addUserHomeScreenOrderCSS(jellyfinOrders) {        
         // Remove existing style tag if present
         const existingStyle = document.getElementById('kefin-user-homescreen-order-css');
-        if (existingStyle) {
-            existingStyle.remove();
-        }
 
         // Create new style tag
         const style = document.createElement('style');
@@ -890,6 +891,9 @@
         }
 
         style.textContent = css;
+        if (existingStyle) {
+            existingStyle.remove();
+        }
         document.head.appendChild(style);
         
         LOG('User home screen order CSS applied');
@@ -1889,7 +1893,7 @@
                         }
 
                     // Add spotlight fields if needed
-                    if (instanceConfig.spotlight) {
+                    if (instanceConfig.spotlight || instanceConfig.renderMode === 'Spotlight') {
                         queryOptions.Fields = 'PrimaryImageAspectRatio,DateCreated,Overview,Taglines,ProductionYear,RecursiveItemCount,ChildCount,UserData,People,Genres';
                     } else {
                         queryOptions.Fields = 'PrimaryImageAspectRatio,DateCreated,Overview,Taglines,ProductionYear,RecursiveItemCount,ChildCount,UserData';

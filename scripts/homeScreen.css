@@ -281,6 +281,6 @@ div#discovery-loading-indicator:not(.show)::after {
     display: none !important;
 } */
 
-.pageTabContent:has(.kefinHomeSectionsContainer) .homeSectionsContainer:not(.kefinHomeSectionsContainer) {
+.pageTabContent:has(.kefinHomeSectionsContainer[data-kefin-home-screen]) .homeSectionsContainer:not([data-kefin-home-screen]) {
     display: none !important;
 }
