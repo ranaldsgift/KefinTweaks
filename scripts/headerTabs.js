@@ -493,7 +493,7 @@
 
             // Sync active tab state when page view changes
             // This is only necessary for the home page with custom tabs
-            if ((view === 'home' || view === 'home.html') && currentTabIndex > 1) {
+            if (view === 'home' || view === 'home.html') {
                 syncActiveTabState(currentTabIndex).catch(err => {
                     ERR('Error in syncActiveTabState:', err);
                 });
