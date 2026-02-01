@@ -375,15 +375,39 @@
                 }
             });
 
+            // Ensure each section has a unique jellyfinBaseId
+            const uniqueHomeSections = sectionsForHomesectionN.filter((section, index, self) =>
+                index === self.findIndex(s => s.jellyfinBaseId === section.jellyfinBaseId)
+            );
+
             // Sort all sections by order
-            sectionsForHomesectionN.sort((a, b) => (a.order || 0) - (b.order || 0));
+            uniqueHomeSections.sort((a, b) => (a.order || 0) - (b.order || 0));
 
             // Assign each section to homesectionN sequentially
-            sectionsForHomesectionN.forEach((section, index) => {
-                if (index <= 8) { // Only homesection0 through homesection8
-                    customPrefs[`homesection${index}`] = section.jellyfinBaseId;
+            for (let i = 0; i <= 9; i++) {
+                const selectHomeSection = document.querySelector(`.homeScreenSettingsContainer #selectHomeSection${i+1}`);
+                if (i <= uniqueHomeSections.length - 1) {
+                    const selectedSection = uniqueHomeSections[i].jellyfinBaseId;
+                    customPrefs[`homesection${i}`] = selectedSection;
+
+                    const selectedOption = selectHomeSection.querySelector(`option[value="${selectedSection}"]`);
+                    if (selectedOption) {
+                        selectHomeSection.value = selectedOption.value;
+                    } else {
+                        selectHomeSection.value = '';
+                    }
+                } else {
+                    customPrefs[`homesection${i}`] = 'none';
+
+                    // Find the value of the "None" option label, some have value="none" and some have no value at all
+                    const noneOption = selectHomeSection.querySelector('option[value="none"]');
+                    if (noneOption) {
+                        selectHomeSection.value = noneOption.value;
+                    } else {
+                        selectHomeSection.value = '';
+                    }
                 }
-            });
+            }
 
             // Save
             const success = await window.userHelper.updateDisplayPreferences(displayPrefs);

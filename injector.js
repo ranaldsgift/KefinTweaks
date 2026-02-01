@@ -716,7 +716,7 @@
     }
 
     async function loadConfigurationJS() {
-        const configDependencyNames = ['modal', 'toaster', 'utils', 'homeScreen-configuration', 'search-configuration', 'seriesEpisodes-configuration', 'seriesInfo-configuration', 'skinManager-configuration', 'customMenuLinks-configuration'];
+        const configDependencyNames = ['modal', 'toaster', 'utils', 'homeScreenConfig2', 'homeScreen-migration', 'homeScreen-configuration', 'search-configuration', 'seriesEpisodes-configuration', 'seriesInfo-configuration', 'skinManager-configuration', 'customMenuLinks-configuration'];
         for (const depName of configDependencyNames) {
             const depScript = SCRIPT_DEFINITIONS.find(script => script.name === depName);
             if (depScript) {
