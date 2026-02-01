@@ -210,6 +210,58 @@
         }
     }
 
+    const seriesSeasonsCountCache = new Map();
+    const seriesSeasonEpisodeCountCache = new Map();
+
+    async function getSeasonsCount(item, includeSpecials = false) {
+        if (!seriesSeasonsCountCache.has(item.Id)) {
+            // Get Seasons from apiHelper.getQuery
+            const data = await apiHelper.getQuery(`${ApiClient.serverAddress()}/Shows/${item.Id}/Seasons?UserId=${ApiClient.getCurrentUserId()}`);
+            let seasons = data.Items || [];
+
+            if (!includeSpecials) {
+                seasons = seasons.filter(season => season.IndexNumber !== 0);
+            }
+
+            seriesSeasonsCountCache.set(item.Id, seasons.length);
+        }
+
+        return seriesSeasonsCountCache.get(item.Id);
+    }
+
+    async function getEpisodesCount(seriesId, seasonIndex = null, includeSpecials = false) {
+
+        if (!seriesSeasonEpisodeCountCache.has(seriesId)) {
+            const data = await apiHelper.getQuery(`${ApiClient.serverAddress()}/Shows/${seriesId}/Episodes?UserId=${ApiClient.getCurrentUserId()}`);
+            let episodes = data.Items || [];
+
+            // Create a Season:EpisodesCount map
+            const seasonEpisodeCountMap = new Map();
+            episodes.forEach(episode => {
+                const seasonIndex = episode.ParentIndexNumber;
+                if (!seasonEpisodeCountMap.has(seasonIndex)) {
+                    seasonEpisodeCountMap.set(seasonIndex, 0);
+                }
+                seasonEpisodeCountMap.set(seasonIndex, seasonEpisodeCountMap.get(seasonIndex) + 1);
+            });
+
+            seriesSeasonEpisodeCountCache.set(seriesId, seasonEpisodeCountMap);
+        }
+
+        // Return the episodes count for the season index
+        if (seasonIndex !== null && !isNaN(seasonIndex)) {
+            return seriesSeasonEpisodeCountCache.get(seriesId).get(seasonIndex) || 0;
+        }
+
+        // Return the total episodes count for all seasons
+        if (!includeSpecials) {
+            // Ignore season 0
+            const specialsCount = seriesSeasonEpisodeCountCache.get(seriesId).get(0) || 0;
+            return seriesSeasonEpisodeCountCache.get(seriesId).values().reduce((a, b) => a + b, 0) - specialsCount;
+        }
+        return seriesSeasonEpisodeCountCache.get(seriesId).values().reduce((a, b) => a + b, 0);
+    }
+
     /**
      * Adds series info to the itemMiscInfo container
      * @param {Object} item - Series item object
@@ -227,13 +279,16 @@
         infoContainer.style.display = 'flex';
         infoContainer.style.margin = '0 1em 0 0';
 
+        const seasonsCount = await getSeasonsCount(item);
+        const episodesCount = await getEpisodesCount(item.Id);
+
         let childCount = item.ChildCount || 0;
 
         // Seasons count (only show if more than 1 season)
         if (childCount > 1) {
             const seasonsDiv = document.createElement('div');
             seasonsDiv.className = 'mediaInfoItem';
-            seasonsDiv.textContent = `${childCount} Seasons`;
+            seasonsDiv.textContent = `${seasonsCount} Seasons`;
             infoContainer.appendChild(seasonsDiv);
         }
 
@@ -242,7 +297,7 @@
         if (RecursiveItemCount > 0) {
             const episodesDiv = document.createElement('div');
             episodesDiv.className = 'mediaInfoItem';
-            episodesDiv.textContent = `${RecursiveItemCount} ${RecursiveItemCount === 1 ? 'Episode' : 'Episodes'}`;
+            episodesDiv.textContent = `${episodesCount} ${episodesCount === 1 ? 'Episode' : 'Episodes'}`;
             infoContainer.appendChild(episodesDiv);
         }
 
@@ -289,7 +344,7 @@
         infoContainer.style.display = 'flex';
 
         // Episodes count
-        const episodeCount = item.ChildCount || 0;
+        const episodeCount = await getEpisodesCount(item.SeriesId, item.IndexNumber);
         if (episodeCount > 0) {
             const episodesDiv = document.createElement('div');
             episodesDiv.className = 'mediaInfoItem';
