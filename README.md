@@ -1,15 +1,28 @@
+<style>
+  a {
+    color: #08396c !important;
+  }
+  hr {
+    background: #b4c5fb !important;
+  }
+</style>
+
 <div align="center" style="display: flex; align-items: center; flex-wrap: wrap; justify-content: center;">
-  <img src="logo.png" width="200"/>
-  <span style="font-size: 6rem; font-family: monospace;">KefinTweaks</span>
+  <picture style="width: 80%;">
+    <source srcset="logo_text_dark2.png" media="(prefers-color-scheme: dark)">
+    <img src="logo_text_light2.png" alt="Your project logo">
+  </picture>
 </div>
 
-# KefinTweaks for Jellyfin
+<hr>
 
-KefinTweaks is a comprehensive collection of enhancements and customizations for Jellyfin, focused on, but not limited to, filling gaps in functionality based on the community's most desired [Feature Requests](https://features.jellyfin.org/?view=most-wanted).  
+**KefinTweaks is a comprehensive collection of enhancements and customizations for Jellyfin, focused on, but not limited to, filling gaps in functionality based on the community's most desired [Feature Requests](https://features.jellyfin.org/?view=most-wanted). This includes things like a [Watchlist](#watchlist), a [customizable Home Screen](#enhanced-home-screen), an [improved search experience](#enhanced-search), and an [Appearance Manager](#skin-manager)**.
 
 While working on these scripts to meet my personal needs, I noticed that there was a lot of overlap between the functionality I desire and many of the requested features by the community so I thought it would be a good idea to share this for anyone who may be interested. 
 
-There is no configuration required, but if you wish to customize some of the features, there are options to do so.
+Since I began working on this in August 2025, the scope of the project has grown and changed drastically. This began as a small set of tweaks to enhance my own personal server, but has evolved into a robust set of features that aim to compliment and enhance the native Jellyfin experience in a way that feels like it *is* native functionality.
+
+In the future, we can hope that the majority of this plugin will become obsolete as we will see many of these changes implemented and included in the native Jellyfin experience, as the community has so long desired!
 
 I think it's also worth mentioning that before the 1.0 release, you can expect to potentially encounter some issues or bugs. I try to address these as quickly as I can, and I appreciate your time for raising the issues in the first place!
 
