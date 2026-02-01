@@ -71,6 +71,7 @@
         kefinNextUp: false,
         kefinContinueWatching: false,
         kefinLatestMedia: false,
+        jellyfinOrders: {},
     };
 
     const performanceTimer = {
@@ -83,7 +84,8 @@
         renderedSections: [],      // Array of section configs + results
         fragmentCache: null,       // Reserved for future use if we cache DOM fragments
         isInitialRender: true,     // Track if this is first render for the current view
-        jellyfinHasRendered: false // Track if Jellyfin has rendered native home sections
+        jellyfinHasRendered: false, // Track if Jellyfin has rendered native home sections
+        pendingJellyfinSectionObservers: []
     };
 
     // Basic performance metrics for measuring initial and recovery renders
@@ -193,6 +195,53 @@
         });
 
         return observer;
+    }
+
+    /**
+     * Get section index N from a .sectionN element (e.g. section0 -> 0).
+     * Returns -1 if no matching class.
+     */
+    function getSectionIndexFromElement(sectionEl) {
+        const sectionClass = Array.from(sectionEl.classList || []).find(c => /^section\d+$/.test(c));
+        if (!sectionClass) return -1;
+        const match = sectionClass.match(/^section(\d+)$/);
+        return match ? parseInt(match[1], 10) : -1;
+    }
+
+    /**
+     * True when the section is ready to clone: either there are no .itemsContainer descendants,
+     * or every .itemsContainer in the section has at least one child (items have been rendered).
+     */
+    function sectionHasAllItemsContainersPopulated(sectionEl) {
+        const itemsContainers = sectionEl.querySelectorAll ? sectionEl.querySelectorAll('.itemsContainer') : [];
+        if (itemsContainers.length === 0) return false;
+        return Array.from(itemsContainers).every(container => container.children.length > 0);
+    }
+
+    /**
+     * Observe a Jellyfin section node until every .itemsContainer in it has children, then clone and append to kefinHome once.
+     * Observer is stored in sectionCache.pendingJellyfinSectionObservers so handleJellyfinRender can disconnect it on re-run.
+     */
+    function observeSectionUntilChildrenThenClone(sectionEl, kefinHome) {
+        if (!sectionEl || typeof MutationObserver === 'undefined') return;
+        const observer = new MutationObserver(() => {
+            if (!sectionHasAllItemsContainersPopulated(sectionEl)) return;
+            const target = document.querySelector('.homePage:not(.hide) #homeTab .kefinHomeSectionsContainer');
+            if (!target) {
+                observer.disconnect();
+                const idx = sectionCache.pendingJellyfinSectionObservers.indexOf(observer);
+                if (idx !== -1) sectionCache.pendingJellyfinSectionObservers.splice(idx, 1);
+                return;
+            }
+            const clone = sectionEl.cloneNode(true);
+            clone.dataset.jellyfinSectionClone = 'true';
+            target.appendChild(clone);
+            observer.disconnect();
+            const idx = sectionCache.pendingJellyfinSectionObservers.indexOf(observer);
+            if (idx !== -1) sectionCache.pendingJellyfinSectionObservers.splice(idx, 1);
+        });
+        sectionCache.pendingJellyfinSectionObservers.push(observer);
+        observer.observe(sectionEl, { childList: true, subtree: true });
     }
 
     function manageBodyClasses() {
@@ -411,16 +460,26 @@
                 return;
             }
 
+            // Disconnect any pending "wait for children" observers from a previous run
+            sectionCache.pendingJellyfinSectionObservers.forEach(obs => { try { obs.disconnect(); } catch (_) {} });
+            sectionCache.pendingJellyfinSectionObservers = [];
+
             // Remove any previously cloned Jellyfin sections from our container
             kefinHome.querySelectorAll('[data-jellyfin-section-clone="true"]').forEach(el => el.remove());
 
-            // Copy Jellyfin .sectionN containers into the Kefin container
+            // Copy Jellyfin .sectionN containers into the Kefin container (clone now if has children; else observe until children appear if in jellyfinOrders)
             const jellySections = jellyHome.querySelectorAll('.section0, .section1, .section2, .section3, .section4, .section5, .section6, .section7, .section8');
 
             jellySections.forEach(sectionEl => {
-                const clone = sectionEl.cloneNode(true);
-                clone.dataset.jellyfinSectionClone = 'true';
-                kefinHome.appendChild(clone);
+                const sectionIndex = getSectionIndexFromElement(sectionEl);
+                const homesectionKey = sectionIndex >= 0 ? `homesection${sectionIndex}` : null;
+                if (sectionHasAllItemsContainersPopulated(sectionEl)) {
+                    const clone = sectionEl.cloneNode(true);
+                    clone.dataset.jellyfinSectionClone = 'true';
+                    kefinHome.appendChild(clone);
+                } else if (homesectionKey && state.jellyfinOrders[homesectionKey] !== undefined) {
+                    observeSectionUntilChildrenThenClone(sectionEl, kefinHome);
+                }
             });
 
             performanceMetrics.recoveryRenderEnd = performance.now();
@@ -825,6 +884,8 @@
                     jellyfinOrders[`homesection${i}`] = kefinHomeScreenSection.order;
                 }
             }
+
+            state.jellyfinOrders = jellyfinOrders;
 
             addUserHomeScreenOrderCSS(jellyfinOrders); 
 
