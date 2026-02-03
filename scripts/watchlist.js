@@ -24,6 +24,8 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	
 	const WATCHLIST_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
+	const SUPPORTED_WATCHLIST_ITEM_TYPES = ['Movie', 'Series', 'Season', 'Episode', 'Video', 'BoxSet', 'Playlist'];
+
 	// Playback monitoring for watchlist cleanup
 	let playbackMonitorInitialized = false;
 
@@ -2315,22 +2317,31 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		
 		try {
 			// Fetch watchlist data
-			const watchlistData = await window.apiHelper.getWatchlistItems({ IncludeItemTypes: 'Movie,Series,Season,Episode' });
+			const watchlistData = await window.apiHelper.getWatchlistItems({ IncludeItemTypes: SUPPORTED_WATCHLIST_ITEM_TYPES.join(',') });
 			localStorageCache.set('watchlist_movies', watchlistData.Items.filter(item => item.Type === 'Movie'));
 			localStorageCache.set('watchlist_series', watchlistData.Items.filter(item => item.Type === 'Series'));
 			localStorageCache.set('watchlist_seasons', watchlistData.Items.filter(item => item.Type === 'Season'));
 			localStorageCache.set('watchlist_episodes', watchlistData.Items.filter(item => item.Type === 'Episode'));
+			localStorageCache.set('watchlist_videos', watchlistData.Items.filter(item => item.Type === 'Video'));
+			localStorageCache.set('watchlist_boxsets', watchlistData.Items.filter(item => item.Type === 'BoxSet'));
+			localStorageCache.set('watchlist_playlists', watchlistData.Items.filter(item => item.Type === 'Playlist'));
 			watchlistCache.movies.data = watchlistData.Items.filter(item => item.Type === 'Movie');
 			watchlistCache.series.data = watchlistData.Items.filter(item => item.Type === 'Series');
 			watchlistCache.seasons.data = watchlistData.Items.filter(item => item.Type === 'Season');
 			watchlistCache.episodes.data = watchlistData.Items.filter(item => item.Type === 'Episode');
+			watchlistCache.videos.data = watchlistData.Items.filter(item => item.Type === 'Video');
+			watchlistCache.boxsets.data = watchlistData.Items.filter(item => item.Type === 'BoxSet');
+			watchlistCache.playlists.data = watchlistData.Items.filter(item => item.Type === 'Playlist');
 
 			// Initialize all watchlist sections in parallel
 			await Promise.all([
 				initWatchlistSection('movies', 'Movie'),
 				initWatchlistSection('series', 'Series'),
 				initWatchlistSection('seasons', 'Season'),
-				initWatchlistSection('episodes', 'Episode')
+				initWatchlistSection('episodes', 'Episode'),
+				initWatchlistSection('videos', 'Video'),
+				initWatchlistSection('boxsets', 'BoxSet'),
+				initWatchlistSection('playlists', 'Playlist')
 			]);
 			
 			tabStates.watchlist.isDataFetched = true;
@@ -3043,7 +3054,20 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		movies: { data: [] },
 		series: { data: [] },
 		seasons: { data: [] },
-		episodes: { data: [] }
+		episodes: { data: [] },
+		videos: { data: [] },
+		boxsets: { data: [] },
+		playlists: { data: [] }
+	};
+
+	const watchlistCacheTypeMap = {
+		'Movie': 'movies',
+		'Series': 'series',
+		'Season': 'seasons',
+		'Episode': 'episodes',
+		'Video': 'videos',
+		'BoxSet': 'boxsets',
+		'Playlist': 'playlists'
 	};
 
 	// Function to render the complete watchlist HTML structure
@@ -3097,6 +3121,9 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			<div class="watchlist-series"></div>
 			<div class="watchlist-seasons"></div>
 			<div class="watchlist-episodes"></div>
+			<div class="watchlist-videos"></div>
+			<div class="watchlist-boxsets"></div>
+			<div class="watchlist-playlists"></div>
 			<div class="watchlist-empty-message" style="display: none;">
 				<div class="empty-message-icon">
 					<span class="material-icons bookmark_border"></span>
@@ -4546,22 +4573,10 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		try {
 			// Determine which cache section this item belongs to
 			let sectionName;
-			switch (itemType) {
-				case 'Movie':
-					sectionName = 'movies';
-					break;
-				case 'Series':
-					sectionName = 'series';
-					break;
-				case 'Season':
-					sectionName = 'seasons';
-					break;
-				case 'Episode':
-					sectionName = 'episodes';
-					break;
-				default:
-					LOG('Unknown item type for cache update:', itemType);
-					return;
+			sectionName = watchlistCacheTypeMap[itemType];
+			if (!sectionName) {
+				LOG('Unknown item type for cache update:', itemType);
+				return;
 			}
 
 			if (isAdded) {
@@ -6725,7 +6740,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				return;
 			}
 
-			const watchlistSections = ['.watchlist-movies', '.watchlist-series', '.watchlist-seasons', '.watchlist-episodes'];
+			const watchlistSections = ['.watchlist-movies', '.watchlist-series', '.watchlist-seasons', '.watchlist-episodes', '.watchlist-videos', '.watchlist-boxsets', '.watchlist-playlists'];
 			
 			// Check if we're currently fetching data or data hasn't been fetched yet
 			if (!tabStates.watchlist.isDataFetched) {
@@ -6754,7 +6769,10 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				renderCardsFromCache(watchlistSection.querySelector('.watchlist-movies'), 'movies', 'Movie'),
 				renderCardsFromCache(watchlistSection.querySelector('.watchlist-series'), 'series', 'Series'),
 				renderCardsFromCache(watchlistSection.querySelector('.watchlist-seasons'), 'seasons', 'Season'),
-				renderCardsFromCache(watchlistSection.querySelector('.watchlist-episodes'), 'episodes', 'Episode')
+				renderCardsFromCache(watchlistSection.querySelector('.watchlist-episodes'), 'episodes', 'Episode'),
+				renderCardsFromCache(watchlistSection.querySelector('.watchlist-videos'), 'videos', 'Video'),
+				renderCardsFromCache(watchlistSection.querySelector('.watchlist-boxsets'), 'boxsets', 'BoxSet'),
+				renderCardsFromCache(watchlistSection.querySelector('.watchlist-playlists'), 'playlists', 'Playlist')
 			]);
 			
 			// Update watchlist stats in header
@@ -7305,7 +7323,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		});
 		
 		// Check if item type is supported for watchlist
-		if (itemType !== "Movie" && itemType !== "Series" && itemType !== "Season" && itemType !== "Episode") {
+		if (!SUPPORTED_WATCHLIST_ITEM_TYPES.includes(itemType)) {
 			return;
 		}
 
@@ -7317,22 +7335,10 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		// Check item's current watchlist status from cache only (no server fetch)
 		// Map itemType to section name
 		let sectionName;
-		switch (itemType) {
-			case 'Movie':
-				sectionName = 'movies';
-				break;
-			case 'Series':
-				sectionName = 'series';
-				break;
-			case 'Season':
-				sectionName = 'seasons';
-				break;
-			case 'Episode':
-				sectionName = 'episodes';
-				break;
-			default:
-				// Unknown type, skip check
-				break;
+		sectionName = watchlistCacheTypeMap[itemType];
+		if (!sectionName) {
+			LOG('Unknown item type for cache update:', itemType);
+			return;
 		}
 		
 		if (sectionName) {
