@@ -273,7 +273,7 @@
             
             // We now want to include the library items with ColletionType "tvshows", or "movies"
             const supportedCollectionTypes = ['tvshows', 'movies', 'homevideos', 'boxsets', 'playlists'];
-            const supportedLibraryItems = libraryItems.filter(item => supportedCollectionTypes.includes(item.CollectionType) || !item.CollectionType);
+            const supportedLibraryItems = libraryItems.Items.filter(item => supportedCollectionTypes.includes(item.CollectionType) || !item.CollectionType);
 
             // Now use these support library items as the parent ids for the Items query, since the Items endpoint doesn't support ParentIds as an array we need to make a different call for each library. Querying with the parent id will dramatically reduce the time for the request to return so this is fine
             let watchlistItems = [];
