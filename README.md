@@ -1,10 +1,28 @@
-# KefinTweaks for Jellyfin
+<style>
+  a {
+    color: #08396c !important;
+  }
+  hr {
+    background: #b4c5fb !important;
+  }
+</style>
 
-KefinTweaks is a comprehensive collection of enhancements and customizations for Jellyfin, focused on, but not limited to, filling gaps in functionality based on the community's most desired [Feature Requests](https://features.jellyfin.org/?view=most-wanted).  
+<div align="center" style="display: flex; align-items: center; flex-wrap: wrap; justify-content: center;">
+  <picture style="width: 80%;">
+    <source srcset="logo_text_dark2.png" media="(prefers-color-scheme: dark)">
+    <img src="logo_text_light2.png" alt="Your project logo">
+  </picture>
+</div>
+
+<hr>
+
+**KefinTweaks is a comprehensive collection of enhancements and customizations for Jellyfin, focused on, but not limited to, filling gaps in functionality based on the community's most desired [Feature Requests](https://features.jellyfin.org/?view=most-wanted). This includes things like a [Watchlist](#watchlist), a [customizable Home Screen](#enhanced-home-screen), an [improved search experience](#enhanced-search), and an [Appearance Manager](#skin-manager)**.
 
 While working on these scripts to meet my personal needs, I noticed that there was a lot of overlap between the functionality I desire and many of the requested features by the community so I thought it would be a good idea to share this for anyone who may be interested. 
 
-There is no configuration required, but if you wish to customize some of the features, there are options to do so.
+Since I began working on this in August 2025, the scope of the project has grown and changed drastically. This began as a small set of tweaks to enhance my own personal server, but has evolved into a robust set of features that aim to compliment and enhance the native Jellyfin experience in a way that feels like it *is* native functionality.
+
+In the future, we can hope that the majority of this plugin will become obsolete as we will see many of these changes implemented and included in the native Jellyfin experience, as the community has so long desired!
 
 I think it's also worth mentioning that before the 1.0 release, you can expect to potentially encounter some issues or bugs. I try to address these as quickly as I can, and I appreciate your time for raising the issues in the first place!
 
@@ -61,6 +79,7 @@ Note: The Slideshow at the top of the Home Screen in the video below is from the
 - [License](#license)
 - [Acknowledgments](#acknowledgments)
 - [Support](#support)
+- [FAQ](#faq)
 - [Roadmap](#roadmap)
   - [Planned Features](#planned-features)
   - [Version History](#version-history)
@@ -559,7 +578,7 @@ A few things to note about KefinTweaks functionality in general and how it inter
 
 - Search
   - The default Jellyfin search is hidden in favor of the KefinTweaks search
-  - KefinTweaks blocks default Jellyfin search requests, and only performs its own search requests
+  - KefinTweaks does not block default Jellyfin search requests, but they will only be triggered when manually navigating to the search page with a searchTerm in the url. In this circumstance, the duplicate search results are hidden.
 - Dashboard Button Fix
   - This fix prevents the Back button in the Dashboad from navigating back to the "new tab" page in your browser
 <hr>
@@ -597,6 +616,26 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **[The Jellyfin Community](https://discord.gg/v7P9CAvCKZhttps://discord.gg/v7P9CAvCKZ)**: For sharing knowledge and providing a welcoming environment to ask questions and learn 
 - **[movie-monk-b0t](https://github.com/movie-monk-b0t)**: For the IMDb Top 250 JSON data
 - **[joshmcrty](https://github.com/joshmcrty)**: For the [Flurry](https://github.com/joshmcrty/Flurry) jQuery plugin
+
+## FAQ
+
+> ### I saved the KefinTweaks Plugin script in JS Injector but I don't see KefinTweaks in the Dashboard menu  
+
+You must complete the installation by clicking the KefinTweaks plugin and selecting the installation source (either GitHub or local) from the KefinTweaks plugin card at the very bottom of your Plugins page:
+
+<div align="center">
+  <img src="pages\images\faq\pending.png" alt="jsinjector publicjs" style="max-width: 100%; height: auto;"/>
+</div>  <br/>  
+
+
+> ### KefinTweaks Plugin never appears in the Plugins page even though I saved the KefinTweaks Plugin script in JS Injector  
+
+1. Ensure `JavaScriptInjector\public.js` is loaded by the client:
+  - Open DevTools (right-click page > inspect)
+  - Click Sources tab
+<div align="center">
+  <img src="pages\images\faq\publicjs.png" alt="jsinjector publicjs" style="max-width: 100%; height: auto;"/>
+</div> 
 
 ## Support
 
