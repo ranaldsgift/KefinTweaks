@@ -1,12 +1,3 @@
-<style>
-  a {
-    color: #08396c !important;
-  }
-  hr {
-    background: #b4c5fb !important;
-  }
-</style>
-
 <div align="center" style="display: flex; align-items: center; flex-wrap: wrap; justify-content: center;">
   <picture style="width: 80%;">
     <source srcset="logo_text_dark2.png" media="(prefers-color-scheme: dark)">
@@ -14,7 +5,7 @@
   </picture>
 </div>
 
-<hr>
+<hr style="background: #b4c5fb !important;">
 
 **KefinTweaks is a comprehensive collection of enhancements and customizations for Jellyfin, focused on, but not limited to, filling gaps in functionality based on the community's most desired [Feature Requests](https://features.jellyfin.org/?view=most-wanted). This includes things like a [Watchlist](#watchlist), a [customizable Home Screen](#enhanced-home-screen), an [improved search experience](#enhanced-search), and an [Appearance Manager](#skin-manager)**.
 
@@ -115,7 +106,7 @@ If you are hosting the script yourself, replace the `https://cdn.jsdelivr.net/gh
   <img src="pages/images/plugin-install.gif" alt="injector" style="max-width: 100%; height: auto;"/>
 </div> 
 <br/>  
-<hr>
+<hr style="background: #b4c5fb !important;">
 
 ## Configuration
 
@@ -164,7 +155,7 @@ On first load, KefinTweaks automatically:
 - Ensures the Watchlist tab exists in the CustomTabs plugin with the correct HTML structure
 
 These tasks only run for administrator users and happen automatically in the background.
-<hr>
+<hr style="background: #b4c5fb !important;">
 
 ## Uninstallation
 
@@ -175,7 +166,7 @@ These tasks only run for administrator users and happen automatically in the bac
   <img src="pages/images/plugin-uninstall.gif" alt="injector" style="max-width: 100%; height: auto;"/>
 </div> 
 <br/>  
-<hr>
+<hr style="background: #b4c5fb !important;">
 
 
 
@@ -203,7 +194,7 @@ The features in KefinTweaks which use local data caching are listed below, along
 - Collections on Details Page  
   - **Collections** [1h]:  
   These items are only cached after they are fetched on first page load. Sadly I know no way to retreive a list of Collections that an Item is a child of from the API directly. The Ancestors endpoint only returns the physical ancestors of an item. In order to be able to populate the "Included In" section, we fetch the children from every Collection in your library and add the Item ID of each child to the cache.
-  <hr>
+  <hr style="background: #b4c5fb !important;">
 
 ## Community Request Progress
 
@@ -229,7 +220,7 @@ The features in KefinTweaks which use local data caching are listed below, along
 - 🚧 [Keep original title option](https://features.jellyfin.org/posts/32/keep-original-title-option)
 - 🚧 [Search by tag/genre](https://features.jellyfin.org/posts/276/search-by-tag-genre)
 - 🚧 [Add drag and drop to library order](https://features.jellyfin.org/posts/3509/add-drag-and-drop-to-libray-order)
-<hr>
+<hr style="background: #b4c5fb !important;">
 
 ### Core Features
 
@@ -285,7 +276,7 @@ Automatically removes watched items from your watchlist when playback completes.
 
 - **Real-time Updates**:  
 Cached watchlist updates when toggling watchlist status from card overlays  
-<hr>
+<hr style="background: #b4c5fb !important;">
 
 
 #### **Enhanced Home Screen**
@@ -331,7 +322,7 @@ Zero-config support for searching with the [Meilisearch](https://github.com/arne
   <img src="pages/images/search.png" alt="search" style="max-width: 100%; height: auto;"/>
 </div>  
 <br/>
-<hr>
+<hr style="background: #b4c5fb !important;">
 
 ### UI Enhancements
 
@@ -343,7 +334,7 @@ Watchlist toggle button added to all item card overlays
   <img src="pages/images/watchlistoverlay.png" alt="watchlistoverlay" style="max-width: 100%; height: auto;"/>
 </div>  
 <br/>  
-<hr>
+<hr style="background: #b4c5fb !important;">
 
 
 #### **Skin Manager**
@@ -370,7 +361,7 @@ Certain Skins either support or require a color scheme. This lets you change the
 
 - **Optional CSS Modules**  
 KefinTweaks also includes optional CSS modules from supported Skins, and even adds some of these as Global options for users to take advantage of with any Skin.
-<hr>
+<hr style="background: #b4c5fb !important;">
 
 ### UX Improvements
 
@@ -392,7 +383,7 @@ Adds a card overlay button to remove items from Continue Watching for all resuma
 
 #### **Collection Sorting**:
 Adds the ability to sort collection items on the Collection page. Supports sorting by Title, Release Date, Date Added, Community Rating, Critic Rating.
-<hr>
+<hr style="background: #b4c5fb !important;">
 
 ### Navigation Improvements
 
@@ -433,7 +424,7 @@ This shows an "Included In" section on the Item Details page which displays any 
   <img src="pages/images/itemdetailscollections.png" alt="itemdetailscollections" style="max-width: 100%; height: auto;"/>
 </div>  
 <br/>  
-<hr>
+<hr style="background: #b4c5fb !important;">
 
 
 ### System Improvements
@@ -457,7 +448,7 @@ Custom branding for items which aren't available on any external streaming provi
 
 - **Ratings and Comments**:  
 Coming soon...requires the [Updoot](https://github.com/BobHasNoSoul/jellyfin-updoot) backend script  
-<hr>
+<hr style="background: #b4c5fb !important;">
 
 
 ## Script Details
@@ -521,7 +512,7 @@ The KefinTweaks Watchlist leverages the existing Jellyfin Item UserData field: "
 - Add a listener for PlaybackStopped to check if a Watchlisted item has been watched and automatically remove it from the Watchlist
 
 Even if you only implement the first bullet point and add a section for Watchlist items, KefinTweaks will automatically handle Watchlist syncing whenever the user connects with a KefinTweaks supported client.  
-<hr>
+<hr style="background: #b4c5fb !important;">
 
 ## Client Support
 
@@ -535,7 +526,7 @@ Here is a list of known supported clients:
 - [Jellyfin for iOS](https://github.com/jellyfin/jellyfin-ios)
 - [Jellyfin for WebOS](https://github.com/jellyfin/jellyfin-webos)
 - [Jellyfin for Tizen](https://github.com/jellyfin/jellyfin-tizen)
-<hr>
+<hr style="background: #b4c5fb !important;">
 
 ## Changes to default Jellyfin functionality
 
@@ -581,7 +572,7 @@ A few things to note about KefinTweaks functionality in general and how it inter
   - KefinTweaks does not block default Jellyfin search requests, but they will only be triggered when manually navigating to the search page with a searchTerm in the url. In this circumstance, the duplicate search results are hidden.
 - Dashboard Button Fix
   - This fix prevents the Back button in the Dashboad from navigating back to the "new tab" page in your browser
-<hr>
+<hr style="background: #b4c5fb !important;">
 
 ## Design Philosophy
 
@@ -590,7 +581,7 @@ The general design philosophy here is to utilize as much pre-existing Jellyfin f
 The only real Plugin dependency that KefinTweaks has is JS Injector which is being used to both load the KefinTweaks scripts, and save configuration data on the server. Loading the scripts without JS Injector is very simple, but without another way of storing configuration data on the server, JS Injector is absolutely required if you wish to override any of the default configuration options in the UI.
 
 The main goal of this project is to push the limits of what is possible through a "front end plugin". All of the code in this project is executed by the client. This is quite unusual in terms of the typical Jellyfin plugin, but I hope it may be inspiring for other future creations down the road. I would also be very happy if the changes included here helped push forward the progress to get these changes implemented in the core Jellyfin project so that everyone can take advantage of them without needing a third party plugin.
-<hr>
+<hr style="background: #b4c5fb !important;">
 
 ## AI Disclaimer
 
@@ -644,7 +635,7 @@ KefinTweaks is not maintained by the Jellyfin team, and as a result you are enco
 
 - **Documentation**:  
 This README and the inline comments in kefinTweaks.js and the other scripts is the only real documentation available at this time  
-<hr>
+<hr style="background: #b4c5fb !important;">
 
 ## Roadmap
 
@@ -652,7 +643,7 @@ This README and the inline comments in kefinTweaks.js and the other scripts is t
 - **Jellyfin 10.11 Support**  
 - **Additional options for User configuration in the Jellyfin UI**
 
-<hr>
+<hr style="background: #b4c5fb !important;">
 
 ### Version History
 - **v0.4.0**: New Features: Proper Install Flow, Watchlist->Playlist Sync, Series Info+, Series Page Episodes, Christmas Seasonal Home Screen
