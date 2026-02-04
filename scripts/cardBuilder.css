@@ -470,8 +470,12 @@
     border: 1px solid rgba(255, 255, 255, 0.3) !important;
     color: var(--main-text, #fff) !important;
     position: relative;
-    top: -3px;
     display: none; /* Hidden by default */
+}
+
+[data-section-id] .sectionTitleContainer {
+    display: flex;
+    align-items: center;
 }
 
 /* Show button when section is expandable */
@@ -557,4 +561,39 @@
 /* Ensure button remains visible when expanded (data-expandable takes precedence, but this ensures it) */
 .emby-scroller-container:has(.itemsContainer[data-expanded="true"]) .show-all-button {
     display: initial !important;
+}
+
+.spotlight-section[data-full-screen="true"] {
+    padding: 0;
+    width: 100%;
+}
+.spotlight-section[data-full-screen="true"] .spotlight-banner-container {
+    border-radius: 0;
+    height: 70vh;
+}
+
+.spotlight-section[data-full-screen="true"] .spotlight-items-container {
+    
+}
+
+.spotlight-section[data-full-screen="true"] .spotlight-overlay.has-title {
+    padding: 70px 80px 20px 80px;
+}
+
+.spotlight-section[data-full-screen="true"] .spotlight-section-title {
+    left: 80px;
+}
+
+.spotlight-section[data-full-screen="true"] .spotlight-item-logo {
+    width: auto;
+    max-width: none;
+    height: 40%;
+}
+
+.spotlight-section[data-full-screen="true"] .spotlight-clearart {
+    right: 80px;
+}
+
+.spotlight-section[data-full-screen="true"] .spotlight-nav-container {
+    right: 80px;
 }

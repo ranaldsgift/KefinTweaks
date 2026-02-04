@@ -92,8 +92,9 @@
     display: block;
 }
 
-.home-screen h2.sectionTitle {
-    margin-bottom: .35em;
+.home-screen [data-section-id] h2.sectionTitle,
+.home-screen [data-section-id] .sectionTitleTextButton>.material-icons {
+    margin-bottom: 0;
     margin-top: 0;
 }
 
