@@ -7,7 +7,7 @@
     const ERR = (...args) => console.error('[KefinTweaks HomeScreen3]', ...args);
 
     // Configuration
-    const PRE_FETCH_DISCOVERY_DATA = true; // If true, fetches first discovery group immediately. If false, waits for scroll/click.
+    const PRE_FETCH_DISCOVERY_DATA = false; // If true, fetches first discovery group immediately. If false, waits for scroll/click.
 
     // Dependencies
     const ApiHelper = window.apiHelper;
@@ -71,7 +71,7 @@
         kefinNextUp: false,
         kefinContinueWatching: false,
         kefinLatestMedia: false,
-        jellyfinOrders: {},
+        jellyfinOrders: {}
     };
 
     const performanceTimer = {
@@ -1805,7 +1805,7 @@
      * Generates a balanced group of discovery sections
      */
     async function generateDiscoveryGroup() {
-        if (state.firstDiscoveryBuffer) {
+/*         if (state.firstDiscoveryBuffer) {
             const firstBufferConfig = state.firstDiscoveryBuffer;
             delete state.firstDiscoveryBuffer;
             localCache.clear('firstDiscoveryBuffer');
@@ -1815,7 +1815,7 @@
             });
 
             return firstBufferConfig;
-        }
+        } */
 
 /*         let discoveryTemplates = flattenSectionGroups(Config.DISCOVERY_SECTION_GROUPS || []);
         const userDiscoverySectionGroups = window.KefinTweaksConfig && window.KefinTweaksConfig.homeScreenConfig && window.KefinTweaksConfig.homeScreenConfig.DISCOVERY_SECTION_GROUPS;
@@ -2016,7 +2016,7 @@
             section.order = state.discoverySectionOrder++;
         });
 
-        localCache.set('discoveryBuffer', selectedConfigs);
+        //localCache.set('discoveryBuffer', selectedConfigs);
 
         return selectedConfigs;
     }
