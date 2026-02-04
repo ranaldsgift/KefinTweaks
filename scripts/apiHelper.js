@@ -532,7 +532,8 @@
             const libraryItems = await window.dataHelper.getLibraries();
             
             // We now want to include the library items with ColletionType "tvshows", or "movies"
-            const supportedLibraryItems = libraryItems.filter(item => item.CollectionType === 'tvshows' || item.CollectionType === 'movies');
+            const supportedCollectionTypes = ['tvshows', 'movies', 'homevideos', 'boxsets', 'playlists'];
+            const supportedLibraryItems = libraryItems.filter(item => supportedCollectionTypes.includes(item.CollectionType) || !item.CollectionType);
 
             // Now use these support library items as the parent ids for the Items query, since the Items endpoint doesn't support ParentIds as an array we need to make a different call for each library. Querying with the parent id will dramatically reduce the time for the request to return so this is fine
             let watchlistItems = [];
@@ -985,17 +986,21 @@
         mergeMultiQueryResults: function(results, sectionConfig) {
             // Combine all items from all queries
             const allItems = [];
+            const itemsByQuery = [];
             const allPromises = [];
+            const promisesByQuery = [];
             
             results.forEach(result => {
                 if (result.data?.Items) {
                     allItems.push(...result.data.Items);
+                    itemsByQuery.push(result.data.Items);
                 }
                 allPromises.push(result.dataPromise);
+                promisesByQuery.push(result.dataPromise);
             });
             
             // Sort merged items if sortBy specified
-            if (sectionConfig.sortBy) {
+            /* if (sectionConfig.sortBy) {
                 allItems.sort((a, b) => {
                     const aVal = a[sectionConfig.sortBy] || (a.UserData?.[sectionConfig.sortBy] ? new Date(a.UserData[sectionConfig.sortBy]).getTime() : 0);
                     const bVal = b[sectionConfig.sortBy] || (b.UserData?.[sectionConfig.sortBy] ? new Date(b.UserData[sectionConfig.sortBy]).getTime() : 0);
@@ -1011,17 +1016,19 @@
                     const comparison = aVal > bVal ? 1 : aVal < bVal ? -1 : 0;
                     return sectionConfig.sortOrder === 'Descending' ? -comparison : comparison;
                 });
-            }
+            } */
             
             // Create merged data promise
-            const mergedDataPromise = Promise.all(allPromises).then(allData => {
-                const mergedItems = [];
+            const dataPromisesByQuery = Promise.all(allPromises).then(allData => {
+                const dataPromises = [];
                 allData.forEach(data => {
-                    if (data?.Items) mergedItems.push(...data.Items);
+                    if (data?.Items) {
+                        dataPromises.push(data.Items);
+                    }
                 });
                 
                 // Sort merged results
-                if (sectionConfig.sortBy) {
+                /* if (sectionConfig.sortBy) {
                     mergedItems.sort((a, b) => {
                         const aVal = a[sectionConfig.sortBy] || (a.UserData?.[sectionConfig.sortBy] ? new Date(a.UserData[sectionConfig.sortBy]).getTime() : 0);
                         const bVal = b[sectionConfig.sortBy] || (b.UserData?.[sectionConfig.sortBy] ? new Date(b.UserData[sectionConfig.sortBy]).getTime() : 0);
@@ -1036,16 +1043,26 @@
                         const comparison = aVal > bVal ? 1 : aVal < bVal ? -1 : 0;
                         return sectionConfig.sortOrder === 'Descending' ? -comparison : comparison;
                     });
-                }
+                } */
                 
-                return { Items: mergedItems };
+                return dataPromises;
             });
+
+            /* const dataPromisesByQuery = Promise.all(promisesByQuery).then(allData => {
+                const dataPromises = [];
+                allData.forEach(data => {
+                    if (data?.Items) {
+                        dataPromises.push(data.Items);
+                    }
+                });
+                return dataPromises;
+            }); */
             
             return {
                 config: sectionConfig,
                 result: {
-                    data: { Items: window.cardBuilder.postProcessItems(sectionConfig, allItems) },
-                    dataPromise: mergedDataPromise.then(data => window.cardBuilder.postProcessItems(sectionConfig, data)),
+                    data: { Items: window.cardBuilder.postProcessItemsByQuery(sectionConfig, itemsByQuery) },
+                    dataPromise: dataPromisesByQuery.then(data => window.cardBuilder.postProcessItemsByQuery(sectionConfig, data)),
                     isStalePromise: Promise.all(results.map(r => r.isStalePromise || Promise.resolve(false)))
                         .then(staleFlags => staleFlags.some(s => s))
                 }

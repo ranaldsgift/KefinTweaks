@@ -181,6 +181,25 @@
         return sortedContinueWatching;
     }
 
+    function postProcessItemsByQuery(sectionConfig, queryResults) {
+        let processed = [];
+        for (let i = 0; i < queryResults.length; i++) {
+            const queryConfig = sectionConfig.queries[i];
+            const queryResult = queryResults[i];
+            const items = queryResult?.Items || queryResult || [];
+            processed.push(...postProcessItems(queryConfig, items));
+        }
+
+        if (sectionConfig.id === 'continueWatchingAndNextUp') {
+            // Get the movies from the items, and the rest as the episodes, then use mergeNextUpAndContinueWatching to merge them
+            const movies = processed.filter(item => item.Type === 'Movie');
+            const episodes = processed.filter(item => item.Type !== 'Movie');
+            processed = mergeNextUpAndContinueWatching(episodes, movies);
+        }
+
+        return processed;
+    }
+
     function postProcessItems(sectionConfig, itemsData) {
         let processed = itemsData?.Items || itemsData || [];
 
@@ -487,8 +506,9 @@
          * @returns {Array} - Post-processed array of Jellyfin items
          */
         postProcessItems: postProcessItems,
-
+        postProcessItemsByQuery: postProcessItemsByQuery,
         /**
+>>>>>>> Stashed changes
          * Main entry point function to build a Jellyfin card
          * @param {Object} item - The Jellyfin item object
          * @param {boolean} overflowCard - Use overflow card classes instead of normal card classes
