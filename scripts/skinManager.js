@@ -22,7 +22,6 @@
     
     // Cached server version for synchronous access
     let cachedServerVersion = null;
-    let versionPollingStarted = false;
 
     function getMajorServerVersion(version) {
         const versionParts = version.split('.');
@@ -736,9 +735,11 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
      * @param {boolean} defaultEnabled - Default enabled state from config
      * @returns {boolean} Whether the include is enabled
      */
-    function isOptionalIncludeEnabled(key, defaultEnabled = false) {
+    function isOptionalIncludeEnabled(key, defaultEnabled = false, userConfig = null) {
         // Check user localStorage first (highest priority)
-        const userConfig = getUserConfig();
+        if (!userConfig) {
+            userConfig = getUserConfig();
+        }
         const userOptionalIncludes = userConfig.optionalIncludes || [];
         
         // Check if user has explicitly set this key
@@ -927,6 +928,8 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         
         // Get merged global optional includes
         const globalOptionalIncludes = getMergedGlobalOptionalIncludes();
+
+        const userConfig = getUserConfig();
         
         // Load enabled global optional includes
         // This explicitly checks user localStorage config first via isOptionalIncludeEnabled
@@ -935,7 +938,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             const key = generateOptionalIncludeKey('global', author, include.url);
             
             // Check enabled state (User Config > Admin Config > Default)
-            const isEnabled = isOptionalIncludeEnabled(key, include.enabled || false);
+            const isEnabled = isOptionalIncludeEnabled(key, include.enabled || false, userConfig);
             
             if (isEnabled && include.url) {
                 loadOptionalIncludeCSS(include.url, 'global');
@@ -949,7 +952,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                 const key = generateOptionalIncludeKey(skin.name, author, include.url);
                 
                 // Check enabled state (User Config > Admin Config > Default)
-                const isEnabled = isOptionalIncludeEnabled(key, include.enabled || false);
+                const isEnabled = isOptionalIncludeEnabled(key, include.enabled || false, userConfig);
                 
                 if (isEnabled && include.url) {
                     loadOptionalIncludeCSS(include.url, skin.name);
