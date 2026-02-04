@@ -72,49 +72,59 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 
 	function optimizeMovieDataForStorage(movieDataArray) {		
 		// Return optimized movie data
-		return movieDataArray.map(movie => ({
-			Id: movie.Id,
-			Name: movie.Name,
-			BackdropImageTags: movie.BackdropImageTags,
-			ImageTags: movie.ImageTags,
-			PremiereDate: movie.PremiereDate,
-			RunTimeTicks: movie.RunTimeTicks,
-			ProductionYear: movie.ProductionYear,
-			UserData: {
-				IsFavorite: movie.UserData.IsFavorite,
-				LastPlayedDate: movie.UserData.LastPlayedDate,
-				PlayCount: movie.UserData.PlayCount,
-				Played: movie.UserData.Played
+		return movieDataArray.map(movie => {
+			const optimizedData = {
+				Id: movie.Id,
+				Name: movie.Name,
+				BackdropImageTags: movie.BackdropImageTags,
+				ImageTags: movie.ImageTags,
+				PremiereDate: movie.PremiereDate,
+				RunTimeTicks: movie.RunTimeTicks,
+				ProductionYear: movie.ProductionYear
 			}
-		}));
+			if (movie.UserData) {
+				optimizedData.UserData = {
+					IsFavorite: movie.UserData.IsFavorite,
+					LastPlayedDate: movie.UserData.LastPlayedDate,
+					PlayCount: movie.UserData.PlayCount,
+					Played: movie.UserData.Played
+				}
+			}
+			return optimizedData;
+		});
 	}
 
 	// Optimize watchlist data for localStorage storage
 	function optimizeWatchlistDataForStorage(watchlistDataArray) {
-		return watchlistDataArray.map(item => ({
-			Id: item.Id,
-			Type: item.Type,
-			MediaType: item.MediaType,
-			Name: item.Name,
-			SeriesId: item.SeriesId,
-			SeriesName: item.SeriesName,
-			SeriesPrimaryImageTag: item.SeriesPrimaryImageTag,
-			ParentBackdropItemId: item.ParentBackdropItemId,
-			ParentBackdropImageTags: item.ParentBackdropImageTags,
-			ParentThumbImageTag: item.ParentPrimaryImageTags,
-			IndexNumber: item.IndexNumber,
-			ParentIndexNumber: item.ParentIndexNumber,
-			ImageTags: item.ImageTags,
-			BackdropImageTags: item.BackdropImageTags,
-			PremiereDate: item.PremiereDate,
-			ProductionYear: item.ProductionYear,
-			UserData: {
-				IsFavorite: item.UserData.IsFavorite,
-				Played: item.UserData.Played,
-				LastPlayedDate: item.UserData.LastPlayedDate,
-				PlayCount: item.UserData.PlayCount
+		return watchlistDataArray.map(item => {
+			const optimizedData = {
+				Id: item.Id,
+				Type: item.Type,
+				MediaType: item.MediaType,
+				Name: item.Name,
+				SeriesId: item.SeriesId,
+				SeriesName: item.SeriesName,
+				SeriesPrimaryImageTag: item.SeriesPrimaryImageTag,
+				ParentBackdropItemId: item.ParentBackdropItemId,
+				ParentBackdropImageTags: item.ParentBackdropImageTags,
+				ParentThumbImageTag: item.ParentPrimaryImageTags,
+				IndexNumber: item.IndexNumber,
+				ParentIndexNumber: item.ParentIndexNumber,
+				ImageTags: item.ImageTags,
+				BackdropImageTags: item.BackdropImageTags,
+				PremiereDate: item.PremiereDate,
+				ProductionYear: item.ProductionYear
+			};
+			if (item.UserData) {
+				optimizedData.UserData = {
+					IsFavorite: item.UserData.IsFavorite,
+					Played: item.UserData.Played,
+					LastPlayedDate: item.UserData.LastPlayedDate,
+					PlayCount: item.UserData.PlayCount
+				}
 			}
-		}));
+			return optimizedData;
+		});
 	}
 
 	// Add refresh button to tab headers
