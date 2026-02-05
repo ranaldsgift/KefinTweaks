@@ -2596,9 +2596,10 @@
             uniqueStudios.sort((a, b) => (b.ChildCount || 0) - (a.ChildCount || 0));
             
             // Filter by minimum shows
-            const filteredStudios = uniqueStudios.filter(studio => 
-                (studio.ChildCount || 0) >= minimumShowsForNetwork
-            );
+            const filteredStudios = uniqueStudios.filter(studio => {
+                const itemCount = studio.ChildCount || studio.SeriesCount || 0;
+                return itemCount >= minimumShowsForNetwork;
+            });
             
             LOG(`Fetched ${filteredStudios.length} Popular TV Networks (filtered from ${uniqueStudios.length})`);
             
