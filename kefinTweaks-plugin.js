@@ -222,7 +222,10 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
 
     const LATEST_RELEASE_NAME = 'Latest';
     const DEVELOPMENT_NAME = 'Development';
+    const EXPERIMENTAL_NAME = 'Experimental';
     const SELF_HOSTED_NAME = 'Self Hosted';
+
+    let experimentalShaCache = null;
 
     // Parse source URL to determine source type and version
     function parseKefinTweaksSource(url) {
@@ -241,10 +244,17 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             return { sourceType: 'github', version: LATEST_RELEASE_NAME };
         } else if (version === 'main' || version === 'master') {
             return { sourceType: 'github', version: DEVELOPMENT_NAME };
+        } else if (version === 'experimental') {
+            return { sourceType: 'github', version: EXPERIMENTAL_NAME };
+        } else if (version && version.length === 40 && /^[0-9a-f]+$/.test(version)) {
+            // Commit hash URL (e.g. from a previous Experimental selection)
+            return { sourceType: 'github', version: EXPERIMENTAL_NAME };
         } else {
             return { sourceType: 'github', version: version.replace(/^v/, '') };
         }
     }
+
+    const GITHUB_API_COMMITS = `https://api.github.com/repos/${GITHUB_REPO}/commits`;
 
     // Fetch available versions from GitHub
     async function fetchVersions() {
@@ -253,21 +263,33 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         }
 
         try {
-            const response = await fetch(GITHUB_API_RELEASES);
-            if (!response.ok) {
+            const [releasesResponse, experimentalResponse] = await Promise.all([
+                fetch(GITHUB_API_RELEASES),
+                fetch(`${GITHUB_API_COMMITS}?sha=experimental&per_page=1`)
+            ]);
+
+            if (!releasesResponse.ok) {
                 throw new Error('Failed to fetch releases');
             }
 
-            const releases = await response.json();
+            const releases = await releasesResponse.json();
             const versions = releases
                 .map(release => release.tag_name.replace(/^v/, ''))
                 .filter(tag => tag.match(/^\d+\.\d+\.\d+/)); // Only semantic versions
 
-            versionsCache = [LATEST_RELEASE_NAME, DEVELOPMENT_NAME, ...versions];
+            if (experimentalResponse.ok) {
+                const experimentalCommits = await experimentalResponse.json();
+                if (Array.isArray(experimentalCommits) && experimentalCommits.length > 0 && experimentalCommits[0].sha) {
+                    experimentalShaCache = experimentalCommits[0].sha;
+                }
+            }
+
+            versionsCache = [LATEST_RELEASE_NAME, DEVELOPMENT_NAME, EXPERIMENTAL_NAME, ...versions];
             return versionsCache;
         } catch (error) {
             console.warn('[KefinTweaks Installer] Error fetching versions:', error);
-            return [LATEST_RELEASE_NAME, DEVELOPMENT_NAME];
+            experimentalShaCache = null;
+            return [LATEST_RELEASE_NAME, DEVELOPMENT_NAME, EXPERIMENTAL_NAME];
         }
     }
 
@@ -282,6 +304,8 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         let versionTag = 'latest';
         if (source === DEVELOPMENT_NAME) {
             versionTag = 'main';
+        } else if (source === EXPERIMENTAL_NAME) {
+            versionTag = experimentalShaCache || 'experimental';
         } else if (source !== LATEST_RELEASE_NAME) {
             versionTag = source.startsWith('v') ? source : 'v' + source;
         }
