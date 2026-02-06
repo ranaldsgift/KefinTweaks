@@ -308,7 +308,7 @@
             if (endTimeStr) {
                 const endTimeDiv = document.createElement('div');
                 endTimeDiv.className = 'mediaInfoItem';
-                endTimeDiv.textContent = `Ends at: ${endTimeStr}`;
+                endTimeDiv.textContent = `Ends at ${endTimeStr}`;
                 infoContainer.appendChild(endTimeDiv);
             }
         }
@@ -359,7 +359,7 @@
             if (endTimeStr) {
                 const endTimeDiv = document.createElement('div');
                 endTimeDiv.className = 'mediaInfoItem';
-                endTimeDiv.textContent = `Ends at: ${endTimeStr}`;
+                endTimeDiv.textContent = `Ends at ${endTimeStr}`;
                 infoContainer.appendChild(endTimeDiv);
             }
         }
