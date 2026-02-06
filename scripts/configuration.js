@@ -4799,24 +4799,127 @@
         }
     }
 
-    // Export configuration to clipboard
+    // Export configuration via modal (with optional clipboard copy on HTTPS)
     async function handleExportConfig(config) {
         try {
             const configJson = JSON.stringify(config, null, 2);
-            await navigator.clipboard.writeText(configJson);
-            
-            if (window.KefinTweaksToaster && window.KefinTweaksToaster.toast) {
-                window.KefinTweaksToaster.toast('Configuration exported to clipboard!');
+
+            // Prefer modal-based export so it works even on unsecured servers
+            if (window.ModalSystem) {
+                const isHttps =
+                    (typeof ApiClient !== 'undefined' &&
+                        ApiClient._serverAddress &&
+                        ApiClient._serverAddress.startsWith('https://')) ||
+                    (typeof location !== 'undefined' && location.protocol === 'https:');
+
+                const supportsClipboard = !!(navigator.clipboard && navigator.clipboard.writeText);
+                const canUseClipboard = isHttps && supportsClipboard;
+
+                window.ModalSystem.create({
+                    id: 'exportConfigModal',
+                    title: 'Export Configuration',
+                    content: `
+                        <div class="listItemBodyText" style="margin-bottom: 1em;">
+                            Your current configuration is shown below as JSON. Select and copy this text to back up or share your configuration.
+                            ${canUseClipboard ? '' : ' Clipboard access is not available on this connection, so manual copying is required.'}
+                        </div>
+                        <textarea id="exportConfigTextarea" class="fld emby-textarea" rows="20"
+                            readonly
+                            style="width: 100%; font-family: monospace; font-size: 0.9em; line-height: 1.5;"></textarea>
+                    `,
+                    footer: `
+                        ${
+                            canUseClipboard
+                                ? `
+                        <button class="emby-button raised button-submit" id="copyExportConfigBtn"
+                            style="padding: 0.75em 2em; font-size: 1em; font-weight: 500; margin-right: 1em;">
+                            <span>Copy to Clipboard</span>
+                        </button>
+                        `
+                                : ''
+                        }
+                        <button class="emby-button raised" id="closeExportConfigBtn"
+                            style="padding: 0.75em 2em; font-size: 1em;">
+                            <span>Close</span>
+                        </button>
+                    `,
+                    closeOnBackdrop: true,
+                    closeOnEscape: true,
+                    onOpen: (modalInstance) => {
+                        const textarea = modalInstance.dialogContent.querySelector('#exportConfigTextarea');
+                        if (textarea) {
+                            textarea.value = configJson;
+                            // Select text to make manual copying easier
+                            setTimeout(() => {
+                                textarea.focus();
+                                textarea.select();
+                            }, 100);
+                        }
+
+                        const closeBtn = modalInstance.dialogFooter?.querySelector('#closeExportConfigBtn');
+                        if (closeBtn) {
+                            closeBtn.addEventListener('click', () => modalInstance.close());
+                        }
+
+                        if (canUseClipboard) {
+                            const copyBtn = modalInstance.dialogFooter?.querySelector('#copyExportConfigBtn');
+                            if (copyBtn) {
+                                copyBtn.addEventListener('click', async () => {
+                                    try {
+                                        await navigator.clipboard.writeText(configJson);
+                                        if (window.KefinTweaksToaster && window.KefinTweaksToaster.toast) {
+                                            window.KefinTweaksToaster.toast('Configuration copied to clipboard!');
+                                        } else {
+                                            alert('Configuration copied to clipboard!');
+                                        }
+                                    } catch (copyError) {
+                                        console.error(
+                                            '[KefinTweaks Configuration] Error copying config to clipboard:',
+                                            copyError
+                                        );
+                                        if (window.KefinTweaksToaster && window.KefinTweaksToaster.toast) {
+                                            window.KefinTweaksToaster.toast(
+                                                'Error copying configuration to clipboard',
+                                                '5'
+                                            );
+                                        } else {
+                                            alert('Error copying configuration to clipboard');
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                    }
+                });
+            } else if (navigator.clipboard && navigator.clipboard.writeText) {
+                // Fallback: no modal system, but clipboard is available
+                await navigator.clipboard.writeText(configJson);
+
+                if (window.KefinTweaksToaster && window.KefinTweaksToaster.toast) {
+                    window.KefinTweaksToaster.toast('Configuration exported to clipboard!');
+                } else {
+                    alert('Configuration exported to clipboard!');
+                }
             } else {
-                alert('Configuration exported to clipboard!');
+                // Last-resort fallback: log to console
+                console.log('[KefinTweaks Configuration] Exported configuration:', configJson);
+                if (window.KefinTweaksToaster && window.KefinTweaksToaster.toast) {
+                    window.KefinTweaksToaster.toast(
+                        'Unable to open export modal or access clipboard; configuration logged to console',
+                        '3'
+                    );
+                } else {
+                    alert(
+                        'Unable to open export modal or access clipboard. Check the browser console for the exported configuration.'
+                    );
+                }
             }
         } catch (error) {
             console.error('[KefinTweaks Configuration] Error exporting config:', error);
-            
             if (window.KefinTweaksToaster && window.KefinTweaksToaster.toast) {
-                window.KefinTweaksToaster.toast('Error exporting configuration to clipboard', '5');
+                window.KefinTweaksToaster.toast('Error exporting configuration', '5');
             } else {
-                alert('Error exporting configuration to clipboard');
+                alert('Error exporting configuration');
             }
         }
     }
