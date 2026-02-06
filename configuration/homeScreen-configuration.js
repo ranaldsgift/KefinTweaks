@@ -68,6 +68,7 @@
     const CARD_FORMATS = ['Poster', 'Thumb', 'Backdrop', 'Square', 'Random'];
     const SORT_ORDERS = ['Random', 'Name', 'DateCreated', 'PremiereDate', 'CommunityRating', 'CriticRating', 'DatePlayed', 'SortName', 'PlayCount', 'PlayedPercentage', 'StartDate', 'Runtime', 'ProductionYear', 'IsPlayed', 'IsUnplayed', 'ParentIndexNumber', 'IndexNumber'];
     const SORT_ORDER_DIRECTIONS = ['Ascending', 'Descending'];
+    const RENDER_MODE_OPTIONS = [{ value: 'Normal', label: 'Normal' }, { value: 'Spotlight', label: 'Spotlight' }, { value: 'Random', label: 'Random' }];
 
     // Current config state
     let currentConfig = null;
@@ -2570,8 +2571,8 @@
                 ${buildSelect('discovery-sortOrder', SORT_ORDERS, section.sortOrder || 'Random', 'Sort Order')}
                 ${section.sortOrderDirection ? buildSelect('discovery-sortOrderDirection', SORT_ORDER_DIRECTIONS, section.sortOrderDirection || 'Ascending', 'Sort Order Direction') : ''}
                 ${buildSelect('discovery-cardFormat', CARD_FORMATS, section.cardFormat || 'Poster', 'Card Format')}
-                ${buildTextInput('discovery-ttl', section.ttl !== undefined ? section.ttl : '', 'TTL (ms)', 'number')}
-                ${buildCheckbox('discovery-spotlight', section.spotlight === true, 'Spotlight')}
+                ${buildTextInput('discovery-ttl', section.ttl !== undefined ? section.ttl : '', 'TTL (ms)', 'number')}                
+                ${buildSelect('discovery-renderMode', RENDER_MODE_OPTIONS, section.renderMode || 'Normal', 'Render Mode')}
             </div>
         `;
     }
@@ -2582,7 +2583,7 @@
      * @param {Object} originalSection - Original section data (for preserving hidden fields in default sections)
      */
     function collectSectionEditorData(isDiscovery = false, originalSection = null) {
-        const dialog = document.querySelector(`.dialogContainer[data-modal-id="${SECTION_EDITOR_MODAL_ID}"]`);
+        const dialog = document.querySelector(`.dialogContainer[data-modal-id="${SECTION_EDITOR_MODAL_ID}"]`) || document.querySelector(`.dialogContainer[data-modal-id="${DISCOVERY_EDITOR_MODAL_ID}"]`);
         if (!dialog) return null;
 
         if (isDiscovery) {
