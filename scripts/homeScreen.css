@@ -58,28 +58,14 @@
     order: 11;
 }
 
-/* Halloween theme */
-.home-screen.halloween-theme.with-background #reactRoot:has(.libraryPage:not(.hide) .pageTabContent.is-active[data-index="0"])>.backgroundContainer::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: -25%;
-    background: linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)), url(https://ranaldsgift.github.io/KefinTweaks/pages/images/halloween.jpg);
-    background-position: 0px -250px;
-    background-size: auto 102%;
-}
-
-/* Christmas theme */
-.home-screen.christmas-theme.with-background #reactRoot:has(.libraryPage:not(.hide) .pageTabContent.is-active[data-index="0"])>.backgroundContainer::after {
+body[data-seasonal-background="true"]:has(.homePage:not(.hide)) #reactRoot:has(.libraryPage:not(.hide) .pageTabContent.is-active[data-index="0"])>.backgroundContainer::after {
     content: '';
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0%;
-    background: linear-gradient(rgba(0, 0, 0, 0.65), rgba(0, 0, 0, 0.85)), url('../pages/images/christmas.jpg');
+    background: linear-gradient(rgba(0, 0, 0, 0.65), rgba(0, 0, 0, 0.85)), var(--seasonal-background-image);
     background-position: center;
     background-size: cover;
 }
@@ -88,12 +74,12 @@
     display: none;
 }
 
-.home-screen.christmas-theme .snowverlay {
+body[data-seasonal-animations="true"]:has(.homePage:not(.hide)) .snowverlay {
     display: block;
 }
 
-.home-screen [data-section-id] h2.sectionTitle,
-.home-screen [data-section-id] .sectionTitleTextButton>.material-icons {
+body:has(.homePage:not(.hide)) [data-section-id] h2.sectionTitle,
+body:has(.homePage:not(.hide)) [data-section-id] .sectionTitleTextButton>.material-icons {
     margin-bottom: 0;
     margin-top: 0;
 }

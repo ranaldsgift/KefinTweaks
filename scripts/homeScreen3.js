@@ -244,51 +244,77 @@
         observer.observe(sectionEl, { childList: true, subtree: true });
     }
 
-    function manageBodyClasses() {
+    async function manageBodyClasses() {
+        
+        const homeScreenConfig = await window.KefinHomeScreen.getConfig();
+        const seasonalSectionGroups = homeScreenConfig.SEASONAL_SECTION_GROUPS || [];
+        const seasonalConfig = homeScreenConfig.SEASONAL_THEME_SETTINGS || {};
+        const enableSeasonalAnimations = seasonalConfig.enableSeasonalAnimations !== false;
+        const enableSeasonalBackground = seasonalConfig.enableSeasonalBackground !== false;
+        const seasonalThemes = seasonalConfig.seasonalThemes || {};
+
+        if (!enableSeasonalBackground && !enableSeasonalAnimations) {
+            LOG('Seasonal background and animations are disabled');
+            return;
+        }
+
         const body = document.body;
         const currentView = window.KefinTweaksUtils?.getCurrentView ? window.KefinTweaksUtils.getCurrentView() : null;
         const isHomePage = currentView === 'home' || currentView === 'home.html' || window.location.href.includes('home.html');
+
+        // Get the active Seasonal groups by checking if any section in the group is enabled and where the current date falls within the StartDate and EndDate of the section
+        const activeSeasonalGroups = seasonalSectionGroups.filter(sectionGroup => {
+            return sectionGroup.sections.some(s => s.enabled && isInSeasonalPeriod(s.startDate, s.endDate));
+        });
         
-        const homeScreenConfig = window.KefinTweaksConfig?.homeScreen || {};
-        const seasonalConfig = homeScreenConfig.seasonal || {};
-        const enableSeasonalAnimations = seasonalConfig.enableSeasonalAnimations !== false;
-        const enableSeasonalBackground = seasonalConfig.enableSeasonalBackground !== false;
-        
-        if (isHomePage && body) {
-            body.classList.add('home-screen');
-        } else if (body) {
-            body.classList.remove('home-screen');
+        if (activeSeasonalGroups.length === 0) {
+            LOG('No active seasonal groups found');
+            return;
+        }
+
+        let activeSeasonalThemeGroup;
+        if (enableSeasonalBackground && enableSeasonalAnimations) {
+            activeSeasonalThemeGroup = activeSeasonalGroups.find(sectionGroup => {
+                const theme = seasonalThemes[sectionGroup.id] || {};
+                return theme.backgroundImage && theme.animation;
+            });
+        } else {
+            activeSeasonalThemeGroup = activeSeasonalGroups.find(sectionGroup => {
+                const theme = seasonalThemes[sectionGroup.id] || {};
+                return (enableSeasonalBackground && theme.backgroundImage)
+                    || (enableSeasonalAnimations && theme.animation);
+            });
+        }
+
+        if (!activeSeasonalThemeGroup) {
+            LOG('No seasonal theme found');
+            return;
         }
         
-        if (body) {
-            const themeClasses = ['halloween-theme', 'christmas-theme', 'valentines-theme', 'newyear-theme', 'with-background'];
-            themeClasses.forEach(themeClass => body.classList.remove(themeClass));
-            
-            if (isHomePage) {
-                if (isHalloweenPeriod()) {
-                    body.classList.add('halloween-theme');
-                } else if (isChristmasPeriod()) {
-                    body.classList.add('christmas-theme');
+        document.body.dataset.seasonalTheme = activeSeasonalThemeGroup.id;
 
-                    if (enableSeasonalBackground) {
-                        body.classList.add('with-background');
-                    }
+        if (enableSeasonalBackground && !document.body.dataset.seasonalBackground) {
+            document.body.dataset.seasonalBackground = 'true';
 
-                    if (enableSeasonalAnimations) {
-                        const snowverlayScript = document.querySelector('script[src*="snowverlay.js"]');
-                        
-                        if (!snowverlayScript) {
-                            const snowverlayScriptSrc = (window.KefinTweaksConfig.kefinTweaksRoot || '') + 'scripts/snowverlay.js';
-                            const script = document.createElement('script');
-                            script.src = snowverlayScriptSrc;
-                            document.head.appendChild(script);
-                        }
-                    }
+            // Add the background image as a css variable to the body
+            const backgroundImage = seasonalThemes[activeSeasonalThemeGroup.id]?.backgroundImage;
+            if (backgroundImage) {
+                document.body.style.setProperty('--seasonal-background-image', backgroundImage);
+            }
+        }
 
-                } else if (isValentinesPeriod()) {
-                    body.classList.add('valentines-theme');
-                } else if (isNewYearsPeriod()) {
-                    body.classList.add('newyear-theme');
+        if (enableSeasonalAnimations && !document.body.dataset.seasonalAnimations) {
+            document.body.dataset.seasonalAnimations = 'true';
+
+            // Add the animation script to the head
+            const animation = seasonalThemes[activeSeasonalThemeGroup.id]?.animation;
+            if (animation) {
+                const animationScript = document.querySelector(`script[src*="${animation}.js"]`);
+                if (!animationScript) {
+                    const animationScriptSrc = (window.KefinTweaksConfig.kefinTweaksRoot || '') + `scripts/seasonal/${animation}.js`;
+                    const script = document.createElement('script');
+                    script.src = animationScriptSrc;
+                    document.head.appendChild(script);
                 }
             }
         }
@@ -1735,6 +1761,14 @@
              return;
         }
 
+        // Ensure at least 1 discovery section is enabled
+        const discoverySections = getDiscoverySections();
+        if (!discoverySections || discoverySections.length === 0 || discoverySections.every(section => section.enabled === false)) {
+            LOG('No discovery sections enabled in config.');
+            state.discoveryEnabled = false;
+            return;
+        }
+
         if (!container) {
             WARN('setupDiscoveryInteraction called without a valid container');
             return;
@@ -2035,11 +2069,7 @@
             const activeTab = document.querySelector('.headerTabs .emby-tab-button-active').getAttribute('data-index');
             if (activeTab !== '0') return;
 
-            const activeContainer = document.querySelector('.libraryPage:not(.hide) .kefinHomeSectionsContainer');
-            if (!activeContainer) return;
-
-
-            if (!activeContainer.dataset.sectionsRendered) return;
+            if (!container.dataset.sectionsRendered) return;
 
             if (state.isRenderingDiscovery) return;
              
@@ -2050,7 +2080,7 @@
             const threshold = windowHeight * 1.5;
             
             if (scrollTop + windowHeight >= documentHeight - threshold) { 
-                renderNextDiscoveryGroup(activeContainer);
+                renderNextDiscoveryGroup(container);
             }
         }, { passive: true });
         LOG('Infinite scroll enabled for discovery.');
@@ -2102,8 +2132,20 @@
         return isInSeasonalPeriod('01-01', '01-05');
     }
     
-    function isValentinesPeriod() {
-        return isInSeasonalPeriod('02-01', '02-15');
+    async function isValentinesPeriod() {
+        const homeScreenConfig = await window.KefinHomeScreen.getConfig();
+        const valentinesConfig = homeScreenConfig.SEASONAL_SECTION_GROUPS.find(s => s.id === 'seasonal-valentines');
+        if (!valentinesConfig) { 
+            return false;
+        }
+
+        const activeSection = valentinesConfig.sections.find(s => s.enabled);
+
+        if (!activeSection) {
+            return false;
+        }
+
+        return isInSeasonalPeriod(activeSection.startDate, activeSection.endDate);        
     }
 
     const localCache = new window.LocalStorageCache();
@@ -2309,14 +2351,15 @@
             }
 
             try { 
+                manageBodyClasses();
                 enhanceHomeScreen();
             } catch (err) { ERR('Home screen page change handler failed:', err); }
         }, { pages: ['home', 'home.html'] });
     }
 
-    if (window.KefinTweaksUtils && typeof window.KefinTweaksUtils.onViewPage === 'function') {
+    /* if (window.KefinTweaksUtils && typeof window.KefinTweaksUtils.onViewPage === 'function') {
         window.KefinTweaksUtils.onViewPage(manageBodyClasses, { pages: [] });
-    }
+    } */
 
 })();
 

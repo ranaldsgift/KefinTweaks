@@ -480,8 +480,8 @@
                     id: 'seasonal.valentines.valentines-movies',
                     name: 'Valentine\'s Movies',
                     enabled: true,
-                    startDate: '02-01',
-                    endDate: '02-15',
+                    startDate: '02-07',
+                    endDate: '02-14',
                     order: 50,
                     cardFormat: 'Poster',
                     queries: [
@@ -499,8 +499,8 @@
                     id: 'seasonal.valentines.valentines-episodes',
                     name: 'Valentine\'s Episodes',
                     enabled: true,
-                    startDate: '02-01',
-                    endDate: '02-15',
+                    startDate: '02-07',
+                    endDate: '02-14',
                     order: 51,
                     cardFormat: 'Poster',
                     queries: [
@@ -819,31 +819,27 @@
     }
 
     const SEASONAL_THEME_SETTINGS = {
-        enabled: true,
-        enableSeasonalAnimations: true,
-        enableSeasonalBackground: true,
-        seasonToggles: [
-            {
-                id: 'halloween',
-                name: 'Halloween',
-                enabled: false
+        enabled: false,
+        enableSeasonalAnimations: false,
+        enableSeasonalBackground: false,
+        seasonalThemes: {
+            'seasonal-halloween': {
+                animation: 'snowverlay',
+                backgroundImage: 'url(../pages/images/halloween.jpg)'
             },
-            {
-                id: 'christmas',
-                name: 'Christmas',
-                enabled: false
+            'seasonal-christmas': {
+                animation: 'snowverlay',
+                backgroundImage: 'url(../pages/images/christmas.jpg)'
             },
-            {
-                id: 'new-years',
-                name: 'New Year\'s',
-                enabled: false
+            'seasonal-new-years': {
+                animation: 'snowverlay',
+                backgroundImage: 'url(../pages/images/new-years.jpg)'
             },
-            {
-                id: 'valentines',
-                name: 'Valentine\'s Day',
-                enabled: false
+            'seasonal-valentines': {
+                animation: 'valentinesOverlay',
+                backgroundImage: 'url(../pages/images/valentines.jpg)'
             }
-        ]
+        }
     }
     const HOME_SETTINGS = {
         minimumSeriesForPopularTVNetworks: 10,
