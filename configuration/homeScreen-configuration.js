@@ -16,6 +16,7 @@
 
     // Supported additional query options (matching configuration.js)
     const SUPPORTED_QUERY_OPTIONS = {
+        Ids: { label: 'Item IDs', type: 'array', hint: 'Comma-separated GUIDs' },
         ParentId: { label: 'Parent ID', type: 'string', hint: 'GUID of parent item' },
         ExcludeItemIds: { label: 'Exclude Item IDs', type: 'array', hint: 'Comma-separated GUIDs' },
         GenreIds: { label: 'Genre IDs', type: 'array', hint: 'Comma-separated GUIDs' },
