@@ -260,8 +260,19 @@
             targetTabButton = await pollForElement(() => document.querySelector(`.headerTabs button[data-index="${currentTabIndex}"]`), 50, 100);
         }
 
+        if (targetTabButton.classList.contains('emby-tab-button-active')) {
+            LOG('Target tab is already active');
+            return;
+        }
+
         const pageTabContents = document.querySelectorAll('.libraryPage:not(.hide) .pageTabContent');
         const targetPageTabContent = document.querySelector(`.libraryPage:not(.hide) .pageTabContent[data-index="${currentTabIndex}"]`);
+
+        const sectionsContainer = targetPageTabContent?.querySelector('.sections');
+        if (sectionsContainer && sectionsContainer.children.length === 0) {
+            LOG('Sections container is empty, waiting for sections to be rendered');
+            return;
+        }
 
         if (headerTabButtons && targetTabButton && pageTabContents && targetPageTabContent) {
             // Remove is-active class from all tab buttons
@@ -493,7 +504,7 @@
 
             // Sync active tab state when page view changes
             // This is only necessary for the home page with custom tabs
-            if (view === 'home' || view === 'home.html') {
+            if ((view === 'home' || view === 'home.html')) {
                 syncActiveTabState(currentTabIndex).catch(err => {
                     ERR('Error in syncActiveTabState:', err);
                 });
