@@ -177,7 +177,6 @@
                         majorServerVersions: [10, 11],
                         urls: [
                             'https://cdn.jsdelivr.net/gh/KartoffelChipss/NeutralFin@latest/theme/neutralfin-minified.css',
-                            'https://cdn.jsdelivr.net/gh/KartoffelChipss/Jellyfin-Lucide@main/theme/jellyfin-lucide.css',
                             `${getKefinTweaksRoot()}skins/neutralfin-kefin.css`
                         ]
                     }
@@ -217,6 +216,16 @@
                     {
                         name: 'Solid App Bar',
                         url: `${getKefinTweaksRoot()}skins/optional/ElegantFin/solidAppBar.css`,
+                        enabled: false
+                    },
+                    {
+                        name: 'Jellyfin Lucide Icons (enable with Lucide Icons for KefinTweaks)',
+                        url: 'https://cdn.jsdelivr.net/gh/KartoffelChipss/Jellyfin-Lucide@main/theme/jellyfin-lucide.css',
+                        enabled: false
+                    },
+                    {
+                        name: 'Lucide Icons for KefinTweaks (enable with Jellyfin Lucide Icons)',
+                        url: `${getKefinTweaksRoot()}skins/optional/NeutralFin/lucide-icons-kefin.css`,
                         enabled: false
                     }
                 ]

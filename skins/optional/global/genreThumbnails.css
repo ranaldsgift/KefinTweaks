@@ -1,6 +1,15 @@
 .card[data-type="Genre"] a.cardImageContainer::after {
   content: attr(aria-label);
-  font-size: 3rem;
+  font-size: 3em;
+  max-width: calc(100% - 1em);
+  white-space: pre-wrap;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.layout-mobile .card[data-type="Genre"] a.cardImageContainer::after {
+  font-size: 2em;
 }
 
 .card[data-type="Genre"] {
