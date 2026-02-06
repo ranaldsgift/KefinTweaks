@@ -1997,6 +1997,17 @@
         // Additional fields for default sections
         let additionalFieldsHTML = '';
         if (isDefaultSection) {
+            // Check if this is a seasonal section based on the section id and add the Start Date and End Date fields
+            if (section.id.startsWith('seasonal.')) {
+                additionalFieldsHTML += `
+                    <div style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
+                        <div class="listItemBodyText" style="font-weight: 500; margin-bottom: 0.75em;">Seasonal</div>
+                        ${buildTextInput('section-startDate', section.startDate || '', 'Start Date (MM-DD)', 'text')}
+                        ${buildTextInput('section-endDate', section.endDate || '', 'End Date (MM-DD)', 'text')}
+                    </div>
+                `;
+            }
+
             if (defaultFields.includeSortOrder) {
                 const sortBy = section.queries?.[0]?.queryOptions?.SortBy || 'Random';
                 const sortOrder = section.queries?.[0]?.queryOptions?.SortOrder || 'Ascending';
@@ -2699,6 +2710,12 @@
             const discoveryEnabledToggle = dialog.querySelector('.section-discoveryEnabled-toggle');
             if (discoveryEnabledToggle) {
                 section.discoveryEnabled = discoveryEnabledToggle.dataset.enabled === 'true';
+            }
+
+            // Check if this is a seasonal section based on the section id and add the Start Date and End Date fields
+            if (section.id.startsWith('seasonal.')) {
+                section.startDate = dialog.querySelector('#section-startDate')?.value || section.startDate;
+                section.endDate = dialog.querySelector('#section-endDate')?.value || section.endDate;
             }
             
             return section;
