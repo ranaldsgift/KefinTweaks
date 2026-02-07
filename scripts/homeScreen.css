@@ -80,8 +80,8 @@ body[data-seasonal-animations="true"]:has(.homePage:not(.hide)) .snowverlay {
 
 body:has(.homePage:not(.hide)) [data-section-id] h2.sectionTitle,
 body:has(.homePage:not(.hide)) [data-section-id] .sectionTitleTextButton>.material-icons {
-    margin-bottom: 0;
-    margin-top: 0;
+    margin-bottom: 0 !important;
+    margin-top: 0 !important;
 }
 
 /* div#discovery-loading-indicator:not(.show)::before {
