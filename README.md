@@ -7,6 +7,15 @@
 
 <hr style="background: #b4c5fb !important;">
 
+<center>
+
+![jsDelivr hits (GitHub)](https://img.shields.io/jsdelivr/gh/hm/ranaldsgift/kefintweaks?style=for-the-badge&logo=javascript&logoColor=b4c5fb&labelColor=08396c&color=0e0922&cacheSeconds=3600)
+<a href="https://github.com/jellyfin/jellyfin/releases/tag/v10.10.7"><img alt="Jellyfin Version 10.10.7" src="https://img.shields.io/badge/Jellyfin-10.10-blue.svg?style=for-the-badge&logo=github&logoColor=b4c5fb&labelColor=08396c&color=0e0922"/></a>
+<a href="https://github.com/jellyfin/jellyfin/releases/latest"><img alt="Jellyfin Latest Version" src="https://img.shields.io/badge/Jellyfin-10.11-blue.svg?style=for-the-badge&logo=github&logoColor=b4c5fb&labelColor=08396c&color=0e0922"/></a>
+<a href="https://discord.com/channels/1381737066366242896/1442127942678216785"><img alt="Jellyfin Community Discord KefinTweaks Channel" src="https://img.shields.io/badge/%23kefintweaks%20-%20Jellyfin%20Community?style=for-the-badge&logo=discord&logoColor=b4c5fb&labelColor=08396c&color=0e0922&label=Jellyfin%20Community"/></a>
+
+</center>
+
 **KefinTweaks is a comprehensive collection of enhancements and customizations for Jellyfin, focused on, but not limited to, filling gaps in functionality based on the community's most desired [Feature Requests](https://features.jellyfin.org/?view=most-wanted). This includes things like a [Watchlist](#watchlist), a [customizable Home Screen](#enhanced-home-screen), an [improved search experience](#enhanced-search), and an [Appearance Manager](#skin-manager)**.
 
 While working on these scripts to meet my personal needs, I noticed that there was a lot of overlap between the functionality I desire and many of the requested features by the community so I thought it would be a good idea to share this for anyone who may be interested. 
