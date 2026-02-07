@@ -2902,7 +2902,7 @@
         
         const cardPadder = document.createElement('div');
         cardPadder.className = `cardPadder ${padderClass} skeleton-padder`;
-        cardPadder.style.cssText = 'background: linear-gradient(90deg, rgba(255,255,255,0.1) 25%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.1) 75%); background-size: 200% 100%; animation: skeleton-loading 1.5s ease-in-out infinite;';
+        cardPadder.style.cssText = 'background: rgba(255,255,255,0.12); animation: skeleton-pulse 1.5s ease-in-out infinite;';
         
         cardScalable.appendChild(cardPadder);
         cardBox.appendChild(cardScalable);
@@ -2969,8 +2969,7 @@
         const skeletonItem = document.createElement('div');
         skeletonItem.className = 'spotlight-item skeleton-spotlight-item';
         skeletonItem.setAttribute('data-index', '0');
-        skeletonItem.style.opacity = '1';
-        skeletonItem.style.cssText += 'background: linear-gradient(90deg, rgba(255,255,255,0.1) 25%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.1) 75%); background-size: 200% 100%; animation: skeleton-loading 1.5s ease-in-out infinite;';
+        skeletonItem.style.cssText = 'background: rgba(255,255,255,0.12); animation: skeleton-pulse 1.5s ease-in-out infinite;';
         
         itemsContainer.appendChild(skeletonItem);
         bannerContainer.appendChild(itemsContainer);
@@ -3108,9 +3107,9 @@
         const style = document.createElement('style');
         style.id = 'skeleton-animation-style';
         style.textContent = `
-            @keyframes skeleton-loading {
-                0% { background-position: 200% 0; }
-                100% { background-position: -200% 0; }
+            @keyframes skeleton-pulse {
+                0%, 100% { opacity: 0.5; }
+                50% { opacity: 1; }
             }
         `;
         document.head.appendChild(style);
