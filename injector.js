@@ -17,6 +17,9 @@
             console.log('[KefinTweaks] Global reset detected. Clearing user configuration.');
             // Only clear the user config to force defaults
             localStorage.removeItem('kefinTweaksUserConfig');
+            // Clear selected skin and color scheme
+            localStorage.removeItem('kefinTweaks_selectedSkin');
+            localStorage.removeItem('kefinTweaks_selectedColorScheme');
             // Update local version to avoid loop
             localStorage.setItem('kefinTweaks_lastResetVersion', remoteVersion.toString());
         }
