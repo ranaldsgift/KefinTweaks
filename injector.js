@@ -2,13 +2,30 @@
 // Dynamically loads scripts and CSS files based on user configuration
 // Usage: Configuration is now managed in kefinTweaks.js - this script reads from window.KefinTweaksConfig
 
-(function() {
+(function () {
     'use strict';
 
-    console.log('[KefinTweaks Injector] Initializing...');    
+    console.log('[KefinTweaks Injector] Initializing...');
+
+    // Check for global configuration reset
+    try {
+        const config = window.KefinTweaksConfig || {};
+        const remoteVersion = config.configVersion || 0;
+        const localVersion = parseInt(localStorage.getItem('kefinTweaks_lastResetVersion') || '0', 10);
+
+        if (remoteVersion > localVersion && remoteVersion > 0) {
+            console.log('[KefinTweaks] Global reset detected. Clearing user configuration.');
+            // Only clear the user config to force defaults
+            localStorage.removeItem('kefinTweaksUserConfig');
+            // Update local version to avoid loop
+            localStorage.setItem('kefinTweaks_lastResetVersion', remoteVersion.toString());
+        }
+    } catch (e) {
+        console.error('[KefinTweaks] Error checking for global reset:', e);
+    }
     // Cache for resolved root URL (to avoid multiple API calls)
     let resolvedRootCache = null;
-    
+
     /**
      * Extracts version string from root URL
      * @param {string} root - The root URL (e.g., "https://cdn.jsdelivr.net/gh/ranaldsgift/KefinTweaks@v0.3.3/")
@@ -18,42 +35,42 @@
         if (!root) {
             return "Pending Install"; // Fallback
         }
-        
-    // Match version patterns: @commitHash, @latest, @main, or @v0.3.3
-    // Note: check for hash first to avoid partial numeric matches (e.g. hash starting with digits)
-    const versionMatch = root.match(/@([a-f0-9]{7,}|latest|main|v?[\d.]+)/i);
-    
-    if (versionMatch) {
-        const version = versionMatch[1];
-        
-        // Handle version tags (v0.3.3 -> 0.3.3)
-        if (version.startsWith('v') && /^\d+\.\d+\.\d+/.test(version.substring(1))) {
-            return version.substring(1); // Remove 'v' prefix
+
+        // Match version patterns: @commitHash, @latest, @main, or @v0.3.3
+        // Note: check for hash first to avoid partial numeric matches (e.g. hash starting with digits)
+        const versionMatch = root.match(/@([a-f0-9]{7,}|latest|main|v?[\d.]+)/i);
+
+        if (versionMatch) {
+            const version = versionMatch[1];
+
+            // Handle version tags (v0.3.3 -> 0.3.3)
+            if (version.startsWith('v') && /^\d+\.\d+\.\d+/.test(version.substring(1))) {
+                return version.substring(1); // Remove 'v' prefix
+            }
+
+            // Handle @main -> "Dev"
+            if (version.toLowerCase() === 'main') {
+                return 'development';
+            }
+
+            // Handle @latest -> "latest"
+            if (version.toLowerCase() === 'latest') {
+                return 'latest';
+            }
+
+            // Handle commit hash -> show as "Dev (#hash)"
+            if (/^[a-f0-9]{7,}$/i.test(version)) {
+                return `Dev (#${version.substring(0, 7)})`;
+            }
+
+            // Return as-is for other patterns
+            return version;
         }
-        
-        // Handle @main -> "Dev"
-        if (version.toLowerCase() === 'main') {
-            return 'development';
-        }
-        
-        // Handle @latest -> "latest"
-        if (version.toLowerCase() === 'latest') {
-            return 'latest';
-        }
-        
-        // Handle commit hash -> show as "Dev (#hash)"
-        if (/^[a-f0-9]{7,}$/i.test(version)) {
-            return `Dev (#${version.substring(0, 7)})`;
-        }
-        
-        // Return as-is for other patterns
-        return version;
-    }
-        
+
         // No version found in URL, this is a custom install
         return "Custom Install";
     }
-    
+
     // Configuration: Start with defaults, then merge user config
     // This allows new scripts to work out of the box without requiring config updates
     const ENABLED_SCRIPTS = {
@@ -76,14 +93,14 @@
         seriesInfo: true,         // Add series and season information to details pages
         collections: true,         // Collection sorting functionality
         skinManager: true,        // Skin selection and management
-        
+
         // Note: Core functionality scripts (utils, cardBuilder, localStorageCache, modal) 
         // are automatically enabled when needed by other scripts
-        
+
         // Merge user config on top of defaults (allows users to override defaults)
         ...window.KefinTweaksConfig?.scripts
     };
-    
+
     // Script definitions with dependencies and metadata
     const SCRIPT_DEFINITIONS = [
         {
@@ -293,7 +310,7 @@
     async function injectVersionBadgeCSS() {
         const styleId = 'kefinTweaks-version-css';
         if (document.getElementById(styleId)) return;
-        
+
         // Get version from root URL in config
         let displayVersion = "";
         try {
@@ -306,16 +323,16 @@
         } catch (error) {
             console.warn('[KefinTweaks Injector] Could not extract version, using fallback:', error);
         }
-        
+
         // Format version for display (add 'v' prefix if it's a version number, not for 'latest' or 'development')
         let versionDisplay = displayVersion;
-        if (!displayVersion.startsWith('v') && 
-            !displayVersion.includes('latest') && 
+        if (!displayVersion.startsWith('v') &&
+            !displayVersion.includes('latest') &&
             !displayVersion.includes('development') &&
             /^\d+\.\d+/.test(displayVersion)) {
             versionDisplay = 'v' + displayVersion;
         }
-        
+
         const style = document.createElement('style');
         style.id = styleId;
         style.textContent = `
@@ -337,11 +354,11 @@
         let hasChanges = false;
         let maxIterations = 10; // Prevent infinite loops
         let iterations = 0;
-        
+
         // Keep running until no more dependencies need to be enabled
         while (iterations < maxIterations) {
             let iterationChanges = false;
-            
+
             SCRIPT_DEFINITIONS.forEach(script => {
                 if (ENABLED_SCRIPTS[script.name]) {
                     script.dependencies.forEach(dep => {
@@ -354,31 +371,31 @@
                     });
                 }
             });
-            
+
             if (!iterationChanges) {
                 break; // No more dependencies to enable
             }
-            
+
             iterations++;
         }
-        
+
         if (iterations >= maxIterations) {
             console.warn('[KefinTweaks Injector] Reached max iterations while auto-enabling dependencies');
         }
-        
+
         return hasChanges;
     }
-    
+
     // Configuration validation
     function validateConfiguration() {
         const errors = [];
-        
+
         // Auto-enable dependencies first
         const dependenciesEnabled = autoEnableDependencies();
         if (dependenciesEnabled) {
             console.log('[KefinTweaks Injector] Auto-enabled required dependencies');
         }
-        
+
         // Check dependencies - only validate if the script is enabled
         SCRIPT_DEFINITIONS.forEach(script => {
             if (ENABLED_SCRIPTS[script.name]) {
@@ -389,21 +406,21 @@
                 });
             }
         });
-        
+
         if (errors.length > 0) {
             console.error('[KefinTweaks Injector] Configuration errors:', errors);
             return false;
         }
-        
+
         return true;
     }
-    
+
     // Resolve @latest or @main to actual version/commit hash
     async function resolveRootVersion(root) {
         // Check if root contains @latest or @main
         const latestMatch = root.match(/@latest(\/|$)/);
         const mainMatch = root.match(/@main(\/|$)/);
-        
+
         if (latestMatch) {
             // Fetch the latest release version number
             try {
@@ -446,24 +463,24 @@
                 return root;
             }
         }
-        
+
         // No resolution needed
         return root;
     }
-    
+
     // Get the root path for scripts from configuration
     async function getScriptRoot() {
         const kefinTweaksRoot = window.KefinTweaksConfig?.kefinTweaksRoot;
-        
+
         // If kefinTweaksRoot is not set or empty, return null (scripts should not load)
         if (!kefinTweaksRoot || kefinTweaksRoot === '') {
             console.warn('[KefinTweaks Injector] kefinTweaksRoot is not configured');
             return null;
         }
-        
+
         // Ensure root ends with /
         let root = kefinTweaksRoot.endsWith('/') ? kefinTweaksRoot : kefinTweaksRoot + '/';
-        
+
         // Resolve @latest or @main if needed (with caching)
         if (resolvedRootCache === null) {
             root = await resolveRootVersion(root);
@@ -471,11 +488,11 @@
         } else {
             root = resolvedRootCache;
         }
-        
+
         // Return scripts path
         return root + 'scripts/';
     }
-    
+
     // Load a CSS file
     async function loadCSS(filename) {
         return new Promise(async (resolve, reject) => {
@@ -484,7 +501,7 @@
                 reject(new Error('kefinTweaksRoot is not configured'));
                 return;
             }
-            
+
             // Check if CSS is already loaded (match by root and filename, ignore suffix)
             const existingLink = document.querySelector(`link[href*="${scriptRoot}${filename}"]`);
             if (existingLink) {
@@ -492,26 +509,26 @@
                 resolve();
                 return;
             }
-            
+
             const link = document.createElement('link');
             link.rel = 'stylesheet';
             link.type = 'text/css';
             link.href = `${scriptRoot}${filename}${urlSuffix}`;
-            
+
             link.onload = () => {
                 console.log(`[KefinTweaks Injector] CSS loaded: ${filename}`);
                 resolve();
             };
-            
+
             link.onerror = () => {
                 console.warn(`[KefinTweaks Injector] Failed to load CSS: ${filename}`);
                 reject(new Error(`Failed to load CSS: ${filename}`));
             };
-            
+
             document.head.appendChild(link);
         });
     }
-    
+
     // Load a JavaScript file
     async function loadScript(filename) {
         return new Promise(async (resolve, reject) => {
@@ -520,7 +537,7 @@
                 reject(new Error('kefinTweaksRoot is not configured'));
                 return;
             }
-            
+
             // Check if script is already loaded
             const existingScript = document.querySelector(`script[src*="${scriptRoot}${filename}"]`);
             if (existingScript) {
@@ -528,25 +545,25 @@
                 resolve();
                 return;
             }
-            
+
             const script = document.createElement('script');
             script.src = `${scriptRoot}${filename}${urlSuffix}`;
             script.async = true;
-            
+
             script.onload = () => {
                 console.log(`[KefinTweaks Injector] Script loaded: ${filename}`);
                 resolve();
             };
-            
+
             script.onerror = () => {
                 console.error(`[KefinTweaks Injector] Failed to load script: ${filename}`);
                 reject(new Error(`Failed to load script: ${filename}`));
             };
-            
+
             document.head.appendChild(script);
         });
     }
-    
+
     // Recursively collect all dependencies for a given script
     function collectAllDependencies(scriptDef, collected = new Set(), visited = new Set()) {
         // Avoid infinite recursion
@@ -554,19 +571,19 @@
             return collected;
         }
         visited.add(scriptDef.name);
-        
+
         // For each dependency
         for (const depName of scriptDef.dependencies) {
             // Only process enabled dependencies
             if (!ENABLED_SCRIPTS[depName]) {
                 continue;
             }
-            
+
             const depScript = SCRIPT_DEFINITIONS.find(s => s.name === depName);
             if (!depScript) {
                 continue;
             }
-            
+
             // Add to collected if we haven't already
             if (!collected.has(depScript.name)) {
                 collected.add(depScript.name);
@@ -574,32 +591,32 @@
                 collectAllDependencies(depScript, collected, visited);
             }
         }
-        
+
         return collected;
     }
-    
+
     // Load a single script (assumes dependencies are already loaded)
     async function loadScriptSync(scriptDef) {
         const scriptRoot = await getScriptRoot();
         if (!scriptRoot) {
             throw new Error('kefinTweaksRoot is not configured');
         }
-        
+
         // Check if already loaded (match by root and filename, ignore suffix)
         const isAlreadyLoaded = document.querySelector(`script[src*="${scriptRoot}${scriptDef.script}"]`);
         if (isAlreadyLoaded) {
             console.log(`[KefinTweaks Injector] Script already loaded: ${scriptDef.name}`);
             return;
         }
-        
+
         // Load CSS if specified
         if (scriptDef.css) {
             await loadCSS(scriptDef.css);
         }
-        
+
         // Load the script
         await loadScript(scriptDef.script);
-        
+
         console.log(`[KefinTweaks Injector] Successfully loaded: ${scriptDef.name}`);
     }
 
@@ -615,28 +632,28 @@
                 }
             }
         }
-        
+
         // Load configuration UI so admins can re-enable KefinTweaks
         await loadScript('configuration.js');
         await loadCSS('configuration.css');
     }
-    
+
     // Main initialization function
     async function initialize() {
         console.log(`[KefinTweaks Injector] Starting KefinTweaks initialization...`);
-        
+
         const scriptRoot = await getScriptRoot();
         if (!scriptRoot) {
             console.log('[KefinTweaks Injector] kefinTweaksRoot is not configured. Please configure KefinTweaks using the installer before scripts can be loaded.');
             return;
         }
-        
+
         // Check if KefinTweaks is enabled in config
         const isKefinTweaksEnabled = window.KefinTweaksConfig?.enabled !== false;
-        
+
         if (!isKefinTweaksEnabled) {
             console.log('[KefinTweaks Injector] KefinTweaks is disabled in configuration. Only loading configuration UI requirements for admin access.');
-            
+
             try {
                 // Ensure configuration dependencies are loaded so the admin UI works
                 await loadConfigurationJS();
@@ -646,52 +663,52 @@
             }
             return;
         }
-        
+
         // Validate configuration
         if (!validateConfiguration()) {
             console.error('[KefinTweaks Injector] Configuration validation failed. Aborting.');
             return;
         }
-        
+
         // Get enabled scripts
         const enabledScripts = SCRIPT_DEFINITIONS.filter(script => ENABLED_SCRIPTS[script.name]);
-        
+
         // Step 1: Collect all dependencies from all enabled scripts
         const allDependencyNames = new Set();
         for (const script of enabledScripts) {
             const deps = collectAllDependencies(script);
             deps.forEach(dep => allDependencyNames.add(dep));
         }
-        
+
         // Step 2: Separate dependencies from non-dependencies
-        const dependencyScripts = SCRIPT_DEFINITIONS.filter(script => 
+        const dependencyScripts = SCRIPT_DEFINITIONS.filter(script =>
             allDependencyNames.has(script.name) && ENABLED_SCRIPTS[script.name]
         );
-        
-        const nonDependencyScripts = enabledScripts.filter(script => 
+
+        const nonDependencyScripts = enabledScripts.filter(script =>
             !allDependencyNames.has(script.name)
         );
-        
+
         // Step 2.5: Separate priority scripts from regular non-dependency scripts
         const priorityScripts = nonDependencyScripts.filter(script => script.priority === true);
         const regularScripts = nonDependencyScripts.filter(script => !script.priority);
-        
-        console.log(`[KefinTweaks Injector] Found ${dependencyScripts.length} dependency scripts:`, 
-                   dependencyScripts.map(s => s.name));
-        console.log(`[KefinTweaks Injector] Found ${priorityScripts.length} priority scripts:`, 
-                   priorityScripts.map(s => s.name));
-        console.log(`[KefinTweaks Injector] Found ${regularScripts.length} regular scripts:`, 
-                   regularScripts.map(s => s.name));
-        
+
+        console.log(`[KefinTweaks Injector] Found ${dependencyScripts.length} dependency scripts:`,
+            dependencyScripts.map(s => s.name));
+        console.log(`[KefinTweaks Injector] Found ${priorityScripts.length} priority scripts:`,
+            priorityScripts.map(s => s.name));
+        console.log(`[KefinTweaks Injector] Found ${regularScripts.length} regular scripts:`,
+            regularScripts.map(s => s.name));
+
         try {
             // Step 3: Load all dependencies first
             console.log('[KefinTweaks Injector] Loading dependencies first...');
             console.log(`[KefinTweaks Injector] Dependency load order:`, dependencyScripts.map(s => s.name));
-            
+
             let dependencyLoadPromises = [];
             dependencyLoadPromises.push(...dependencyScripts.map(script => loadScriptSync(script)));
             await Promise.all(dependencyLoadPromises);
-            
+
             // Step 4: Load priority scripts immediately after dependencies
             if (priorityScripts.length > 0) {
                 console.log('[KefinTweaks Injector] Loading priority scripts...');
@@ -700,15 +717,15 @@
                 priorityLoadPromises.push(...priorityScripts.map(script => loadScriptSync(script)));
                 await Promise.all(priorityLoadPromises);
             }
-            
+
             // Step 5: Load regular non-dependencies in parallel (their dependencies are already loaded)
             let loadPromises = [];
             console.log('[KefinTweaks Injector] Loading regular non-dependencies...');
             loadPromises.push(...regularScripts.map(script => loadScriptSync(script)));
             await Promise.all(loadPromises);
-            
+
             console.log('[KefinTweaks Injector] All scripts loaded successfully!');
-            
+
             // Always load configuration.js for admin UI (loads after other scripts)
             console.log('[KefinTweaks Injector] Loading configuration script...');
             try {
@@ -717,7 +734,7 @@
             } catch (error) {
                 console.warn('[KefinTweaks Injector] Failed to load configuration script:', error);
             }
-            
+
             // Dispatch custom event when all scripts are loaded
             const event = new CustomEvent('kefinTweaksLoaded', {
                 detail: {
@@ -726,55 +743,55 @@
                 }
             });
             document.dispatchEvent(event);
-            
+
         } catch (error) {
             console.error('[KefinTweaks Injector] Error during initialization:', error);
         }
     }
-    
+
     // Utility functions for debugging and configuration
     window.KefinTweaks = {
         // Get current configuration
         getConfig: () => ({ ...ENABLED_SCRIPTS }),
-        
+
         // Get script definitions
         getScripts: () => [...SCRIPT_DEFINITIONS],
-        
+
         // Check if a script is loaded
         isScriptLoaded: (scriptName) => {
             const scriptDef = SCRIPT_DEFINITIONS.find(s => s.name === scriptName);
             if (!scriptDef) return false;
-            
+
             const scriptElement = document.querySelector(`script[src*="${scriptDef.script}"]`);
             return !!scriptElement;
         },
-        
+
         // Reload all scripts (useful for development)
         reload: () => {
             console.log('[KefinTweaks Injector] Reloading all scripts...');
             initialize();
         },
-        
+
         // Load a specific script (useful for dynamic loading)
         loadScript: async (scriptName) => {
             const scriptDef = SCRIPT_DEFINITIONS.find(s => s.name === scriptName);
             if (!scriptDef) {
                 throw new Error(`Script '${scriptName}' not found`);
             }
-            
+
             if (!ENABLED_SCRIPTS[scriptName]) {
                 throw new Error(`Script '${scriptName}' is disabled in configuration`);
             }
-            
+
             await loadScriptWithDependencies(scriptDef);
         }
     };
-    
+
     // Check if user is admin (with timeout for login)
     async function checkAdminWithTimeout(maxWaitMs = 5000) {
         const startTime = Date.now();
         const checkInterval = 100; // Check every 100ms
-        
+
         return new Promise((resolve) => {
             const checkAdmin = async () => {
                 try {
@@ -795,18 +812,18 @@
                 } catch (error) {
                     // User might not be logged in yet, continue waiting
                 }
-                
+
                 // Check if we've exceeded max wait time
                 if (Date.now() - startTime >= maxWaitMs) {
                     console.log('[KefinTweaks Startup] Timeout waiting for user login');
                     resolve(false);
                     return;
                 }
-                
+
                 // Continue checking
                 setTimeout(checkAdmin, checkInterval);
             };
-            
+
             checkAdmin();
         });
     }
@@ -833,7 +850,7 @@
 
             const plugins = await response.json();
             const pluginsList = Array.isArray(plugins) ? plugins : (plugins.Items || []);
-            
+
             const plugin = pluginsList.find(p => p.Name === pluginName);
             return plugin ? plugin.Id : null;
         } catch (error) {
@@ -927,7 +944,7 @@
             }
 
             console.log('[KefinTweaks Startup] Ensuring Watchlist tab exists in CustomTabs...');
-            
+
             const pluginId = await findPlugin('Custom Tabs');
             if (!pluginId) {
                 console.warn('[KefinTweaks Startup] CustomTabs plugin not found');
@@ -937,7 +954,7 @@
             // Get current CustomTabs config
             const server = ApiClient._serverAddress;
             const token = ApiClient.accessToken();
-            
+
             const response = await fetch(`${server}/CustomTabs/Config`, {
                 headers: {
                     'X-Emby-Token': token
@@ -955,7 +972,7 @@
 
             // Find watchlist tab by checking if the ContentHtml includes div class=\"sections watchlist\"
             const watchlistTab = tabs.find(tab => tab.ContentHtml.includes('sections watchlist'));
-            
+
             if (watchlistTab) {
                 console.log('[KefinTweaks Startup] Watchlist tab already exists with correct ContentHtml');
                 return true;
@@ -980,16 +997,16 @@
     // Startup task - runs only for admin users
     async function startupTask() {
         console.log('[KefinTweaks Startup] Starting startup task...');
-        
+
         // Check if kefinTweaksRoot is configured - startup tasks only run after installation
         if (!window.KefinTweaksConfig?.kefinTweaksRoot || window.KefinTweaksConfig.kefinTweaksRoot === '') {
             console.log('[KefinTweaks Startup] kefinTweaksRoot is not configured, skipping startup tasks');
             return;
         }
-        
+
         // Check if user is admin (wait up to 5s for login)
         const isAdmin = await checkAdminWithTimeout(5000);
-        
+
         if (!isAdmin) {
             console.log('[KefinTweaks Startup] User is not admin or not logged in, skipping startup task');
             return;
@@ -998,7 +1015,7 @@
         try {
             // Task: Ensure Watchlist tab exists in CustomTabs
             await ensureWatchlistTab();
-            
+
             console.log('[KefinTweaks Startup] Startup task completed successfully');
         } catch (error) {
             console.error('[KefinTweaks Startup] Error in startup task:', error);
@@ -1021,7 +1038,7 @@
             setTimeout(startupTask, 1000);
         })();
     }
-    
+
     console.log('[KefinTweaks Injector] Injector script loaded. Available at window.KefinTweaks');
-    
+
 })();
