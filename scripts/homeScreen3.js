@@ -886,6 +886,9 @@
             for (let i = 0; i <= 8; i++) {
                 const homeSection = customPrefs[`homesection${i}`];
 
+                if (!homeSection) {
+                    continue;
+                }
                 if (homeSection.toLowerCase() === 'nextup' && state.kefinNextUp) {
                     continue;
                 }
