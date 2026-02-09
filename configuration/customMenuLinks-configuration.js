@@ -64,6 +64,7 @@
                     <div class="listItemContent">
                         <div class="listItemBodyText" style="margin-bottom: 0.5em;">Custom Menu Links JSON</div>
                         <div class="listItemBodyText secondary" style="margin-bottom: 0.75em; font-size: 0.9em;">Add custom menu links that will appear in the custom menu. Use Material icon names for icons.</div>
+                        <div class="listItemBodyText secondary" style="margin-bottom: 0.75em; font-size: 0.9em;">These links are not added by modifying your config.json, so if you wish for these to appear on supported third party clients which don't use jellyfin-web, you will want to manually edit your config.json rather than adding the links here. You can find the information about doing that <a href="https://jellyfin.org/docs/general/clients/web-config/#custom-menu-links">here</a>.</div>
                         <textarea id="customMenuLinksJson" class="fld emby-textarea" rows="12" placeholder='[{"name":"Link Name","icon":"link","url":"#/..."}]' style="width: 100%; font-family: monospace; font-size: 0.9em; line-height: 1.5;">${JSON.stringify(config, null, 2)}</textarea>
                         <details style="margin-top: 0.75em;">
                             <summary class="listItemBodyText secondary" style="font-size: 0.9em; color: #4a9eff; cursor: pointer;">View Example Format</summary>
