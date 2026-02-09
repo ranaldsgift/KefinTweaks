@@ -348,6 +348,11 @@
      */
     async function verifyRecentlyAddedInLibraryConfig(config) {
         try {
+            if (!window.ApiClient || !window.ApiClient._loggedIn) {
+                WARN('User not logged in, skipping recently-added verification');
+                return config;
+            }
+
             if (!window.dataHelper || !window.dataHelper.getLibraries) {
                 WARN('dataHelper.getLibraries not available, skipping recently-added verification');
                 return config;
@@ -2179,7 +2184,7 @@
             <div style="display: grid; gap: 0.75em;">
                 <!-- Parent Item Dropdown -->
                 ${buildSelect(`query-${queryIndex}-parentItemType`, [
-                    { value: '', label: 'Select a Parent...' },
+                    { value: '', label: 'Select a Parent... (optional)' },
                     { value: 'Collection', label: 'Collection' },
                     { value: 'Playlist', label: 'Playlist' },
                     { value: 'Generic Parent', label: 'Generic Parent' }

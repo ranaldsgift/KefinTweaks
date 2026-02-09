@@ -1329,6 +1329,9 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         const maxRetries = 100; // 10 seconds (100 * 100ms)
         
         try {
+            // Check if there is a valid config with a root url already, and load the injector if so
+            checkAndLoadInjector();
+
             // Check if ApiClient is available and user is logged in
             if (!window.ApiClient || !window.ApiClient._loggedIn) {
                 if (retryCount < maxRetries) {
@@ -1341,9 +1344,6 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                     return;
                 }
             }
-
-            // Check if there is a valid config with a root url already, and load the injector if so
-            checkAndLoadInjector();
 
             // Check if user is admin
             const userIsAdmin = await isAdmin();

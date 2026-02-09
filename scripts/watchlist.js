@@ -4616,10 +4616,12 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	}
 
 	// Initialize monitoring to remove watched items from watchlist (playback + manual)
-	function initializePlaybackMonitoring() {
+	async function initializePlaybackMonitoring() {
 		if (playbackMonitorInitialized) {
 			return;
 		}
+
+		await window.userHelper.waitForLogin();
 
 		const maxRetries = 10;
 		let retries = 0;

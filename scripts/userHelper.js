@@ -13,6 +13,28 @@
             throw new Error('ApiClient is not available');
         }
     }
+
+    function ensureLoggedIn() {
+        if (typeof ApiClient === 'undefined' || !ApiClient) {
+            throw new Error('ApiClient is not available');
+        }
+        if (!ApiClient._loggedIn) {
+            throw new Error('User is not logged in');
+        }
+    }
+
+    // Run this on a separate thread to avoid blocking the main thread with requestIdleCallback
+    async function waitForLogin() {
+        return new Promise((resolve) => {
+            requestIdleCallback(() => {
+                if (window.ApiClient && window.ApiClient._loggedIn) {
+                    resolve(true);
+                } else {
+                    setTimeout(() => waitForLogin(), 100);
+                }
+            });
+        });
+    }
     
     /**
      * API Helper functions for Jellyfin operations
@@ -20,6 +42,7 @@
     const userHelper = {
         getUserDisplayPreferences: async function() {
             ensureApiClient();
+            ensureLoggedIn();
 
             let cachedDisplayPreferences = null;
             
@@ -63,13 +86,16 @@
             return { promise: userDisplayPreferencesPromise, cached: cachedDisplayPreferences };
         },
         useEpisodeImages: async function() {
-            const { promise, cached } = await this.getUserDisplayPreferences();
-            const userDisplayPreferences = await promise;
-            if (!userDisplayPreferences) {
-                LOG('No user display preferences found');
+            try {
+                ensureApiClient();
+                ensureLoggedIn();
+                const { promise, cached } = await this.getUserDisplayPreferences();
+                const userDisplayPreferences = await promise;
+                return userDisplayPreferences.CustomPrefs?.useEpisodeImagesInNextUpAndResume === 'true';
+            } catch (error) {
+                WARN('Failed to load user display preferences for useEpisodeImages:', error);
                 return false;
             }
-            return userDisplayPreferences.CustomPrefs?.useEpisodeImagesInNextUpAndResume === 'true';
         },
         updateCustomPrefsByKey: async function(key, value) {
             const { promise, cached } = await this.getUserDisplayPreferences();
@@ -96,7 +122,8 @@
                 body: JSON.stringify(prefs)
             });
             return response.ok;
-        }
+        },
+        waitForLogin: waitForLogin
     };
 
     // TODO -- Update this whenever the user display preferences are updated

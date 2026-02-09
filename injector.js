@@ -19,36 +19,41 @@
             return "Pending Install"; // Fallback
         }
         
-    // Match version patterns: @commitHash, @latest, @main, or @v0.3.3
-    // Note: check for hash first to avoid partial numeric matches (e.g. hash starting with digits)
-    const versionMatch = root.match(/@([a-f0-9]{7,}|latest|main|v?[\d.]+)/i);
-    
-    if (versionMatch) {
-        const version = versionMatch[1];
+        // Match version patterns: @commitHash, @latest, @main, @experimental, or @v0.3.3
+        // Note: check for hash first to avoid partial numeric matches (e.g. hash starting with digits)
+        const versionMatch = root.match(/@([a-f0-9]{7,}|latest|main|experimental|v?[\d.]+)/i);
         
-        // Handle version tags (v0.3.3 -> 0.3.3)
-        if (version.startsWith('v') && /^\d+\.\d+\.\d+/.test(version.substring(1))) {
-            return version.substring(1); // Remove 'v' prefix
+        if (versionMatch) {
+            const version = versionMatch[1];
+            
+            // Handle version tags (v0.3.3 -> 0.3.3)
+            if (version.startsWith('v') && /^\d+\.\d+\.\d+/.test(version.substring(1))) {
+                return version.substring(1); // Remove 'v' prefix
+            }
+            
+            // Handle @main -> "development"
+            if (version.toLowerCase() === 'main') {
+                return 'development';
+            }
+            
+            // Handle @experimental -> "experimental"
+            if (version.toLowerCase() === 'experimental') {
+                return 'experimental';
+            }
+            
+            // Handle @latest -> "latest"
+            if (version.toLowerCase() === 'latest') {
+                return 'latest';
+            }
+            
+            // Handle commit hash -> show as "Dev (#hash)"
+            if (/^[a-f0-9]{7,}$/i.test(version)) {
+                return `Dev (#${version.substring(0, 7)})`;
+            }
+            
+            // Return as-is for other patterns
+            return version;
         }
-        
-        // Handle @main -> "Dev"
-        if (version.toLowerCase() === 'main') {
-            return 'development';
-        }
-        
-        // Handle @latest -> "latest"
-        if (version.toLowerCase() === 'latest') {
-            return 'latest';
-        }
-        
-        // Handle commit hash -> show as "Dev (#hash)"
-        if (/^[a-f0-9]{7,}$/i.test(version)) {
-            return `Dev (#${version.substring(0, 7)})`;
-        }
-        
-        // Return as-is for other patterns
-        return version;
-    }
         
         // No version found in URL, this is a custom install
         return "Custom Install";
@@ -75,6 +80,8 @@
         seriesInfo: true,         // Add series and season information to details pages
         collections: true,         // Collection sorting functionality
         skinManager: true,        // Skin selection and management
+        thumbnailScrubber: false,  // Trickplay thumbnail scrub on hover (bottom 20px of video cards)
+        
         // Note: Core functionality scripts (utils, cardBuilder, localStorageCache, modal) 
         // are automatically enabled when needed by other scripts
         
@@ -285,7 +292,7 @@
             name: 'homeScreen',
             script: 'homeScreen3.js',
             css: 'homeScreen.css',
-            dependencies: ['cardBuilder', 'localStorageCache', 'utils', 'homeScreenConfig2', 'homeScreen-configuration', 'peopleCache', 'studiosCache', 'moviesCache', 'indexedDBCache', 'homeScreenConfigCommunity', 'dataHelper', 'apiHelper', 'websocketHelper', 'homeScreen-migration', 'homeScreen-user-configuration'],
+            dependencies: ['cardBuilder', 'localStorageCache', 'utils', 'homeScreenConfig2', 'homeScreen-configuration', 'peopleCache', 'studiosCache', 'moviesCache', 'indexedDBCache', 'homeScreenConfigCommunity', 'dataHelper', 'apiHelper', 'homeScreen-migration', 'homeScreen-user-configuration'],
             priority: true, // Load immediately after dependencies to reduce UI disruption
             description: 'Adds custom home screen sections'
         },
@@ -330,6 +337,13 @@
             css: null,
             dependencies: [],
             description: 'Fixes the dashboard button to redirect to the home page when the back button is clicked and there is no history to go back to'
+        },
+        {
+            name: 'thumbnailScrubber',
+            script: 'thumbnailScrubber.js',
+            css: null,
+            dependencies: [],
+            description: 'Shows trickplay thumbnail preview when hovering in the bottom 20px of a video card for 2+ seconds'
         },
         {
             name: 'infiniteScroll',
@@ -509,11 +523,12 @@
         return true;
     }
     
-    // Resolve @latest or @main to actual version/commit hash
+    // Resolve @latest, @main, or @experimental to actual version/commit hash (so user always loads latest from that ref)
     async function resolveRootVersion(root) {
-        // Check if root contains @latest or @main
+        // Check if root contains @latest, @main, or @experimental
         const latestMatch = root.match(/@latest(\/|$)/);
         const mainMatch = root.match(/@main(\/|$)/);
+        const experimentalMatch = root.match(/@experimental(\/|$)/);
         
         if (latestMatch) {
             // Fetch the latest release version number
@@ -556,6 +571,26 @@
                 console.warn('[KefinTweaks Injector] Error fetching commit hash:', error);
                 return root;
             }
+        } else if (experimentalMatch) {
+            // Fetch the latest commit hash from the experimental branch
+            try {
+                const response = await fetch('https://api.github.com/repos/ranaldsgift/KefinTweaks/commits/experimental');
+                if (response.ok) {
+                    const commit = await response.json();
+                    if (commit && commit.sha) {
+                        return root.replace('@experimental', `@${commit.sha}`);
+                    } else {
+                        console.warn('[KefinTweaks Injector] Could not fetch experimental commit hash, using @experimental');
+                        return root;
+                    }
+                } else {
+                    console.warn('[KefinTweaks Injector] Failed to fetch experimental commit hash, using @experimental');
+                    return root;
+                }
+            } catch (error) {
+                console.warn('[KefinTweaks Injector] Error fetching experimental commit hash:', error);
+                return root;
+            }
         }
         
         // No resolution needed
@@ -575,7 +610,7 @@
         // Ensure root ends with /
         let root = kefinTweaksRoot.endsWith('/') ? kefinTweaksRoot : kefinTweaksRoot + '/';
         
-        // Resolve @latest or @main if needed (with caching)
+        // Resolve @latest, @main, or @experimental if needed (with caching)
         if (resolvedRootCache === null) {
             root = await resolveRootVersion(root);
             resolvedRootCache = root;
