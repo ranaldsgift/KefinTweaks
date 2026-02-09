@@ -2203,7 +2203,7 @@
                 <span>Import</span>
             </button>
             <button class="emby-button raised block button-delete" id="resetAllUsersBtn" style="padding: 0.75em 2em; font-size: 1em; font-weight: 500;">
-                <span>Save & Reset All Users Local Settings</span>
+                <span>Reset All Users Local Settings</span>
             </button>
         `;
 
