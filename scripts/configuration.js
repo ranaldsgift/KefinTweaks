@@ -2196,14 +2196,14 @@
             <button class="emby-button raised" id="resetConfigBtn" style="padding: 0.75em 2em; font-size: 1em;">
                 <span>Defaults</span>
             </button>
-            <button class="emby-button raised" id="resetAllUsersBtn" style="padding: 0.75em 2em; font-size: 1em; background: rgba(200, 0, 0, 0.5);">
-                <span>Reset All User Settings</span>
-            </button>
             <button class="emby-button raised" id="exportConfigBtn" style="padding: 0.75em 2em; font-size: 1em;">
                 <span>Export</span>
             </button>
             <button class="emby-button raised" id="importConfigBtn" style="padding: 0.75em 2em; font-size: 1em;">
                 <span>Import</span>
+            </button>
+            <button class="emby-button raised block button-submit" id="resetAllUsersBtn" style="padding: 0.75em 2em; font-size: 1em; background: var(--btnDeleteColor);">
+                <span>Save & Reset All Users Local Settings</span>
             </button>
         `;
 
