@@ -2202,7 +2202,7 @@
             <button class="emby-button raised" id="importConfigBtn" style="padding: 0.75em 2em; font-size: 1em;">
                 <span>Import</span>
             </button>
-            <button class="emby-button raised block button-submit" id="resetAllUsersBtn" style="padding: 0.75em 2em; font-size: 1em; background: var(--btnDeleteColor);">
+            <button class="emby-button raised block button-delete" id="resetAllUsersBtn" style="padding: 0.75em 2em; font-size: 1em; font-weight: 500;">
                 <span>Save & Reset All Users Local Settings</span>
             </button>
         `;
