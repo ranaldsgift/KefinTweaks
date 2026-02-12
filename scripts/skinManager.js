@@ -998,8 +998,9 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
      * @param {string} skinName - The skin name
      */
     function loadOptionalIncludeCSS(url, skinName) {
-        // Check if this CSS is already loaded
-        if (loadedOptionalIncludesUrls.has(url)) {
+        // Check if this CSS is already loaded in the DOM
+        const existingLink = document.querySelector(`link[href="${url}"]`);
+        if (existingLink) {
             LOG(`Optional include CSS already loaded: ${url}`);
             return;
         }
@@ -2859,9 +2860,6 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         
         // Step 1: Load the new CSS first (gets cached and starts loading)
         requestAnimationFrame(async () => {
-            // Load optional includes for this skin
-            loadOptionalIncludes(skin);
-
             const cssUrls = await getSkinUrlsForCurrentVersion(skin);
             
             if (!cssUrls || cssUrls.length === 0) {
@@ -2875,6 +2873,9 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                     loadSkinCSS(url, skin.name);
                 }
             });
+
+            // Load optional includes for this skin
+            loadOptionalIncludes(skin);
         });
     }
     
