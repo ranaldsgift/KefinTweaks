@@ -12,6 +12,11 @@
     const SCRUB_ACTIVATION_DELAY_MS = 300;
     const PROGRESS_BAR_WIDTH_PERCENT = 95;
 
+    // Passive hover preview defaults (can be overridden by config)
+    const HOVER_PREVIEW_DEFAULT_ENABLED = false;
+    const HOVER_PREVIEW_DEFAULT_TIMEOUT_MS = 800;
+    const HOVER_PREVIEW_DEFAULT_FRAME_MS = 333;
+
     const VIDEO_TYPES = ['Movie', 'Episode'];
 
     /** Ticks are 100-nanosecond units; 10_000 ticks = 1 ms */
@@ -30,6 +35,8 @@
      */
     let currentCardState = null;
     let rafId = null;
+    let hoverPreviewRafId = null;
+    let hoverPreviewIntervalId = null;
 
     if (!document.getElementById('kefin-scrubber-styles')) {
         const style = document.createElement('style');
@@ -141,8 +148,96 @@
             .kefin-scrubber-overlay[data-no-trickplay] {
                 display: none !important;
             }
+
+            /* Passive hover preview: dedicated clipped box so only one tile is visible */
+            .cardImageContainer .kefin-hover-preview-box {
+                position: absolute;
+                left: 0;
+                right: 0;
+                top: 50%;
+                transform: translateY(-50%);
+                margin: 0 auto;
+                overflow: hidden;
+                pointer-events: none;
+                z-index: 18;
+            }
+            .cardImageContainer .kefin-hover-preview-frame {
+                width: 100%;
+                height: 100%;
+                background-repeat: no-repeat;
+            }
         `;
         document.head.appendChild(style);
+    }
+
+    /**
+     * Read thumbnail scrubber configuration from global config.
+     * Returns { previewOnHover: boolean, hoverTimeoutMs: number, scrubActivationDelayMs: number, hoverPreviewFrameMs?: number }.
+     */
+    function getThumbnailScrubberConfig() {
+        const root = (window.KefinTweaksConfig && window.KefinTweaksConfig.thumbnailScrubber) || {};
+        const previewOnHover = root.PreviewOnHover === true;
+
+        // Hover start delay (ms) - prefer HOVER_PREVIEW_TIMEOUT_MS, fall back to legacy HOVER_TIMEOUT.
+        const hoverDelayRaw = root.HOVER_PREVIEW_TIMEOUT_MS != null ? root.HOVER_PREVIEW_TIMEOUT_MS : root.HOVER_TIMEOUT;
+        const hoverTimeoutMs = Number.isFinite(hoverDelayRaw * 1)
+            ? Math.max(0, hoverDelayRaw * 1)
+            : HOVER_PREVIEW_DEFAULT_TIMEOUT_MS;
+
+        // Scrub activation delay override (ms) - fall back to default constant.
+        const scrubDelayRaw = root.SCRUB_ACTIVATION_DELAY_MS;
+        const scrubActivationDelayMs = Number.isFinite(scrubDelayRaw * 1) && scrubDelayRaw >= 0
+            ? scrubDelayRaw * 1
+            : SCRUB_ACTIVATION_DELAY_MS;
+
+        // Optional override for hover preview frame speed (ms between frames).
+        const hoverPreviewFrameMs = Number.isFinite(root.HOVER_PREVIEW_FRAME_MS * 1) && root.HOVER_PREVIEW_FRAME_MS > 0
+            ? root.HOVER_PREVIEW_FRAME_MS * 1
+            : null;
+
+        return {
+            previewOnHover: previewOnHover ?? HOVER_PREVIEW_DEFAULT_ENABLED,
+            hoverTimeoutMs,
+            scrubActivationDelayMs,
+            hoverPreviewFrameMs
+        };
+    }
+
+    function isHoverPreviewEnabled() {
+        try {
+            return !!getThumbnailScrubberConfig().previewOnHover;
+        } catch (e) {
+            WARN('Error reading hover preview config', e);
+            return HOVER_PREVIEW_DEFAULT_ENABLED;
+        }
+    }
+
+    function getHoverPreviewTimeoutMs() {
+        try {
+            return getThumbnailScrubberConfig().hoverTimeoutMs || HOVER_PREVIEW_DEFAULT_TIMEOUT_MS;
+        } catch (e) {
+            WARN('Error reading hover timeout config', e);
+            return HOVER_PREVIEW_DEFAULT_TIMEOUT_MS;
+        }
+    }
+
+    function getHoverPreviewFrameIntervalMs() {
+        try {
+            const cfg = getThumbnailScrubberConfig();
+            return cfg.hoverPreviewFrameMs || HOVER_PREVIEW_DEFAULT_FRAME_MS;
+        } catch (e) {
+            WARN('Error reading hover frame interval config', e);
+            return null;
+        }
+    }
+
+    function getScrubActivationDelayMs() {
+        try {
+            return getThumbnailScrubberConfig().scrubActivationDelayMs || SCRUB_ACTIVATION_DELAY_MS;
+        } catch (e) {
+            WARN('Error reading scrub activation delay config', e);
+            return SCRUB_ACTIVATION_DELAY_MS;
+        }
     }
 
     /**
@@ -597,9 +692,41 @@
         }
     }
 
+    function stopHoverPreview() {
+        if (!currentCardState) return;
+        const state = currentCardState;
+        if (state.hoverPreviewTimer) {
+            clearTimeout(state.hoverPreviewTimer);
+            state.hoverPreviewTimer = null;
+        }
+        state.hoverPreviewRunning = false;
+        if (hoverPreviewRafId != null) {
+            cancelAnimationFrame(hoverPreviewRafId);
+            hoverPreviewRafId = null;
+        }
+        if (hoverPreviewIntervalId != null) {
+            clearInterval(hoverPreviewIntervalId);
+            hoverPreviewIntervalId = null;
+        }
+        if (state.cardImageContainer) {
+            const box = state.cardImageContainer.querySelector('.kefin-hover-preview-box');
+            if (box && box._frame) {
+                box._frame.style.backgroundImage = '';
+                box._frame.style.backgroundPositionX = '';
+                box._frame.style.backgroundPositionY = '';
+                box._frame.style.backgroundSize = '';
+            }
+            if (box) {
+                box.style.height = '';
+                box.style.width = '';
+            }
+        }
+    }
+
     function teardown() {
         if (!currentCardState) return;
         clearActivationTimer();
+        stopHoverPreview();
         if (currentCardState.overlay) {
             const overlay = currentCardState.overlay;
             overlay.classList.remove('is-visible', 'is-zone-active', 'is-popover-open');
@@ -614,6 +741,148 @@
         }
     }
 
+    function startHoverPreviewLoop() {
+        if (!currentCardState || !currentCardState.hoverPreviewRunning || !currentCardState.scrubberData) {
+            hoverPreviewRafId = null;
+            return;
+        }
+
+        const state = currentCardState;
+        const data = state.scrubberData;
+        const container = state.cardImageContainer;
+        if (!container || typeof ApiClient === 'undefined') {
+            state.hoverPreviewRunning = false;
+            hoverPreviewRafId = null;
+            return;
+        }
+
+        const runTimeTicks = data.runTimeTicks || 0;
+        if (runTimeTicks <= 0) {
+            state.hoverPreviewRunning = false;
+            hoverPreviewRafId = null;
+            return;
+        }
+
+        // Base trickplay interval (ms) comes from server metadata.
+        const baseIntervalMs = data.trickplayInfo && data.trickplayInfo.Interval ? data.trickplayInfo.Interval : 10000;
+
+        // Optional override from config for hover preview speed (ms between frames).
+        const configuredIntervalMs = getHoverPreviewFrameIntervalMs();
+
+        // Draw initial frame immediately at current positionTicks using original trickplay aspect ratio.
+        const renderFrame = () => {
+            if (!currentCardState || !currentCardState.hoverPreviewRunning || currentCardState.card !== state.card) {
+                return;
+            }
+
+            const rect = container.getBoundingClientRect();
+            const cw = rect.width || 0;
+            // Maintain trickplay aspect ratio (16:9 by default) regardless of poster aspect.
+            const ch = Math.round(cw / PREVIEW_ASPECT) || 0;
+
+            // Create or reuse a clipped hover preview box inside the card image.
+            let box = container.querySelector('.kefin-hover-preview-box');
+            if (!box) {
+                box = document.createElement('div');
+                box.className = 'kefin-hover-preview-box';
+                const frame = document.createElement('div');
+                frame.className = 'kefin-hover-preview-frame';
+                box.appendChild(frame);
+                box._frame = frame;
+                container.appendChild(box);
+            }
+            const frameEl = box._frame || box.firstElementChild || box;
+
+            box.style.width = cw + 'px';
+            box.style.height = ch + 'px';
+
+            const positionTicks = state.hoverPreviewPositionTicks || 0;
+
+            const style = getTrickplayStyle(
+                ApiClient,
+                state.itemId,
+                data.trickplayInfo,
+                data.mediaSourceId,
+                positionTicks,
+                cw,
+                ch
+            );
+
+            frameEl.style.backgroundImage = style.backgroundImage;
+            frameEl.style.backgroundPositionX = style.backgroundPositionX;
+            frameEl.style.backgroundPositionY = style.backgroundPositionY;
+            frameEl.style.backgroundSize = style.backgroundSize != null ? style.backgroundSize : 'auto';
+        };
+
+        // Initial draw
+        renderFrame();
+
+        // Clear any previous interval to avoid duplicates
+        if (hoverPreviewIntervalId != null) {
+            clearInterval(hoverPreviewIntervalId);
+            hoverPreviewIntervalId = null;
+        }
+
+        // Advance exactly one tile per tick, using the base trickplay interval for distance in ticks
+        // so we always land on real trickplay frame boundaries, even if the visual speed is overridden.
+        hoverPreviewIntervalId = setInterval(() => {
+            if (!currentCardState || !currentCardState.hoverPreviewRunning || currentCardState.card !== state.card) {
+                clearInterval(hoverPreviewIntervalId);
+                hoverPreviewIntervalId = null;
+                return;
+            }
+
+            const advanceTicks = baseIntervalMs * TICKS_PER_MS;
+            const currentTicks = (state.hoverPreviewPositionTicks || 0) + advanceTicks;
+            const wrappedTicks = currentTicks % runTimeTicks;
+            state.hoverPreviewPositionTicks = wrappedTicks;
+
+            renderFrame();
+        }, configuredIntervalMs);
+    }
+
+    async function ensureScrubberDataForHover(state) {
+        if (!state) return;
+        if (state.scrubberData) return;
+        const data = await getScrubberData(state.itemId);
+        if (!data) {
+            if (state.overlay) {
+                state.overlay.setAttribute('data-no-trickplay', 'true');
+                state.overlay.classList.remove('is-visible', 'is-zone-active');
+            }
+            return;
+        }
+        state.scrubberData = data;
+    }
+
+    async function maybeStartHoverPreview() {
+        if (!currentCardState || !isHoverPreviewEnabled()) return;
+        const state = currentCardState;
+        if (state.hoverPreviewRunning || state.hoverPreviewTimer) return;
+
+        const timeoutMs = getHoverPreviewTimeoutMs();
+        const timeout = timeoutMs < 0 ? 0 : timeoutMs;
+
+        state.hoverPreviewTimer = setTimeout(async () => {
+            state.hoverPreviewTimer = null;
+            if (!currentCardState || currentCardState.card !== state.card) return;
+            await ensureScrubberDataForHover(state);
+            if (!currentCardState || currentCardState.card !== state.card) return;
+            state.hoverPreviewRunning = true;
+            state.hoverPreviewLastTs = performance.now();
+            // Start from card's data-positionticks when available, otherwise from 0.
+            const posAttr = state.card && state.card.getAttribute
+                ? state.card.getAttribute('data-positionticks')
+                : null;
+            const startTicks = posAttr && !Number.isNaN(Number(posAttr))
+                ? Number(posAttr)
+                : 0;
+            state.hoverPreviewPositionTicks = startTicks;
+            state.hoverPreviewFrameAccumMs = 0;
+            startHoverPreviewLoop();
+        }, timeout);
+    }
+
     function attachCard(ctx) {
         if (!ctx) return;
         const overlay = getOrCreateScrubberOverlay(ctx.cardImageContainer);
@@ -626,9 +895,17 @@
             activationTimer: null,
             scrubberData: null,
             lastClientX: 0,
-            lastClientY: 0
+            lastClientY: 0,
+            hoverPreviewTimer: null,
+            hoverPreviewRunning: false,
+            hoverPreviewLastTs: 0,
+            hoverPreviewPositionTicks: 0,
+            hoverPreviewFrameAccumMs: 0
         };
         overlay.classList.add('is-visible');
+        if (isHoverPreviewEnabled()) {
+            maybeStartHoverPreview();
+        }
     }
 
     function getDelegationRoot() {
@@ -709,12 +986,17 @@
         const overlay = state.overlay;
 
         if (inZone) {
+            // When user actively scrubs, stop passive hover preview
+            if (isHoverPreviewEnabled()) {
+                stopHoverPreview();
+            }
             if (overlay.hasAttribute('data-no-trickplay')) return;
             if (!state.activationTimer) {
+                const delayMs = getScrubActivationDelayMs();
                 state.activationTimer = setTimeout(() => {
                     state.activationTimer = null;
                     activateScrubberForCurrentCard();
-                }, SCRUB_ACTIVATION_DELAY_MS);
+                }, delayMs);
             }
             scheduleUIUpdate();
         } else {
@@ -723,6 +1005,11 @@
                 if (overlay._progressFill) overlay._progressFill.style.width = '0%';
             }
             if (!overlay._popoverOpen) clearActivationTimer();
+
+            // Outside scrub zone but still on card - ensure hover preview timer is running
+            if (isHoverPreviewEnabled() && !state.hoverPreviewRunning && !state.hoverPreviewTimer) {
+                maybeStartHoverPreview();
+            }
         }
     }
 

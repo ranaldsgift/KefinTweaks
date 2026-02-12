@@ -339,10 +339,17 @@
             description: 'Fixes the dashboard button to redirect to the home page when the back button is clicked and there is no history to go back to'
         },
         {
+            name: 'thumbnailScrubber-configuration',
+            script: '../configuration/thumbnailScrubber-configuration.js',
+            css: null,
+            dependencies: ['modal', 'toaster', 'utils'],
+            description: 'Thumbnail scrubber configuration for KefinTweaks'
+        },
+        {
             name: 'thumbnailScrubber',
             script: 'thumbnailScrubber.js',
             css: null,
-            dependencies: [],
+            dependencies: ['thumbnailScrubber-configuration'],
             description: 'Shows trickplay thumbnail preview when hovering in the bottom 20px of a video card for 2+ seconds'
         },
         {
@@ -750,7 +757,7 @@
     }
 
     async function loadConfigurationJS() {
-        const configDependencyNames = ['modal', 'toaster', 'utils', 'homeScreenConfig2', 'ui', 'homeScreen-migration', 'homeScreen-configuration', 'search-configuration', 'seriesEpisodes-configuration', 'seriesInfo-configuration', 'skinManager-configuration', 'customMenuLinks-configuration'];
+        const configDependencyNames = ['modal', 'toaster', 'utils', 'homeScreenConfig2', 'ui', 'homeScreen-migration', 'homeScreen-configuration', 'search-configuration', 'seriesEpisodes-configuration', 'seriesInfo-configuration', 'skinManager-configuration', 'customMenuLinks-configuration', 'thumbnailScrubber-configuration'];
         for (const depName of configDependencyNames) {
             const depScript = SCRIPT_DEFINITIONS.find(script => script.name === depName);
             if (depScript) {
