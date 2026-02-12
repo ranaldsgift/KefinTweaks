@@ -665,15 +665,19 @@
                     style.id = 'kefinTweaks-nextUpEpisode-style';
                     const escapedHeaderText = nextUpHeaderText.replace(/'/g, "\\'").replace(/"/g, '\\"');
                     style.textContent = `
-                        .nextUpEpisode .cardScalable::after {
+                        .nextUpEpisode:not(.nextUpEpisode ~ .nextUpEpisode) .cardScalable::after {
                             content: '${escapedHeaderText}';
                             position: absolute;
-                            transform: translateY(-100%);
-                            padding: 0.5em 1em;
-                            width: calc(100% - 2em);
+                            transform: translateY(0);
+                            top: 0.5em;
+                            left: 0.5em;
+                            padding: 0.25em 0.5em;
                             text-align: center;
-                            background: linear-gradient(90deg, transparent, black, transparent);
-                            font-size: 1.2em;
+                            background: rgb(0 0 0 / 85%);
+                            font-size: 1.1em;
+                            border: 1px solid rgb(255 255 255 / 40%);
+                            border-radius: 5px;
+                            pointer-events: none;
                         }
                     `;
                     document.head.appendChild(style);
@@ -681,34 +685,46 @@
                 }
                 
                 // Add nextUpEpisode class if not S1E1
-                if (targetEpisodeNumber.season !== 1 || targetEpisodeNumber.episode !== 1) {
-                    setTimeout(() => {
-                        const scrollerItemsContainer = scrollerContainer.querySelector('.itemsContainer');
-                        if (scrollerItemsContainer) {
-                            const cards = scrollerItemsContainer.querySelectorAll('.card');
-                            for (const card of cards) {
-                                const cardTextLinks = card.querySelectorAll('.cardText a');
-                                for (const link of cardTextLinks) {
-                                    const linkText = link.innerText || link.textContent;
-                                    const match = linkText.match(/S(\d+):E(\d+)/);
-                                    if (match && 
-                                        parseInt(match[1], 10) === targetEpisodeNumber.season &&
-                                        parseInt(match[2], 10) === targetEpisodeNumber.episode) {
-                                        card.classList.add('nextUpEpisode');
-                                        LOG(`Added nextUpEpisode class to card S${targetEpisodeNumber.season}:E${targetEpisodeNumber.episode}`);
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                    }, 100);
-                }
-                
-                scrollToEpisode(scrollerContainer, targetEpisodeNumber);
+                updateNextUpItem(targetEpisodeNumber, scrollerContainer);
             }
         }
 
         LOG(`Successfully rendered episodes section for season ${targetSeason.indexNumber} with ${episodes.length} episodes`);
+    }
+
+    function updateNextUpItem(targetEpisodeNumber, scrollerContainer) {              
+        // Remove existing nextUpEpisode class
+        const existingNextUpEpisodes = scrollerContainer.querySelectorAll('.nextUpEpisode');
+        if (existingNextUpEpisodes.length > 0) {
+            for (const existingNextUpEpisode of existingNextUpEpisodes) {
+                existingNextUpEpisode.classList.remove('nextUpEpisode');
+                LOG(`Removed nextUpEpisode class from card S${targetEpisodeNumber.season}:E${targetEpisodeNumber.episode}`);
+            }
+        }        
+        
+        // Add nextUpEpisode class if not S1E1
+        if (targetEpisodeNumber.season !== 1 || targetEpisodeNumber.episode !== 1) {
+            const scrollerItemsContainer = scrollerContainer.querySelector('.itemsContainer');
+            if (scrollerItemsContainer) {
+                const cards = scrollerItemsContainer.querySelectorAll('.card');
+                for (const card of cards) {
+                    const cardTextLinks = card.querySelectorAll('.cardText a');
+                    for (const link of cardTextLinks) {
+                        const linkText = link.innerText || link.textContent;
+                        const match = linkText.match(/S(\d+):E(\d+)/);
+                        if (match && 
+                            parseInt(match[1], 10) === targetEpisodeNumber.season &&
+                            parseInt(match[2], 10) === targetEpisodeNumber.episode) {
+                            card.classList.add('nextUpEpisode');
+                            LOG(`Added nextUpEpisode class to card S${targetEpisodeNumber.season}:E${targetEpisodeNumber.episode}`);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        
+        scrollToEpisode(scrollerContainer, targetEpisodeNumber);
     }
 
     /**
@@ -821,6 +837,36 @@
         activePage.dataset.seriesEpisodesProcessed = 'true';
     }
 
+    async function verifyNextUpItem(seriesId) {
+        const nextUpItem = await fetchNextUpEpisode(seriesId);
+
+        if (!nextUpItem) {
+            LOG('No Next Up item found, skipping');
+            return;
+        }
+
+        const currentNextUpItem = document.querySelector('.libraryPage:not(.hide) .nextUpEpisode');
+
+        if (currentNextUpItem.dataset.id === nextUpItem.Id) {
+            LOG('Next Up item is the same as the current one, skipping');
+            return;
+        }
+
+        const targetEpisodeNumber = nextUpItem ? {
+            season: nextUpItem.ParentIndexNumber,
+            episode: nextUpItem.IndexNumber,
+            id: nextUpItem.Id
+        } : null;
+
+        const scrollerContainer = document.querySelector('.libraryPage:not(.hide) .series-episodes-section .emby-scroller');
+        if (!scrollerContainer) {
+            LOG('Scroller container not found, skipping');
+            return;
+        }
+
+        updateNextUpItem(targetEpisodeNumber, scrollerContainer);
+    }
+
     /**
      * Initialize the series episodes hook
      */
@@ -838,22 +884,23 @@
                 const activePage = document.querySelector('.libraryPage:not(.hide)');
                 if (!activePage) return;
 
-                // Remove processed flag when page changes
-                if (activePage.dataset.seriesEpisodesProcessed) {
-                    //delete activePage.dataset.seriesEpisodesProcessed;
-                    LOG('Existing episodes section found, skipping');
-                    return;
-                }
-
-                // Remove any existing episodes section
                 const existingSection = activePage.querySelector('.series-episodes-section');
-                if (existingSection) {
-                    //existingSection.remove();
-                    LOG('Existing episodes section found, skipping');
+
+                if (activePage.dataset.seriesEpisodesProcessed || existingSection) {
+                    LOG('Existing episodes section found, only verifying NextUp item');
+                    const itemId = document.querySelector('.libraryPage:not(.hide) .btnPlaystate')?.dataset?.id;
+
+                    if (itemId) {
+                        verifyNextUpItem(itemId);
+                    }
                     return;
                 }
 
                 const item = await itemPromise;
+
+                if (!item || item.Type !== 'Series') {
+                    return;
+                }
 
                 if (item && item.Type === 'Series') {
                     LOG(`Found series: ${item.Id} (${item.Name})`);
