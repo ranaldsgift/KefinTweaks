@@ -84,8 +84,133 @@
             "type": "custom"
           }
         ]
+      },
+      {
+        "name": "Genre Sections",
+        "author": "HighImKevin",
+        "sections": [
+          {
+            "name": "Popular Movie Genres",
+            "enabled": true,
+            "order": 22,
+            "discoveryEnabled": false,
+            "renderMode": "Normal",
+            "cardFormat": "Thumb",
+            "queries": [
+              {
+                "path": "/Genres",
+                "queryOptions": {
+                  "IncludeItemTypes": [
+                    "Movie"
+                  ],
+                  "SortBy": "ChildCount",
+                  "SortOrder": "Descending",
+                  "Limit": 20
+                }
+              }
+            ],
+            "flattenSeries": false,
+            "id": "custom-1768961093582",
+            "ttl": 86400000,
+            "type": "custom"
+          },
+          {
+            "name": "Popular TV Genres",
+            "enabled": true,
+            "order": 100,
+            "discoveryEnabled": false,
+            "renderMode": "Normal",
+            "cardFormat": "Thumb",
+            "queries": [
+              {
+                "path": "/Genres",
+                "queryOptions": {
+                  "IncludeItemTypes": [
+                    "Series"
+                  ],
+                  "SortBy": "ChildCount",
+                  "SortOrder": "Descending",
+                  "Limit": 20
+                }
+              }
+            ],
+            "flattenSeries": false,
+            "id": "custom-1770808132827",
+            "ttl": 86400000,
+            "type": "custom"
+          }
+        ]
+      },
+      {
+        "name": "Prolific People [Discovery]",
+        "author": "HighImKevin",
+        "sections": [
+          {
+            "name": "Prolific Writers",
+            "enabled": true,
+            "order": 100,
+            "discoveryEnabled": true,
+            "renderMode": "Normal",
+            "cardFormat": "Poster",
+            "queries": [
+              {
+                "dataSource": "PeopleCache.getTopWriters",
+                "queryOptions": {
+                  "SortBy": "Random",
+                  "SortOrder": "Ascending",
+                  "Limit": 20
+                }
+              }
+            ],
+            "flattenSeries": false,
+            "id": "custom-1770810264918",
+            "type": "custom"
+          },
+          {
+            "name": "Prolific Directors",
+            "enabled": true,
+            "order": 100,
+            "discoveryEnabled": true,
+            "renderMode": "Normal",
+            "cardFormat": "Poster",
+            "queries": [
+              {
+                "dataSource": "PeopleCache.getTopDirectors",
+                "queryOptions": {
+                  "SortBy": "Random",
+                  "SortOrder": "Ascending",
+                  "Limit": 20
+                }
+              }
+            ],
+            "flattenSeries": false,
+            "id": "custom-1770810234128",
+            "type": "custom"
+          },
+          {
+            "name": "Prolific Actors",
+            "enabled": true,
+            "order": 250,
+            "discoveryEnabled": true,
+            "renderMode": "Normal",
+            "cardFormat": "Poster",
+            "queries": [
+              {
+                "dataSource": "PeopleCache.getTopActors",
+                "queryOptions": {
+                  "SortBy": "Random",
+                  "SortOrder": "Ascending",
+                  "Limit": 20
+                }
+              }
+            ],
+            "flattenSeries": false,
+            "id": "custom-1768973523242",
+            "type": "custom"
+          }
+        ]
       }
-        // Add more collections here
+      // Add more collections here
     ];
 
     // Expose to window

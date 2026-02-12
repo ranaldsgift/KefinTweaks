@@ -271,3 +271,7 @@ div#discovery-loading-indicator:not(.show)::after {
 .pageTabContent:has(.kefinHomeSectionsContainer[data-kefin-home-screen]) .homeSectionsContainer:not([data-kefin-home-screen]) {
     display: none !important;
 }
+
+.homeSectionsContainer > * {
+    content-visibility: auto;
+}

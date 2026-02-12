@@ -8,6 +8,10 @@
     const state = {
         useEpisodeImages: false,
     };
+
+    // Global toggle for progressive section fade-in.
+    // Developers can set this to false to disable the behavior.
+    const FADE_IN_SECTIONS = true;
     
     /**
      * Helper function to shuffle array (Fisher-Yates)
@@ -272,6 +276,20 @@
             processed = processed.filter(item => item.UserData?.PlayedPercentage && item.UserData?.PlayedPercentage > 0);
         }
 
+        // Check for SortBy ChildCount and use ChildCount to sort the items
+        // ChildCount = ChildCount + SeriesCount + EpisodeCount + AlbumCount + ArtistCount + ProgramCount + MovieCount + SongCount 
+        if (sectionConfig.queries?.[0]?.queryOptions?.SortBy === 'ChildCount') {
+            processed = processed.sort((a, b) => {
+                const childCountA = (a.ChildCount || 0) + (a.SeriesCount || 0) + (a.EpisodeCount || 0) + (a.AlbumCount || 0) + (a.ArtistCount || 0) + (a.ProgramCount || 0) + (a.MovieCount || 0) + (a.SongCount || 0);
+                const childCountB = (b.ChildCount || 0) + (b.SeriesCount || 0) + (b.EpisodeCount || 0) + (b.AlbumCount || 0) + (b.ArtistCount || 0) + (b.ProgramCount || 0) + (b.MovieCount || 0) + (b.SongCount || 0);
+
+                if (sectionConfig.queries?.[0]?.queryOptions?.SortOrder === 'Descending') {
+                    return childCountB - childCountA;
+                }
+                return childCountA - childCountB;
+            });
+        }
+
         const limit = sectionConfig.itemLimit || sectionConfig.queries?.[0]?.queryOptions?.Limit || 0;
 
         // Apply local limits for non-API sources
@@ -310,7 +328,7 @@
                 queryResult = await ApiHelper.fetchFromDataSource(query.dataSource, query.queryOptions || {}, false);
             } else {
                 // Build and execute query
-                const queryUrl = ApiHelper.buildQueryFromSection(query, userId, serverUrl);
+                const queryUrl = ApiHelper.buildQueryFromSection(query, userId, serverUrl, sectionConfig.renderMode === 'Spotlight');
                 
                 if (typeof queryUrl === 'string') {
                     // Standard query - use useCache: false to bypass cache
@@ -471,7 +489,9 @@
                 
                 // Replace the section element
                 sectionElement.replaceWith(content);
-                
+                checkSectionOverflow(content, true);
+                setTimeout(() => checkSectionOverflow(content, true), 150);
+
                 // Add refresh button to new content
                 const sectionTitleContainer = content.querySelector('.sectionTitleContainer');
                 let newButton = null;
@@ -641,6 +661,8 @@
                 // Replace content of skeleton container with real content
                 // This preserves the container element itself and its layout properties (like order)
                 skeletonContaineElement.replaceWith(realContainer);
+                checkSectionOverflow(realContainer, true);
+                setTimeout(() => checkSectionOverflow(realContainer, true), 150);
             }).catch(error => {
                 console.error('[KefinTweaks CardBuilder] Error loading items for progressive enhancement:', error);
                 // Optionally remove skeleton on error or show error state
@@ -660,7 +682,7 @@
          * @param {Object} options - Configuration options
          */
         renderProgressiveSections: async function(container, sections, options = {}) {
-            const { revealSectionsSequentially = false } = options;
+            const { revealSectionsSequentially = false, waitForContainerClass = null } = options;
 
             const renderProgressiveSectionsStartTime = performance.now();
 
@@ -708,6 +730,7 @@
 
                     content.setAttribute('data-section-id', sectionConfig.id);
                     content.style.order = sectionConfig.order;
+                    content.dataset.order = sectionConfig.order;
                     
                     // Add refresh button to rendered section
                     const sectionTitleContainer = content.querySelector('.sectionTitleContainer');
@@ -742,7 +765,6 @@
                 }
                 sectionElement.setAttribute('data-section-id', sectionConfig.id);
                 sectionElement.style.order = sectionConfig.order;
-                sectionElements.push(sectionElement);
                 //container.appendChild(sectionElement);
                 
                 // set section element content-visibility to hidden
@@ -753,13 +775,44 @@
                     sectionElement.style.display = 'none';
                 }
 
+                sectionElements.push(sectionElement);
                 fragment.appendChild(sectionElement);
                 const sectionEndTime = performance.now();
                 const sectionDuration = sectionEndTime - sectionStartTime;
                 console.log(`Section ${sectionConfig.id} progressive initialization time: ${sectionDuration.toFixed(2)}ms`);
             }
 
-            container.appendChild(fragment);
+            // Wait for the container to have the class specified in waitForContainerClass with a timeout of 10 seconds
+            // Append the container to the page for now invisibly so that Jellyfin handles enhancing it with the typical Scroller functionality
+            // Finally when the container has the class specified in waitForContainerClass, we can move the pre-rendered sections into the container
+            if (waitForContainerClass && !container.classList.contains(waitForContainerClass)) {
+                // Wait for the container to have the class specified in waitForContainerClass with a timeout of 10 seconds
+                console.log(`Waiting for container to have class ${waitForContainerClass}...`);
+                const maxAttempts = 100;
+                let attempts = 0;
+                while (!container.classList.contains(waitForContainerClass) && attempts < maxAttempts) {
+                    attempts++;
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    if (container.classList.contains(waitForContainerClass)) {
+                        break;
+                    }
+                }
+                if (!container.classList.contains(waitForContainerClass)) {
+                    console.log(`Container did not have class ${waitForContainerClass} after ${maxAttempts} attempts, continuing...`);
+                }    
+            }
+
+            // Batch append sections to avoid Jellyfin emby-scroller processing
+            // all at once (causes render lag when many sections are added)
+            const BATCH_SIZE = 4;
+            const sectionNodes = Array.from(fragment.childNodes);
+            for (let i = 0; i < sectionNodes.length; i += BATCH_SIZE) {
+                const batch = sectionNodes.slice(i, i + BATCH_SIZE);
+                batch.forEach(node => container.appendChild(node));
+                if (i + BATCH_SIZE < sectionNodes.length) {
+                    await new Promise(resolve => requestAnimationFrame(resolve));
+                }
+            }
 
             /* for (const sectionElement of sectionElements) {
                 sectionElement.style.contentVisibility = 'hidden';
@@ -921,7 +974,9 @@
                     }
 
                     sectionElement.replaceWith(content);
-                    
+                    checkSectionOverflow(content, true);
+                    setTimeout(() => checkSectionOverflow(content, true), 150);
+
                     // If revealSectionsSequentially is enabled and section hasn't been revealed yet, re-observe it
                     if (revealSectionsSequentially && content.classList.contains('cardbuilder-section-reveal') && !content.classList.contains('in-viewport')) {
                         observeSectionForReveal(content);
@@ -1013,8 +1068,8 @@
                             content.setAttribute(attr.name, attr.value);
                         });
                         skeleton.replaceWith(content);
-                        // Update skeleton inner HTML with the content
-                        //skeleton.innerHTML = content.innerHTML;
+                        checkSectionOverflow(content, true);
+                        setTimeout(() => checkSectionOverflow(content, true), 150);
                     } else {
                         skeleton.remove();
                     }
@@ -1304,8 +1359,12 @@
         } else if (cardFormat === 'portrait' || cardFormat === 'poster') {
             if (item.Type === 'Episode' && item.SeriesPrimaryImageTag) {
                 imageUrl = `${serverAddress}/Items/${item.SeriesId}/Images/Primary?${imageParams}&quality=96&tag=${item.SeriesPrimaryImageTag}`;                
-            } else {
-                imageUrl = item.ImageTags?.Primary ? `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.ImageTags?.Primary}` : `${serverAddress}/Items/${item.Id}/Images/Thumb?${imageParams}&quality=96&tag=${item.ImageTags?.Thumb}`;                
+            } else if (item.ImageTags?.Primary) {
+                imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.ImageTags?.Primary}`;
+            } else if (item.PrimaryImageTag) {
+                imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.PrimaryImageTag}`;
+            } else if (item.ImageTags?.Thumb) {
+                imageUrl = `${serverAddress}/Items/${item.Id}/Images/Thumb?${imageParams}&quality=96&tag=${item.ImageTags?.Thumb}`;
             }
         } else if (cardFormat === 'thumb') {
 
@@ -1628,9 +1687,10 @@
      * @param {string} title - Title for the spotlight section
      * @param {Object} options - Options for the spotlight carousel
      * @param {boolean} options.autoPlay - Auto-cycle through items (default: true)
-     * @param {number} options.interval - Auto-play interval in ms (default: 5000)
+     * @param {number} options.interval - Auto-play interval in ms (default: 10000)
      * @param {boolean} options.showDots - Show dot indicators (default: true)
      * @param {boolean} options.showNavButtons - Show prev/next buttons (default: true)
+     * @param {boolean} options.pauseOnHover - Pause auto-cycle when cursor is over spotlight (default: true, false when fullScreen)
      * @returns {HTMLElement} - The constructed spotlight container
      */
     function createSpotlightSection(items, title, options = {}) {
@@ -1639,12 +1699,16 @@
         }
         
         const {
-            autoPlay = true,
-            interval = 5000,
+            autoPlay = true,    
+            interval = 10000,
             showDots = true,
             showNavButtons = true,
             showClearArt = false,
-            viewMoreUrl = null
+            panAnimation = true,
+            fullScreen = false,
+            dualBackdrops = true,
+            viewMoreUrl = null,
+            pauseOnHover = !fullScreen  // Default: don't pause on hover in fullscreen (continue cycling)
         } = options;
         
         const serverId = ApiClient.serverId();
@@ -1652,6 +1716,8 @@
         let currentIndex = 0;
         let autoPlayTimer = null;
         let isPaused = false;
+        let isVisible = true; // updated by Intersection Observer; start true so initial startAutoPlay runs
+        let currentSlideAnimationComplete = false;
         
         // Create main container
         const container = document.createElement('div');
@@ -1672,14 +1738,6 @@
                 titleLink.textContent = title;
                 titleLink.title = 'See All';
                 titleLink.style.textDecoration = 'none';
-
-                const cssStyle = document.createElement('style');
-                cssStyle.textContent = `
-                    .spotlight-title-link:hover {
-                        text-decoration: underline !important;
-                    }
-                `;
-                titleLink.appendChild(cssStyle);
                 
                 // Handle both URL and function
                 if (typeof viewMoreUrl === 'function') {
@@ -1710,6 +1768,8 @@
         const itemsContainer = document.createElement('div');
         itemsContainer.className = 'spotlight-items-container';
         
+        const isMobileLayout = document.documentElement.classList.contains('mobile-layout');
+
         // Create items
         items.forEach((item, index) => {
             // Get item type early for use throughout
@@ -1728,17 +1788,101 @@
 
             let imageUrl = '';
 
-            if (item.Type === 'Episode' && item.ParentBackdropImageTags?.[0]) {
-                // Series backdrop image
-                imageUrl = `${serverAddress}/Items/${item.ParentBackdropItemId}/Images/Backdrop?fillHeight=450&fillWidth=1920&quality=96&tag=${item.ParentBackdropImageTags[0]}`;
-            } else if (item.BackdropImageTags?.[0]) {
-                imageUrl = `${serverAddress}/Items/${item.Id}/Images/Backdrop?fillHeight=450&fillWidth=1920&quality=96&tag=${item.BackdropImageTags[0]}`;
-            } else if (item.ImageTags?.Primary) {
-                imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?fillHeight=450&fillWidth=1920&quality=96&tag=${item.ImageTags.Primary}`;
+            // Build list of available backdrop sources for this item
+            let backdropSources = [];
+
+            if (item.Type === 'Episode' && Array.isArray(item.ParentBackdropImageTags) && item.ParentBackdropImageTags.length) {
+                backdropSources = item.ParentBackdropImageTags.map(tag => ({
+                    itemId: item.ParentBackdropItemId,
+                    tag
+                }));
+            } else if (Array.isArray(item.BackdropImageTags) && item.BackdropImageTags.length) {
+                backdropSources = item.BackdropImageTags.map(tag => ({
+                    itemId: item.Id,
+                    tag
+                }));
             }
-            
-            if (imageUrl) {
-                itemDiv.style.backgroundImage = `url("${imageUrl}")`;
+
+            // Set backdrop width based on client width either 1920 or 1280, 640 is the minimum
+            const clientWidth = window.innerWidth;
+            let backdropWidth = 1920;
+            if (clientWidth < 1280) {
+                backdropWidth = 1280;
+            } else if (clientWidth < 640) {
+                backdropWidth = 640;
+            }
+
+            // On non-mobile layouts, if we have more than one backdrop, render two side-by-side
+            if (!isMobileLayout && backdropSources.length > 1 && dualBackdrops) {                
+                const firstBackdropIndex = Math.floor(Math.random() * backdropSources.length);
+                let secondBackdropIndex = Math.floor(Math.random() * backdropSources.length);
+
+                if (secondBackdropIndex === firstBackdropIndex) {
+                    // Get another random backdrop index that is not the same as the first one
+                    secondBackdropIndex = (secondBackdropIndex + 1) % backdropSources.length;
+                }
+
+                // Pick two distinct random backdrops
+                const first = backdropSources[firstBackdropIndex];
+                const second = backdropSources[secondBackdropIndex];
+
+                const firstUrl = `${serverAddress}/Items/${first.itemId}/Images/Backdrop/${firstBackdropIndex}?fillWidth=${backdropWidth}&quality=96&tag=${first.tag}`;
+                const secondUrl = `${serverAddress}/Items/${second.itemId}/Images/Backdrop/${secondBackdropIndex}?fillWidth=${backdropWidth}&quality=96&tag=${second.tag}`;
+
+                const dualBackgroundContainer = document.createElement('div');
+                dualBackgroundContainer.className = 'spotlight-background-dual';
+
+                const leftLayer = document.createElement('div');
+                leftLayer.className = 'spotlight-background-layer spotlight-background-layer-left';
+                const leftImg = document.createElement('img');
+                leftImg.setAttribute('data-src', firstUrl);
+                leftImg.alt = '';
+                leftImg.draggable = false;
+                if (index === 0) {
+                    leftImg.src = firstUrl;
+                    leftImg.loading = 'eager';
+                }
+                leftLayer.appendChild(leftImg);
+
+                const rightLayer = document.createElement('div');
+                rightLayer.className = 'spotlight-background-layer spotlight-background-layer-right';
+                const rightImg = document.createElement('img');
+                rightImg.setAttribute('data-src', secondUrl);
+                rightImg.alt = '';
+                rightImg.draggable = false;
+                if (index === 0) {
+                    rightImg.src = secondUrl;
+                    rightImg.loading = 'eager';
+                }
+                rightLayer.appendChild(rightImg);
+
+                dualBackgroundContainer.appendChild(leftLayer);
+                dualBackgroundContainer.appendChild(rightLayer);
+                itemDiv.appendChild(dualBackgroundContainer);
+            } else {
+                // Fallback: single backdrop or primary image, including mobile layouts
+                if (backdropSources.length) {
+                    const first = backdropSources[0];
+                    imageUrl = `${serverAddress}/Items/${first.itemId}/Images/Backdrop?fillWidth=${backdropWidth}&quality=96&tag=${first.tag}`;
+                } else if (item.ImageTags?.Primary) {
+                    imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?fillWidth=${backdropWidth}&quality=96&tag=${item.ImageTags.Primary}`;
+                }
+
+                if (imageUrl) {
+                    // Use img in a layer (like dual) so pan animation can be applied
+                    const singleBackdropContainer = document.createElement('div');
+                    singleBackdropContainer.className = 'spotlight-background-single';
+                    const singleImg = document.createElement('img');
+                    singleImg.setAttribute('data-src', imageUrl);
+                    singleImg.alt = '';
+                    singleImg.draggable = false;
+                    if (index === 0) {
+                        singleImg.src = imageUrl;
+                        singleImg.loading = 'eager';
+                    }
+                    singleBackdropContainer.appendChild(singleImg);
+                    itemDiv.appendChild(singleBackdropContainer);
+                }
             }
             
             // Create left overlay (40-50% width, dark semi-transparent)
@@ -1752,10 +1896,11 @@
             
             if (hasLogo) {
                 // Use logo image instead of text title
-                const logoUrl = `${serverAddress}/Items/${item.Id}/Images/Logo?fillHeight=200&quality=96&tag=${item.ImageTags.Logo}`;
+                const logoUrl = `${serverAddress}/Items/${item.Id}/Images/Logo?fillHeight=${fullScreen ? '300' : '200'}&quality=96&tag=${item.ImageTags.Logo}`;
                 titleEl = document.createElement('div');
                 titleEl.className = 'spotlight-item-logo';
-                titleEl.style.backgroundImage = `url("${logoUrl}")`;
+                titleEl.setAttribute('data-background-url', logoUrl);
+                if (index === 0) titleEl.style.backgroundImage = `url("${logoUrl}")`;
                 titleEl.alt = item.Name || 'Unknown';
             } else {
                 // Use text title as fallback
@@ -1799,13 +1944,14 @@
                 const endTime = new Date(now.getTime() + runtimeMs);
                 const endTimeEl = document.createElement('span');
                 endTimeEl.className = 'spotlight-end-time';
-                endTimeEl.textContent = `Ends at ${endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+                endTimeEl.textContent = `${endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+
                 metadataRow.appendChild(endTimeEl);
             }
             
             // Genres (on same line) - make clickable if IDs are available
             if (item.Genres && item.Genres.length > 0) {
-                const genresContainer = document.createElement('span');
+                const genreFragment = document.createDocumentFragment();
 
                 if (item.GenreItems && item.GenreItems.length > 0) {
                     item.GenreItems.forEach((genreItem, index) => {
@@ -1820,20 +1966,13 @@
                             genreLink.addEventListener('click', (e) => {
                                 e.stopPropagation();
                             });
-                            if (index > 0) {
-                                const comma = document.createElement('span');
-                                comma.textContent = ', ';
-                                genresContainer.appendChild(comma);
-                            }
 
-                            genresContainer.appendChild(genreLink);
+                            genreFragment.appendChild(genreLink);
                         }
                     });
                 }
-                
-                if (genresContainer.children.length > 0) {
-                    metadataRow.appendChild(genresContainer);
-                }
+
+                metadataRow.appendChild(genreFragment);
             }
             
             // Helper function to create truncated list that expands on ellipsis hover
@@ -2038,10 +2177,14 @@
                 }
             } else {
                 // For Movies, show Tagline (if available)
-                if (item.Taglines && Array.isArray(item.Taglines) && item.Taglines.length > 0) {
-                    taglineEl.textContent = item.Taglines[0]; // Show first tagline
-                } else if (item.Overview) {
+                if (item.Overview && fullScreen) {
                     taglineEl.textContent = item.Overview;
+                } else {
+                    if (item.Taglines && Array.isArray(item.Taglines) && item.Taglines.length > 0) {
+                        taglineEl.textContent = item.Taglines[0]; // Show first tagline
+                    } else if (item.Overview) {
+                        taglineEl.textContent = item.Overview;
+                    }
                 }
             }
             
@@ -2228,7 +2371,8 @@
                 const clearArtUrl = `${serverAddress}/Items/${item.Id}/Images/Art?fillHeight=300&quality=96&tag=${item.ImageTags.Art}`;
                 const clearArtEl = document.createElement('img');
                 clearArtEl.className = 'spotlight-clearart';
-                clearArtEl.src = clearArtUrl;
+                clearArtEl.setAttribute('data-src', clearArtUrl);
+                if (index === 0) clearArtEl.src = clearArtUrl;
                 clearArtEl.alt = item.Name || 'Unknown';
                 itemDiv.appendChild(clearArtEl);
             }
@@ -2242,6 +2386,12 @@
         });
         
         bannerContainer.appendChild(itemsContainer);
+
+        // Apply initial pan animation to first slide (helper also sets up completion tracking)
+        if (panAnimation && items.length > 0) {
+            const firstItem = bannerContainer.querySelector('.spotlight-item[data-index="0"]');
+            if (firstItem) applyPanAnimationToSlide(firstItem);
+        }
         
         // Navigation buttons (top right)
         if (showNavButtons && items.length > 1) {
@@ -2320,9 +2470,54 @@
             bannerContainer.appendChild(dotsContainer);
         }
         
+        // Load images for a slide (and optionally preload next). Only sets src/backgroundImage from data-* so browser loads on demand.
+        function ensureSlideImagesLoaded(slideIndex) {
+            if (slideIndex < 0 || slideIndex >= items.length) return;
+            const itemEl = bannerContainer.querySelector(`.spotlight-item[data-index="${slideIndex}"]`);
+            if (!itemEl) return;
+            itemEl.querySelectorAll('img[data-src]').forEach(img => {
+                const url = img.getAttribute('data-src');
+                if (url && !img.src) img.src = url;
+            });
+            const bgUrl = itemEl.getAttribute('data-background-url');
+            if (bgUrl && !itemEl.style.backgroundImage) itemEl.style.backgroundImage = `url("${bgUrl}")`;
+            const logoEl = itemEl.querySelector('.spotlight-item-logo[data-background-url]');
+            if (logoEl) {
+                const logoUrl = logoEl.getAttribute('data-background-url');
+                if (logoUrl && !logoEl.style.backgroundImage) logoEl.style.backgroundImage = `url("${logoUrl}")`;
+            }
+        }
+
+        // Apply pan animation to a slide and track when it completes (for re-trigger on viewport re-entry)
+        function applyPanAnimationToSlide(slideElement) {
+            if (!slideElement || !panAnimation) return;
+            const imgs = slideElement.querySelectorAll('.spotlight-background-layer img, .spotlight-background-single img');
+            if (!imgs.length) return;
+            currentSlideAnimationComplete = false;
+            let finishedCount = 0;
+            const checkAllDone = () => {
+                finishedCount++;
+                if (finishedCount >= imgs.length) currentSlideAnimationComplete = true;
+            };
+            imgs.forEach(img => {
+                img.classList.remove('animate');
+                void img.offsetWidth; // force reflow to restart animation
+                img.classList.add('animate');
+                const handler = (e) => {
+                    if (e.animationName === 'kenBurnsZoomOut' || e.animationName === 'kenBurnsZoomIn') {
+                        img.removeEventListener('animationend', handler);
+                        checkAllDone();
+                    }
+                };
+                img.addEventListener('animationend', handler);
+            });
+        }
+
         // Go to item function (fade transition)
         function goToItem(index, resetTimer = true) {
             if (index === currentIndex) return;
+            ensureSlideImagesLoaded(index);
+            ensureSlideImagesLoaded((index + 1) % items.length);
             
             const currentItem = bannerContainer.querySelector(`.spotlight-item[data-index="${currentIndex}"]`);
             const nextItem = bannerContainer.querySelector(`.spotlight-item[data-index="${index}"]`);
@@ -2330,6 +2525,7 @@
             if (currentItem && nextItem) {
                 currentItem.style.opacity = '0';
                 nextItem.style.opacity = '1';
+                applyPanAnimationToSlide(nextItem);
             }
             
             currentIndex = index;
@@ -2354,7 +2550,7 @@
             }
         }
         
-        // Auto-play function
+        // Auto-play function (only runs when section is visible in viewport)
         function startAutoPlay() {
             // Always clear any existing timer first
             if (autoPlayTimer) {
@@ -2362,7 +2558,8 @@
                 autoPlayTimer = null;
             }
             
-            if (!autoPlay || items.length <= 1 || isPaused) return;
+            if (!autoPlay || items.length <= 1 || isPaused || !isVisible) return;
+            if (pauseOnHover && isHovering) return;
             
             autoPlayTimer = setInterval(() => {
                 // Don't reset timer when auto-advancing (to maintain interval)
@@ -2370,11 +2567,11 @@
             }, interval);
         }
         
-        // Pause on hover - prevent auto-cycling when hovering
+        // Pause on hover - prevent auto-cycling when hovering (skipped when pauseOnHover is false, e.g. fullscreen)
         let isHovering = false;
         bannerContainer.addEventListener('mouseenter', () => {
             isHovering = true;
-            if (autoPlayTimer) {
+            if (pauseOnHover && autoPlayTimer) {
                 clearInterval(autoPlayTimer);
                 autoPlayTimer = null;
             }
@@ -2382,15 +2579,81 @@
         
         bannerContainer.addEventListener('mouseleave', () => {
             isHovering = false;
-            // Only restart if auto-play is enabled, not paused, and not hovering
-            if (autoPlay && !isPaused && !isHovering) {
+            // Only restart if auto-play is enabled, not paused, not hovering, and section is visible
+            if (autoPlay && !isPaused && !isHovering && isVisible) {
                 startAutoPlay();
             }
         });
         
-        // Start auto-play
+        // Only cycle when spotlight is in view: stop when off-screen to avoid loading images unnecessarily
+        const visibilityObserver = new IntersectionObserver(
+            (entries) => {
+                const entry = entries[0];
+                if (!entry) return;
+                const wasVisible = isVisible;
+                isVisible = entry.isIntersecting;
+                if (!isVisible) {
+                    if (autoPlayTimer) {
+                        clearInterval(autoPlayTimer);
+                        autoPlayTimer = null;
+                    }
+                } else {
+                    // Re-entering viewport: advance slide (don't restart animation)
+                    if (!wasVisible && autoPlay && !isPaused && !(pauseOnHover && isHovering) && items.length > 1) {
+                        const currentItem = bannerContainer.querySelector(`.spotlight-item[data-index="${currentIndex}"]`);
+                        if (panAnimation && currentItem) {
+                            if (currentSlideAnimationComplete) {
+                                // Animation done - cycle to next card immediately
+                                goToItem((currentIndex + 1) % items.length, true);
+                            } else {
+                                // Animation still playing - schedule cycle for when it finishes + interval
+                                const imgs = currentItem.querySelectorAll('.spotlight-background-layer img, .spotlight-background-single img');
+                                if (imgs.length > 0) {
+                                    let finishedCount = 0;
+                                    const checkAllDone = () => {
+                                        finishedCount++;
+                                        if (finishedCount >= imgs.length) {
+                                            currentSlideAnimationComplete = true;
+                                            setTimeout(() => {
+                                                if (autoPlay && !isPaused && isVisible && items.length > 1) {
+                                                    goToItem((currentIndex + 1) % items.length, true);
+                                                }
+                                            }, interval);
+                                        }
+                                    };
+                                    imgs.forEach(img => {
+                                        const handler = (e) => {
+                                            if (e.animationName === 'kenBurnsZoomOut' || e.animationName === 'kenBurnsZoomIn') {
+                                                img.removeEventListener('animationend', handler);
+                                                checkAllDone();
+                                            }
+                                        };
+                                        img.addEventListener('animationend', handler);
+                                    });
+                                } else {
+                                    startAutoPlay();
+                                }
+                            }
+                        } else {
+                            startAutoPlay();
+                        }
+                    } else if (autoPlay && !isPaused && !(pauseOnHover && isHovering)) {
+                        startAutoPlay();
+                    }
+                }
+            },
+            { root: null, rootMargin: '0px', threshold: 0 }
+        );
+        visibilityObserver.observe(container);
+        
+        // Start auto-play (will no-op if container not yet in DOM or not visible once observer runs)
         if (autoPlay) {
             startAutoPlay();
+        }
+
+        // Preload next slide soon after mount so transition has no pop
+        if (items.length > 1) {
+            requestAnimationFrame(() => ensureSlideImagesLoaded(1));
         }
 
         // Touch swipe handling
@@ -2445,8 +2708,28 @@
         }, { passive: true });
         
         container.appendChild(bannerContainer);
+
+        if (fullScreen) {
+            container.dataset.fullScreen = 'true';
+        }
         
         return container;
+    }
+
+    /**
+     * Check if a section's items overflow the scroller and set data-expandable for show-all button visibility.
+     * Can be called for any .emby-scroller-container that contains .itemsContainer (e.g. when section is detected in DOM).
+     * @param {HTMLElement} verticalSection - Section element (emby-scroller-container)
+     * @param {boolean} forceUpdate - If true, update even when data-expandable is already set (e.g. on resize)
+     */
+    function checkSectionOverflow(verticalSection, forceUpdate = false) {
+        if (!verticalSection || verticalSection.nodeType !== 1) return;
+        const itemsContainer = verticalSection.querySelector('.itemsContainer');
+        const scroller = verticalSection.querySelector('.emby-scroller');
+        if (!itemsContainer || !scroller) return;
+        if (!forceUpdate && verticalSection.hasAttribute('data-expandable')) return;
+        const hasOverflow = itemsContainer.scrollWidth > scroller.clientWidth;
+        verticalSection.setAttribute('data-expandable', hasOverflow ? 'true' : 'false');
     }
 
     /**
@@ -2812,18 +3095,6 @@
             console.log(`[KefinTweaks CardBuilder] Time to switch view: ${performanceTime3}ms`);
         });
 
-        // Check if items container overflows the scroller width
-        // Only sets data-expandable if it doesn't already exist (one-time check)
-        function checkOverflow(forceUpdate = false) {
-            // Only update if data-expandable doesn't exist, or if forceUpdate is true (window resize)
-            if (!forceUpdate && verticalSection.hasAttribute('data-expandable')) {
-                return; // Already set, don't update
-            }
-            
-            const hasOverflow = itemsContainer.scrollWidth > scroller.clientWidth;
-            verticalSection.setAttribute('data-expandable', hasOverflow ? 'true' : 'false');
-        }
-
         // Track window size to detect actual window resize events
         let lastWindowWidth = window.innerWidth;
         let lastWindowHeight = window.innerHeight;
@@ -2842,7 +3113,7 @@
                 // Debounce window resize checks
                 clearTimeout(windowResizeTimer);
                 windowResizeTimer = setTimeout(() => {
-                    checkOverflow(true); // Force update on window resize
+                    checkSectionOverflow(verticalSection, true); // Force update on window resize
                 }, 100); // 100ms debounce
             }
         }
@@ -2850,13 +3121,7 @@
         // Listen for window resize events
         window.addEventListener('resize', handleWindowResize);
 
-        // Initial overflow check after cards are rendered
-        // Use requestAnimationFrame to ensure layout is complete, then a small delay for images
-        requestAnimationFrame(() => {
-            setTimeout(() => {
-                checkOverflow(false); // Initial check - only set if doesn't exist
-            }, 200); // Allow time for images to load and affect card dimensions
-        });
+        // Initial overflow check is done when section is detected in the DOM by overflowMutationObserver
 
         // Assemble the section
         verticalSection.appendChild(sectionTitleContainer);
@@ -3118,6 +3383,9 @@
     // Smart Lazy Image Loading with Global Observers
     let lazyImageObserver = null;
     let lazyMutationObserver = null;
+
+    // Overflow check: run checkSectionOverflow when .emby-scroller-container with .itemsContainer appears in DOM
+    let overflowMutationObserver = null;
     
     /**
      * Initialize the global IntersectionObserver for lazy loading images
@@ -3186,7 +3454,46 @@
             });
         });
     }
-    
+
+    /**
+     * Collect section elements (.emby-scroller-container containing .itemsContainer) from an added node
+     * @param {Node} node - Added node (element or fragment)
+     * @returns {HTMLElement[]} - Deduplicated section elements to run overflow check on
+     */
+    function getScrollerSectionsForOverflowCheck(node) {
+        if (!node || node.nodeType !== 1 || !node.querySelectorAll) return [];
+        const sections = [];
+        const selfMatch = node.classList && node.classList.contains('emby-scroller-container') && node.querySelector('.itemsContainer');
+        if (selfMatch) sections.push(node);
+        const inner = node.querySelectorAll('.emby-scroller-container');
+        inner.forEach(el => {
+            if (el !== node && el.querySelector('.itemsContainer')) sections.push(el);
+        });
+        return sections;
+    }
+
+    /**
+     * Initialize the MutationObserver that runs checkSectionOverflow when sections appear in the DOM
+     */
+    function initOverflowMutationObserver() {
+        if (overflowMutationObserver) return;
+        overflowMutationObserver = new MutationObserver((mutations) => {
+            const sectionsToCheck = new Set();
+            mutations.forEach(mutation => {
+                mutation.addedNodes.forEach(node => {
+                    getScrollerSectionsForOverflowCheck(node).forEach(section => sectionsToCheck.add(section));
+                });
+            });
+            sectionsToCheck.forEach(section => {
+                requestAnimationFrame(() => {
+                    checkSectionOverflow(section, false);
+                    // Re-check after a short delay so images/layout can affect dimensions
+                    setTimeout(() => checkSectionOverflow(section, true), 150);
+                });
+            });
+        });
+    }
+
     /**
      * Initialize the smart lazy loading system
      * Scans existing elements and starts both observers
@@ -3199,11 +3506,19 @@
         // Initialize observers
         initLazyImageObserver();
         initLazyMutationObserver();
+        initOverflowMutationObserver();
         
         // Scan existing elements with data-src
         const existingLazyImages = document.querySelectorAll('.cardImageContainer[data-src]');
         existingLazyImages.forEach(img => {
             lazyImageObserver.observe(img);
+        });
+        
+        // Run overflow check on any sections already in the DOM
+        document.querySelectorAll('.emby-scroller-container').forEach(section => {
+            if (section.querySelector('.itemsContainer')) {
+                requestAnimationFrame(() => checkSectionOverflow(section, false));
+            }
         });
         
         // Start watching for new elements
@@ -3212,11 +3527,21 @@
                 childList: true,
                 subtree: true
             });
+            overflowMutationObserver.observe(document.body, {
+                childList: true,
+                subtree: true
+            });
         } else {
             // If body isn't ready, wait for DOMContentLoaded
             document.addEventListener('DOMContentLoaded', () => {
                 if (lazyMutationObserver && document.body) {
                     lazyMutationObserver.observe(document.body, {
+                        childList: true,
+                        subtree: true
+                    });
+                }
+                if (overflowMutationObserver && document.body) {
+                    overflowMutationObserver.observe(document.body, {
                         childList: true,
                         subtree: true
                     });
@@ -3282,7 +3607,9 @@
     }
 
     function initialize() {
-        state.useEpisodeImages = window.userHelper.useEpisodeImages();
+        if (!state.useEpisodeImages) {
+            state.useEpisodeImages = window.userHelper.useEpisodeImages();
+        }
     }
 
     initialize();

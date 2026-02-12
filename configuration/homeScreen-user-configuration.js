@@ -81,7 +81,7 @@
             const isEnabled = enabledBaseIds.has(baseId);
             
             // Get order and enabled status from kefinHomeScreen if available
-            let order = index;
+            let order = 0;
             let enabledFromPrefs = isEnabled; // Default to homesectionN value
             
             if (Array.isArray(kefinHomeScreen) && kefinHomeScreen.length > 0) {
@@ -366,10 +366,20 @@
 
             // Add non-mapped Jellyfin sections
             sections.forEach(section => {
-                if (section.enabled !== false && (section.isJellyfin || isJellyfinSection(section.id) || section.mapsToJellyfin)) {
+                if (section.enabled === true && (section.isJellyfin || isJellyfinSection(section.id) || section.mapsToJellyfin)) {
                     const baseId = section.mapsToJellyfin || section.jellyfinBaseId || section.id;
                     sectionsForHomesectionN.push({
                         jellyfinBaseId: baseId,
+                        order: section.order || 0
+                    });
+                }
+                if (section.enabled === true && section.id === 'continueWatchingAndNextUp') {
+                    sectionsForHomesectionN.push({
+                        jellyfinBaseId: 'resume',
+                        order: section.order || 0
+                    });
+                    sectionsForHomesectionN.push({
+                        jellyfinBaseId: 'nextup',
                         order: section.order || 0
                     });
                 }
@@ -505,7 +515,12 @@
 
             // Filter out mapped Jellyfin sections if their KefinTweaks equivalent exists
             const kefinSectionIds = new Set(kefinSections.map(s => s.id));
-            const hasRecentlyAdded = kefinSections.some(s => s.id && s.id.startsWith('recently-added-'));
+
+            const adminKefinSections = window.KefinHomeScreen.getConfig().ENABLED_NORMAL_SECTIONS;
+            const isKefinNextUpEnabled = adminKefinSections.some(s => s.id && s.id === 'nextUp' && s.enabled === true);
+            const isKefinContinueWatchingEnabled = adminKefinSections.some(s => s.id && s.id === 'continueWatching' && s.enabled === true);
+            const isKefinMergeNextUpEnabled = adminKefinSections.some(s => s.id && s.id === 'continueWatchingAndNextUp' && s.enabled === true);
+            const isKefinRecentlyAddedEnabled = adminKefinSections.some(s => s.id && s.id.startsWith('recently-added-') && s.enabled === true);
 
             jellyfinSections = jellyfinSections.filter(jellyfinSection => {
                 const baseId = jellyfinSection.jellyfinBaseId || jellyfinSection.id;
@@ -513,7 +528,15 @@
                 
                 // For latestmedia, check if any recently-added-* section exists
                 if (baseId === 'latestmedia') {
-                    return !hasRecentlyAdded; // Remove if any recently-added exists
+                    return !isKefinRecentlyAddedEnabled; // Remove if any recently-added exists
+                }
+
+                if (baseId === 'nextup') {
+                    return !isKefinNextUpEnabled && !isKefinMergeNextUpEnabled;
+                }
+
+                if (baseId === 'resume') {
+                    return !isKefinContinueWatchingEnabled && !isKefinMergeNextUpEnabled;
                 }
                 
                 // For other mapped sections, check if the mapped KefinTweaks section exists

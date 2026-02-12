@@ -67,7 +67,7 @@
     };
 
     const CARD_FORMATS = ['Poster', 'Thumb', 'Backdrop', 'Square', 'Random'];
-    const SORT_ORDERS = ['Random', 'Name', 'DateCreated', 'PremiereDate', 'CommunityRating', 'CriticRating', 'DatePlayed', 'SortName', 'PlayCount', 'PlayedPercentage', 'StartDate', 'Runtime', 'ProductionYear', 'IsPlayed', 'IsUnplayed', 'ParentIndexNumber', 'IndexNumber'];
+    const SORT_ORDERS = ['None', 'Random', 'Name', 'DateCreated', 'PremiereDate', 'CommunityRating', 'CriticRating', 'DatePlayed', 'SortName', 'PlayCount', 'PlayedPercentage', 'StartDate', 'Runtime', 'ProductionYear', 'IsPlayed', 'IsUnplayed', 'ParentIndexNumber', 'IndexNumber', 'IsFolder', 'SimilarityScore', 'SearchScore', 'DateLastContentAdded', 'SeriesDatePlayed', 'ChildCount'];
     const SORT_ORDER_DIRECTIONS = ['Ascending', 'Descending'];
     const RENDER_MODE_OPTIONS = [{ value: 'Normal', label: 'Normal' }, { value: 'Spotlight', label: 'Spotlight' }, { value: 'Random', label: 'Random' }];
 
@@ -75,6 +75,7 @@
     let currentConfig = null;
     let mainModalInstance = null;
     let currentActiveTab = 'settings'; // Track the currently active tab
+    let currentGlobalSettingsSubTab = 'general'; // Track active sub-tab in Global Settings (general, spotlight, discovery, cache)
 
     /**
      * Show toast notification
@@ -459,7 +460,7 @@
     /**
      * Load configuration from JS Injector and merge with defaults
      */
-    async function loadConfig() {
+    function loadConfig() {
         try {
             // Get existing config from window.KefinTweaksConfig
             const existingConfig = (window.KefinTweaksConfig && window.KefinTweaksConfig.homeScreenConfig) || {};
@@ -495,11 +496,40 @@
                 DISCOVERY_SETTINGS: { ...defaults.DISCOVERY_SETTINGS, ...(existingConfig.DISCOVERY_SETTINGS || {}) },
                 SEASONAL_THEME_SETTINGS: { ...defaults.SEASONAL_THEME_SETTINGS, ...(existingConfig.SEASONAL_THEME_SETTINGS || {}) },
                 CACHE: { ...defaults.CACHE, ...(existingConfig.CACHE || {}) },
+                SPOTLIGHT_SETTINGS: { ...defaults.SPOTLIGHT_SETTINGS, ...(existingConfig.SPOTLIGHT_SETTINGS || {}) },
+                HOME_SETTINGS: { ...defaults.HOME_SETTINGS, ...(existingConfig.HOME_SETTINGS || {}) },
                 MERGE_NEXT_UP: existingConfig.MERGE_NEXT_UP ?? defaults.MERGE_NEXT_UP ?? false
             };
 
+            // Add ENABLED_NORMAL_SECTIONS and ENABLED_DISCOVERY_SECTIONS
+            // ENABLED_NORMAL_SECTIONS is all enabled sections from HOME_SECTION_GROUPS, SEASONAL_SECTION_GROUPS, and CUSTOM_SECTION_GROUPS that aren't discovery sections
+            // If they have a start/end date the current date must fall within that date range
+            // ENABLED_DISCOVERY_SECTIONS is all enabled sections from DISCOVERY_SECTION_GROUPS and CUSTOM_SECTION_GROUPS that are discovery sections
+            // If they have a start/end date the current date must fall within that date range
+
+            const isInSeasonalPeriod = (startDate, endDate) => {
+                const currentDate = new Date();
+                const start = new Date(startDate);
+                const end = new Date(endDate);
+
+                // Ensure the years are the same as the current date year
+                start.setFullYear(currentDate.getFullYear());
+                end.setFullYear(currentDate.getFullYear());
+
+                return currentDate >= start && currentDate <= end;
+            };
+
+            const enabledHomeSections = flattenSectionGroups(mergedConfig.HOME_SECTION_GROUPS).filter(s => s.enabled === true && s.discoveryEnabled !== true && (s.startDate && s.endDate ? isInSeasonalPeriod(s.startDate, s.endDate) : true));
+            const enabledSeasonalSections = flattenSectionGroups(mergedConfig.SEASONAL_SECTION_GROUPS).filter(s => s.enabled === true && s.discoveryEnabled !== true && isInSeasonalPeriod(s.startDate, s.endDate));
+            const enabledCustomSections = flattenSectionGroups(mergedConfig.CUSTOM_SECTION_GROUPS).filter(s => s.enabled === true && s.discoveryEnabled !== true && (s.startDate && s.endDate ? isInSeasonalPeriod(s.startDate, s.endDate) : true));
+            const enabledDiscoverySections = flattenSectionGroups(mergedConfig.DISCOVERY_SECTION_GROUPS).filter(s => s.enabled === true && (s.startDate && s.endDate ? isInSeasonalPeriod(s.startDate, s.endDate) : true));
+            const enabledCustomDiscoverySections = flattenSectionGroups(mergedConfig.CUSTOM_SECTION_GROUPS).filter(s => s.enabled === true && s.discoveryEnabled === true && (s.startDate && s.endDate ? isInSeasonalPeriod(s.startDate, s.endDate) : true));
+
+            mergedConfig.ENABLED_NORMAL_SECTIONS = [...enabledHomeSections, ...enabledSeasonalSections, ...enabledCustomSections];
+            mergedConfig.ENABLED_DISCOVERY_SECTIONS = [...enabledDiscoverySections, ...enabledCustomDiscoverySections];
+
             // Verify and sync recently-added library sections
-            await verifyRecentlyAddedInLibraryConfig(mergedConfig);
+            //await verifyRecentlyAddedInLibraryConfig(mergedConfig);
 
             currentConfig = mergedConfig;
             return mergedConfig;
@@ -513,8 +543,12 @@
      * Get merged home screen config (exported for use by other scripts)
      * @returns {Promise<Object>} Merged configuration object
      */
-    async function getConfig() {
-        return await loadConfig();
+    function getConfig(forceReload = false) {
+        if (currentConfig && !forceReload) {
+            return currentConfig;
+        }
+        let config = loadConfig();
+        return config;
     }
 
     /**
@@ -1008,6 +1042,14 @@
                     ...(savedHomeScreenConfig.CACHE || {}),
                     ...(config.CACHE || {})
                 },
+                SPOTLIGHT_SETTINGS: {
+                    ...(savedHomeScreenConfig.SPOTLIGHT_SETTINGS || {}),
+                    ...(config.SPOTLIGHT_SETTINGS || {})
+                },
+                HOME_SETTINGS: {
+                    ...(savedHomeScreenConfig.HOME_SETTINGS || {}),
+                    ...(config.HOME_SETTINGS || {})
+                },
                 MERGE_NEXT_UP: config.MERGE_NEXT_UP !== undefined ? config.MERGE_NEXT_UP : (savedHomeScreenConfig.MERGE_NEXT_UP !== undefined ? savedHomeScreenConfig.MERGE_NEXT_UP : false)
             };
             
@@ -1460,6 +1502,43 @@
     }
 
     /**
+     * Build global settings sub-navigation HTML (left column, same style as Edit Sections nav)
+     */
+    function buildGlobalSettingsNavigationHTML(activeSubTab = 'general') {
+        const tabs = [
+            { id: 'general', label: 'General Settings' },
+            { id: 'spotlight', label: 'Spotlight Settings' },
+            { id: 'discovery', label: 'Discovery Settings' },
+            { id: 'cache', label: 'Cache Settings' }
+        ];
+        return `
+            <div style="display: flex; flex-direction: column; gap: 0.5em;">
+                ${tabs.map(tab => `
+                    <button type="button"
+                            class="global-settings-nav-btn ${activeSubTab === tab.id ? 'active' : ''}"
+                            data-global-settings-tab="${tab.id}"
+                            style="padding: 0.75em 1em; text-align: left; background: ${activeSubTab === tab.id ? 'rgba(0, 164, 220, 0.2)' : 'rgba(255,255,255,0.05)'}; border: 1px solid ${activeSubTab === tab.id ? 'rgba(0, 164, 220, 0.5)' : 'rgba(255,255,255,0.1)'}; border-radius: 4px; color: ${activeSubTab === tab.id ? 'var(--theme-primary-color, #00a4dc)' : 'inherit'}; cursor: pointer; transition: all 0.2s;">
+                        <span class="listItemBodyText" style="font-weight: ${activeSubTab === tab.id ? '500' : '400'};">${tab.label}</span>
+                    </button>
+                `).join('')}
+            </div>
+        `;
+    }
+
+    /**
+     * Build global settings panel content for the given sub-tab
+     */
+    function buildGlobalSettingsPanelContent(subTab) {
+        switch (subTab) {
+            case 'general': return buildGeneralSettingsHTML();
+            case 'spotlight': return buildSpotlightSettingsHTML();
+            case 'discovery': return buildDiscoverySettingsHTML();
+            case 'cache': return buildCacheSettingsHTML();
+            default: return buildGeneralSettingsHTML();
+        }
+    }
+
+    /**
      * Build group HTML with sections and toggle-all button
      */
     function buildGroupHTML(group, sectionType) {
@@ -1593,9 +1672,6 @@
         // Always use currentConfig as source of truth
         if (!currentConfig) return '<div class="listItemBodyText secondary">No configuration loaded.</div>';
 
-        // Determine if settings should be expanded (expanded by default unless mobile)
-        const settingsExpanded = !isMobile();
-        
         // Use currentActiveTab to determine which tab/content should be displayed
         const activeTab = currentActiveTab || 'settings';
 
@@ -1620,32 +1696,17 @@
                     </button>
                 </div>
 
-                <!-- Global Settings Tab -->
+                <!-- Global Settings Tab (left nav + right content, same layout as Edit Sections) -->
                 <div id="tab-settings" class="config-tab-content" style="display: ${activeTab === 'settings' ? 'block' : 'none'};">
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1em;">
-                        <!-- General Settings -->
-                        <details ${settingsExpanded ? 'open' : ''} style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
-                            <summary class="listItemBodyText" style="font-weight: 500; cursor: pointer; margin-bottom: 0.5em;">General Settings</summary>
-                            <div style="padding: 0.75em 0 0 0;">
-                                ${buildGeneralSettingsHTML()}
-                            </div>
-                        </details>
-
-                        <!-- Discovery Settings -->
-                        <details ${settingsExpanded ? 'open' : ''} style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
-                            <summary class="listItemBodyText" style="font-weight: 500; cursor: pointer; margin-bottom: 0.5em;">Discovery Settings</summary>
-                            <div style="padding: 0.75em 0 0 0;">
-                                ${buildDiscoverySettingsHTML()}
-                            </div>
-                        </details>
-
-                        <!-- Cache Settings -->
-                        <details ${settingsExpanded ? 'open' : ''} style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
-                            <summary class="listItemBodyText" style="font-weight: 500; cursor: pointer; margin-bottom: 0.5em;">Cache Settings</summary>
-                            <div style="padding: 0.75em 0 0 0;">
-                                ${buildCacheSettingsHTML()}
-                            </div>
-                        </details>
+                    <div style="display: grid; grid-template-columns: 200px 1fr; gap: 1.5em;">
+                        <!-- Left Column: Sub-tab navigation -->
+                        <div id="global-settings-navigation">
+                            ${buildGlobalSettingsNavigationHTML(currentGlobalSettingsSubTab)}
+                        </div>
+                        <!-- Right Column: Content for selected sub-tab -->
+                        <div id="global-settings-content">
+                            ${buildGlobalSettingsPanelContent(currentGlobalSettingsSubTab)}
+                        </div>
                     </div>
                 </div>
 
@@ -1739,17 +1800,14 @@
     function buildGeneralSettingsHTML() {
         if (!currentConfig) return '';
         const seasonal = currentConfig.SEASONAL_THEME_SETTINGS || {};
+        const homeSettings = currentConfig.HOME_SETTINGS || {};
         return `
-            <div style="display: grid; gap: 1em;">
-                <div style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
-                    ${buildToggleSlider('merge-next-up', currentConfig.MERGE_NEXT_UP === true, 'Merge Next Up with Continue Watching', { includeHiddenCheckbox: true })}
-                </div>
-                <div style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
-                    ${buildToggleSlider('seasonal-enableSeasonalAnimations', seasonal.enableSeasonalAnimations !== false, 'Enable Seasonal Animations', { includeHiddenCheckbox: true })}
-                </div>
-                <div style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
-                    ${buildToggleSlider('seasonal-enableSeasonalBackground', seasonal.enableSeasonalBackground !== false, 'Enable Seasonal Backgrounds', { includeHiddenCheckbox: true })}
-                </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.75em 1.5em;">
+                ${buildToggleSlider('merge-next-up', currentConfig.MERGE_NEXT_UP === true, 'Merge Next Up with Continue Watching', { includeHiddenCheckbox: true })}
+                ${buildToggleSlider('seasonal-enableSeasonalAnimations', seasonal.enableSeasonalAnimations !== false, 'Enable Seasonal Animations', { includeHiddenCheckbox: true })}
+                ${buildToggleSlider('seasonal-enableSeasonalBackground', seasonal.enableSeasonalBackground !== false, 'Enable Seasonal Backgrounds', { includeHiddenCheckbox: true })}
+                ${buildToggleSlider('home-ensureThumbsForPopularTVNetworks', homeSettings.ensureThumbsForPopularTVNetworks === true, 'Ensure Thumbs for Popular TV Networks', { includeHiddenCheckbox: true })}
+                ${buildToggleSlider('home-fadeInSections', homeSettings.fadeInSections === true, 'Fade in sections sequentially', { includeHiddenCheckbox: true })}
             </div>
         `;
     }
@@ -1762,19 +1820,18 @@
         const discovery = currentConfig.DISCOVERY_SETTINGS || {};
 
         return `
-            <div style="display: grid; gap: 1em;">
-                <div style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
-                    ${buildToggleSlider('discovery-enabled', discovery.enabled !== false, 'Enabled', { includeHiddenCheckbox: true })}
-                    ${buildToggleSlider('discovery-infiniteScroll', discovery.infiniteScroll !== false, 'Infinite Scroll', { includeHiddenCheckbox: true })}
-                    ${buildToggleSlider('discovery-renderSpotlightAboveMatching', discovery.renderSpotlightAboveMatching === true, 'Group Top Rated and Normal Sections', { includeHiddenCheckbox: true })}
-                    ${buildToggleSlider('discovery-randomizeOrder', discovery.randomizeOrder === true, 'Randomize Order', { includeHiddenCheckbox: true })}
-                    ${buildTextInput('discovery-minPeopleAppearances', discovery.minPeopleAppearances || 10, 'Min People Appearances', 'number')}
-                    ${buildTextInput('discovery-minGenreMovieCount', discovery.minGenreMovieCount || 50, 'Min Genre Movie Count', 'number')}
-                    ${buildTextInput('discovery-defaultItemLimit', discovery.defaultItemLimit || 16, 'Default Item Limit', 'number')}
-                    ${buildSelect('discovery-defaultSortOrder', SORT_ORDERS, discovery.defaultSortOrder || 'Random', 'Default Sort Order')}
-                    ${buildSelect('discovery-defaultCardFormat', CARD_FORMATS, discovery.defaultCardFormat || 'Poster', 'Default Card Format')}
-                    ${buildTextInput('discovery-spotlightDiscoveryChance', discovery.spotlightDiscoveryChance || 0.5, 'Spotlight Discovery Chance (0-1)', 'number')}
-                </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.75em 1.5em;">
+                ${buildToggleSlider('discovery-enabled', discovery.enabled !== false, 'Enabled', { includeHiddenCheckbox: true })}
+                ${buildToggleSlider('discovery-infiniteScroll', discovery.infiniteScroll !== false, 'Infinite Scroll', { includeHiddenCheckbox: true })}
+                ${buildToggleSlider('discovery-renderSpotlightAboveMatching', discovery.renderSpotlightAboveMatching === true, 'Group Top Rated and Normal Sections', { includeHiddenCheckbox: true })}
+                ${buildToggleSlider('discovery-randomizeOrder', discovery.randomizeOrder === true, 'Randomize Order', { includeHiddenCheckbox: true })}
+                ${buildToggleSlider('discovery-fadeInSections', discovery.fadeInSections === true, 'Fade in sections sequentially', { includeHiddenCheckbox: true })}
+                ${buildTextInput('discovery-minPeopleAppearances', discovery.minPeopleAppearances || 10, 'Min People Appearances', 'number')}
+                ${buildTextInput('discovery-minGenreMovieCount', discovery.minGenreMovieCount || 50, 'Min Genre Movie Count', 'number')}
+                ${buildTextInput('discovery-defaultItemLimit', discovery.defaultItemLimit || 16, 'Default Item Limit', 'number')}
+                ${buildSelect('discovery-defaultSortOrder', SORT_ORDERS, discovery.defaultSortOrder || 'Random', 'Default Sort Order')}
+                ${buildSelect('discovery-defaultCardFormat', CARD_FORMATS, discovery.defaultCardFormat || 'Poster', 'Default Card Format')}
+                ${buildTextInput('discovery-spotlightDiscoveryChance', discovery.spotlightDiscoveryChance || 0.5, 'Spotlight Discovery Chance (0-1)', 'number')}
             </div>
         `;
     }
@@ -1808,17 +1865,68 @@
         const cache = currentConfig.CACHE || {};
 
         return `
-            <div style="display: grid; gap: 1em;">
-                <div style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
-                    <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-bottom: 0.75em;">TTL values in minutes</div>
-                    ${buildTextInput('cache-DEFAULT_TTL', msToMinutes(cache.DEFAULT_TTL || 1800000), 'Default TTL (minutes)', 'number')}
-                    ${buildTextInput('cache-VERY_SHORT_TTL', msToMinutes(cache.VERY_SHORT_TTL || 60000), 'Very Short TTL (minutes)', 'number')}
-                    ${buildTextInput('cache-SHORT_TTL', msToMinutes(cache.SHORT_TTL || 300000), 'Short TTL (minutes)', 'number')}
-                    ${buildTextInput('cache-LONG_TTL', msToMinutes(cache.LONG_TTL || 86400000), 'Long TTL (minutes)', 'number')}
-                    ${buildTextInput('cache-STATIC_TTL', msToMinutes(cache.STATIC_TTL || 604800000), 'Static TTL (minutes)', 'number')}
-                    ${buildTextInput('cache-DISCOVERY_TTL', msToMinutes(cache.DISCOVERY_TTL || 3600000), 'Discovery TTL (minutes)', 'number')}
-                </div>
+            <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-bottom: 0.5em;">TTL values in minutes</div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.75em 1.5em;">
+                ${buildTextInput('cache-DEFAULT_TTL', msToMinutes(cache.DEFAULT_TTL || 1800000), 'Default TTL (minutes)', 'number')}
+                ${buildTextInput('cache-VERY_SHORT_TTL', msToMinutes(cache.VERY_SHORT_TTL || 60000), 'Very Short TTL (minutes)', 'number')}
+                ${buildTextInput('cache-SHORT_TTL', msToMinutes(cache.SHORT_TTL || 300000), 'Short TTL (minutes)', 'number')}
+                ${buildTextInput('cache-LONG_TTL', msToMinutes(cache.LONG_TTL || 86400000), 'Long TTL (minutes)', 'number')}
+                ${buildTextInput('cache-STATIC_TTL', msToMinutes(cache.STATIC_TTL || 604800000), 'Static TTL (minutes)', 'number')}
+                ${buildTextInput('cache-DISCOVERY_TTL', msToMinutes(cache.DISCOVERY_TTL || 3600000), 'Discovery TTL (minutes)', 'number')}
             </div>
+        `;
+    }
+
+    /**
+     * Build spotlight settings HTML (default behavior for spotlight sections)
+     */
+    function buildSpotlightSettingsHTML() {
+        if (!currentConfig) return '';
+        const spotlight = currentConfig.SPOTLIGHT_SETTINGS || {};
+        const defaults = window.KefinHomeConfig2?.SPOTLIGHT_SETTINGS || {};
+        return `
+            <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-bottom: 0.5em;">Default behavior for spotlight sections on the home screen. Per-section overrides can be set when editing a section.</div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.75em 1.5em;">
+                ${buildToggleSlider('spotlight-autoPlay', spotlight.autoPlay !== false, 'Auto-play', { includeHiddenCheckbox: true })}
+                ${buildToggleSlider('spotlight-showDots', spotlight.showDots !== false, 'Show dot indicators', { includeHiddenCheckbox: true })}
+                ${buildToggleSlider('spotlight-showNavButtons', spotlight.showNavButtons !== false, 'Show prev/next buttons', { includeHiddenCheckbox: true })}
+                ${buildToggleSlider('spotlight-showClearArt', spotlight.showClearArt === true, 'Show clear art', { includeHiddenCheckbox: true })}
+                ${buildToggleSlider('spotlight-panAnimation', spotlight.panAnimation !== false, 'Pan animation', { includeHiddenCheckbox: true })}
+                ${buildToggleSlider('spotlight-fullScreen', spotlight.fullScreen === true, 'Full screen', { includeHiddenCheckbox: true })}
+                ${buildToggleSlider('spotlight-dualBackdrops', spotlight.dualBackdrops !== false, 'Dual backdrops', { includeHiddenCheckbox: true })}
+                ${buildTextInput('spotlight-interval', spotlight.interval ?? defaults.interval ?? 10000, 'Auto-play interval (ms)', 'number')}
+            </div>
+        `;
+    }
+
+    /**
+     * Build spotlight settings HTML for a section editor (custom or discovery).
+     * Shown only when Render Mode is Spotlight; call from buildSectionEditorHTML when the editor includes render mode.
+     * @param {Object} section - Section or discovery config (for spotlightConfig / defaults)
+     * @param {string} idPrefix - Input id prefix, e.g. 'section-' or 'discovery-'
+     * @param {boolean} isSpotlight - Initial visibility (true = show)
+     * @returns {string} HTML for the spotlight options container
+     */
+    function buildSectionEditorSpotlightHTML(section, idPrefix, isSpotlight) {
+        const globalSpotlight = currentConfig?.SPOTLIGHT_SETTINGS || {};
+        const spotlightDefaults = window.KefinHomeConfig2?.SPOTLIGHT_SETTINGS || {};
+        const sectionSpotlight = section.spotlightConfig || {};
+        const spotlightOpts = { ...spotlightDefaults, ...globalSpotlight, ...sectionSpotlight };
+        const containerId = idPrefix + 'spotlight-options-container';
+        return `
+                <div id="${containerId}" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em; display: ${isSpotlight ? 'block' : 'none'};">
+                    <div class="listItemBodyText" style="font-weight: 500; margin-bottom: 0.75em;">Spotlight Options</div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.75em 1.5em;">
+                        ${buildToggleSlider(idPrefix + 'spotlight-autoPlay', spotlightOpts.autoPlay !== false, 'Auto-play', { includeHiddenCheckbox: true })}
+                        ${buildToggleSlider(idPrefix + 'spotlight-showDots', spotlightOpts.showDots !== false, 'Show dot indicators', { includeHiddenCheckbox: true })}
+                        ${buildToggleSlider(idPrefix + 'spotlight-showNavButtons', spotlightOpts.showNavButtons !== false, 'Show prev/next buttons', { includeHiddenCheckbox: true })}
+                        ${buildToggleSlider(idPrefix + 'spotlight-showClearArt', spotlightOpts.showClearArt === true, 'Show clear art', { includeHiddenCheckbox: true })}
+                        ${buildToggleSlider(idPrefix + 'spotlight-panAnimation', spotlightOpts.panAnimation !== false, 'Pan animation', { includeHiddenCheckbox: true })}
+                        ${buildToggleSlider(idPrefix + 'spotlight-fullScreen', spotlightOpts.fullScreen === true, 'Full screen', { includeHiddenCheckbox: true })}
+                        ${buildToggleSlider(idPrefix + 'spotlight-dualBackdrops', spotlightOpts.dualBackdrops !== false, 'Dual backdrops', { includeHiddenCheckbox: true })}
+                        ${buildTextInput(idPrefix + 'spotlight-interval', spotlightOpts.interval ?? 10000, 'Auto-play interval (ms)', 'number')}
+                    </div>
+                </div>
         `;
     }
 
@@ -1968,6 +2076,11 @@
             if (defaultFields.includeFilterByPlayedStatus) {
                 basicPropertiesHTML += buildFilterByPlayedStatusToggle('section-filterByPlayedStatus', section.queries?.[0]?.queryOptions?.IsUnplayed === true);
             }
+            basicPropertiesHTML += buildSelect('section-renderMode', [
+                { value: 'Normal', label: 'Normal' },
+                { value: 'Spotlight', label: 'Spotlight' },
+                { value: 'Random', label: 'Random' }
+            ], section.renderMode || (section.spotlight ? 'Spotlight' : 'Normal'), 'Render Mode');
         } else {
             // Custom sections - show full editor in flexbox layout
             basicPropertiesHTML += `
@@ -2068,6 +2181,10 @@
             }
         }
 
+        // Spotlight options: only include when this editor has Render Mode (custom sections)
+        const isSpotlightMode = section.renderMode === 'Spotlight' || section.spotlight;
+        const spotlightOptionsHTML = buildSectionEditorSpotlightHTML(section, 'section-', isSpotlightMode);
+
         return `
             <div style="max-width: 1000px; margin: 0 auto;">
                 <!-- Enabled Toggle (at the very top) -->
@@ -2080,7 +2197,10 @@
                     ${basicPropertiesHTML}
                 </div>
                 ${additionalFieldsHTML}
+                <!-- Spotlight Options (visible only when Render Mode = Spotlight) -->
+                ${spotlightOptionsHTML}
                 ${!isDefaultSection ? `
+
                 <!-- Queries Array Editor -->
                 <div style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
                     <div style="display: flex; align-items: center; margin-bottom: 0.75em; gap: 0.5em;">
@@ -2213,7 +2333,7 @@
             { key: 'SortBy', label: 'Sort By', value: queryOptions.SortBy || '', options: SORT_ORDERS },
             { key: 'SortOrder', label: 'Sort Order', value: queryOptions.SortOrder || '', options: SORT_ORDER_DIRECTIONS },
             { key: 'Limit', label: 'Limit', value: queryOptions.Limit || '', type: 'number' },
-            { key: 'Filters', label: 'Filters', value: queryOptions.Filters || '' },
+            { key: 'Filters', label: 'Filters', value: queryOptions.Filters || '', placeholder: 'IsUnplayed,IsResumable,IsNotFolder' },
             { key: 'SearchTerm', label: 'Search Term', value: queryOptions.SearchTerm || '' }
         ];
 
@@ -2242,7 +2362,7 @@
                 <div style="display: flex; gap: 0.75em; flex-wrap: wrap;">
                     ${commonFields.map(field => `
                         <div style="flex: 1; min-width: 150px;">
-                        ${field.options ? buildSelect(`query-${queryIndex}-${field.key}`, field.options, field.value, field.label) : buildTextInput(`query-${queryIndex}-${field.key}`, field.value, field.label, field.type || 'text')}
+                        ${field.options ? buildSelect(`query-${queryIndex}-${field.key}`, field.options, field.value, field.label) : buildTextInput(`query-${queryIndex}-${field.key}`, field.value, field.label, field.type || 'text', field.placeholder || '')}
                         </div>
                     `).join('')}
                 </div>
@@ -2577,6 +2697,8 @@
      * Build discovery section editor HTML (simplified)
      */
     function buildDiscoveryEditorHTML(section) {
+        const isDiscoverySpotlight = section.renderMode === 'Spotlight';
+        const discoverySpotlightHTML = buildSectionEditorSpotlightHTML(section, 'discovery-', isDiscoverySpotlight);
         return `
             <div style="max-width: 100%;">
                 <div class="listItemBodyText secondary" style="margin-bottom: 1em; padding: 0.75em; background: rgba(255,255,255,0.05); border-radius: 4px;">
@@ -2588,8 +2710,10 @@
                 ${buildSelect('discovery-sortOrder', SORT_ORDERS, section.sortOrder || 'Random', 'Sort Order')}
                 ${section.sortOrderDirection ? buildSelect('discovery-sortOrderDirection', SORT_ORDER_DIRECTIONS, section.sortOrderDirection || 'Ascending', 'Sort Order Direction') : ''}
                 ${buildSelect('discovery-cardFormat', CARD_FORMATS, section.cardFormat || 'Poster', 'Card Format')}
-                ${buildTextInput('discovery-ttl', section.ttl !== undefined ? section.ttl : '', 'TTL (ms)', 'number')}                
+                ${buildTextInput('discovery-ttl', section.ttl !== undefined ? section.ttl : '', 'TTL (ms)', 'number')}
                 ${buildSelect('discovery-renderMode', RENDER_MODE_OPTIONS, section.renderMode || 'Normal', 'Render Mode')}
+                <!-- Spotlight Options (visible only when Render Mode = Spotlight) -->
+                ${discoverySpotlightHTML}
             </div>
         `;
     }
@@ -2635,6 +2759,22 @@
                 if (minimumItems) {
                     discovery.minimumItems = parseInt(minimumItems, 10);
                 }
+            }
+
+            // Spotlight options (saved when Render Mode = Spotlight)
+            if (renderMode === 'Spotlight') {
+                discovery.spotlightConfig = {
+                    autoPlay: dialog.querySelector('#discovery-spotlight-autoPlay')?.checked !== false,
+                    interval: parseInt(dialog.querySelector('#discovery-spotlight-interval')?.value || '10000', 10),
+                    showDots: dialog.querySelector('#discovery-spotlight-showDots')?.checked !== false,
+                    showNavButtons: dialog.querySelector('#discovery-spotlight-showNavButtons')?.checked !== false,
+                    showClearArt: dialog.querySelector('#discovery-spotlight-showClearArt')?.checked === true,
+                    panAnimation: dialog.querySelector('#discovery-spotlight-panAnimation')?.checked !== false,
+                    fullScreen: dialog.querySelector('#discovery-spotlight-fullScreen')?.checked === true,
+                    dualBackdrops: dialog.querySelector('#discovery-spotlight-dualBackdrops')?.checked !== false
+                };
+            } else {
+                delete discovery.spotlightConfig;
             }
             
             return discovery;
@@ -2722,6 +2862,24 @@
             if (section.id.startsWith('seasonal.')) {
                 section.startDate = dialog.querySelector('#section-startDate')?.value || section.startDate;
                 section.endDate = dialog.querySelector('#section-endDate')?.value || section.endDate;
+            }
+            
+            const renderMode = dialog.querySelector('#section-renderMode')?.value || 'Normal';
+            if (renderMode) {
+                section.renderMode = renderMode;
+
+                if (renderMode === 'Spotlight') {
+                    section.spotlightConfig = {
+                        autoPlay: dialog.querySelector('#section-spotlight-autoPlay')?.checked !== false,
+                        interval: parseInt(dialog.querySelector('#section-spotlight-interval')?.value || '10000', 10),
+                        showDots: dialog.querySelector('#section-spotlight-showDots')?.checked !== false,
+                        showNavButtons: dialog.querySelector('#section-spotlight-showNavButtons')?.checked !== false,
+                        showClearArt: dialog.querySelector('#section-spotlight-showClearArt')?.checked === true,
+                        panAnimation: dialog.querySelector('#section-spotlight-panAnimation')?.checked !== false,
+                        fullScreen: dialog.querySelector('#section-spotlight-fullScreen')?.checked === true,
+                        dualBackdrops: dialog.querySelector('#section-spotlight-dualBackdrops')?.checked !== false
+                    };
+                }
             }
             
             return section;
@@ -2862,7 +3020,7 @@
                 if (badgeContainer) {
                     const badges = badgeContainer.querySelectorAll('.tag-badge');
                     if (badges.length > 0) {
-                        query.queryOptions.Genres = Array.from(badges).map(b => b.getAttribute('data-value')).filter(Boolean).join(',');
+                        query.queryOptions.Genres = Array.from(badges).map(b => b.getAttribute('data-value')).filter(Boolean);
                     }
                 }
             }
@@ -2871,7 +3029,7 @@
                 if (badgeContainer) {
                     const badges = badgeContainer.querySelectorAll('.tag-badge');
                     if (badges.length > 0) {
-                        query.queryOptions.Tags = Array.from(badges).map(b => b.getAttribute('data-value')).filter(Boolean).join(',');
+                        query.queryOptions.Tags = Array.from(badges).map(b => b.getAttribute('data-value')).filter(Boolean);
                     }
                 }
             }
@@ -2963,6 +3121,22 @@
         if (startDate) section.startDate = startDate;
         if (endDate) section.endDate = endDate;
 
+        // Spotlight options (saved to spotlightConfig when Render Mode = Spotlight)
+        if (renderMode === 'Spotlight') {
+            section.spotlightConfig = {
+                autoPlay: dialog.querySelector('#section-spotlight-autoPlay')?.checked !== false,
+                interval: parseInt(dialog.querySelector('#section-spotlight-interval')?.value || '10000', 10),
+                showDots: dialog.querySelector('#section-spotlight-showDots')?.checked !== false,
+                showNavButtons: dialog.querySelector('#section-spotlight-showNavButtons')?.checked !== false,
+                showClearArt: dialog.querySelector('#section-spotlight-showClearArt')?.checked === true,
+                panAnimation: dialog.querySelector('#section-spotlight-panAnimation')?.checked !== false,
+                fullScreen: dialog.querySelector('#section-spotlight-fullScreen')?.checked === true,
+                dualBackdrops: dialog.querySelector('#section-spotlight-dualBackdrops')?.checked !== false
+            };
+        } else {
+            delete section.spotlightConfig;
+        }
+
         // Multi-query sorting
         if (section.queries.length > 1) {
             const sortBy = dialog.querySelector('#section-sortBy')?.value;
@@ -2995,7 +3169,8 @@
             defaultCardFormat: dialog.querySelector('#discovery-defaultCardFormat')?.value || 'Poster',
             spotlightDiscoveryChance: parseFloat(dialog.querySelector('#discovery-spotlightDiscoveryChance')?.value || '0.5'),
             renderSpotlightAboveMatching: dialog.querySelector('#discovery-renderSpotlightAboveMatching')?.checked === true,
-            randomizeOrder: dialog.querySelector('#discovery-randomizeOrder')?.checked === true
+            randomizeOrder: dialog.querySelector('#discovery-randomizeOrder')?.checked === true,
+            fadeInSections: dialog.querySelector('#discovery-fadeInSections')?.checked === true
         };
 
         const seasonal = {
@@ -3018,12 +3193,30 @@
             FORCE_REFRESH_TTL: 0
         };
 
+        const spotlight = {
+            autoPlay: dialog.querySelector('#spotlight-autoPlay')?.checked !== false,
+            interval: parseInt(dialog.querySelector('#spotlight-interval')?.value || '10000', 10),
+            showDots: dialog.querySelector('#spotlight-showDots')?.checked !== false,
+            showNavButtons: dialog.querySelector('#spotlight-showNavButtons')?.checked !== false,
+            showClearArt: dialog.querySelector('#spotlight-showClearArt')?.checked === true,
+            panAnimation: dialog.querySelector('#spotlight-panAnimation')?.checked !== false,
+            fullScreen: dialog.querySelector('#spotlight-fullScreen')?.checked === true,
+            dualBackdrops: dialog.querySelector('#spotlight-dualBackdrops')?.checked !== false
+        };
+
+        const homeSettings = {
+            fadeInSections: dialog.querySelector('#home-fadeInSections')?.checked === true,
+            ensureThumbsForPopularTVNetworks: dialog.querySelector('#home-ensureThumbsForPopularTVNetworks')?.checked === true
+        };
+
         const mergeNextUp = dialog.querySelector('#merge-next-up')?.checked === true;
 
         return {
             DISCOVERY_SETTINGS: discovery,
             SEASONAL_THEME_SETTINGS: seasonal,
             CACHE: cache,
+            SPOTLIGHT_SETTINGS: spotlight,
+            HOME_SETTINGS: homeSettings,
             MERGE_NEXT_UP: mergeNextUp
         };
     }
@@ -3090,6 +3283,25 @@
 
                         // Refresh main modal and restore tab functionality
                         refreshMainModal();
+                    });
+                }
+
+                // Delegated toggle-slider handler for section editor (Spotlight Options, Discovery Enabled, etc.)
+                // Single listener on content root so it works when controls are re-rendered and is not re-added
+                const contentRoot = modalInstance.dialogContent;
+                if (contentRoot) {
+                    contentRoot.addEventListener('click', (e) => {
+                        const btn = e.target.closest('.toggle-slider');
+                        if (!btn || !contentRoot.contains(btn)) return;
+                        const checkboxId = btn.dataset.checkboxId;
+                        if (!checkboxId) return;
+                        e.stopPropagation();
+                        const checkbox = document.getElementById(checkboxId);
+                        if (checkbox && contentRoot.contains(checkbox)) {
+                            checkbox.checked = !checkbox.checked;
+                            checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+                            updateToggleSliderUI(btn, checkbox.checked);
+                        }
                     });
                 }
 
@@ -3399,15 +3611,29 @@
                     });
                 }
                 
-                // Render Mode dropdown - show/hide Card Format
+                // Render Mode dropdown - show/hide Card Format and Spotlight Options (section editor)
                 const renderModeSelect = modalInstance.dialogContent.querySelector('#section-renderMode');
                 const cardFormatContainer = modalInstance.dialogContent.querySelector('#section-cardFormat-container');
-                if (renderModeSelect && cardFormatContainer) {
-                    const updateCardFormatVisibility = () => {
-                        cardFormatContainer.style.display = renderModeSelect.value === 'Spotlight' ? 'none' : 'block';
+                const spotlightOptionsContainer = modalInstance.dialogContent.querySelector('#section-spotlight-options-container');
+                if (renderModeSelect) {
+                    const updateRenderModeDependentVisibility = () => {
+                        const isSpotlight = renderModeSelect.value === 'Spotlight';
+                        if (cardFormatContainer) cardFormatContainer.style.display = isSpotlight ? 'none' : 'block';
+                        if (spotlightOptionsContainer) spotlightOptionsContainer.style.display = isSpotlight ? 'block' : 'none';
                     };
-                    renderModeSelect.addEventListener('change', updateCardFormatVisibility);
-                    updateCardFormatVisibility(); // Set initial state
+                    renderModeSelect.addEventListener('change', updateRenderModeDependentVisibility);
+                    updateRenderModeDependentVisibility(); // Set initial state
+                }
+
+                // Render Mode dropdown - show/hide Spotlight Options (discovery editor)
+                const discoveryRenderModeSelect = modalInstance.dialogContent.querySelector('#discovery-renderMode');
+                const discoverySpotlightOptionsContainer = modalInstance.dialogContent.querySelector('#discovery-spotlight-options-container');
+                if (discoveryRenderModeSelect && discoverySpotlightOptionsContainer) {
+                    const updateDiscoverySpotlightVisibility = () => {
+                        discoverySpotlightOptionsContainer.style.display = discoveryRenderModeSelect.value === 'Spotlight' ? 'block' : 'none';
+                    };
+                    discoveryRenderModeSelect.addEventListener('change', updateDiscoverySpotlightVisibility);
+                    updateDiscoverySpotlightVisibility(); // Set initial state
                 }
                 
                 // Section Group dropdown - show/hide new group input
@@ -4018,6 +4244,36 @@
             const contentContainer = dialog.querySelector('#section-content');
             if (contentContainer) {
                 contentContainer.innerHTML = buildSectionContentHTML(sectionType);
+            }
+        });
+
+        // Global Settings sub-tab navigation (left nav in Global Settings tab)
+        dialog.addEventListener('click', (e) => {
+            const btn = e.target.closest('.global-settings-nav-btn');
+            if (!btn) return;
+            const subTab = btn.dataset.globalSettingsTab;
+            if (!subTab) return;
+
+            currentGlobalSettingsSubTab = subTab;
+
+            dialog.querySelectorAll('.global-settings-nav-btn').forEach(b => {
+                b.classList.remove('active');
+                b.style.background = 'rgba(255,255,255,0.05)';
+                b.style.borderColor = 'rgba(255,255,255,0.1)';
+                b.style.color = 'inherit';
+                const label = b.querySelector('.listItemBodyText');
+                if (label) label.style.fontWeight = '400';
+            });
+            btn.classList.add('active');
+            btn.style.background = 'rgba(0, 164, 220, 0.2)';
+            btn.style.borderColor = 'rgba(0, 164, 220, 0.5)';
+            btn.style.color = 'var(--theme-primary-color, #00a4dc)';
+            const label = btn.querySelector('.listItemBodyText');
+            if (label) label.style.fontWeight = '500';
+
+            const contentContainer = dialog.querySelector('#global-settings-content');
+            if (contentContainer) {
+                contentContainer.innerHTML = buildGlobalSettingsPanelContent(subTab);
             }
         });
         /* dialog.querySelectorAll('.section-type-nav-btn').forEach(btn => {
@@ -5348,6 +5604,8 @@
             // Load config
             const config = await loadConfig();
 
+            await verifyRecentlyAddedInLibraryConfig(config);
+
             // Build content
             const content = document.createElement('div');
             content.innerHTML = buildMainConfigHTML();
@@ -5466,8 +5724,7 @@
                 // Build query URL using shared builder (handles minAge/maxAge conversion)
                 if (query.dataSource) {
                     // Data source - skip for preview (would need special handling)
-                    showToast('Data source queries cannot be previewed');
-                    continue;
+                    queryUrl = null;
                 } else if (window.apiHelper && window.apiHelper.buildQueryFromSection) {
                     // Use shared builder for consistency
                     queryUrl = window.apiHelper.buildQueryFromSection(query, userId, serverUrl);
@@ -5480,15 +5737,20 @@
                     }
                 }
 
-                if (queryUrl && typeof queryUrl === 'string') {
-                    try {
-                        const result = await apiHelper.getQuery(queryUrl, { useCache: false });
-                        const items = result.Items || result || [];
-                        allItems = allItems.concat(items);
-                    } catch (error) {
-                        console.error('[Preview] Error fetching query:', error);
-                        showToast(`Error fetching query: ${error.message}`);
+                try {
+                    let items = [];
+                    if (query.dataSource) {                            
+                        const response = await window.apiHelper.fetchFromDataSource(query.dataSource, query.queryOptions || {}, false);
+                        items = response.Items || response || [];
                     }
+                    else if (queryUrl && typeof queryUrl === 'string') {
+                        const result = await apiHelper.getQuery(queryUrl, { useCache: false });
+                        items = result.Items || result || [];
+                    }
+                    allItems = allItems.concat(items);
+                } catch (error) {
+                    console.error('[Preview] Error fetching query:', error);
+                    showToast(`Error fetching query: ${error.message}`);
                 }
             }
 

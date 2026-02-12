@@ -260,7 +260,7 @@
             targetTabButton = await pollForElement(() => document.querySelector(`.headerTabs button[data-index="${currentTabIndex}"]`), 50, 100);
         }
 
-        if (targetTabButton.classList.contains('emby-tab-button-active')) {
+        if (targetTabButton && targetTabButton.classList.contains('emby-tab-button-active')) {
             LOG('Target tab is already active');
             return;
         }

@@ -31,6 +31,145 @@
     transition: opacity 0.8s ease-in-out;
 }
 
+/* Dual-backdrop background with masked crossfade */
+.spotlight-background-dual {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    overflow: hidden;
+}
+
+.spotlight-background-layer {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    overflow: hidden;
+}
+
+.spotlight-background-layer img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    pointer-events: none;
+}
+
+.spotlight-background-layer img.animate {
+    filter: blur(0);
+    transform: scale(1);
+    transition: filter 0.3s ease-in-out, transform 0.3s ease-in-out;
+}
+
+.spotlight-background-layer-left img.animate {
+    animation: kenBurnsZoomOut 20s ease-out forwards;
+}
+.spotlight-background-layer-right img.animate {
+    animation: kenBurnsZoomIn 20s ease-out forwards;
+}
+
+/* Single backdrop (when dual backdrops disabled or only one image) - same pan animation */
+.spotlight-background-single {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    overflow: hidden;
+}
+
+.spotlight-background-single img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    pointer-events: none;
+}
+
+.spotlight-background-single img.animate {
+    animation: kenBurnsZoomIn 20s ease-out forwards;
+}
+
+@keyframes kenBurnsZoomIn {
+    from {
+      transform: scale(1) translate3d(0, 0, 0);
+    }
+    to {
+      transform: scale(1.12) translate3d(-1%, -1%, 0);
+    }
+  }
+
+  @keyframes kenBurnsZoomOut {
+    from {
+      transform: scale(1.15) translate3d(-1%, -1%, 0);
+    }
+    to {
+      transform: scale(1.02) translate3d(0, 0, 0);
+    }
+  }
+  
+  
+
+@keyframes slowPanRight {
+    from {
+      transform: scale(1.1) translate3d(-3%, 0, 0);
+    }
+    to {
+      transform: scale(1.1) translate3d(3%, 0, 0);
+    }
+  }
+
+  @keyframes slowPanLeft {
+    from {
+      transform: scale(1.1) translate3d(3%, 0, 0);
+    }
+    to {
+      transform: scale(1.1) translate3d(-3%, 0, 0);
+    }
+  }
+  
+  
+
+/* Layer masks for elegant crossfade - overlap in center (45-55%) */
+.spotlight-background-layer-left {
+    left: 0;
+    width: 55%;
+    -webkit-mask-image: linear-gradient(
+        to right,
+        rgba(0, 0, 0, 1) 0%,
+        rgba(0, 0, 0, 1) 75%,
+        rgba(0, 0, 0, 0.5) 90%,
+        rgba(0, 0, 0, 0) 100%
+    );
+    mask-image: linear-gradient(
+        to right,
+        rgba(0, 0, 0, 1) 0%,
+        rgba(0, 0, 0, 1) 75%,
+        rgba(0, 0, 0, 0.5) 90%,
+        rgba(0, 0, 0, 0) 100%
+    );
+    -webkit-mask-size: 100% 100%;
+    mask-size: 100% 100%;
+}
+
+.spotlight-background-layer-right {
+    right: 0;
+    width: 55%;
+    -webkit-mask-image: linear-gradient(
+        to right,
+        rgba(0, 0, 0, 0) 0%,
+        rgba(0, 0, 0, 0.5) 10%,
+        rgba(0, 0, 0, 1) 25%,
+        rgba(0, 0, 0, 1) 100%
+    );
+    mask-image: linear-gradient(
+        to right,
+        rgba(0, 0, 0, 0) 0%,
+        rgba(0, 0, 0, 0.5) 10%,
+        rgba(0, 0, 0, 1) 25%,
+        rgba(0, 0, 0, 1) 100%
+    );
+    -webkit-mask-size: 100% 100%;
+    mask-size: 100% 100%;
+}
+
 .spotlight-item[data-index="0"] {
     opacity: 1;
 }
@@ -563,37 +702,208 @@
     display: initial !important;
 }
 
+/* Full-screen spotlight: negative margins for overlap, content inset, top/bottom fade.
+   Banner has NO padding so the background image overflows edge-to-edge; only content is inset. */
 .spotlight-section[data-full-screen="true"] {
+    --spotlight-fullscreen-vertical: 200px;
+    --spotlight-fullscreen-horizontal: max(env(safe-area-inset-left), env(safe-area-inset-right), 4%);
     padding: 0;
     width: 100%;
-}
-.spotlight-section[data-full-screen="true"] .spotlight-banner-container {
-    border-radius: 0;
-    height: 70vh;
+    margin-top: calc(-1 * calc(var(--spotlight-fullscreen-vertical) / 2));
+    margin-bottom: calc(-1 * calc(var(--spotlight-fullscreen-vertical) / 2));
 }
 
-.spotlight-section[data-full-screen="true"] .spotlight-items-container {
-    
+.spotlight-section[data-full-screen="true"] .spotlight-banner-container {
+    border-radius: 0;
+    height: 90vh !important;
+    /* No padding: background fills full size so image extends edge-to-edge and into overlap zone */
+    position: relative;
+    /* Wider mask so backdrop fades gradually at top/bottom (no visible solid edge during animation) */
+    -webkit-mask-image: linear-gradient(
+        to bottom,
+        transparent 0%,
+        black 12%,
+        black 88%,
+        transparent 100%
+    );
+    mask-image: linear-gradient(
+        to bottom,
+        transparent 0%,
+        black 12%,
+        black 88%,
+        transparent 100%
+    );
+    -webkit-mask-size: 100% 100%;
+    mask-size: 100% 100%;
+    -webkit-mask-position: 0 0;
+    mask-position: 0 0;
+}
+
+/* Dark gradient overlays at top and bottom (like left-side overlay): graceful fade and better visibility when content overlaps */
+.spotlight-section[data-full-screen="true"] .spotlight-banner-container::before,
+.spotlight-section[data-full-screen="true"] .spotlight-banner-container::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: 22%;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.spotlight-section[data-full-screen="true"] .spotlight-banner-container::before {
+    top: 0;
+    background: linear-gradient(
+        to bottom,
+        rgba(0, 0, 0, 0.85) 0%,
+        rgba(0, 0, 0, 0.5) 40%,
+        transparent 100%
+    );
+}
+
+.spotlight-section[data-full-screen="true"] .spotlight-banner-container::after {
+    bottom: 0;
+    background: linear-gradient(
+        to top,
+        rgba(0, 0, 0, 0.85) 0%,
+        rgba(0, 0, 0, 0.5) 40%,
+        transparent 100%
+    );
+}
+
+.spotlight-section[data-full-screen="true"] .spotlight-items-container,
+.spotlight-section[data-full-screen="true"] .spotlight-item {
+    /* Full bleed: fill banner so background extends to edges (and past negative margin) */
+    left: 0;
+    right: 0;
+    width: 100%;
+}
+
+/* Overlay stays left: 0 so the dark gradient still covers the image; only content is inset via padding.
+   z-index above top/bottom gradient pseudo-elements so title and buttons stay readable. */
+.spotlight-section[data-full-screen="true"] .spotlight-overlay {
+    left: 0;
+    z-index: 3;
+    padding: calc(var(--spotlight-fullscreen-vertical) + 50px) var(--spotlight-fullscreen-horizontal) calc(var(--spotlight-fullscreen-vertical) + 50px) var(--spotlight-fullscreen-horizontal);
 }
 
 .spotlight-section[data-full-screen="true"] .spotlight-overlay.has-title {
-    padding: 70px 80px 20px 80px;
+    padding: calc(var(--spotlight-fullscreen-vertical) + 50px) var(--spotlight-fullscreen-horizontal) calc(var(--spotlight-fullscreen-vertical) + 50px) var(--spotlight-fullscreen-horizontal);
 }
 
 .spotlight-section[data-full-screen="true"] .spotlight-section-title {
-    left: 80px;
+    left: var(--spotlight-fullscreen-horizontal);
+    top: var(--spotlight-fullscreen-vertical);
 }
 
 .spotlight-section[data-full-screen="true"] .spotlight-item-logo {
     width: auto;
     max-width: none;
     height: 40%;
+    margin-bottom: 40px;
 }
 
 .spotlight-section[data-full-screen="true"] .spotlight-clearart {
-    right: 80px;
+    right: var(--spotlight-fullscreen-horizontal);
+    bottom: var(--spotlight-fullscreen-vertical);
 }
 
 .spotlight-section[data-full-screen="true"] .spotlight-nav-container {
-    right: 80px;
+    right: var(--spotlight-fullscreen-horizontal);
+    top: var(--spotlight-fullscreen-vertical);
+}
+
+.spotlight-section[data-full-screen="true"] .spotlight-dots {
+    bottom: var(--spotlight-fullscreen-vertical);
+}
+
+.spotlight-section[data-full-screen="true"] img {
+    object-position: center -35%;    
+}
+.spotlight-section[data-full-screen="true"] .spotlight-clearart {
+    display: none;
+}
+
+:has(.spotlight-section[data-full-screen="true"]) .homeSectionsContainer > *:not(.spotlight-section) {
+    z-index: 1;
+}
+
+.spotlight-section[data-full-screen="true"] .spotlight-tagline {
+    max-height: 150px !important;
+    -webkit-line-clamp: 6;
+    font-style: normal;
+    font-size: 1.05em;
+}
+
+/* Full-screen: modern stream-site metadata styles */
+.spotlight-section[data-full-screen="true"] .metadata-container {
+    gap: 10px;
+}
+
+.spotlight-section[data-full-screen="true"] .spotlight-metadata-row {
+    font-size: 15px;
+    gap: 10px;
+}
+
+/* Pill-style for year, duration, genres, director/writer/series, end time */
+.spotlight-section[data-full-screen="true"] .spotlight-metadata-row > span {
+    padding: 5px 12px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.spotlight-section[data-full-screen="true"] .spotlight-end-time {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.spotlight-section[data-full-screen="true"] .spotlight-end-time .material-icons {
+    font-size: 1.1em;
+    opacity: 0.9;
+}
+
+.spotlight-section[data-full-screen="true"] .spotlight-genre-link {
+    display: inline-block;
+    padding: 5px 12px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    transition: background 0.2s, border-color 0.2s;
+}
+
+.spotlight-section[data-full-screen="true"] .spotlight-genre-link:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.35);
+}
+
+/* Director/writer/series info: pill-style container */
+.spotlight-section[data-full-screen="true"] .spotlight-truncated-list:has(>*) {
+    font-size: 15px;
+    padding: 6px 14px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    display: inline-block;
+    max-width: fit-content;
+}
+
+.spotlight-section a:not(:hover) {
+    text-decoration: none !important;
+}
+
+.spotlight-section[data-full-screen="true"] span.spotlight-end-time::after {
+    content: 'schedule';
+    position: absolute;
+    left: 10px;
+    font-family: 'Material Icons';
+    top: calc(50% + 1px);
+    transform: translateY(-50%);
+}
+
+.spotlight-section[data-full-screen="true"] span.spotlight-end-time {
+    padding-left: 30px !important;
+    position: relative;
 }

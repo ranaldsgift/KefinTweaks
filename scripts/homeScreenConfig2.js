@@ -502,7 +502,7 @@
                     startDate: '02-07',
                     endDate: '02-14',
                     order: 51,
-                    cardFormat: 'Poster',
+                    cardFormat: 'Thumb',
                     queries: [
                         {
                             queryOptions: {
@@ -808,14 +808,8 @@
         defaultCardFormat: "Poster",
         spotlightDiscoveryChance: 0.5,
         renderSpotlightAboveMatching: false,
-        spotlight: {
-            autoPlay: true,
-            interval: 5000,
-            showDots: true,
-            showNavButtons: true,
-            showClearArt: true
-        },
-        randomizeOrder: false
+        randomizeOrder: false,
+        fadeInSections: false,
     }
 
     const SEASONAL_THEME_SETTINGS = {
@@ -843,6 +837,17 @@
     }
     const HOME_SETTINGS = {
         minimumSeriesForPopularTVNetworks: 10,
+        fadeInSections: false,
+        ensureThumbsForPopularTVNetworks: false,
+    }
+
+    const SPOTLIGHT_SETTINGS = {
+        autoPlay: true,
+        interval: 10000,
+        showDots: true,
+        showNavButtons: true,
+        showClearArt: false,
+        panAnimation: true
     }
 
     // Expose configuration
@@ -856,7 +861,8 @@
         MERGE_NEXT_UP: false,
         HOME_SETTINGS: HOME_SETTINGS,
         DISCOVERY_SETTINGS: DISCOVERY_SETTINGS,
-        SEASONAL_THEME_SETTINGS: SEASONAL_THEME_SETTINGS
+        SEASONAL_THEME_SETTINGS: SEASONAL_THEME_SETTINGS,
+        SPOTLIGHT_SETTINGS: SPOTLIGHT_SETTINGS
     };
 
     console.log('[KefinTweaks HomeConfig2] Configuration loaded');

@@ -1198,7 +1198,8 @@
             { key: 'subtitleSearch', label: 'Subtitle Search', desc: 'Search and download subtitles directly from the video OSD' },
             { key: 'exclusiveElsewhere', label: 'Exclusive Elsewhere', desc: 'Custom branding when items aren\'t available on streaming services' },
             { key: 'backdropLeakFix', label: 'Backdrop Leak Fix', desc: 'Fixes memory leaks from backdrop images when tab isn\'t focused' },
-            { key: 'dashboardButtonFix', label: 'Dashboard Button Fix', desc: 'Improved back button behavior on dashboard - prevents navigating back to the new tab browser page' }
+            { key: 'dashboardButtonFix', label: 'Dashboard Button Fix', desc: 'Improved back button behavior on dashboard - prevents navigating back to the new tab browser page' },
+            { key: 'thumbnailScrubber', label: 'Thumbnail Scrubber', desc: 'Shows trickplay thumbnail preview when hovering in the bottom 20px of a video card similar to Youtube' }
         ];
 
         return scriptNames.map(script => {
@@ -4821,7 +4822,7 @@
                     content: `
                         <div class="listItemBodyText" style="margin-bottom: 1em;">
                             Your current configuration is shown below as JSON. Select and copy this text to back up or share your configuration.
-                            ${canUseClipboard ? '' : ' Clipboard access is not available on this connection, so manual copying is required.'}
+                            ${canUseClipboard ? '' : ' Clipboard access requires an HTTPS connection, so manual copying is required.'}
                         </div>
                         <textarea id="exportConfigTextarea" class="fld emby-textarea" rows="20"
                             readonly

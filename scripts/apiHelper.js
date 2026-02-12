@@ -227,6 +227,10 @@
         
         return `${serverAddress}/Users/${userId}/Items?${params.toString()}`;
     }
+
+    const state = {
+        cachedServerVersion: null
+    }
     
     /**
      * API Helper functions for Jellyfin operations
@@ -545,6 +549,14 @@
                         itemTypes = options.IncludeItemTypes.split(',').filter(item => item === 'Movie');
                     } else if (libraryItem.CollectionType === 'tvshows') {
                         itemTypes = options.IncludeItemTypes.split(',').filter(item => item === 'Series' || item === 'Season' || item === 'Episode');
+                    } else if (libraryItem.CollectionType === 'boxsets') {
+                        itemTypes = options.IncludeItemTypes.split(',').filter(item => item === 'BoxSet');
+                    } else if (libraryItem.CollectionType === 'playlists') {
+                        itemTypes = options.IncludeItemTypes.split(',').filter(item => item === 'Playlist');
+                    } else if (libraryItem.CollectionType === 'homevideos') {
+                        //itemTypes = options.IncludeItemTypes.split(',').filter(item => item === 'Video');
+                    } else if (!libraryItem.CollectionType) {
+                        itemTypes = options.IncludeItemTypes.split(',').filter(item => item === 'Movie' || item === 'Series' || item === 'Season' || item === 'Episode' || item === 'Video');
                     }
                 }
                 
@@ -784,7 +796,7 @@
          * @param {string} serverUrl - Server URL
          * @returns {string|Object} - Query URL string or dataSource marker object
          */
-        buildQueryFromSection: function(query, userId, serverUrl) {
+        buildQueryFromSection: function(query, userId, serverUrl, isSpotlight = false) {
             ensureApiClient();
             
             const queryOptions = { ...(query.queryOptions || {}) };
@@ -818,7 +830,7 @@
             }
             
             // Standard /Items query
-            return this.buildStandardQuery(queryOptions, userId, serverUrl);
+            return this.buildStandardQuery(queryOptions, userId, serverUrl, isSpotlight);
         },
 
         /**
@@ -826,18 +838,22 @@
          * @param {Object} queryOptions - Query options
          * @param {string} userId - User ID
          * @param {string} serverUrl - Server URL
+         * @param {boolean} isSpotlight - Whether the query is for a spotlight section
          * @returns {string} - Query URL
          */
-        buildStandardQuery: function(queryOptions, userId, serverUrl) {
+        buildStandardQuery: function(queryOptions, userId, serverUrl, isSpotlight = false) {
             // Fields that require pipe delimiter instead of comma
             const PIPE_DELIMITED_FIELDS = ['Genres', 'Tags', 'OfficialRatings', 'Studios', 'Artists', 'ExcludeArtistsIds', 'Albums', 'AlbumIds', 'StudioIds', 'GenreIds'];
             
             const params = new URLSearchParams({
                 Recursive: 'true',
                 Fields: 'PrimaryImageAspectRatio,DateCreated,Overview,Taglines,ProductionYear,RecursiveItemCount,ChildCount,UserData',
-                ImageTypeLimit: 1,
                 UserId: userId
             });
+
+            if (isSpotlight) {
+                params.set('Fields', 'PrimaryImageAspectRatio,DateCreated,Overview,Taglines,ProductionYear,RecursiveItemCount,ChildCount,UserData,People,Genres,ParentBackdropImageTags');
+            }
             
             // Map all queryOptions to params
             Object.entries(queryOptions || {}).forEach(([key, value]) => {
@@ -896,9 +912,6 @@
             if (!params.has('Fields')) {
                 params.set('Fields', 'PrimaryImageAspectRatio,DateCreated,MediaSourceCount,UserData');
             }
-            if (!params.has('ImageTypeLimit')) {
-                params.set('ImageTypeLimit', '1');
-            }
             if (!params.has('EnableTotalRecordCount')) {
                 params.set('EnableTotalRecordCount', 'false');
             }
@@ -933,7 +946,7 @@
                     }
                     
                     // Filter studios/networks with no thumb
-                    if (cacheName === 'StudiosCache') {
+                    if (cacheName === 'StudiosCache' && window.KefinHomeScreem?.getConfig()?.HOME_SETTINGS?.ensureThumbsForPopularTVNetworks === true) {
                         data = data.filter(item => item.ImageTags?.Thumb);
                     }
                     
@@ -1069,7 +1082,48 @@
             };
         },
         
-        isAdmin: isAdmin
+        isAdmin: isAdmin,        
+    
+        /**
+         * Get the current Jellyfin version from ApiClient
+         * Polls every 500ms for up to 5 seconds in the background if not immediately available
+         * @returns {number|null} The major version number (e.g., 10 for "10.10.X", 11 for "10.11.X"), or null if unavailable
+         */
+        getJellyfinVersion: async function() {
+            try {            
+                // If we have a cached value, return it
+                if (state.cachedServerVersion !== null) {
+                    return state.cachedServerVersion;
+                }
+
+                if (!window.ApiClient || !window.ApiClient._appName || !window.ApiClient._appVersion) {
+                    return null;
+                }
+
+                if (window.ApiClient._appName === 'Jellyfin Web' && window.ApiClient._appVersion) {
+                    state.cachedServerVersion = getMajorServerVersion(window.ApiClient._appVersion);
+                    return state.cachedServerVersion;
+                }
+
+                // Check the server version instead of app version
+                if (!window.ApiClient._serverVersion) {
+                    // Wait 10s to see if it becomes ready, check every 500ms
+                    const startTime = Date.now();
+                    while (Date.now() - startTime < 10000) {
+                        if (window.ApiClient._serverVersion) {
+                            break;
+                        }
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                    }
+                }
+
+                state.cachedServerVersion = getMajorServerVersion(window.ApiClient._serverVersion);
+                return state.cachedServerVersion;
+            } catch (error) {
+                WARN('Error getting server version:', error);
+                return null;
+            }
+        }
     };
 
     const GENRE_TTL = 24 * 60 * 60 * 1000; // 24 hours

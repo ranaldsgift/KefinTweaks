@@ -14,6 +14,7 @@
     let moviesTopPeople = null;
     let isInitializing = false;
     let isComplete = false;
+    let isFetchingTopPeople = false;
 
     /**
      * Extracts necessary item data for caching (similar to watchlist format)
@@ -52,8 +53,7 @@
                         const key = person.Id;
                         if (!peopleMap.has(key)) {
                             peopleMap.set(key, {
-                                id: person.Id,
-                                name: person.Name,
+                                ...person,
                                 directorCount: 0,
                                 writerCount: 0,
                                 actorCount: 0,
@@ -110,10 +110,8 @@
             const topDirectors = allPeople
                 .filter(person => person.directorCount >= minAppearances)
                 .sort((a, b) => b.directorCount - a.directorCount)
-                .slice(0, 100)
                 .map(person => ({
-                    id: person.id,
-                    name: person.name,
+                    ...person,
                     count: person.directorCount,
                     items: person.directorItems || []
                 }));
@@ -121,10 +119,8 @@
             const topWriters = allPeople
                 .filter(person => person.writerCount >= minAppearances)
                 .sort((a, b) => b.writerCount - a.writerCount)
-                .slice(0, 100)
                 .map(person => ({   
-                    id: person.id,
-                    name: person.name,
+                    ...person,
                     count: person.writerCount,
                     items: person.writerItems || []
                 }));
@@ -132,10 +128,8 @@
             const topActors = allPeople
                 .filter(person => person.actorCount >= minAppearances)
                 .sort((a, b) => b.actorCount - a.actorCount)
-                .slice(0, 100)
                 .map(person => ({   
-                    id: person.id,
-                    name: person.name,
+                    ...person,
                     count: person.actorCount,
                     items: person.actorItems || []
                 }));
@@ -155,14 +149,16 @@
      * Fetches and processes top people data from all movies using pagination
      */
     async function fetchTopPeople() {
-        const apiClient = window.ApiClient;
-        const serverUrl = apiClient.serverAddress();
-        const token = apiClient.accessToken();
-        const userId = apiClient.getCurrentUserId();
-        const indexedDBCache = window.IndexedDBCache;
+        if (isFetchingTopPeople) return;
+        isFetchingTopPeople = true;
         
         try {
             LOG('Starting paginated fetch of movies for people data processing...');
+            const apiClient = window.ApiClient;
+            const serverUrl = apiClient.serverAddress();
+            const token = apiClient.accessToken();
+            const userId = apiClient.getCurrentUserId();
+            const indexedDBCache = window.IndexedDBCache;
             
             let startIndex = 0;
             const limit = 500;
@@ -181,17 +177,11 @@
             }
             
             while (hasMoreData) {
-                const url = `${serverUrl}/Items?userId=${userId}&IncludeItemTypes=Movie&Recursive=true&Fields=People,UserData&Limit=${limit}&StartIndex=${startIndex}`;
+                const url = `${serverUrl}/Items?IncludeItemTypes=Movie&Recursive=true&Fields=People,UserData&Limit=${limit}&StartIndex=${startIndex}`;
                 
                 LOG(`Fetching movies ${startIndex} to ${startIndex + limit - 1}...`);
                 
-                const response = await fetch(url, {
-                    headers: { 'Authorization': `MediaBrowser Token="${token}"` }
-                });
-                
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                
-                const data = await response.json();
+                const data = await window.apiHelper.getQuery(url);
                 const movies = data.Items || [];
                 
                 if (movies.length === 0) {
@@ -237,6 +227,8 @@
         } catch (err) {
             ERR('Failed to fetch top people data:', err);
             return null;
+        } finally {
+            isFetchingTopPeople = false;
         }
     }
 
@@ -246,39 +238,45 @@
     async function initialize() {
         if (isInitializing) return;
         
-        if (moviesTopPeople !== null && isComplete) {
-            return;
-        }
-        
-        const indexedDBCache = window.IndexedDBCache;
-        const userId = window.ApiClient.getCurrentUserId();
-        
-        // Check for valid complete filtered data
-        const validComplete = await indexedDBCache.isCacheValid('movies_top_people', userId);
-        if (validComplete) {
-            const cachedData = await indexedDBCache.get('movies_top_people', userId);
-            if (cachedData && cachedData.isComplete) {
-                moviesTopPeople = cachedData;
-                isComplete = true;
-                LOG('Loaded complete top people data from IndexedDB');
-                return;
-            }
-        }
-        
         // Initialize background fetch
         isInitializing = true;
         try {
-            await fetchTopPeople();
+        
+            if (moviesTopPeople !== null && isComplete) {
+                return;
+            }
+            
+            const indexedDBCache = window.IndexedDBCache;
+            const userId = window.ApiClient.getCurrentUserId();
+            
+            // Check for valid complete filtered data
+            const validComplete = await indexedDBCache.isCacheValid('movies_top_people', userId);
+            if (validComplete) {
+                const cachedData = await indexedDBCache.get('movies_top_people', userId);
+                if (cachedData && cachedData.isComplete) {
+                    moviesTopPeople = cachedData;
+                    isComplete = true;
+                    LOG('Loaded complete top people data from IndexedDB');
+                    return;
+                }
+            }
+            fetchTopPeople();
         } finally {
             isInitializing = false;
         }
     }
 
     async function getTopPeople() {
-        if (!moviesTopPeople) {
-            await initialize();
+        LOG('Getting top people data');
+        try {
+            if (!moviesTopPeople) {
+                await initialize();
+            }
+            return moviesTopPeople;
+        } catch (err) {
+            ERR('Failed to get top people data:', err);
+            return null;
         }
-        return moviesTopPeople;
     }
 
     async function getTopActors() {
