@@ -1,0 +1,7 @@
+.spotlight-banner-container {
+    height: 600px !important;
+}
+.spotlight-item-logo {
+    height: 300px !important;
+    max-width: none !important;
+}

@@ -90,6 +90,36 @@
                 name: 'Upcoming Calendar View',
                 url: `${getKefinTweaksRoot()}skins/optional/global/upcomingCalendar.css`,
                 enabled: false
+            },
+            {
+                name: 'Hide Title If Logo Present',
+                url: `${getKefinTweaksRoot()}skins/optional/global/hideTitleIfLogoPresent.css`,
+                enabled: false
+            },
+            {
+                name: 'Sort People With Images First',
+                url: `${getKefinTweaksRoot()}skins/optional/global/sortPeopleWithImagesFirst.css`,
+                enabled: false
+            },
+            {
+                name: 'Taller Spotlight Sections',
+                url: `${getKefinTweaksRoot()}skins/optional/global/tallerSpotlightSections.css`,
+                enabled: false
+            },
+            {
+                name: 'No Clear Art on Spotlights',
+                url: `${getKefinTweaksRoot()}skins/optional/global/noClearArtOnSpotlights.css`,
+                enabled: false
+            },
+            {
+                name: 'Show Section Controls On Hover Only',
+                url: `${getKefinTweaksRoot()}skins/optional/global/sectionControlsOnHover.css`,
+                enabled: false
+            },
+            {
+                name: 'Studio Thumbnails',
+                url: `${getKefinTweaksRoot()}skins/optional/global/studioThumbnails.css`,
+                enabled: false
             }
         ],
         
@@ -332,11 +362,17 @@
                 url: [
                     {
                         majorServerVersions: [10],
-                        urls: ['https://cdn.jsdelivr.net/gh/tedhinklater/finimalism@main/finimalism7.css']
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/tedhinklater/finimalism@main/finimalism7.css',
+                            `${getKefinTweaksRoot()}skins/finimalism-kefin.css`
+                        ]
                     },
                     {
                         majorServerVersions: [11],
-                        urls: ['https://cdn.jsdelivr.net/gh/tedhinklater/finimalism@main/finimalism10.11.css']
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/tedhinklater/finimalism@main/finimalism10.11.css',
+                            `${getKefinTweaksRoot()}skins/finimalism-kefin.css`
+                        ]
                     }
                 ],
                 colorSchemes: [],

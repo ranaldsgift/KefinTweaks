@@ -6,6 +6,7 @@
   text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-transform: capitalize;
 }
 
 .layout-mobile .card[data-type="Genre"] a.cardImageContainer::after {

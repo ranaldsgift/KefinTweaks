@@ -1,0 +1,7 @@
+.custom-scroller-container:hover button.show-all-button,
+.custom-scroller-container:hover .section-refresh-button {
+    visibility: visible;
+}
+button.show-all-button, .section-refresh-button {
+    visibility: hidden;
+}

@@ -1,0 +1,3 @@
+:has(.detailLogo:not(.hide)) .nameContainer {
+    display: none;
+}

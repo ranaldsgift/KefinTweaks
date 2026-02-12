@@ -1,0 +1,9 @@
+div#castCollapsible .itemsContainer,
+div#guestCastCollapsible .itemsContainer {
+    display: flex;
+}
+
+div#castCollapsible .itemsContainer .card:has(.defaultCardBackground),
+div#guestCastCollapsible .itemsContainer .card:has(.defaultCardBackground) {
+    order: 1;
+}

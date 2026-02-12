@@ -2859,6 +2859,9 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         
         // Step 1: Load the new CSS first (gets cached and starts loading)
         requestAnimationFrame(async () => {
+            // Load optional includes for this skin
+            loadOptionalIncludes(skin);
+
             const cssUrls = await getSkinUrlsForCurrentVersion(skin);
             
             if (!cssUrls || cssUrls.length === 0) {
@@ -2872,9 +2875,6 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                     loadSkinCSS(url, skin.name);
                 }
             });
-            
-            // Load optional includes for this skin
-            loadOptionalIncludes(skin);
         });
     }
     
