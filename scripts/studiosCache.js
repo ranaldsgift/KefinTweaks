@@ -36,7 +36,7 @@
 
             // Extract immediate data (may be null/empty if uncached)
             const immediateData = result.data;
-            const studios = immediateData?.Items || immediateData || [];
+            const studios = immediateData?.Items ?? (await result.dataPromise)?.Items ?? [];
 
             // When dataPromise resolves, update in-memory cache
             result.dataPromise.then(freshData => {
