@@ -2325,22 +2325,31 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		
 		try {
 			// Fetch watchlist data
-			const watchlistData = await window.apiHelper.getWatchlistItems({ IncludeItemTypes: 'Movie,Series,Season,Episode' });
+			const watchlistData = await window.apiHelper.getWatchlistItems({ IncludeItemTypes: 'Movie,Series,Season,Episode,BoxSet,Playlist,Video' });
 			localStorageCache.set('watchlist_movies', watchlistData.Items.filter(item => item.Type === 'Movie'));
 			localStorageCache.set('watchlist_series', watchlistData.Items.filter(item => item.Type === 'Series'));
 			localStorageCache.set('watchlist_seasons', watchlistData.Items.filter(item => item.Type === 'Season'));
 			localStorageCache.set('watchlist_episodes', watchlistData.Items.filter(item => item.Type === 'Episode'));
+			localStorageCache.set('watchlist_boxsets', watchlistData.Items.filter(item => item.Type === 'BoxSet'));
+			localStorageCache.set('watchlist_playlists', watchlistData.Items.filter(item => item.Type === 'Playlist'));
+			localStorageCache.set('watchlist_homevideos', watchlistData.Items.filter(item => item.Type === 'Video'));
 			watchlistCache.movies.data = watchlistData.Items.filter(item => item.Type === 'Movie');
 			watchlistCache.series.data = watchlistData.Items.filter(item => item.Type === 'Series');
 			watchlistCache.seasons.data = watchlistData.Items.filter(item => item.Type === 'Season');
 			watchlistCache.episodes.data = watchlistData.Items.filter(item => item.Type === 'Episode');
+			watchlistCache.boxsets.data = watchlistData.Items.filter(item => item.Type === 'BoxSet');
+			watchlistCache.playlists.data = watchlistData.Items.filter(item => item.Type === 'Playlist');
+			watchlistCache.homevideos.data = watchlistData.Items.filter(item => item.Type === 'Video');
 
 			// Initialize all watchlist sections in parallel
 			await Promise.all([
 				initWatchlistSection('movies', 'Movie'),
 				initWatchlistSection('series', 'Series'),
 				initWatchlistSection('seasons', 'Season'),
-				initWatchlistSection('episodes', 'Episode')
+				initWatchlistSection('episodes', 'Episode'),
+				initWatchlistSection('boxsets', 'BoxSet'),
+				initWatchlistSection('playlists', 'Playlist'),
+				initWatchlistSection('homevideos', 'Video')
 			]);
 			
 			tabStates.watchlist.isDataFetched = true;
@@ -3053,7 +3062,10 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		movies: { data: [] },
 		series: { data: [] },
 		seasons: { data: [] },
-		episodes: { data: [] }
+		episodes: { data: [] },
+		boxsets: { data: [] },
+		playlists: { data: [] },
+		homevideos: { data: [] }
 	};
 
 	// Function to render the complete watchlist HTML structure
@@ -3097,6 +3109,15 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 						<div class="watchlist-header-stats" id="watchlist-stats-movies" style="display: none;">
 							<span id="watchlist-movies-count">0 Movies</span>
 						</div>
+						<div class="watchlist-header-stats" id="watchlist-stats-boxsets" style="display: none;">
+							<span id="watchlist-boxsets-count">0 Box Sets</span>
+						</div>
+						<div class="watchlist-header-stats" id="watchlist-stats-playlists" style="display: none;">
+							<span id="watchlist-playlists-count">0 Playlists</span>
+						</div>
+						<div class="watchlist-header-stats" id="watchlist-stats-homevideos" style="display: none;">
+							<span id="watchlist-homevideos-count">0 Home Videos</span>
+						</div>
 					</div>
 					<button class="layout-toggle-btn" id="watchlist-layout-toggle" title="Toggle layout">
 						<span class="material-icons view_module"></span>
@@ -3107,6 +3128,9 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			<div class="watchlist-series"></div>
 			<div class="watchlist-seasons"></div>
 			<div class="watchlist-episodes"></div>
+			<div class="watchlist-boxsets"></div>
+			<div class="watchlist-playlists"></div>
+			<div class="watchlist-homevideos"></div>
 			<div class="watchlist-empty-message" style="display: none;">
 				<div class="empty-message-icon">
 					<span class="material-icons bookmark_border"></span>
@@ -4569,6 +4593,15 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				case 'Episode':
 					sectionName = 'episodes';
 					break;
+				case 'BoxSet':
+					sectionName = 'boxsets';
+					break;
+				case 'Playlist':
+					sectionName = 'playlists';
+					break;
+				case 'Video':
+					sectionName = 'homevideos';
+					break;
 				default:
 					LOG('Unknown item type for cache update:', itemType);
 					return;
@@ -5106,7 +5139,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			let removedCount = 0;
 			
 			// Check all watchlist sections
-			const sections = ['movies', 'series', 'seasons', 'episodes'];
+			const sections = ['movies', 'series', 'seasons', 'episodes', 'boxsets', 'playlists', 'homevideos'];
 			for (const section of sections) {
 				const items = watchlistCache[section].data;
 				const playedItems = items.filter(item => item.UserData && item.UserData.Played);
@@ -5181,7 +5214,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	async function checkIfItemInWatchlist(itemId) {
 		try {
 			// First check if we have the item in our cache (faster)
-			const sections = ['movies', 'series', 'seasons', 'episodes'];
+			const sections = ['movies', 'series', 'seasons', 'episodes', 'boxsets', 'playlists', 'homevideos'];
 			for (const section of sections) {
 				if (watchlistCache[section].data.some(item => item.Id === itemId)) {
 					return true;
@@ -5235,7 +5268,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		const token = apiClient.accessToken();
 
 		// Fetch movies that have been played
-		const url = `${serverUrl}/Items?IncludeItemTypes=Movie&UserId=${userId}&Recursive=true&Filters=IsPlayed&Fields=UserData,ProviderIds&EnableImageTypes=Primary,Backdrop,Thumb&ImageTypeLimit=1&SortBy=DatePlayed&SortOrder=Descending`;
+		const url = `${serverUrl}/Items?IncludeItemTypes=Movie&UserId=${userId}&Recursive=true&Filters=IsPlayed&Fields=UserData,ProviderIds,People&EnableImageTypes=Primary,Backdrop,Thumb&ImageTypeLimit=1&SortBy=DatePlayed&SortOrder=Descending`;
 
 		try {
 			const res = await fetch(url, { headers: { "Authorization": `MediaBrowser Token=\"${token}\"` } });
@@ -6737,7 +6770,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				return;
 			}
 
-			const watchlistSections = ['.watchlist-movies', '.watchlist-series', '.watchlist-seasons', '.watchlist-episodes'];
+			const watchlistSections = ['.watchlist-movies', '.watchlist-series', '.watchlist-seasons', '.watchlist-episodes', '.watchlist-boxsets', '.watchlist-playlists', '.watchlist-homevideos'];
 			
 			// Check if we're currently fetching data or data hasn't been fetched yet
 			if (!tabStates.watchlist.isDataFetched) {
@@ -6766,7 +6799,11 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				renderCardsFromCache(watchlistSection.querySelector('.watchlist-movies'), 'movies', 'Movie'),
 				renderCardsFromCache(watchlistSection.querySelector('.watchlist-series'), 'series', 'Series'),
 				renderCardsFromCache(watchlistSection.querySelector('.watchlist-seasons'), 'seasons', 'Season'),
-				renderCardsFromCache(watchlistSection.querySelector('.watchlist-episodes'), 'episodes', 'Episode')
+				renderCardsFromCache(watchlistSection.querySelector('.watchlist-episodes'), 'episodes', 'Episode'),
+				renderCardsFromCache(watchlistSection.querySelector('.watchlist-boxsets'), 'boxsets', 'BoxSet'),
+				renderCardsFromCache(watchlistSection.querySelector('.watchlist-playlists'), 'playlists', 'Playlist'),
+				renderCardsFromCache(watchlistSection.querySelector('.watchlist-homevideos'), 'homevideos', 'Video')
+
 			]);
 			
 			// Update watchlist stats in header
@@ -6969,6 +7006,9 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		const seasonsCount = watchlistCache.seasons.data.length;
 		const episodesCount = watchlistCache.episodes.data.length;
 		const moviesCount = watchlistCache.movies.data.length;
+		const boxsetsCount = watchlistCache.boxsets.data.length;
+		const playlistsCount = watchlistCache.playlists.data.length;
+		const homevideosCount = watchlistCache.homevideos.data.length;
 
 		// Update or hide shows stats
 		const showsStats = getElementByIdSafe('watchlist-stats-shows');
@@ -7011,6 +7051,39 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				getElementByIdSafe('watchlist-movies-count').textContent = `${moviesCount} Movie${moviesCount === 1 ? '' : 's'}`;
 			} else {
 				moviesStats.style.display = 'none';
+			}
+		}
+
+		// Update or hide boxsets stats
+		const boxsetsStats = getElementByIdSafe('watchlist-stats-boxsets');
+		if (boxsetsStats) {
+			if (boxsetsCount > 0) {
+				boxsetsStats.style.display = 'flex';
+				getElementByIdSafe('watchlist-boxsets-count').textContent = `${boxsetsCount} Box Set${boxsetsCount === 1 ? '' : 's'}`;
+			} else {
+				boxsetsStats.style.display = 'none';
+			}
+		}
+
+		// Update or hide playlists stats
+		const playlistsStats = getElementByIdSafe('watchlist-stats-playlists');
+		if (playlistsStats) {
+			if (playlistsCount > 0) {
+				playlistsStats.style.display = 'flex';
+				getElementByIdSafe('watchlist-playlists-count').textContent = `${playlistsCount} Playlist${playlistsCount === 1 ? '' : 's'}`;
+			} else {
+				playlistsStats.style.display = 'none';
+			}
+		}
+
+		// Update or hide homevideos stats
+		const homevideosStats = getElementByIdSafe('watchlist-stats-homevideos');
+		if (homevideosStats) {
+			if (homevideosCount > 0) {
+				homevideosStats.style.display = 'flex';
+				getElementByIdSafe('watchlist-homevideos-count').textContent = `${homevideosCount} Home Video${homevideosCount === 1 ? '' : 's'}`;
+			} else {
+				homevideosStats.style.display = 'none';
 			}
 		}
 	}
@@ -7312,7 +7385,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		});
 		
 		// Check if item type is supported for watchlist
-		if (itemType !== "Movie" && itemType !== "Series" && itemType !== "Season" && itemType !== "Episode") {
+		if (itemType !== "Movie" && itemType !== "Series" && itemType !== "Season" && itemType !== "Episode" && itemType !== "BoxSet" && itemType !== "Playlist" && itemType !== "Video") {
 			return;
 		}
 
@@ -7336,6 +7409,15 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				break;
 			case 'Episode':
 				sectionName = 'episodes';
+				break;
+			case 'BoxSet':
+				sectionName = 'boxsets';
+				break;
+			case 'Playlist':
+				sectionName = 'playlists';
+				break;
+			case 'Video':
+				sectionName = 'homevideos';
 				break;
 			default:
 				// Unknown type, skip check
@@ -7495,7 +7577,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			// Get item data to check if it should be shown and current state
 			ApiClient.getItem(ApiClient.getCurrentUserId(), itemId).then((item) => {
 				// Only show for Movies, Series, Seasons, and Episodes
-				if (item.Type !== "Movie" && item.Type !== "Series" && item.Type !== "Season" && item.Type !== "Episode") {
+				if (item.Type !== "Movie" && item.Type !== "Series" && item.Type !== "Season" && item.Type !== "Episode" && item.Type !== "BoxSet" && item.Type !== "Playlist" && item.Type !== "Video") {
 					watchlistIcon.style.display = "none";
 				}
 
@@ -7549,7 +7631,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				}
 
 				// Check if item is provided and if item type is supported for watchlist
-				if (item && (item.Type === "Movie" || item.Type === "Series" || item.Type === "Season" || item.Type === "Episode")) {
+				if (item && (item.Type === "Movie" || item.Type === "Series" || item.Type === "Season" || item.Type === "Episode" || item.Type === "BoxSet" || item.Type === "Playlist" || item.Type === "Video")) {
 					visibleItemDetailPage.dataset.watchlistButtonAdded = 'true';
 					addDetailPageWatchlistButton(item);
 				}
@@ -7745,7 +7827,10 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
             { name: 'Movies', el: watchlistSection.querySelector('.watchlist-movies') },
             { name: 'Series', el: watchlistSection.querySelector('.watchlist-series') },
             { name: 'Seasons', el: watchlistSection.querySelector('.watchlist-seasons') },
-            { name: 'Episodes', el: watchlistSection.querySelector('.watchlist-episodes') }
+            { name: 'Episodes', el: watchlistSection.querySelector('.watchlist-episodes') },
+			{ name: 'Box Sets', el: watchlistSection.querySelector('.watchlist-boxsets') },
+			{ name: 'Playlists', el: watchlistSection.querySelector('.watchlist-playlists') },
+			{ name: 'Home Videos', el: watchlistSection.querySelector('.watchlist-homevideos') }
         ];
         
         containers.forEach(({ name, el }) => {
