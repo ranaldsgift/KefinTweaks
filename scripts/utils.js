@@ -14,6 +14,9 @@
     
     // Store the original onViewShow function
     let originalOnViewShow = null;
+    const state = {
+        previousHash: null,
+    }
     
     // Initialize the utils by hooking into Emby.Page.onViewShow
     function initialize() {
@@ -38,7 +41,8 @@
                 const view = getCurrentView() ?? args[0];
                 
                 // Call our registered handlers
-                notifyHandlers(view, args[1], window.location.hash);
+                notifyHandlers(view, args[1], window.location.hash, state.previousHash);
+                state.previousHash = window.location.hash;
             };
             
             LOG('Hooked into Emby.Page.onViewShow');
@@ -184,7 +188,7 @@
      * @param {string} view - The view name
      * @param {Element} element - The view element
      */
-    function notifyHandlers(view, element, hash) {
+    function notifyHandlers(view, element, hash, previousHash) {
         // Clear cache when view changes to ensure fresh data
         const currentItemId = getItemIdFromUrl();
         if (cachedItemId !== currentItemId) {
@@ -203,7 +207,7 @@
             if (shouldCallHandler(config, view)) {
                 try {
                     // Pass the promise as third parameter - handlers can await if needed
-                    config.callback(view, element, hash, itemPromise);
+                    config.callback(view, element, hash, itemPromise, previousHash);
                 } catch (err) {
                     ERR('Error in onViewPage handler:', err);
                 }
@@ -218,8 +222,12 @@
      * @returns {boolean} Whether the handler should be called
      */
     function shouldCallHandler(config, view) {
-        const { pages } = config.options;
+        const { pages, triggerOnSameHash = true } = config.options;
         
+        if (state.previousHash === window.location.hash && !triggerOnSameHash) {
+            return false;
+        }
+
         // If no specific pages are specified, call for all pages
         if (pages.length === 0) return true;
         

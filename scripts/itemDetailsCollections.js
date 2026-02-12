@@ -292,7 +292,8 @@
                 }, 100);
             },
             {
-                pages: ['details']
+                pages: ['details'],
+                triggerOnSameHash: false
             }
         );
 
