@@ -2202,6 +2202,9 @@
             <button class="emby-button raised" id="importConfigBtn" style="padding: 0.75em 2em; font-size: 1em;">
                 <span>Import</span>
             </button>
+            <button class="emby-button raised block button-delete" id="resetAllUsersBtn" style="padding: 0.75em 2em; font-size: 1em; font-weight: 500;">
+                <span>Reset All Users Local Settings</span>
+            </button>
         `;
 
         // Create modal using ModalSystem
@@ -4437,6 +4440,11 @@
             resetBtn.addEventListener('click', () => handleResetConfig(modalInstance));
         }
 
+        const resetAllUsersBtn = modalInstance.dialogFooter?.querySelector('#resetAllUsersBtn');
+        if (resetAllUsersBtn) {
+            resetAllUsersBtn.addEventListener('click', () => handleResetAllUsersConfig(modalInstance));
+        }
+
         // Export button handler
         const exportBtn = modalInstance.dialogFooter?.querySelector('#exportConfigBtn');
         if (exportBtn) {
@@ -5454,6 +5462,41 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             openConfigurationModal();
         } catch (error) {
             console.error('[KefinTweaks Configuration] Error resetting config:', error);
+            if (window.KefinTweaksToaster && window.KefinTweaksToaster.toast) {
+                window.KefinTweaksToaster.toast(`Error resetting configuration: ${error.message}`, '5');
+            } else {
+                alert(`Error resetting configuration: ${error.message}`);
+            }
+        }
+    }
+
+    async function handleResetAllUsersConfig(modalInstance) {
+        const userIsAdmin = await isAdmin();
+        if (!userIsAdmin) {
+            alert('You must be an administrator to reset configuration for all users.');
+            return;
+        }
+
+        const confirmed = confirm('WARNING: This will force ALL users to reset their KefinTweaks settings to the default configuration on their next visit. This action cannot be undone. Are you sure you want to continue?');
+        if (!confirmed) {
+            return;
+        }
+
+        try {
+            const config = await getKefinTweaksConfig();
+            // Update the configVersion to current timestamp
+            // This will trigger the reset logic in injector.js for all clients
+            config.configVersion = Date.now();
+
+            await saveConfigToJavaScriptInjector(config);
+
+            if (window.KefinTweaksToaster && window.KefinTweaksToaster.toast) {
+                window.KefinTweaksToaster.toast('Reset signal sent. All users will be reset on next load.');
+            } else {
+                alert('Reset signal sent. All users will be reset on next load.');
+            }
+        } catch (error) {
+            console.error('[KefinTweaks Configuration] Error resetting all users config:', error);
             if (window.KefinTweaksToaster && window.KefinTweaksToaster.toast) {
                 window.KefinTweaksToaster.toast(`Error resetting configuration: ${error.message}`, '5');
             } else {
