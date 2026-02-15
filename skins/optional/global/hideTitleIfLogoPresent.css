@@ -1,3 +1,4 @@
+/* Hide the title if a logo is present. Use visibility in case skins rely on it for spacing */
 :has(.detailLogo:not(.hide)) .nameContainer {
-    display: none;
+    visibility: hidden;
 }
