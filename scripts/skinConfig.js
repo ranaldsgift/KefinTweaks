@@ -390,6 +390,40 @@
                 ]
             },
             {
+                name: 'Finimalism 11',
+                author: 'tedhinklater',
+                url: [
+                    {
+                        majorServerVersions: [11],
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/tedhinklater/finimalism@main/Finimalism11.css',
+                            `${getKefinTweaksRoot()}skins/finimalism-11-kefin.css`
+                        ]
+                    }
+                ],
+                colorSchemes: [],
+                optionalIncludes: [
+                    {
+                        name: 'Horizontal Scrolling on Home Page',
+                        url: 'https://cdn.jsdelivr.net/gh/tedhinklater/finimalism@main/scrollers-11.css',
+                        enabled: false
+                    }
+                ]
+            },
+            {
+                name: 'Finimalism 12',
+                author: 'tedhinklater',
+                url: [
+                    {
+                        majorServerVersions: [11],
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/tedhinklater/finimalism@main/Finimalism12.css',
+                            `${getKefinTweaksRoot()}skins/finimalism-12-kefin.css`
+                        ]
+                    }
+                ],
+            },
+            {
                 name: 'Jellyfish',
                 author: 'n00bcodr',
                 url: [
@@ -914,7 +948,197 @@
                         enabled: false
                     }
                 ]
-            }
+            },
+            {
+                name: 'Evergreen',
+                author: 'everviolet',
+                url: [
+                    {
+                        majorServerVersions: [10, 11],
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/everviolet/jellyfin@latest/themes/evergarden-winter.css',
+                        ]
+                    },
+                ],
+                colorSchemes: [
+                    {
+                        name: 'Winter',
+                        url: ''
+                    },
+                    {
+                        name: 'Fall',
+                        url: 'https://cdn.jsdelivr.net/gh/everviolet/jellyfin@latest/themes/evergarden-fall.css'
+                    },
+                    {
+                        name: 'Spring',
+                        url: 'https://cdn.jsdelivr.net/gh/everviolet/jellyfin@latest/themes/evergarden-spring.css'
+                    },
+                    {
+                        name: 'Summer',
+                        url: 'https://cdn.jsdelivr.net/gh/everviolet/jellyfin@latest/themes/evergarden-summer.css'
+                    },
+                ]
+            },
+            {
+                name: 'Finity',
+                author: 'prism2001',
+                url: [
+                    {
+                        majorServerVersions: [10],
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/prism2001/finity@main/minimal/finity-minimal.css',
+                        ]
+                    },
+                ],
+            },
+            {
+                name: 'infinitv',
+                author: 'buesche87',
+                url: [
+                    {
+                        majorServerVersions: [10, 11],
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/buesche87/infinitv@latest/infinitv.css',
+                            `${getKefinTweaksRoot()}skins/infinitv-kefin.css`
+                        ]
+                    },
+                ],
+            },
+            {
+                name: 'JellySkin',
+                author: 'prayag17',
+                url: [
+                    {
+                        majorServerVersions: [10],
+                        urls: [
+                            'https://cdn.jsdelivr.net/npm/jellyskin@latest/dist/main.css',
+                        ]
+                    },
+                ],
+                optionalIncludes: [
+                    {
+                        name: 'Logos',
+                        url: 'https://cdn.jsdelivr.net/npm/jellyskin@latest/dist/logo.css',
+                        enabled: false
+                    },
+                    {
+                        name: 'Remove Backdrop Filter',
+                        url: 'https://cdn.jsdelivr.net/npm/jellyskin@latest/dist/addons/improvePerformance/removeBackdropFilter.css',
+                        enabled: false
+                    },
+                    {
+                        name: 'Remove Fading Scroll',
+                        url: 'https://cdn.jsdelivr.net/npm/jellyskin@latest/dist/addons/improvePerformance/removeFadingScroll.css',
+                        enabled: false
+                    },
+                    {
+                        name: 'Horizontal My Media',
+                        url: 'https://cdn.jsdelivr.net/npm/jellyskin@latest/dist/addons/horizontalMyMedia.css',
+                        enabled: false
+                    },
+                    {
+                        name: 'Video Theme Blur',
+                        url: 'https://cdn.jsdelivr.net/npm/jellyskin@latest/dist/addons/videoThemeBlur.css',
+                        enabled: false
+                    }
+                ],
+                colorSchemes: [
+                    {
+                        name: 'Default',
+                        url: ''
+                    },
+                    {
+                        name: 'Mauve',
+                        url: 'https://cdn.jsdelivr.net/npm/jellyskin@latest/dist/addons/gradients/mauve.css'
+                    },
+                    {
+                        name: 'Night Sky',
+                        url: 'https://cdn.jsdelivr.net/npm/jellyskin@latest/dist/addons/gradients/nightSky.css'
+                    },
+                    {
+                        name: 'Sea',
+                        url: 'https://cdn.jsdelivr.net/npm/jellyskin@latest/dist/addons/gradients/sea.css'
+                    },
+                ]
+            },
+            {
+                name: 'Jellyfin Better Styles',
+                author: 'Tetrax-10',
+                url: [
+                    {
+                        majorServerVersions: [10],
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/Tetrax-10/jellyfin-better-styles@dist/theme.css',
+                        ]
+                    },
+                    {
+                        majorServerVersions: [11],
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/Tetrax-10/jellyfin-better-styles@dist/theme.css',
+                            `${getKefinTweaksRoot()}skins/better-styles-kefin-11.css`
+                        ]
+                    },
+                ],
+            },
+            {
+                name: 'Zesty Theme',
+                author: 'stpnwf',
+                url: [
+                    {
+                        majorServerVersions: [10],
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/stpnwf/ZestyTheme@legacy/v10.10/theme.css',
+                        ]
+                    },
+                    {
+                        majorServerVersions: [11],
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/stpnwf/ZestyTheme@latest/theme.css',
+                        ]
+                    },
+                ],
+                optionalIncludes: [
+                    {
+                        name: 'Alternative Login Background',
+                        url: 'https://cdn.jsdelivr.net/gh/stpnwf/ZestyTheme@latest/login-alt.css',
+                        enabled: false
+                    }
+                ],
+                colorSchemes: [
+                    {
+                        name: 'Cyan',
+                        url: ''
+                    },
+                    {
+                        name: 'Fall',
+                        url: 'https://cdn.jsdelivr.net/gh/stpnwf/ZestyTheme@latest/colorschemes/blue.css'
+                    },
+                    {
+                        name: 'Spring',
+                        url: 'https://cdn.jsdelivr.net/gh/stpnwf/ZestyTheme@latest/colorschemes/coral.css'
+                    },
+                    {
+                        name: 'Summer',
+                        url: 'https://cdn.jsdelivr.net/gh/stpnwf/ZestyTheme@latest/colorschemes/gray.css'
+                    },
+                    {
+                        name: 'Green',
+                        url: 'https://cdn.jsdelivr.net/gh/stpnwf/ZestyTheme@latest/colorschemes/green.css'
+                    },
+                    {
+                        name: 'Purple',
+                        url: 'https://cdn.jsdelivr.net/gh/stpnwf/ZestyTheme@latest/colorschemes/purple.css'
+                    },
+                    {
+                        name: 'Red',
+                        url: 'https://cdn.jsdelivr.net/gh/stpnwf/ZestyTheme@latest/colorschemes/red.css'
+                    },
+                    {
+                        name: 'Yellow',
+                        url: 'https://cdn.jsdelivr.net/gh/stpnwf/ZestyTheme@latest/colorschemes/yellow.css'
+                    }
+                ]
+            },
             // Add more skins here as needed
         ]
     };

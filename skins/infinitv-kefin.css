@@ -1,0 +1,18 @@
+:root {
+    /* Accent Color */
+    --accent-h: 310;   /* Hue: Purple */
+    --accent-s: 100%;  /* Saturation */
+    --accent-l: 50%;   /* Brightness */
+
+    /* Background Image */
+    --bgImage: url("https://wallpaperaccess.com/download/purple-galaxy-439751");
+
+    /* Darkness & Opacity */
+    --bgdarkness:    0.6; /* Background Darkness */
+    --headeropacity: 0.7; /* Header & Drawer Opacity */
+    --itemopacity:   0.8; /* Item Opacity (Card Footer, Detail Ribbon) */
+
+    /* Roundings */
+    --rounding-media: 12px;
+    --rounding-system: 6px;
+}
