@@ -70,6 +70,11 @@
     const SORT_ORDERS = ['None', 'Random', 'Name', 'DateCreated', 'PremiereDate', 'CommunityRating', 'CriticRating', 'DatePlayed', 'SortName', 'PlayCount', 'PlayedPercentage', 'StartDate', 'Runtime', 'ProductionYear', 'IsPlayed', 'IsUnplayed', 'ParentIndexNumber', 'IndexNumber', 'IsFolder', 'SimilarityScore', 'SearchScore', 'DateLastContentAdded', 'SeriesDatePlayed', 'ChildCount'];
     const SORT_ORDER_DIRECTIONS = ['Ascending', 'Descending'];
     const RENDER_MODE_OPTIONS = [{ value: 'Normal', label: 'Normal' }, { value: 'Spotlight', label: 'Spotlight' }, { value: 'Random', label: 'Random' }];
+    const SLIDE_STATE_OPTIONS = [
+        { value: 'none', label: 'None' },
+        { value: 'dots', label: 'Dots' },
+        { value: 'numeric', label: 'Numeric' }
+    ];
 
     // Current config state
     let currentConfig = null;
@@ -1888,7 +1893,7 @@
             <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-bottom: 0.5em;">Default behavior for spotlight sections on the home screen. Per-section overrides can be set when editing a section.</div>
             <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.75em 1.5em;">
                 ${buildToggleSlider('spotlight-autoPlay', spotlight.autoPlay !== false, 'Auto-play', { includeHiddenCheckbox: true })}
-                ${buildToggleSlider('spotlight-showDots', spotlight.showDots !== false, 'Show dot indicators', { includeHiddenCheckbox: true })}
+                ${buildSelect('spotlight-slideState', SLIDE_STATE_OPTIONS, (spotlight.showSlideState === false ? 'none' : (spotlight.showDots === false ? 'numeric' : 'dots')), 'Slide state')}
                 ${buildToggleSlider('spotlight-showNavButtons', spotlight.showNavButtons !== false, 'Show prev/next buttons', { includeHiddenCheckbox: true })}
                 ${buildToggleSlider('spotlight-showClearArt', spotlight.showClearArt === true, 'Show clear art', { includeHiddenCheckbox: true })}
                 ${buildToggleSlider('spotlight-panAnimation', spotlight.panAnimation !== false, 'Pan animation', { includeHiddenCheckbox: true })}
@@ -1918,7 +1923,7 @@
                     <div class="listItemBodyText" style="font-weight: 500; margin-bottom: 0.75em;">Spotlight Options</div>
                     <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.75em 1.5em;">
                         ${buildToggleSlider(idPrefix + 'spotlight-autoPlay', spotlightOpts.autoPlay !== false, 'Auto-play', { includeHiddenCheckbox: true })}
-                        ${buildToggleSlider(idPrefix + 'spotlight-showDots', spotlightOpts.showDots !== false, 'Show dot indicators', { includeHiddenCheckbox: true })}
+                        ${buildSelect(idPrefix + 'spotlight-slideState', SLIDE_STATE_OPTIONS, (spotlightOpts.showSlideState === false ? 'none' : (spotlightOpts.showDots === false ? 'numeric' : 'dots')), 'Slide state')}
                         ${buildToggleSlider(idPrefix + 'spotlight-showNavButtons', spotlightOpts.showNavButtons !== false, 'Show prev/next buttons', { includeHiddenCheckbox: true })}
                         ${buildToggleSlider(idPrefix + 'spotlight-showClearArt', spotlightOpts.showClearArt === true, 'Show clear art', { includeHiddenCheckbox: true })}
                         ${buildToggleSlider(idPrefix + 'spotlight-panAnimation', spotlightOpts.panAnimation !== false, 'Pan animation', { includeHiddenCheckbox: true })}
@@ -2763,10 +2768,12 @@
 
             // Spotlight options (saved when Render Mode = Spotlight)
             if (renderMode === 'Spotlight') {
+                const slideStateVal = dialog.querySelector('#discovery-spotlight-slideState')?.value || 'dots';
                 discovery.spotlightConfig = {
                     autoPlay: dialog.querySelector('#discovery-spotlight-autoPlay')?.checked !== false,
                     interval: parseInt(dialog.querySelector('#discovery-spotlight-interval')?.value || '10000', 10),
-                    showDots: dialog.querySelector('#discovery-spotlight-showDots')?.checked !== false,
+                    showSlideState: slideStateVal !== 'none',
+                    showDots: slideStateVal === 'dots',
                     showNavButtons: dialog.querySelector('#discovery-spotlight-showNavButtons')?.checked !== false,
                     showClearArt: dialog.querySelector('#discovery-spotlight-showClearArt')?.checked === true,
                     panAnimation: dialog.querySelector('#discovery-spotlight-panAnimation')?.checked !== false,
@@ -2869,10 +2876,12 @@
                 section.renderMode = renderMode;
 
                 if (renderMode === 'Spotlight') {
+                    const slideStateVal = dialog.querySelector('#section-spotlight-slideState')?.value || 'dots';
                     section.spotlightConfig = {
                         autoPlay: dialog.querySelector('#section-spotlight-autoPlay')?.checked !== false,
                         interval: parseInt(dialog.querySelector('#section-spotlight-interval')?.value || '10000', 10),
-                        showDots: dialog.querySelector('#section-spotlight-showDots')?.checked !== false,
+                        showSlideState: slideStateVal !== 'none',
+                        showDots: slideStateVal === 'dots',
                         showNavButtons: dialog.querySelector('#section-spotlight-showNavButtons')?.checked !== false,
                         showClearArt: dialog.querySelector('#section-spotlight-showClearArt')?.checked === true,
                         panAnimation: dialog.querySelector('#section-spotlight-panAnimation')?.checked !== false,
@@ -3123,10 +3132,12 @@
 
         // Spotlight options (saved to spotlightConfig when Render Mode = Spotlight)
         if (renderMode === 'Spotlight') {
+            const slideStateVal = dialog.querySelector('#section-spotlight-slideState')?.value || 'dots';
             section.spotlightConfig = {
                 autoPlay: dialog.querySelector('#section-spotlight-autoPlay')?.checked !== false,
                 interval: parseInt(dialog.querySelector('#section-spotlight-interval')?.value || '10000', 10),
-                showDots: dialog.querySelector('#section-spotlight-showDots')?.checked !== false,
+                showSlideState: slideStateVal !== 'none',
+                showDots: slideStateVal === 'dots',
                 showNavButtons: dialog.querySelector('#section-spotlight-showNavButtons')?.checked !== false,
                 showClearArt: dialog.querySelector('#section-spotlight-showClearArt')?.checked === true,
                 panAnimation: dialog.querySelector('#section-spotlight-panAnimation')?.checked !== false,
@@ -3193,10 +3204,12 @@
             FORCE_REFRESH_TTL: 0
         };
 
+        const slideStateVal = dialog.querySelector('#spotlight-slideState')?.value || 'dots';
         const spotlight = {
             autoPlay: dialog.querySelector('#spotlight-autoPlay')?.checked !== false,
             interval: parseInt(dialog.querySelector('#spotlight-interval')?.value || '10000', 10),
-            showDots: dialog.querySelector('#spotlight-showDots')?.checked !== false,
+            showSlideState: slideStateVal !== 'none',
+            showDots: slideStateVal === 'dots',
             showNavButtons: dialog.querySelector('#spotlight-showNavButtons')?.checked !== false,
             showClearArt: dialog.querySelector('#spotlight-showClearArt')?.checked === true,
             panAnimation: dialog.querySelector('#spotlight-panAnimation')?.checked !== false,

@@ -528,7 +528,6 @@
         postProcessItems: postProcessItems,
         postProcessItemsByQuery: postProcessItemsByQuery,
         /**
->>>>>>> Stashed changes
          * Main entry point function to build a Jellyfin card
          * @param {Object} item - The Jellyfin item object
          * @param {boolean} overflowCard - Use overflow card classes instead of normal card classes
@@ -1688,7 +1687,8 @@
      * @param {Object} options - Options for the spotlight carousel
      * @param {boolean} options.autoPlay - Auto-cycle through items (default: true)
      * @param {number} options.interval - Auto-play interval in ms (default: 10000)
-     * @param {boolean} options.showDots - Show dot indicators (default: true)
+     * @param {boolean} options.showSlideState - Show slide state container (dots or numeric) (default: true)
+     * @param {boolean} options.showDots - When showSlideState is true: true = dots (max 5), false = numeric "N / X" (default: true)
      * @param {boolean} options.showNavButtons - Show prev/next buttons (default: true)
      * @param {boolean} options.pauseOnHover - Pause auto-cycle when cursor is over spotlight (default: true, false when fullScreen)
      * @returns {HTMLElement} - The constructed spotlight container
@@ -1701,6 +1701,7 @@
         const {
             autoPlay = true,    
             interval = 10000,
+            showSlideState = true,
             showDots = true,
             showNavButtons = true,
             showClearArt = false,
@@ -2450,22 +2451,29 @@
             navContainer.insertBefore(pauseButton, navContainer.firstChild);
         }
         
-        // Dot indicators
-        if (showDots && items.length > 1) {
+        // Slide state container (dots or numeric "N / X")
+        const MAX_DOTS = 5;
+        if (showSlideState && items.length > 1) {
             const dotsContainer = document.createElement('div');
-            dotsContainer.className = 'spotlight-dots';
+            dotsContainer.className = 'spotlight-dots' + (showDots ? '' : ' spotlight-dots-numeric');
+            dotsContainer.setAttribute('data-index', '1'); /* 1-based for "N / X" display */
+            dotsContainer.setAttribute('data-total-items', String(items.length));
             
-            items.forEach((_, index) => {
-                const dot = document.createElement('button');
-                dot.className = 'spotlight-dot' + (index === 0 ? ' active' : '');
-                dot.setAttribute('data-index', index);
-                dot.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    // Reset timer when manually navigating
-                    goToItem(index, true);
-                });
-                dotsContainer.appendChild(dot);
-            });
+            if (showDots) {
+                const numDots = Math.min(items.length, MAX_DOTS);
+                for (let i = 0; i < numDots; i++) {
+                    const dot = document.createElement('button');
+                    dot.className = 'spotlight-dot' + (i === 0 ? ' active' : '');
+                    dot.setAttribute('data-dot-index', i);
+                    dot.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const windowStart = Math.floor(currentIndex / numDots) * numDots;
+                        const targetIndex = Math.min(windowStart + i, items.length - 1);
+                        goToItem(targetIndex, true);
+                    });
+                    dotsContainer.appendChild(dot);
+                }
+            }
             
             bannerContainer.appendChild(dotsContainer);
         }
@@ -2504,7 +2512,7 @@
                 void img.offsetWidth; // force reflow to restart animation
                 img.classList.add('animate');
                 const handler = (e) => {
-                    if (e.animationName === 'kenBurnsZoomOut' || e.animationName === 'kenBurnsZoomIn') {
+                    if (['kenBurnsZoomOut', 'kenBurnsZoomIn', 'kenBurnsZoomOutFullscreen', 'kenBurnsZoomInFullscreen'].includes(e.animationName)) {
                         img.removeEventListener('animationend', handler);
                         checkAllDone();
                     }
@@ -2530,16 +2538,24 @@
             
             currentIndex = index;
             
-            // Update dots
-            if (showDots) {
-                const dots = bannerContainer.querySelectorAll('.spotlight-dot');
-                dots.forEach((dot, i) => {
-                    if (i === index) {
-                        dot.classList.add('active');
-                    } else {
-                        dot.classList.remove('active');
-                    }
-                });
+            // Update slide state (dots or data attrs for numeric)
+            if (showSlideState) {
+                const dotsContainer = bannerContainer.querySelector('.spotlight-dots');
+                if (dotsContainer) {
+                    dotsContainer.setAttribute('data-index', String(index + 1)); // 1-based for display
+                }
+                if (showDots) {
+                    const dots = bannerContainer.querySelectorAll('.spotlight-dot');
+                    const numDots = dots.length;
+                    const activeDotIndex = numDots > 0 ? (index % numDots) : 0;
+                    dots.forEach((dot, i) => {
+                        if (i === activeDotIndex) {
+                            dot.classList.add('active');
+                        } else {
+                            dot.classList.remove('active');
+                        }
+                    });
+                }
             }
             
             // Reset auto-play timer when manually navigating (always reset delay)
@@ -2623,7 +2639,7 @@
                                     };
                                     imgs.forEach(img => {
                                         const handler = (e) => {
-                                            if (e.animationName === 'kenBurnsZoomOut' || e.animationName === 'kenBurnsZoomIn') {
+                                            if (['kenBurnsZoomOut', 'kenBurnsZoomIn', 'kenBurnsZoomOutFullscreen', 'kenBurnsZoomInFullscreen'].includes(e.animationName)) {
                                                 img.removeEventListener('animationend', handler);
                                                 checkAllDone();
                                             }
@@ -2758,7 +2774,7 @@
         if (viewMoreUrl) {
             // Create clickable title with chevron icon
             const titleLink = document.createElement('a');
-            titleLink.className = 'sectionTitle-link sectionTitleTextButton';
+            titleLink.className = 'sectionTitle-link button-flat button-flat-mini sectionTitleTextButton emby-button';
             titleLink.style.cssText = 'text-decoration: none; cursor: pointer; display: flex; align-items: center;';
             
             // Handle both URL and function

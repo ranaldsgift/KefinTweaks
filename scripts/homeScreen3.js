@@ -994,15 +994,6 @@
             if (!homeSection) {
                 continue;
             }
-            if (homeSection.toLowerCase() === 'nextup' && state.kefinNextUp) {
-                continue;
-            }
-            if (homeSection.toLowerCase() === 'resume' && state.kefinContinueWatching) {
-                continue;
-            }
-            if (homeSection.toLowerCase() === 'latestmedia' && state.kefinLatestMedia) {
-                continue;
-            }
 
             // Match to homeSection in kefinHomeScreen with .toLowerCase() id
             let kefinHomeScreenSection = kefinHomeScreen.find(s => s.id.toLowerCase() === homeSection.toLowerCase() && s.enabled === true);
@@ -1017,7 +1008,7 @@
             if (kefinHomeScreenSection) {
                 jellyfinOrders[`homesection${i}`] = kefinHomeScreenSection.order;
             } else {
-                jellyfinOrders[`homesection${i}`] = 0;
+                jellyfinOrders[`homesection${i}`] = 999;
             }
         }        
         
@@ -1040,7 +1031,7 @@
         // Add display: none to all .homeectionN not in jellyfinOrders
         for (let i = 0; i <= 8; i++) {
             const homesectionKey = `homesection${i}`;
-            if (isNaN(jellyfinOrders[homesectionKey])) {
+            if (jellyfinOrders[homesectionKey] && isNaN(jellyfinOrders[homesectionKey])) {
                 const classSelector = `.${homesectionKey.replace('home','')}`;
                 css += `${classSelector} { display: none !important; }\n`;
             }
@@ -1367,14 +1358,22 @@
         const loadSectionTimerEnd = performance.now();
         const loadSectionDuration = loadSectionTimerEnd - loadSectionTimerStart;
         LOG(`Section ${sectionConfig.id} loaded for rendering in time: ${loadSectionDuration.toFixed(2)}ms`);
+
+        const postProcess = (sectionConfig, items) => {
+            let postProcessedItems = items;
+            if (window.cardBuilder.postProcessItems) {
+                postProcessedItems = window.cardBuilder.postProcessItems(sectionConfig, items);
+            }
+            return postProcessedItems;
+        }
         
         // Single query result
         return {
             config: sectionConfig,
             queryUrl: null,
             result: {
-                data: window.cardBuilder.postProcessItems(sectionConfig, results[0].data),
-                dataPromise: results[0].dataPromise.then(data => window.cardBuilder.postProcessItems(sectionConfig, data)),
+                data: postProcess(sectionConfig, results[0].data),
+                dataPromise: results[0].dataPromise.then(data => postProcess(sectionConfig, data)),
                 isStalePromise: results[0].isStalePromise
             }
         };

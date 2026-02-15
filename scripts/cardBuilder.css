@@ -104,6 +104,25 @@
       transform: scale(1.02) translate3d(0, 0, 0);
     }
   }
+
+/* Full-screen: start images pre-scaled so they extend past edges from the start (no hard edge before zoom) */
+@keyframes kenBurnsZoomInFullscreen {
+  from {
+    transform: scale(1.08) translate3d(0, 0, 0);
+  }
+  to {
+    transform: scale(1.12) translate3d(-1%, -1%, 0);
+  }
+}
+
+@keyframes kenBurnsZoomOutFullscreen {
+  from {
+    transform: scale(1.15) translate3d(-1%, -1%, 0);
+  }
+  to {
+    transform: scale(1.08) translate3d(0, 0, 0);
+  }
+}
   
   
 
@@ -208,6 +227,8 @@
     padding: 8px 16px;
     border-radius: 4px;
     backdrop-filter: blur(4px);
+    letter-spacing: 2px;
+    word-spacing: 2px;
 }
 
 .spotlight-item-title {
@@ -502,6 +523,26 @@
     background: white;
 }
 
+/* Numeric slide state: "N / X" via data attributes */
+.spotlight-dots.spotlight-dots-numeric {
+    background: rgb(0 0 0 / 40%);
+    border-radius: 5px;
+    padding: 0.25em 0.5em;
+    gap: 0;
+}
+
+.spotlight-dots.spotlight-dots-numeric .spotlight-dot {
+    display: none;
+}
+
+.spotlight-dots.spotlight-dots-numeric::after {
+    content: attr(data-index) " / " attr(data-total-items);
+    font-size: 14px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.9);
+    letter-spacing: 0.5px;
+}
+
 .spotlight-genre-link,
 .spotlight-person-link {
     color: inherit;
@@ -705,7 +746,7 @@
 /* Full-screen spotlight: negative margins for overlap, content inset, top/bottom fade.
    Banner has NO padding so the background image overflows edge-to-edge; only content is inset. */
 .spotlight-section[data-full-screen="true"] {
-    --spotlight-fullscreen-vertical: 200px;
+    --spotlight-fullscreen-vertical: 4%;
     --spotlight-fullscreen-horizontal: max(env(safe-area-inset-left), env(safe-area-inset-right), 4%);
     padding: 0;
     width: 100%;
@@ -722,15 +763,15 @@
     -webkit-mask-image: linear-gradient(
         to bottom,
         transparent 0%,
-        black 12%,
-        black 88%,
+        black calc(var(--spotlight-fullscreen-vertical) * 2),
+        black calc(100% - calc(var(--spotlight-fullscreen-vertical) * 2)),
         transparent 100%
     );
     mask-image: linear-gradient(
         to bottom,
         transparent 0%,
-        black 12%,
-        black 88%,
+        black calc(var(--spotlight-fullscreen-vertical) * 2),
+        black calc(100% - calc(var(--spotlight-fullscreen-vertical) * 2)),
         transparent 100%
     );
     -webkit-mask-size: 100% 100%;
@@ -780,28 +821,54 @@
     width: 100%;
 }
 
+/* Full-screen: base scale so image extends past edges even before animation starts */
+.spotlight-section[data-full-screen="true"] .spotlight-background-single img,
+.spotlight-section[data-full-screen="true"] .spotlight-background-layer img {
+    transform: scale(1.08);
+}
+
+/* Full-screen: use pre-scaled animations so image never shows hard edge at top */
+.spotlight-section[data-full-screen="true"] .spotlight-background-single img.animate {
+    animation: kenBurnsZoomInFullscreen 20s ease-out forwards;
+}
+.spotlight-section[data-full-screen="true"] .spotlight-background-layer-left img.animate {
+    animation: kenBurnsZoomOutFullscreen 20s ease-out forwards;
+}
+.spotlight-section[data-full-screen="true"] .spotlight-background-layer-right img.animate {
+    animation: kenBurnsZoomInFullscreen 20s ease-out forwards;
+}
+
 /* Overlay stays left: 0 so the dark gradient still covers the image; only content is inset via padding.
    z-index above top/bottom gradient pseudo-elements so title and buttons stay readable. */
 .spotlight-section[data-full-screen="true"] .spotlight-overlay {
     left: 0;
     z-index: 3;
-    padding: calc(var(--spotlight-fullscreen-vertical) + 50px) var(--spotlight-fullscreen-horizontal) calc(var(--spotlight-fullscreen-vertical) + 50px) var(--spotlight-fullscreen-horizontal);
+    padding: calc(var(--spotlight-fullscreen-vertical) * 2) var(--spotlight-fullscreen-horizontal) calc(var(--spotlight-fullscreen-vertical) * 2) var(--spotlight-fullscreen-horizontal);
 }
 
 .spotlight-section[data-full-screen="true"] .spotlight-overlay.has-title {
-    padding: calc(var(--spotlight-fullscreen-vertical) + 50px) var(--spotlight-fullscreen-horizontal) calc(var(--spotlight-fullscreen-vertical) + 50px) var(--spotlight-fullscreen-horizontal);
+    padding: calc(var(--spotlight-fullscreen-vertical) * 2) var(--spotlight-fullscreen-horizontal) calc(var(--spotlight-fullscreen-vertical) * 2) var(--spotlight-fullscreen-horizontal);
 }
 
 .spotlight-section[data-full-screen="true"] .spotlight-section-title {
     left: var(--spotlight-fullscreen-horizontal);
-    top: var(--spotlight-fullscreen-vertical);
+    top: calc(var(--spotlight-fullscreen-vertical) * 2.5);
 }
 
 .spotlight-section[data-full-screen="true"] .spotlight-item-logo {
     width: auto;
     max-width: none;
-    height: 40%;
+    min-height: 35% !important;
+    height: 35% !important;
     margin-bottom: 40px;
+}
+
+.spotlight-section[data-full-screen="true"] .spotlight-item-title {
+    width: auto;
+    max-width: none;
+    height: 35% !important;
+    margin-bottom: 40px;
+    font-size: 4rem;
 }
 
 .spotlight-section[data-full-screen="true"] .spotlight-clearart {
@@ -811,15 +878,15 @@
 
 .spotlight-section[data-full-screen="true"] .spotlight-nav-container {
     right: var(--spotlight-fullscreen-horizontal);
-    top: var(--spotlight-fullscreen-vertical);
+    top: calc(var(--spotlight-fullscreen-vertical) * 2.5);
 }
 
 .spotlight-section[data-full-screen="true"] .spotlight-dots {
-    bottom: var(--spotlight-fullscreen-vertical);
+    bottom: calc(var(--spotlight-fullscreen-vertical) * 2.5);
 }
 
 .spotlight-section[data-full-screen="true"] img {
-    object-position: center -35%;    
+    object-position: center 0%;    
 }
 .spotlight-section[data-full-screen="true"] .spotlight-clearart {
     display: none;
@@ -834,6 +901,7 @@
     -webkit-line-clamp: 6;
     font-style: normal;
     font-size: 1.05em;
+    margin-bottom: 0;
 }
 
 /* Full-screen: modern stream-site metadata styles */
@@ -906,4 +974,18 @@
 .spotlight-section[data-full-screen="true"] span.spotlight-end-time {
     padding-left: 30px !important;
     position: relative;
+}
+
+.spotlight-section[data-full-screen="true"] .spotlight-buttons-container {
+    margin-top: 40px;
+}
+
+.spotlight-section[data-full-screen="true"] .spotlight-item-logo {
+    width: 95%;
+}
+
+
+.layout-mobile .spotlight-section[data-full-screen="true"] .spotlight-section-title {
+    left: var(--spotlight-fullscreen-horizontal);
+    top: var(--spotlight-fullscreen-vertical);
 }

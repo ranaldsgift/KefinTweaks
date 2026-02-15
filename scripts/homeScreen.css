@@ -24,40 +24,6 @@
     padding-bottom: 100px;
 }
 
-.homeSectionsContainer > .section0 {
-    order: 1;
-}
-.homeSectionsContainer > .section1 {
-    order: 2;
-}
-.homeSectionsContainer > .section2 {
-    order: 3;
-}
-.homeSectionsContainer > .section3 {
-    order: 4;
-}
-.homeSectionsContainer > .section4 {
-    order: 5;
-}
-.homeSectionsContainer > .section5 {
-    order: 6;
-}
-.homeSectionsContainer > .section6 {
-    order: 7;
-}
-.homeSectionsContainer > .section7 {
-    order: 8;
-}
-.homeSectionsContainer > .section8 {
-    order: 9;
-}
-.homeSectionsContainer > .section9 {
-    order: 10;
-}
-.homeSectionsContainer > .section10 {
-    order: 11;
-}
-
 body[data-seasonal-background="true"]:has(.homePage:not(.hide)) #reactRoot:has(.libraryPage:not(.hide) .pageTabContent.is-active[data-index="0"])>.backgroundContainer::after {
     content: '';
     position: absolute;
