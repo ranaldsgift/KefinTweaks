@@ -269,15 +269,12 @@
      */
     async function addSeriesInfo(item, miscInfoContainer) {
         // Check if already added
-        if (miscInfoContainer.querySelector('.kt-series-info')) {
+        if (miscInfoContainer.dataset.seriesInfo) {
             LOG('Series info already added, skipping');
             return;
         }
 
-        const infoContainer = document.createElement('div');
-        infoContainer.className = 'kt-series-info';
-        infoContainer.style.display = 'flex';
-        infoContainer.style.margin = '0 1em 0 0';
+        miscInfoContainer.dataset.seriesInfo = 'true';
 
         const seasonsCount = await getSeasonsCount(item);
         const episodesCount = await getEpisodesCount(item.Id);
@@ -289,7 +286,7 @@
             const seasonsDiv = document.createElement('div');
             seasonsDiv.className = 'mediaInfoItem';
             seasonsDiv.textContent = `${seasonsCount} Seasons`;
-            infoContainer.appendChild(seasonsDiv);
+            miscInfoContainer.appendChild(seasonsDiv);
         }
 
         // Episodes count
@@ -298,7 +295,7 @@
             const episodesDiv = document.createElement('div');
             episodesDiv.className = 'mediaInfoItem';
             episodesDiv.textContent = `${episodesCount} ${episodesCount === 1 ? 'Episode' : 'Episodes'}`;
-            infoContainer.appendChild(episodesDiv);
+            miscInfoContainer.appendChild(episodesDiv);
         }
 
         // End time - RunTimeTicks is for first episode, multiply by episode count for total
@@ -309,15 +306,11 @@
                 const endTimeDiv = document.createElement('div');
                 endTimeDiv.className = 'mediaInfoItem';
                 endTimeDiv.textContent = `Ends at ${endTimeStr}`;
-                infoContainer.appendChild(endTimeDiv);
+                miscInfoContainer.appendChild(endTimeDiv);
             }
         }
-
-        // Append to miscInfoContainer
-        if (infoContainer.children.length > 0) {
-            miscInfoContainer.appendChild(infoContainer);
-            LOG('Added series info to itemMiscInfo container');
-        }
+        
+        LOG('Added series info to itemMiscInfo container');
     }
 
     /**
