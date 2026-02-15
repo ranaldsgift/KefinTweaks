@@ -12,7 +12,7 @@
 <a href="https://github.com/jellyfin/jellyfin/releases/latest"><img alt="Jellyfin Latest Version" src="https://img.shields.io/badge/Jellyfin-10.11-blue.svg?style=for-the-badge&logo=github&logoColor=b4c5fb&labelColor=08396c&color=0e0922"/></a>
 <a href="https://github.com/jellyfin/jellyfin/releases/tag/v10.10.7"><img alt="Jellyfin Version 10.10.7" src="https://img.shields.io/badge/Jellyfin-10.10-blue.svg?style=for-the-badge&logo=github&logoColor=b4c5fb&labelColor=08396c&color=0e0922"/></a></p>
 <p align="center">
-<a href="https://discord.com/channels/1381737066366242896/1442127942678216785"><img alt="Jellyfin Community Discord KefinTweaks Channel" src="https://img.shields.io/badge/%23kefintweaks%20-%20Jellyfin%20Community?style=for-the-badge&logo=discord&logoColor=b4c5fb&labelColor=08396c&color=0e0922&label=Jellyfin%20Community"/></a>
+<a href="https://discord.gg/ussYu37xKG"><img alt="Jellyfin Community Discord KefinTweaks Channel" src="https://img.shields.io/badge/%23kefintweaks%20-%20Jellyfin%20Community?style=for-the-badge&logo=discord&logoColor=b4c5fb&labelColor=08396c&color=0e0922&label=Jellyfin%20Community"/></a>
 </p>
 
 <hr style="background: #b4c5fb !important; margin-top: -10px;">
@@ -540,6 +540,7 @@ Here is a list of known supported clients:
 These third party clients support the same Watchlist as KefinTweaks:
 - [AFinity by MakD](https://github.com/MakD/AFinity)
 - [Streamyfin](https://github.com/streamyfin/streamyfin)
+- [Pelagica](https://github.com/KartoffelChipss/pelagica)
 <hr style="background: #b4c5fb !important;">
 
 ## Changes to default Jellyfin functionality
