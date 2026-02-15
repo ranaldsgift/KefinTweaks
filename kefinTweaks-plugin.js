@@ -546,7 +546,17 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
 
         footer.appendChild(okBtn);
 
+        // Close original KefinTweaksConfiguration Modal if it is open
+        const kefinTweaksConfigurationModals = document.querySelectorAll('[data-modal-id="kefinTweaksConfigModal"]');
+        if (kefinTweaksConfigurationModals.length > 0) {
+            kefinTweaksConfigurationModals.forEach(modal => {
+                modal.remove();
+            });
+        }
+
         createSimpleModal(SUCCESS_MODAL_ID, `${isInitialInstall ? 'Plugin Installed' : 'Plugin Updated'}`, content, footer);
+
+        
     }
 
     // Open source configuration modal
