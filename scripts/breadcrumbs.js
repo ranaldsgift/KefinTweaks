@@ -81,7 +81,15 @@
         let queryParams = '';
         if (item.ParentId) {
             // Get the top parent item from the ancestors with a Type = CollectionFolder
-            const ancestors = await ApiClient.getAncestorItems(item.Id);
+            // Use apiHelper.getQuery rather than getAncestorItems so we can use the cached data
+            const ancestorsUrl = `${ApiClient.serverAddress()}/Items/${item.Id}/Ancestors`;
+            const queryResult = await window.apiHelper.getQuery(ancestorsUrl, { useCache: true });
+            let ancestors = queryResult.data;
+
+            if (!ancestors || !Array.isArray(ancestors)) {
+                ancestors = await queryResult.dataPromise;
+            }
+
             const collectionFolder = ancestors.find(ancestor => ancestor.Type === 'CollectionFolder');
             const userRootFolder = ancestors.find(ancestor => ancestor.Type === 'UserRootFolder');
             if (collectionFolder) {
