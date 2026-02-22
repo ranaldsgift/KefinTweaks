@@ -77,6 +77,11 @@
                 enabled: false
             },
             {
+                name: 'Left Aligned Font / Poster Spacing / Watched Indicators',
+                url: 'https://cdn.jsdelivr.net/gh/LitCastVlog/Flow@main/CSS/ScyFlow-FontTweaks.css',
+                enabled: false
+            },
+            {
                 name: 'Wrap Items In Home Sections',
                 url: `${getKefinTweaksRoot()}skins/optional/global/wrapHomeScrollerItems.css`,
                 enabled: false
@@ -119,6 +124,16 @@
             {
                 name: 'Studio Thumbnails',
                 url: `${getKefinTweaksRoot()}skins/optional/global/studioThumbnails.css`,
+                enabled: false
+            },
+            {
+                name: 'Spotlight Controls On Hover Only',
+                url: `${getKefinTweaksRoot()}skins/optional/global/spotlightControlsOnHover.css`,
+                enabled: false
+            },
+            {
+                name: 'Darken Background Images',
+                url: `${getKefinTweaksRoot()}skins/optional/global/darkenBackgroundImages.css`,
                 enabled: false
             }
         ],
@@ -758,11 +773,6 @@
                         name: 'Nyan Progress Bar',
                         url: 'https://cdn.jsdelivr.net/gh/LitCastVlog/Flow@main/CSS/Themes/NyanProgress.css',
                         enabled: false
-                    },
-                    {
-                        name: 'Left Aligned Font / Poster Spacing / Watched Indicators',
-                        url: 'https://cdn.jsdelivr.net/gh/LitCastVlog/Flow@main/CSS/ScyFlow-FontTweaks.css',
-                        enabled: false
                     }
                 ],
                 colorSchemes: [
@@ -1088,12 +1098,14 @@
                         majorServerVersions: [10],
                         urls: [
                             'https://cdn.jsdelivr.net/gh/stpnwf/ZestyTheme@legacy/v10.10/theme.css',
+                            `${getKefinTweaksRoot()}skins/zesty-kefin.css`
                         ]
                     },
                     {
                         majorServerVersions: [11],
                         urls: [
                             'https://cdn.jsdelivr.net/gh/stpnwf/ZestyTheme@latest/theme.css',
+                            `${getKefinTweaksRoot()}skins/zesty-kefin.css`
                         ]
                     },
                 ],

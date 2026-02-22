@@ -1,0 +1,8 @@
+.spotlight-section:not(:hover) .spotlight-nav-container {
+  opacity: 0;
+  transition: opacity .1s ease-in-out;
+}
+.spotlight-section:hover .spotlight-nav-container {
+  opacity: 1;
+  transition: opacity .1s ease-in-out;
+}

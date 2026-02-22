@@ -1,4 +1,4 @@
 /* Hide the title if a logo is present. Use visibility in case skins rely on it for spacing */
-:has(.detailLogo:not(.hide)) .nameContainer {
+:has(.libraryPage:not(.hide) .detailLogo:not(.hide)) .nameContainer {
     visibility: hidden;
 }

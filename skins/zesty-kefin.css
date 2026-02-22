@@ -1,0 +1,9 @@
+button.watchlist-icon.detailButton .material-icons {
+    display: none;
+}
+button.watchlist-icon.detailButton::after {
+    content: attr(title);
+}
+.layout-desktop .detailSection {
+    max-width: calc(100vw - 5%);
+}
