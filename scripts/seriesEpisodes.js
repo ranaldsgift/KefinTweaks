@@ -280,12 +280,12 @@
                 const itemElement = document.createElement('div');
                 itemElement.className = 'kefinTweaks-popover-item';
                 
-                if (currentSeason && season.id === currentSeason.id) {
+                if (currentSeason && season.Id === currentSeason.Id) {
                     itemElement.classList.add('selected');
                     selectedItemElement = itemElement;
                 }
                 
-                const displayText = formatSeasonName(`${season.name}`, season.indexNumber);
+                const displayText = formatSeasonName(`${season.Name}`, season.IndexNumber);
                 itemElement.textContent = displayText;
                 itemElement.addEventListener('click', () => {
                     LOG(`Season selected: ${displayText}`);
@@ -472,14 +472,14 @@
             targetSeasonId = targetEpisode.SeasonId;
             targetSeasonIndex = targetEpisode.ParentIndexNumber;
             // Try to find matching season in seasons list for consistent naming, otherwise use API data
-            const matchingSeason = seasons.find(s => s.id === targetSeasonId);
-            targetSeasonName = matchingSeason ? matchingSeason.name : (targetEpisode.SeasonName || `Season ${targetSeasonIndex}`);
+            const matchingSeason = seasons.find(s => s.Id === targetSeasonId);
+            targetSeasonName = matchingSeason ? matchingSeason.Name : (targetEpisode.SeasonName || `Season ${targetSeasonIndex}`);
         } else {
             // Fallback to first season
             if (seasons.length > 0) {
-                targetSeasonId = seasons[0].id;
-                targetSeasonIndex = seasons[0].indexNumber;
-                targetSeasonName = seasons[0].name;
+                targetSeasonId = seasons[0].Id;
+                targetSeasonIndex = seasons[0].IndexNumber;
+                targetSeasonName = seasons[0].Name;
             } else {
                 WARN('No seasons available to render');
                 return;
@@ -535,12 +535,6 @@
         
         const hideSingleSeasonContainer = window.KefinTweaksConfig?.flattenSingleSeasonShows?.hideSingleSeasonContainer === true;
 
-        // ElegantFin handling :)
-        seasonSection.style.cssText = `
-            overflow: hidden;
-            display: block;
-        `;
-
         const scrollerContainer = seasonSection.querySelector('.emby-scroller');
         if (scrollerContainer) {
             scrollerContainer.classList.add('no-padding');
@@ -577,18 +571,18 @@
         // Add season selector if more than one season
         if (seasons.length > 1) {
             const handleSeasonChange = async (selectedSeason) => {
-                LOG(`Switching to season: ${selectedSeason.name}`);
+                LOG(`Switching to season: ${selectedSeason.Name}`);
                 
-                const newEpisodes = await fetchEpisodesForSeries(seriesId, selectedSeason.id);
+                const newEpisodes = await fetchEpisodesForSeries(seriesId, selectedSeason.Id);
                 if (newEpisodes.length === 0) {
-                    WARN(`No episodes found for Season ID: ${selectedSeason.id}`);
+                    WARN(`No episodes found for Season ID: ${selectedSeason.Id}`);
                     return;
                 }
                 
                 // Update section title
                 const sectionTitle = sectionTitleContainer.querySelector('.sectionTitle');
                 if (sectionTitle) {
-                    const newSeasonName = formatSeasonName(selectedSeason.name, selectedSeason.indexNumber);
+                    const newSeasonName = formatSeasonName(selectedSeason.Name, selectedSeason.IndexNumber);
                     sectionTitle.textContent = newSeasonName;
                 }
                 
@@ -745,19 +739,17 @@
             return;
         }
 
-        // Wait for seasons section to render
-        LOG('Waiting for seasons section to render...');
-        const childrenCollapsible = await waitForSeasonsSection(activePage);
-        
-        if (!childrenCollapsible) {
-            WARN('Could not find seasons section, aborting');
-            return;
+        // Use apiHelper to get seasons
+        const response = await window.apiHelper.getQuery(`${ApiClient.serverAddress()}/Shows/${seriesId}/Seasons`, { useCache: true });
+        if (!response.data) {
+            response.data = await response.dataPromise;
         }
+        const seasonsData = response.data;
 
         // Extract seasons from DOM
-        const seasons = extractSeasonsFromDOM(activePage);
+        const seasons = seasonsData.Items || seasonsData || [];
         if (seasons.length === 0) {
-            WARN('No seasons found in DOM');
+            WARN('No seasons found');
             return;
         }
 
@@ -792,11 +784,11 @@
 
             // Find season matching NextUp episode by SeasonId (preferred) or index number
             if (targetEpisode.SeasonId) {
-                targetSeason = seasons.find(s => s.id === targetEpisode.SeasonId);
+                targetSeason = seasons.find(s => s.Id === targetEpisode.SeasonId);
             }
             
             if (!targetSeason && targetEpisode.ParentIndexNumber !== undefined) {
-                 targetSeason = seasons.find(s => s.indexNumber === targetEpisode.ParentIndexNumber);
+                 targetSeason = seasons.find(s => s.IndexNumber === targetEpisode.ParentIndexNumber);
             }
         }
         
@@ -804,11 +796,11 @@
         if (!targetSeason) {
             targetSeason = seasons[0];
             // If we have NextUp but season not found, use first episode of first season
-            if (targetEpisodeNumber && !seasons.find(s => s.indexNumber === targetEpisodeNumber.season)) {
-                targetEpisodeNumber = { season: targetSeason.indexNumber, episode: 1 };
+            if (targetEpisodeNumber && !seasons.find(s => s.IndexNumber === targetEpisodeNumber.season)) {
+                targetEpisodeNumber = { season: targetSeason.IndexNumber, episode: 1 };
                 LOG(`NextUp season not in seasons list, defaulting to first episode of first season`);
             } else if (!targetEpisodeNumber) {
-                targetEpisodeNumber = { season: targetSeason.indexNumber, episode: 1 };
+                targetEpisodeNumber = { season: targetSeason.IndexNumber, episode: 1 };
                 LOG(`No NextUp found, defaulting to first episode of first season`);
             }
         }
