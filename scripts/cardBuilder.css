@@ -8,10 +8,14 @@
 
 .spotlight-banner-container {
     position: relative;
-    width: 100%;
     height: 450px;
     overflow: hidden;
     border-radius: 8px;
+}
+
+/* Size variants */
+.spotlight-section[data-size="full"] .spotlight-banner-container {
+    height: 94vh !important;
 }
 
 .spotlight-items-container {
@@ -39,6 +43,10 @@
     overflow: hidden;
 }
 
+.spotlight-section[data-layout="Border"] .spotlight-background-dual {
+    border-radius: 8px;
+}
+
 .spotlight-background-layer {
     position: absolute;
     top: 0;
@@ -58,13 +66,17 @@
     filter: blur(0);
     transform: scale(1);
     transition: filter 0.3s ease-in-out, transform 0.3s ease-in-out;
+    will-change: transform;
+    backface-visibility: hidden;
 }
 
 .spotlight-background-layer-left img.animate {
     animation: kenBurnsZoomOut 20s ease-out forwards;
+    transform-origin: center right;
 }
 .spotlight-background-layer-right img.animate {
     animation: kenBurnsZoomIn 20s ease-out forwards;
+    transform-origin: center left;
 }
 
 /* Single backdrop (when dual backdrops disabled or only one image) - same pan animation */
@@ -84,67 +96,125 @@
 }
 
 .spotlight-background-single img.animate {
-    animation: kenBurnsZoomIn 20s ease-out forwards;
+    animation: kenBurnsZoomIn 15s ease-out forwards;
+    will-change: transform;
+    backface-visibility: hidden;
+    transform-origin: center center;
 }
 
 @keyframes kenBurnsZoomIn {
     from {
-      transform: scale(1) translate3d(0, 0, 0);
+      transform: scale3d(1, 1, 0);
     }
     to {
-      transform: scale(1.12) translate3d(-1%, -1%, 0);
+      transform: scale3d(1.12, 1.12, 0.1);
     }
   }
 
   @keyframes kenBurnsZoomOut {
     from {
-      transform: scale(1.15) translate3d(-1%, -1%, 0);
+      transform: scale3d(1.15, 1.15, 0.1);
     }
     to {
-      transform: scale(1.02) translate3d(0, 0, 0);
+      transform: scale3d(1.02, 1.02, 0);
     }
   }
 
 /* Full-screen: start images pre-scaled so they extend past edges from the start (no hard edge before zoom) */
 @keyframes kenBurnsZoomInFullscreen {
   from {
-    transform: scale(1.08) translate3d(0, 0, 0);
+    transform: scale3d(1.08, 1.08, 0);
   }
   to {
-    transform: scale(1.12) translate3d(-1%, -1%, 0);
+    transform: scale3d(1.12, 1.12, 0.1);
   }
 }
 
 @keyframes kenBurnsZoomOutFullscreen {
   from {
-    transform: scale(1.15) translate3d(-1%, -1%, 0);
+    transform: scale3d(1.15, 1.15, 0.1);
   }
   to {
-    transform: scale(1.08) translate3d(0, 0, 0);
+    transform: scale3d(1.08, 1.08, 0);
   }
 }
-  
-  
 
-@keyframes slowPanRight {
-    from {
-      transform: scale(1.1) translate3d(-3%, 0, 0);
-    }
-    to {
-      transform: scale(1.1) translate3d(3%, 0, 0);
-    }
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: scale3d(1, 1, 1) translateY(30px); }
+  to   { opacity: 1; transform: scale3d(1, 1, 1) translateY(0); }
+}
+
+@keyframes fadeInDown {
+  from { opacity: 0; transform: scale3d(1, 1, 1) translateY(-30px); }
+  to   { opacity: 1; transform: scale3d(1, 1, 1) translateY(0); }
+}
+  
+@keyframes kenBurnsPanRight {
+    from { transform: scale3d(1.1, 1.1, 1) translateX(-2%); }
+    to   { transform: scale3d(1.1, 1.1, 1) translateX(2%); }
+  }
+  
+  @keyframes kenBurnsPanLeft {
+    from { transform: scale3d(1.1, 1.1, 1) translateX(2%); }
+    to   { transform: scale3d(1.1, 1.1, 1) translateX(-2%); }
+  }
+  
+  @keyframes kenBurnsPanUp {
+    from { transform: scale3d(1.1, 1.1, 1) translateY(2%); }
+    to   { transform: scale3d(1.1, 1.1, 1) translateY(-2%); }
+  }
+  
+  @keyframes kenBurnsDiagonal {
+    from { transform: scale3d(1.08, 1.08, 1) translate(-2%, 2%); }
+    to   { transform: scale3d(1.13, 1.13, 1) translate(2%, -2%); }
+  }
+  
+  @keyframes fadeInScale {
+    from { opacity: 0; transform: scale3d(0.95, 0.95, 1); }
+    to   { opacity: 1; transform: scale3d(1, 1, 1); }
+  }
+  
+  @keyframes parallaxFloat {
+    0%, 100% { transform: scale3d(1, 1, 1) translateY(0); }
+    50%       { transform: scale3d(1, 1, 1) translateY(-12px); }
+  }
+  
+  @keyframes depthPulse {
+    0%, 100% { transform: scale3d(1, 1, 1); }
+    50%       { transform: scale3d(1.03, 1.03, 1); }
   }
 
-  @keyframes slowPanLeft {
-    from {
-      transform: scale(1.1) translate3d(3%, 0, 0);
-    }
-    to {
-      transform: scale(1.1) translate3d(-3%, 0, 0);
-    }
+  @keyframes slowRotate {
+    from { transform: scale3d(1.15, 1.15, 1) rotate(0deg); }
+    to   { transform: scale3d(1.15, 1.15, 1) rotate(3deg); }
   }
   
+  @keyframes breathe {
+    0%, 100% { transform: scale3d(1, 1, 1);       opacity: 0.9; }
+    50%       { transform: scale3d(1.04, 1.04, 1); opacity: 1; }
+  }
   
+  @keyframes heatHaze {
+    0%, 100% { transform: scale3d(1.05, 1.05, 1) skewX(0deg); }
+    25%       { transform: scale3d(1.06, 1.06, 1) skewX(0.3deg); }
+    75%       { transform: scale3d(1.05, 1.05, 1) skewX(-0.3deg); }
+  }
+
+  @keyframes colorWash {
+    0%   { filter: saturate(1)   brightness(1); }
+    50%  { filter: saturate(1.2) brightness(1.05); }
+    100% { filter: saturate(1)   brightness(1); }
+  }
+  
+  @keyframes vignetteIn {
+    from { box-shadow: inset 0 0 0px rgba(0,0,0,0); }
+    to   { box-shadow: inset 0 0 120px rgba(0,0,0,0.6); }
+  }
 
 /* Layer masks for elegant crossfade - overlap in center (45-55%) */
 .spotlight-background-layer-left {
@@ -197,6 +267,11 @@
     opacity: 0;
 }
 
+/* Logo section heights per size - fixed to prevent layout shift when sliding between items */
+.spotlight-section { --spotlight-logo-height: 120px; }
+.spotlight-section[data-size="large"] { --spotlight-logo-height: 180px; }
+.spotlight-section[data-size="full"] { --spotlight-logo-height: 240px; }
+
 .spotlight-overlay {
     position: absolute;
     top: 0;
@@ -206,24 +281,29 @@
     background: linear-gradient(to right, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.7) 70%, transparent 100%);
     padding: 40px;
     color: white;
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-rows: var(--spotlight-logo-height) auto 1fr minmax(48px, auto);
+    grid-template-areas: "logo" "metadata" "overview" "buttons";
+    align-content: start;
+    gap: 1em;
     z-index: 2;
 }
 
+.spotlight-overlay .spotlight-logo-section { grid-area: logo; height: var(--spotlight-logo-height); min-height: 0; display: flex; align-items: flex-end; overflow: hidden; align-content: center; flex-wrap: wrap; }
+.spotlight-overlay .spotlight-metadata-section { grid-area: metadata; }
+.spotlight-overlay .spotlight-overview-section { grid-area: overview; display: flex; flex-direction: column; justify-content: flex-start; overflow: hidden; }
+.spotlight-overlay .spotlight-buttons-section { grid-area: buttons; display: flex; align-items: center; }
+
 .spotlight-overlay.has-title {
-    padding: 70px 40px 20px 40px;
+    padding: 50px 40px 20px 40px;
 }
 
 .spotlight-section-title {
     position: absolute;
-    top: 20px;
-    left: 20px;
     color: white;
     font-size: 18px;
     font-weight: 600;
     z-index: 10;
-    background: rgba(0,0,0,0.4);
     padding: 8px 16px;
     border-radius: 4px;
     backdrop-filter: blur(4px);
@@ -231,20 +311,29 @@
     word-spacing: 2px;
 }
 
+.spotlight-section-title a {
+    font-size: 1.1rem;
+}
+
 .spotlight-item-title {
-    margin: 0 0 16px 0;
-    font-size: 1.6em;
+    margin: 0;
+    font-size: 3.5em;
     font-weight: bold;
-    height: 80px;
-    align-content: end;
+    min-height: 0;
+    display: flex;
+    align-items: flex-end;
+    overflow: hidden;
+}
+.spotlight-item-title:not(h3) {
+    height: 100%;
 }
 
 .spotlight-item-logo {
-    max-width: 206.8px;
-    height: 80px;
+    height: 100%;
+    max-height: var(--spotlight-logo-height);
+    width: 100%;
     object-fit: contain;
-    margin-bottom: 16px;
-    margin-top: 10px;
+    margin: 0;
     background-size: contain;
     background-repeat: no-repeat;
     background-position: left;
@@ -262,14 +351,22 @@
 }
 
 .spotlight-rating-container {
-    display: flex;
+    -webkit-align-items: center;
     align-items: center;
-    gap: 8px;
+    display: -webkit-flex;
+    display: flex;
+    -webkit-justify-content: center;
+    justify-content: center;
+    vertical-align: middle;
+    margin: 0 1em 0 0;
 }
 
 .spotlight-rating-star {
-    color: #4A9EFF;
-    font-size: 24px;
+    color: #f2b01e;
+    font-size: 1.4em;
+    height: auto !important;
+    margin-right: .125em;
+    width: auto !important;
 }
 
 .spotlight-rating-value {
@@ -288,48 +385,160 @@
     gap: 12px;
     font-size: 14px;
     opacity: 0.9;
+    overflow: visible;
+    min-width: 0;
 }
 
-.spotlight-metadata-row .spotlight-end-time {
-    opacity: 0.8;
+.spotlight-metadata-row .itemDetailsGroup,
+.spotlight-metadata-row .sectionTabs {
+    flex-shrink: 0;
+}
+
+.spotlight-credits-row .spotlight-truncated-list {
+    flex-shrink: 1;
+    min-width: 0;
+}
+
+/* Keep each name on one line (no mid-name wrapping) */
+.spotlight-credits-row .spotlight-person-link,
+.spotlight-credits-row .spotlight-truncated-list .detailsGroupItem > span:not(.spotlight-list-separator):not(.spotlight-truncated-list-label),
+.spotlight-credits-row .spotlight-truncated-list .emby-tab-button > span:not(.spotlight-list-separator):not(.spotlight-truncated-list-label) {
+    white-space: nowrap;
+}
+
+/* Metadata row icons (end time, etc.) - same pattern as truncated list icons */
+.spotlight-metadata-row .emby-tab-button[data-icon] {
+    display: inline-flex;
+    align-items: center;
+}
+.spotlight-metadata-row .emby-tab-button[data-icon]::before {
+    content: attr(data-icon);
+    font-family: 'Material Icons';
+    font-size: 1.1em;
+    margin-right: 6px;
+    opacity: 0.9;
+    text-transform: none;
+}
+
+.spotlight-metadata-row .spotlight-studio {
+    display: inline-flex;
+    align-items: center;
+}
+.spotlight-metadata-row .spotlight-studio::before {
+    content: '\ea40'; /* Material Icons 'apartment' codepoint */
+    font-family: 'Material Icons';
+    font-weight: normal;
+    font-style: normal;
+    font-size: 1.1em;
+    margin-right: 6px;
+    opacity: 0.9;
 }
 
 .metadata-container {
     display: flex;
     flex-direction: column;
+    align-items: start;
     gap: 8px;
-    margin-bottom: 2em;
+    overflow: visible;
+    min-width: 0;
+    width: 100%;
 }
 
 .spotlight-truncated-list {
     font-size: 14px;
     opacity: 0.9;
     position: relative;
+    overflow: hidden;
+    min-width: 0;
+    max-width: 100%;
 }
 
-.spotlight-truncated-list .spotlight-ellipsis {
+/* Allow tooltip to escape overflow when present */
+.spotlight-truncated-list:has(.spotlight-truncated-list-tooltip) {
+    overflow: visible;
+}
+
+/* Tooltip for truncated lists - full list on hover after 1s, no layout shift */
+.spotlight-truncated-list-tooltip {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    margin-bottom: 8px;
+    padding: 12px 16px;
+    background: rgba(0, 0, 0, 0.95);
+    color: white;
+    border-radius: 8px;
+    font-size: 14px;
+    line-height: 1.5;
+    max-width: 400px;
+    min-width: 200px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+    z-index: 1000;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    word-wrap: break-word;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.spotlight-truncated-list-tooltip-items {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.spotlight-truncated-list-tooltip-item {
+    display: block;
+}
+
+.spotlight-truncated-list-tooltip.visible {
+    opacity: 1;
+    pointer-events: auto; /* Allow hovering tooltip to keep it visible */
+}
+
+.spotlight-truncated-list-tooltip .spotlight-person-link,
+.spotlight-truncated-list-tooltip .spotlight-genre-link,
+.spotlight-truncated-list-tooltip .spotlight-studio-link {
+    color: inherit;
+    text-decoration: underline;
     cursor: pointer;
 }
 
-.spotlight-tagline {
-    margin: 0 0 24px 0;
-    font-size: 18px;
-    font-style: italic;
-    opacity: 0.9;
-    line-height: 1.4;
-    max-width: 90%;
+.spotlight-list-separator {
+    opacity: 0.75;
+    margin: 0 0.4em;
+    user-select: none;
+}
+
+/* Overview: shown for all layouts with line clamping to avoid cut-off text */
+.spotlight-overview {
     display: -webkit-box;
+    margin: 0;
+    font-size: 15px;
+    font-style: normal;
+    opacity: 0.9;
+    line-height: 1.45;
+    max-width: 75%;
     -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
     text-overflow: ellipsis;
-    min-height: 75px;
-    max-height: 75px;
+}
+
+.spotlight-section[data-size="large"] .spotlight-overview {
+    -webkit-line-clamp: 4;
+}
+
+.spotlight-section[data-size="full"] .spotlight-overview {
+    font-size: 1.05em;
+    -webkit-line-clamp: 4;
 }
 
 .spotlight-buttons-container {
     display: flex;
-    gap: 12px;
+    gap: 5px;
     align-items: center;
     margin-top: auto;
 }
@@ -447,55 +656,39 @@
 
 .spotlight-nav-container {
     position: absolute;
-    top: 20px;
-    right: 20px;
+    top: 0px;
+    right: 0px;
     display: flex;
     gap: 8px;
     z-index: 10;
-    background: rgba(0,0,0,0.4);
+}
+
+.spotlight-section[data-layout="Border"] .spotlight-nav-container {
     border-radius: 4px;
-    padding: 4px;
+    top: 5px !important;
+    right: 5px !important;
+}
+
+.spotlight-section[data-layout="Border"] .spotlight-section-title {
+    border-radius: 4px;
+    top: 5px !important;
+    left: 5px !important;
 }
 
 .spotlight-nav-button {
-    width: 36px;
-    height: 36px;
     background: transparent;
-    color: white;
     border: none;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 0;
+    margin: 0 !important;
     transition: background 0.2s;
 }
 
 .spotlight-nav-button:hover {
     background: rgba(255,255,255,0.2);
-}
-
-.spotlight-nav-button .material-icons {
-    font-size: 24px;
-}
-
-.spotlight-pause-button {
-    width: 36px;
-    height: 36px;
-    background: transparent;
-    color: white;
-    border: none;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 10;
-    padding: 0;
-    transition: background 0.2s;
-}
-
-.spotlight-pause-button .material-icons {
-    font-size: 24px;
 }
 
 .spotlight-dots {
@@ -527,7 +720,7 @@
 .spotlight-dots.spotlight-dots-numeric {
     background: rgb(0 0 0 / 40%);
     border-radius: 5px;
-    padding: 0.25em 0.5em;
+    padding: 0.25rem 0.5rem;
     gap: 0;
 }
 
@@ -544,7 +737,8 @@
 }
 
 .spotlight-genre-link,
-.spotlight-person-link {
+.spotlight-person-link,
+.spotlight-studio-link {
     color: inherit;
     text-decoration: underline;
     cursor: pointer;
@@ -582,8 +776,9 @@
     }
     
     .spotlight-tagline {
-        max-height: 175px !important;
-        -webkit-line-clamp: 4;
+        max-height: 2.5em !important;
+        -webkit-line-clamp: 1;
+        bottom: 60px;
     }
 
     .spotlight-item-logo {
@@ -596,15 +791,10 @@
     margin-bottom: 45px !important;
 }
 
-[data-item-type="Movie"] .spotlight-item-logo {
-    height: 120px;
-    max-width: 310.2px;
-}
-
+/* Tagline always 1 line - Movie-specific override kept for any edge cases */
 [data-item-type="Movie"] .spotlight-tagline {
     -webkit-line-clamp: 1;
-    min-height: 30px;
-    max-height: 30px;
+    max-height: 2.5em;
 }   
 
 // Remove this if we switch back to Jellyfin's default scroll buttons
@@ -623,6 +813,23 @@
     top: 0;
     z-index: 1;
 }
+
+/* Blurhash placeholder canvas: fill card image area so it's visible until the real image loads */
+/* .cardScalable {
+    position: relative;
+}
+.cardScalable .blurhash-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    pointer-events: none;
+}
+.cardScalable .blurhash-canvas.lazy-hidden {
+    display: none !important;
+} */
 
 /* Progressive Section Reveal Animation */
 .cardbuilder-section-reveal {
@@ -743,20 +950,19 @@
     display: initial !important;
 }
 
-/* Full-screen spotlight: negative margins for overlap, content inset, top/bottom fade.
+/* Borderless layout: full width, no border, negative margins for overlap.
    Banner has NO padding so the background image overflows edge-to-edge; only content is inset. */
-.spotlight-section[data-full-screen="true"] {
+.spotlight-section[data-layout="Borderless"] {
     --spotlight-fullscreen-vertical: 4%;
     --spotlight-fullscreen-horizontal: max(env(safe-area-inset-left), env(safe-area-inset-right), 4%);
     padding: 0;
     width: 100%;
-    margin-top: calc(-1 * calc(var(--spotlight-fullscreen-vertical) / 2));
-    margin-bottom: calc(-1 * calc(var(--spotlight-fullscreen-vertical) / 2));
+    margin-top: calc(-1 * calc(var(--spotlight-fullscreen-vertical) * 1));
+    margin-bottom: calc(-1 * calc(var(--spotlight-fullscreen-vertical) * 2));
 }
 
-.spotlight-section[data-full-screen="true"] .spotlight-banner-container {
+.spotlight-section[data-layout="Borderless"] .spotlight-banner-container {
     border-radius: 0;
-    height: 90vh !important;
     /* No padding: background fills full size so image extends edge-to-edge and into overlap zone */
     position: relative;
     /* Wider mask so backdrop fades gradually at top/bottom (no visible solid edge during animation) */
@@ -781,8 +987,8 @@
 }
 
 /* Dark gradient overlays at top and bottom (like left-side overlay): graceful fade and better visibility when content overlaps */
-.spotlight-section[data-full-screen="true"] .spotlight-banner-container::before,
-.spotlight-section[data-full-screen="true"] .spotlight-banner-container::after {
+.spotlight-section[data-layout="Borderless"] .spotlight-banner-container::before,
+.spotlight-section[data-layout="Borderless"] .spotlight-banner-container::after {
     content: '';
     position: absolute;
     left: 0;
@@ -793,7 +999,7 @@
     z-index: 2;
 }
 
-.spotlight-section[data-full-screen="true"] .spotlight-banner-container::before {
+.spotlight-section[data-layout="Borderless"] .spotlight-banner-container::before {
     top: 0;
     background: linear-gradient(
         to bottom,
@@ -803,7 +1009,7 @@
     );
 }
 
-.spotlight-section[data-full-screen="true"] .spotlight-banner-container::after {
+.spotlight-section[data-layout="Borderless"] .spotlight-banner-container::after {
     bottom: 0;
     background: linear-gradient(
         to top,
@@ -813,179 +1019,419 @@
     );
 }
 
-.spotlight-section[data-full-screen="true"] .spotlight-items-container,
-.spotlight-section[data-full-screen="true"] .spotlight-item {
+.spotlight-section[data-layout="Borderless"] .spotlight-items-container,
+.spotlight-section[data-layout="Borderless"] .spotlight-item {
     /* Full bleed: fill banner so background extends to edges (and past negative margin) */
     left: 0;
     right: 0;
     width: 100%;
 }
 
-/* Full-screen: base scale so image extends past edges even before animation starts */
-.spotlight-section[data-full-screen="true"] .spotlight-background-single img,
-.spotlight-section[data-full-screen="true"] .spotlight-background-layer img {
+/* Borderless: base scale so image extends past edges even before animation starts */
+.spotlight-section[data-layout="Borderless"] .spotlight-background-single img,
+.spotlight-section[data-layout="Borderless"] .spotlight-background-layer img {
     transform: scale(1.08);
 }
 
-/* Full-screen: use pre-scaled animations so image never shows hard edge at top */
-.spotlight-section[data-full-screen="true"] .spotlight-background-single img.animate {
+/* Borderless: use pre-scaled animations so image never shows hard edge at top */
+/* .spotlight-section[data-layout="Borderless"] .spotlight-background-single img.animate {
     animation: kenBurnsZoomInFullscreen 20s ease-out forwards;
 }
-.spotlight-section[data-full-screen="true"] .spotlight-background-layer-left img.animate {
+.spotlight-section[data-layout="Borderless"] .spotlight-background-layer-left img.animate {
     animation: kenBurnsZoomOutFullscreen 20s ease-out forwards;
 }
-.spotlight-section[data-full-screen="true"] .spotlight-background-layer-right img.animate {
+.spotlight-section[data-layout="Borderless"] .spotlight-background-layer-right img.animate {
     animation: kenBurnsZoomInFullscreen 20s ease-out forwards;
-}
+} */
 
-/* Overlay stays left: 0 so the dark gradient still covers the image; only content is inset via padding.
-   z-index above top/bottom gradient pseudo-elements so title and buttons stay readable. */
-.spotlight-section[data-full-screen="true"] .spotlight-overlay {
+/* Overlay: same ~45% width as smaller spotlights for consistent gradient and content area. */
+.spotlight-section[data-layout="Borderless"] .spotlight-overlay {
     left: 0;
+    width: 45%;
     z-index: 3;
     padding: calc(var(--spotlight-fullscreen-vertical) * 2) var(--spotlight-fullscreen-horizontal) calc(var(--spotlight-fullscreen-vertical) * 2) var(--spotlight-fullscreen-horizontal);
+    grid-template-rows: var(--spotlight-logo-height) auto 1fr minmax(48px, auto);
+    gap: 1.5em;
+    background: linear-gradient(to right, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.7) 70%, transparent 100%);
 }
 
-.spotlight-section[data-full-screen="true"] .spotlight-overlay.has-title {
-    padding: calc(var(--spotlight-fullscreen-vertical) * 2) var(--spotlight-fullscreen-horizontal) calc(var(--spotlight-fullscreen-vertical) * 2) var(--spotlight-fullscreen-horizontal);
+.spotlight-section[data-layout="Borderless"][data-size="full"] .spotlight-overlay {
+    align-content: start;
+    gap: 1.5em;
 }
 
-.spotlight-section[data-full-screen="true"] .spotlight-section-title {
+.spotlight-section[data-layout="Borderless"][data-size="full"] .spotlight-credits-row {
+    flex-wrap: nowrap;
+    flex-direction: row;
+}
+
+
+.spotlight-section[data-layout="Borderless"] .spotlight-overlay.has-title {
+    padding: calc(var(--spotlight-fullscreen-vertical) * 2) var(--spotlight-fullscreen-horizontal) calc(var(--spotlight-fullscreen-vertical) * 2.25) var(--spotlight-fullscreen-horizontal);
+}
+
+/* Duplicate removed - already defined above for Borderless */
+
+.spotlight-section[data-size="full"] .spotlight-item-title {
+    width: auto;
+    max-width: none;
+    font-size: 4rem;
+}
+
+/* Duplicate removed - clearart display:none already set for Borderless above */
+
+.spotlight-section[data-layout="Borderless"] .spotlight-section-title {
     left: var(--spotlight-fullscreen-horizontal);
     top: calc(var(--spotlight-fullscreen-vertical) * 2.5);
 }
 
-.spotlight-section[data-full-screen="true"] .spotlight-item-logo {
-    width: auto;
-    max-width: none;
-    min-height: 35% !important;
-    height: 35% !important;
-    margin-bottom: 40px;
-}
-
-.spotlight-section[data-full-screen="true"] .spotlight-item-title {
-    width: auto;
-    max-width: none;
-    height: 35% !important;
-    margin-bottom: 40px;
-    font-size: 4rem;
-}
-
-.spotlight-section[data-full-screen="true"] .spotlight-clearart {
-    right: var(--spotlight-fullscreen-horizontal);
-    bottom: var(--spotlight-fullscreen-vertical);
-}
-
-.spotlight-section[data-full-screen="true"] .spotlight-nav-container {
+.spotlight-section[data-layout="Borderless"] .spotlight-nav-container {
     right: var(--spotlight-fullscreen-horizontal);
     top: calc(var(--spotlight-fullscreen-vertical) * 2.5);
 }
 
-.spotlight-section[data-full-screen="true"] .spotlight-dots {
-    bottom: calc(var(--spotlight-fullscreen-vertical) * 2.5);
+.spotlight-section[data-layout="Borderless"] .spotlight-dots {
+    bottom: calc(var(--spotlight-fullscreen-vertical) * 4.5);
 }
 
-.spotlight-section[data-full-screen="true"] img {
+.spotlight-section .spotlight-background-layer img,
+.spotlight-section .spotlight-background-single img {
     object-position: center 0%;    
 }
-.spotlight-section[data-full-screen="true"] .spotlight-clearart {
+.spotlight-section[data-layout="Borderless"] .spotlight-clearart {
     display: none;
 }
 
-:has(.spotlight-section[data-full-screen="true"]) .homeSectionsContainer > *:not(.spotlight-section) {
+:has(.spotlight-section[data-layout="Borderless"]) .homeSectionsContainer > *:not(.spotlight-section) {
     z-index: 1;
 }
 
-.spotlight-section[data-full-screen="true"] .spotlight-tagline {
-    max-height: 150px !important;
-    -webkit-line-clamp: 6;
-    font-style: normal;
+/* Tagline at bottom center above navigation dots (all spotlights) - always 1 line max */
+.spotlight-tagline {
+    position: absolute !important;
+    left: 50%;
+    transform: translateX(-50%);
+    width: fit-content;
+    max-width: min(85%, 700px);
+    max-height: 2.5em;
+    text-align: center;
+    font-style: italic;
     font-size: 1.05em;
-    margin-bottom: 0;
+    margin: 0;
+    padding: 8px 16px;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border-radius: 6px;
+    z-index: 4;
+    pointer-events: none;
+    line-height: 1.4;
+}
+.spotlight-tagline > *, .spotlight-section-title > *, .spotlight-nav-container > * {
+    background: rgba(0, 0, 0, 0.5);
+    border-radius: 4px;
+}
+.spotlight-section:not(.hide) .spotlight-tagline p {
+    font-weight: initial !important;
+    transform: initial !important;
+    width: 100%;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    cursor: default;
 }
 
-/* Full-screen: modern stream-site metadata styles */
-.spotlight-section[data-full-screen="true"] .metadata-container {
+/* Normal and large: tagline above dots (dots at bottom: 20px) */
+.spotlight-section[data-layout="Border"] .spotlight-tagline {
+    bottom: 40px;
+}
+
+.spotlight-section[data-layout="Borderless"] .spotlight-tagline {
+    bottom: calc(var(--spotlight-fullscreen-vertical) * 4.5 + 40px);
+}
+
+/* Size full: modern stream-site metadata styles */
+.spotlight-section[data-size="full"] .metadata-container {
     gap: 10px;
 }
 
-.spotlight-section[data-full-screen="true"] .spotlight-metadata-row {
+.spotlight-section[data-size="full"] .spotlight-metadata-row {
     font-size: 15px;
     gap: 10px;
 }
 
-/* Pill-style for year, duration, genres, director/writer/series, end time */
-.spotlight-section[data-full-screen="true"] .spotlight-metadata-row > span {
-    padding: 5px 12px;
+/* Full-screen: uniform padding for all metadata pills (year, duration, genres, director, writer, series) */
+/* .spotlight-section[data-size="full"] .spotlight-metadata-row .detailsGroupItem,
+.spotlight-section[data-size="full"] .metadata-container .detailsGroupItem {
     border-radius: 6px;
     background: rgba(255, 255, 255, 0.12);
     border: 1px solid rgba(255, 255, 255, 0.2);
-}
+} */
 
-.spotlight-section[data-full-screen="true"] .spotlight-end-time {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-}
-
-.spotlight-section[data-full-screen="true"] .spotlight-end-time .material-icons {
-    font-size: 1.1em;
-    opacity: 0.9;
-}
-
-.spotlight-section[data-full-screen="true"] .spotlight-genre-link {
+.spotlight-section[data-size="full"] .spotlight-genre-link {
     display: inline-block;
-    padding: 5px 12px;
-    border-radius: 6px;
-    background: rgba(255, 255, 255, 0.12);
-    border: 1px solid rgba(255, 255, 255, 0.2);
     transition: background 0.2s, border-color 0.2s;
 }
 
-.spotlight-section[data-full-screen="true"] .spotlight-genre-link:hover {
-    background: rgba(255, 255, 255, 0.2);
-    border-color: rgba(255, 255, 255, 0.35);
+/* Full-screen: director/writer use material icon instead of label text */
+/* Director/writer: always use icon, never show "Directed by"/"Written by" text */
+.spotlight-truncated-list[data-icon] .spotlight-truncated-list-label {
+    display: none;
+}
+.spotlight-truncated-list .detailsGroupItem[data-icon],
+.spotlight-truncated-list .emby-tab-button[data-icon] {
+    display: inline-flex;
+    align-items: center;
+}
+.spotlight-truncated-list .detailsGroupItem[data-icon]::before,
+.spotlight-truncated-list .emby-tab-button[data-icon]::before {
+    content: attr(data-icon);
+    font-family: 'Material Icons';
+    font-size: 1.1em;
+    margin-right: 6px;
+    opacity: 0.9;
+    text-transform: none; /* Prevent parent text-transform: capitalize (e.g. .spotlight-series-info) from breaking icon */
+}
+.spotlight-truncated-list[data-icon] .detailsGroupItem[data-icon]::before,
+.spotlight-truncated-list[data-icon] .emby-tab-button[data-icon]::before {
+    content: attr(data-icon);
 }
 
-/* Director/writer/series info: pill-style container */
-.spotlight-section[data-full-screen="true"] .spotlight-truncated-list:has(>*) {
-    font-size: 15px;
-    padding: 6px 14px;
-    border-radius: 6px;
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    display: inline-block;
-    max-width: fit-content;
+/* Director/writer/series info: no extra padding - detailsGroupItem matches other metadata pills */
+.spotlight-section[data-size="full"] .spotlight-truncated-list.itemDetailsGroup:has(>.detailsGroupItem),
+.spotlight-section[data-size="full"] .spotlight-truncated-list.sectionTabs:has(>.emby-tab-button) {
+    font-size: large;
+    display: flex;
+    align-items: center;
+    align-self: start;
 }
 
 .spotlight-section a:not(:hover) {
     text-decoration: none !important;
 }
 
-.spotlight-section[data-full-screen="true"] span.spotlight-end-time::after {
-    content: 'schedule';
-    position: absolute;
-    left: 10px;
-    font-family: 'Material Icons';
-    top: calc(50% + 1px);
-    transform: translateY(-50%);
+.spotlight-section[data-size="full"] .spotlight-buttons-container {
+    margin-top: 0px !important;
+    margin-bottom: 0px !important;
+    display: flex;
+    flex-direction: row;
+    justify-content: start;
 }
 
-.spotlight-section[data-full-screen="true"] span.spotlight-end-time {
-    padding-left: 30px !important;
-    position: relative;
-}
-
-.spotlight-section[data-full-screen="true"] .spotlight-buttons-container {
-    margin-top: 40px;
-}
-
-.spotlight-section[data-full-screen="true"] .spotlight-item-logo {
+.spotlight-section[data-size="full"] .spotlight-item-logo {
     width: 95%;
 }
 
 
-.layout-mobile .spotlight-section[data-full-screen="true"] .spotlight-section-title {
+/* Mobile spotlight: uniform layout TITLE -> gap -> LOGO -> METADATA -> OVERVIEW -> BUTTONS -> DOTS */
+.layout-mobile .spotlight-tagline {
+    display: none !important;
+}
+
+.layout-mobile .spotlight-overlay {
+    width: 100% !important;
+    background: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.4) 40%, rgba(0,0,0,0.85) 100%) !important;
+    padding: 4rem 1rem 4rem 1rem !important;
+    align-items: start;
+    align-content: start;
+    grid-template-rows: auto auto 1fr minmax(48px, auto);
+    grid-template-areas: "logo" "metadata" "overview" "buttons";
+    gap: 0.75em;
+}
+
+/* Gap after TITLE: extra top padding when section has a title */
+.layout-mobile .spotlight-overlay.has-title {
+    padding-top: 6rem !important;
+}
+
+.layout-mobile .spotlight-section .spotlight-section-title {
+    top: 1rem;
+    left: 1rem;
+}
+
+.layout-mobile .metadata-container {
+    display: flex !important;
+}
+
+.layout-mobile .spotlight-logo-section {
+    height: auto !important;
+    min-height: 0 !important;
+}
+
+.layout-mobile .spotlight-overview {
+    max-width: 100%;
+}
+
+.spotlight-series-info {
+    text-transform: capitalize;
+}
+
+.spotlight-section[data-size="full"] .metadata-container * {
+    font-size: 1.1rem;
+}
+
+/* Native Jellyfin itemDetailsGroup structure for all spotlight metadata */
+.spotlight-section .itemDetailsGroup:has(.detailsGroupItem:not(.hide)),
+.spotlight-section .sectionTabs:has(.emby-tab-button:not(.hide)) {
+    margin: 0px !important;
+    padding: 0px !important;
+    width: initial !important;
+    min-width: initial !important;
+}
+.spotlight-section .itemDetailsGroup:not(.hide) .detailsGroupItem,
+.spotlight-section .itemDetailsGroup:not(.hide) .emby-tab-button {
+    margin: 0px !important;
+    gap: 0px !important;
+}
+
+.spotlight-section .spotlight-buttons-container.mainDetailButtons .btnPlay {
+    margin-right: 0px !important;
+    right: 0px !important;
+}
+
+.spotlight-section .spotlight-buttons-container.mainDetailButtons {
+    margin-left: 0px !important;
+}
+
+.spotlight-section:not(.hide) .headerTabs,
+.spotlight-section:not(.hide) .sectionTabs {
+    display: flex !important;
+    height: initial !important;
+    padding: 0px !important;
+    margin-top: 0px !important;
+    margin-bottom: 0px !important;
+    margin-left: 0px !important;
+    margin-right: 0px !important;
+}
+
+.spotlight-section:not(.hide) .emby-tab-button {
+    height: initial !important;
+    padding: 0.5rem 0.5rem !important;
+    margin: 0px !important;
+    top: initial !important;
+    transform: initial !important;
+}
+
+.spotlight-section-title.headerTabs.sectionTabs,
+.spotlight-nav-container.headerTabs.sectionTabs {
+    position: absolute !important;
+    display: flex !important;
+    flex-direction: row !important;
+}
+
+.spotlight-section[data-layout="Border"] .spotlight-section-title {
+    top: 0;
+}
+
+.spotlight-nav-buttons-container {
+    display: flex !important;
+    gap: 8px !important;
+    font-size: 1.1rem !important;
+}
+
+.spotlight-section:not(.hide) span.emby-tab-button.emby-tab-button-active:not(:has(a)) {
+    cursor: default;
+}
+.metadata-container *, .spotlight-tagline p {
+    color: rgba(255, 255, 255, 0.9) !important;
+}
+.spotlight-nav-button span.material-icons {
+    font-size: 24px !important;
+    display: inline-block !important;
+    top: initial !important;
+}
+.spotlight-section-title > * {
+    font-size: 18px !important;
+}
+
+.spotlight-metadata-row  *:not(a) {
+    cursor: default;
+}
+
+.spotlight-section[data-layout="Borderless"][data-size="normal"] {
+    margin-top: calc(-1 * calc(var(--spotlight-fullscreen-vertical) / 4));
+    margin-bottom: calc(-1 * calc(var(--spotlight-fullscreen-vertical) / 4));
+}
+.spotlight-section[data-layout="Borderless"][data-size="normal"] .spotlight-banner-container {
+    height: 33rem;
+}
+
+.spotlight-section[data-layout="Borderless"][data-size="normal"] .spotlight-overview-section {
+    display: none !important;
+}
+.spotlight-section[data-layout="Borderless"][data-size="normal"] .spotlight-overlay {
+}
+.spotlight-section[data-layout="Borderless"][data-size="normal"] .spotlight-buttons-section {
+    margin-top: -1.5em;
+}
+.spotlight-section[data-layout="Borderless"][data-size="large"] .spotlight-banner-container {
+    height: 52rem;
+}
+
+.spotlight-section[data-layout="Borderless"][data-size="normal"] .spotlight-overlay.has-title {
+    padding: calc(var(--spotlight-fullscreen-vertical) * 2.25) var(--spotlight-fullscreen-horizontal) calc(var(--spotlight-fullscreen-vertical) * 1.25) var(--spotlight-fullscreen-horizontal);
+}
+
+.spotlight-section[data-layout="Borderless"][data-size="normal"] {
+    --spotlight-fullscreen-vertical: 3em;
+    --spotlight-fullscreen-horizontal: max(env(safe-area-inset-left), env(safe-area-inset-right), 4%);
+}
+.spotlight-section[data-layout="Borderless"][data-size="normal"] .spotlight-section-title {
     left: var(--spotlight-fullscreen-horizontal);
-    top: var(--spotlight-fullscreen-vertical);
+    top: calc(var(--spotlight-fullscreen-vertical) * 1);
+}
+.spotlight-section[data-layout="Borderless"][data-size="normal"] .spotlight-tagline {
+    bottom: calc(var(--spotlight-fullscreen-vertical) * 1.5 + 40px);
+}
+.spotlight-section[data-layout="Borderless"][data-size="normal"] .spotlight-dots {
+    bottom: calc(var(--spotlight-fullscreen-vertical) * 1.5);
+}
+.spotlight-section[data-layout="Borderless"][data-size="normal"] .spotlight-nav-container {
+    right: var(--spotlight-fullscreen-horizontal);
+    top: calc(var(--spotlight-fullscreen-vertical) * 1);
+}
+.spotlight-section[data-layout="Borderless"][data-size="normal"] .spotlight-overlay {
+    grid-template-rows: var(--spotlight-logo-height) auto auto minmax(48px, auto);
+}
+.spotlight-section[data-size="normal"] .spotlight-overlay {
+    grid-template-rows: var(--spotlight-logo-height) auto auto 1fr;
+}
+.spotlight-section[data-size="large"] .spotlight-overlay {
+    grid-template-rows: var(--spotlight-logo-height) auto auto 1fr;
+}
+.spotlight-section[data-layout="Border"] .spotlight-overlay {
+    padding: 65px 40px 15px 40px;
+}
+.spotlight-section[data-layout="Border"] .spotlight-section-title {
+    top: 15px !important;
+    left: 40px !important;
+}
+.spotlight-section[data-layout="Border"] .spotlight-nav-container {
+    top: 15px !important;
+    right: 40px !important;
+}
+.spotlight-section[data-layout="Border"][data-size="normal"] .spotlight-section-title a {
+    font-size: 1rem !important;
+}
+.spotlight-section[data-layout="Border"][data-size="normal"] .spotlight-buttons-section {
+    align-self: end;
+}
+.spotlight-section[data-layout="Border"] .spotlight-banner-container {
+    border: 1px solid rgb(255 255 255 / 10%);
+}
+.spotlight-section[data-layout="Border"][data-size="large"] .spotlight-banner-container {
+    height: 40rem;
+}
+
+.spotlight-section[data-layout="Border"][data-size="full"] .spotlight-banner-container {
+    height: 70vh !important;
+}
+
+.spotlight-section[data-layout="Borderless"][data-size="large"] .spotlight-overview {
+    -webkit-line-clamp: 3;
+}
+
+.spotlight-section[data-layout="Border"][data-size="normal"] .spotlight-overview {
+    -webkit-line-clamp: 2;
 }

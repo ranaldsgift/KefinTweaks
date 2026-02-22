@@ -12,6 +12,22 @@
     // Global toggle for progressive section fade-in.
     // Developers can set this to false to disable the behavior.
     const FADE_IN_SECTIONS = true;
+
+    // Sliding window: render current slide + 4 prev + 4 next (9 total). As user navigates, remove/add slides.
+    const SPOTLIGHT_WINDOW_PREV = 4;
+    const SPOTLIGHT_WINDOW_NEXT = 4;
+
+    function getSpotlightWindowIndices(currentIndex, totalLength) {
+        if (totalLength <= 9) {
+            return Array.from({ length: totalLength }, (_, i) => i);
+        }
+        const indices = new Set();
+        for (let i = -SPOTLIGHT_WINDOW_PREV; i <= SPOTLIGHT_WINDOW_NEXT; i++) {
+            const idx = (currentIndex + i + totalLength) % totalLength;
+            indices.add(idx);
+        }
+        return Array.from(indices);
+    }
     
     /**
      * Helper function to shuffle array (Fisher-Yates)
@@ -290,6 +306,10 @@
             });
         }
 
+        if (sectionConfig.queries?.[0]?.queryOptions?.SortBy === 'Random') {
+            processed = shuffle(processed);
+        }
+
         const limit = sectionConfig.itemLimit || sectionConfig.queries?.[0]?.queryOptions?.Limit || 0;
 
         // Apply local limits for non-API sources
@@ -489,7 +509,7 @@
                 
                 // Replace the section element
                 sectionElement.replaceWith(content);
-                checkSectionOverflow(content, true);
+                //checkSectionOverflow(content, true);
                 setTimeout(() => checkSectionOverflow(content, true), 150);
 
                 // Add refresh button to new content
@@ -661,7 +681,7 @@
                 // This preserves the container element itself and its layout properties (like order)
                 skeletonContaineElement.replaceWith(realContainer);
                 checkSectionOverflow(realContainer, true);
-                setTimeout(() => checkSectionOverflow(realContainer, true), 150);
+                //setTimeout(() => checkSectionOverflow(realContainer, true), 150);
             }).catch(error => {
                 console.error('[KefinTweaks CardBuilder] Error loading items for progressive enhancement:', error);
                 // Optionally remove skeleton on error or show error state
@@ -803,7 +823,7 @@
 
             // Batch append sections to avoid Jellyfin emby-scroller processing
             // all at once (causes render lag when many sections are added)
-            const BATCH_SIZE = 4;
+            /* const BATCH_SIZE = 4;
             const sectionNodes = Array.from(fragment.childNodes);
             for (let i = 0; i < sectionNodes.length; i += BATCH_SIZE) {
                 const batch = sectionNodes.slice(i, i + BATCH_SIZE);
@@ -811,6 +831,12 @@
                 if (i + BATCH_SIZE < sectionNodes.length) {
                     await new Promise(resolve => requestAnimationFrame(resolve));
                 }
+            } */
+
+            for (const sectionElement of sectionElements) {
+                container.appendChild(sectionElement);
+                await new Promise(resolve => requestAnimationFrame(resolve));
+                await new Promise(resolve => setTimeout(resolve, 0));
             }
 
             /* for (const sectionElement of sectionElements) {
@@ -974,7 +1000,7 @@
 
                     sectionElement.replaceWith(content);
                     checkSectionOverflow(content, true);
-                    setTimeout(() => checkSectionOverflow(content, true), 150);
+                    //setTimeout(() => checkSectionOverflow(content, true), 150);
 
                     // If revealSectionsSequentially is enabled and section hasn't been revealed yet, re-observe it
                     if (revealSectionsSequentially && content.classList.contains('cardbuilder-section-reveal') && !content.classList.contains('in-viewport')) {
@@ -1067,8 +1093,8 @@
                             content.setAttribute(attr.name, attr.value);
                         });
                         skeleton.replaceWith(content);
-                        checkSectionOverflow(content, true);
-                        setTimeout(() => checkSectionOverflow(content, true), 150);
+                        /* checkSectionOverflow(content, true);
+                        setTimeout(() => checkSectionOverflow(content, true), 150); */
                     } else {
                         skeleton.remove();
                     }
@@ -1207,6 +1233,186 @@
     };
 
     /**
+     * Blurhash base83 character set (must match official blurhash package: includes comma and period)
+     * https://github.com/woltapp/blurhash/blob/master/TypeScript/src/base83.ts
+     */
+    const BLURHASH_B83 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz#$%*+,-.:;=?@[]^_{|}~';
+
+    function blurhashDecode83(str, from, length) {
+        if (from + length > str.length) return NaN;
+        let value = 0;
+        for (let i = 0; i < length; i++) {
+            const idx = BLURHASH_B83.indexOf(str[from + i]);
+            if (idx < 0) return NaN;
+            value = value * 83 + idx;
+        }
+        return value;
+    }
+
+    function blurhashSignPow(val, exp) {
+        const sign = val < 0 ? -1 : 1;
+        return sign * Math.pow(Math.abs(val), exp);
+    }
+
+    function blurhashLinearToSrgb(value) {
+        const v = Math.max(0, Math.min(1, value));
+        return v <= 0.0031308 ? Math.trunc(v * 12.92 * 255 + 0.5) : Math.trunc((1.055 * Math.pow(v, 1 / 2.4) - 0.055) * 255 + 0.5);
+    }
+
+    function blurhashSrgbToLinear(value) {
+        const v = value / 255;
+        return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+    }
+
+    /**
+     * Decode a blurhash string to RGBA pixel data (Uint8ClampedArray).
+     * Matches the official blurhash package (same as Jellyfin's worker uses).
+     * Layout: 1 char size, 1 char quantised max, 4 chars DC (24-bit), then 2 chars per AC (base-19 packed).
+     */
+    function blurhashDecode(blurhash, width, height) {
+        if (!blurhash || blurhash.length < 6) return null;
+        try {
+            const sizeVal = blurhashDecode83(blurhash, 0, 1);
+            if (isNaN(sizeVal)) return null;
+            const numX = (sizeVal % 9) + 1;
+            const numY = Math.floor(sizeVal / 9) + 1;
+            const expectedLen = 4 + 2 * numX * numY;
+            if (blurhash.length !== expectedLen) return null;
+
+            const quantisedMax = blurhashDecode83(blurhash, 1, 1);
+            if (isNaN(quantisedMax)) return null;
+            const maxVal = (quantisedMax + 1) / 166;
+
+            const components = [];
+            for (let i = 0; i < numX * numY; i++) {
+                if (i === 0) {
+                    const dc = blurhashDecode83(blurhash, 2, 4);
+                    if (isNaN(dc)) return null;
+                    const intR = dc >> 16;
+                    const intG = (dc >> 8) & 255;
+                    const intB = dc & 255;
+                    components.push([
+                        blurhashSrgbToLinear(intR),
+                        blurhashSrgbToLinear(intG),
+                        blurhashSrgbToLinear(intB)
+                    ]);
+                } else {
+                    const acVal = blurhashDecode83(blurhash, 4 + i * 2, 2);
+                    if (isNaN(acVal)) return null;
+                    const quantR = Math.floor(acVal / (19 * 19));
+                    const quantG = Math.floor(acVal / 19) % 19;
+                    const quantB = acVal % 19;
+                    components.push([
+                        blurhashSignPow((quantR - 9) / 9, 2) * maxVal,
+                        blurhashSignPow((quantG - 9) / 9, 2) * maxVal,
+                        blurhashSignPow((quantB - 9) / 9, 2) * maxVal
+                    ]);
+                }
+            }
+
+            const pixels = new Uint8ClampedArray(width * height * 4);
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    let r = 0, g = 0, b = 0;
+                    for (let j = 0; j < numY; j++) {
+                        const basisY = Math.cos((Math.PI * y * j) / height);
+                        for (let i = 0; i < numX; i++) {
+                            const basis = Math.cos((Math.PI * x * i) / width) * basisY;
+                            const color = components[i + j * numX];
+                            r += color[0] * basis;
+                            g += color[1] * basis;
+                            b += color[2] * basis;
+                        }
+                    }
+                    const off = (y * width + x) * 4;
+                    pixels[off] = blurhashLinearToSrgb(r);
+                    pixels[off + 1] = blurhashLinearToSrgb(g);
+                    pixels[off + 2] = blurhashLinearToSrgb(b);
+                    pixels[off + 3] = 255;
+                }
+            }
+            return pixels;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    /**
+     * Draw decoded blurhash into an existing canvas (e.g. 20x20).
+     * @param {HTMLCanvasElement} canvas - Canvas to draw into
+     * @param {string} blurhashString - Blurhash string
+     * @returns {boolean} - True if drawn successfully
+     */
+    function drawBlurhashToCanvas(canvas, blurhashString) {
+        if (!canvas || !blurhashString) return false;
+        const w = canvas.width || 20;
+        const h = canvas.height || 20;
+        const pixels = blurhashDecode(blurhashString, w, h);
+        if (!pixels) return false;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return false;
+        const imageData = ctx.createImageData(w, h);
+        imageData.data.set(pixels);
+        ctx.putImageData(imageData, 0, 0);
+        return true;
+    }
+
+    /**
+     * Get blurhash string for the card image when the image is from the current item.
+     * Mirrors the image URL logic; returns undefined when image comes from parent/series (we don't have their ImageBlurHashes).
+     * @param {Object} item - Jellyfin item
+     * @param {string|null} cardFormat - 'backdrop'|'square'|'portrait'|'poster'|'thumb'|null
+     * @param {string|null} forcedImageType - e.g. 'Primary'
+     * @returns {string|undefined} - Blurhash string or undefined
+     */
+    function getBlurhashForCard(item, cardFormat, forcedImageType) {
+        const hashes = item.ImageBlurHashes;
+        if (!hashes || typeof hashes !== 'object') return undefined;
+        cardFormat = cardFormat?.toLowerCase() || null;
+        forcedImageType = forcedImageType?.toLowerCase() || null;
+
+        if (cardFormat === 'backdrop') {
+            if (item.BackdropImageTags && item.BackdropImageTags[0])
+                return hashes.Backdrop?.[item.BackdropImageTags[0]];
+            if (item.ImageTags?.Thumb) return hashes.Thumb?.[item.ImageTags.Thumb];
+            if (item.ImageTags?.Primary) return hashes.Primary?.[item.ImageTags.Primary];
+            return undefined;
+        }
+        if (cardFormat === 'square') {
+            if (item.Type === 'Season' || item.Type === 'Series' || item.Type === 'Movie') {
+                if (item.BackdropImageTags && item.BackdropImageTags[0])
+                    return hashes.Backdrop?.[item.BackdropImageTags[0]];
+                if (item.ImageTags?.Primary) return hashes.Primary?.[item.ImageTags.Primary];
+                return undefined;
+            }
+            if (item.ImageTags?.Primary) return hashes.Primary?.[item.ImageTags.Primary];
+            if (item.BackdropImageTags && item.BackdropImageTags[0])
+                return hashes.Backdrop?.[item.BackdropImageTags[0]];
+            if (item.ImageTags?.Thumb) return hashes.Thumb?.[item.ImageTags.Thumb];
+            return undefined;
+        }
+        if (cardFormat === 'portrait' || cardFormat === 'poster') {
+            if (item.ImageTags?.Primary) return hashes.Primary?.[item.ImageTags.Primary];
+            if (item.PrimaryImageTag) return hashes.Primary?.[item.PrimaryImageTag];
+            if (item.ImageTags?.Thumb) return hashes.Thumb?.[item.ImageTags.Thumb];
+            return undefined;
+        }
+        if (cardFormat === 'thumb') {
+            if (forcedImageType && state.useEpisodeImages && item.Type === 'Episode' && item.ImageTags?.Primary)
+                return hashes.Primary?.[item.ImageTags.Primary];
+            if (item.ImageTags?.Thumb) return hashes.Thumb?.[item.ImageTags.Thumb];
+            if (item.ImageTags?.Primary) return hashes.Primary?.[item.ImageTags.Primary];
+            return undefined;
+        }
+        if (item.IsJellyseerr) return undefined;
+        if (item.ImageTags?.Primary) return hashes.Primary?.[item.ImageTags.Primary];
+        if (item.ImageTags?.Thumb) return hashes.Thumb?.[item.ImageTags.Thumb];
+        if (item.BackdropImageTags && item.BackdropImageTags.length > 0)
+            return hashes.Backdrop?.[item.BackdropImageTags[0]];
+        return undefined;
+    }
+
+    /**
      * Creates a Jellyfin card element from an item
      * @param {Object} item - The Jellyfin item object
      * @param {boolean} overflowCard - Use overflow card classes instead of normal card classes
@@ -1313,12 +1519,13 @@
         
         cardPadder.appendChild(cardIcon);
 
-        // Blurhash canvas (placeholder)
+        // Blurhash canvas (placeholder) – will be filled and shown when we have a blurhash
         const blurhashCanvas = document.createElement('canvas');
         blurhashCanvas.setAttribute('aria-hidden', 'true');
         blurhashCanvas.width = 20;
         blurhashCanvas.height = 20;
-        blurhashCanvas.className = 'blurhash-canvas lazy-hidden';
+        // lazy-hidden only when we have no blurhash (grey card until image loads)
+        blurhashCanvas.className = 'blurhash-canvas';
 
         // Card image container
         const cardImageContainer = document.createElement('a');
@@ -1428,10 +1635,24 @@
             
             cardImageContainer.appendChild(iconSpan);
         }
-        
+
+        const blurhashStr = getBlurhashForCard(item, cardFormat, forcedImageType);
+        if (!blurhashStr) {
+            blurhashCanvas.classList.add('lazy-hidden');
+        } else {
+            // Draw blurhash immediately so placeholder is visible ASAP (canvas is behind cardImageContainer)
+            if (!drawBlurhashToCanvas(blurhashCanvas, blurhashStr)) {
+                blurhashCanvas.classList.add('lazy-hidden');
+            } else {
+                // Hide the image container so the blurhash canvas shows until the real image loads
+                cardImageContainer.classList.add('lazy-hidden');
+            }
+        }
+
         if (imageUrl) {
             // Use data-src for lazy loading instead of immediate backgroundImage
             cardImageContainer.setAttribute('data-src', imageUrl);
+            if (blurhashStr) cardImageContainer.setAttribute('data-blurhash', blurhashStr);
             // Add lazy class for styling/selection
             cardImageContainer.classList.add('lazy');
         }
@@ -1625,12 +1846,12 @@
             secondaryText.appendChild(yearBdi);
         }
 
-        // Assemble card
+        // Assemble card (blurhash already drawn above when blurhashStr was set)
         cardScalable.appendChild(cardPadder);
         cardScalable.appendChild(blurhashCanvas);
         cardScalable.appendChild(cardImageContainer);
         cardScalable.appendChild(cardOverlayContainer);
-        
+
         cardBox.appendChild(cardScalable);
         cardBox.appendChild(cardTextContainer);
         
@@ -1697,7 +1918,7 @@
         if (!items || items.length === 0) {
             return document.createElement('div');
         }
-        
+
         const {
             autoPlay = true,    
             interval = 10000,
@@ -1707,10 +1928,13 @@
             showClearArt = false,
             panAnimation = true,
             fullScreen = false,
+            spotlightSize,
             dualBackdrops = true,
             viewMoreUrl = null,
             pauseOnHover = !fullScreen  // Default: don't pause on hover in fullscreen (continue cycling)
         } = options;
+        const layout = fullScreen ? 'Borderless' : 'Border';
+        const size = spotlightSize ?? (fullScreen ? 'full' : 'normal');
         
         const serverId = ApiClient.serverId();
         const serverAddress = ApiClient.serverAddress();
@@ -1735,7 +1959,7 @@
             if (viewMoreUrl) {
                 // Create clickable title
                 const titleLink = document.createElement('a');
-                titleLink.className = 'spotlight-section-title spotlight-title-link';
+                titleLink.className = 'emby-tab-button emby-tab-button-active emby-button-foreground';
                 titleLink.textContent = title;
                 titleLink.title = 'See All';
                 titleLink.style.textDecoration = 'none';
@@ -1758,11 +1982,15 @@
             } else {
                 // Regular non-clickable title
                 sectionTitleEl = document.createElement('div');
-                sectionTitleEl.className = 'spotlight-section-title';
+                sectionTitleEl.className = 'emby-tab-button emby-tab-button-active emby-button-foreground';
                 sectionTitleEl.textContent = title;
             }
+
+            const sectionTitleContainer = document.createElement('div');
+            sectionTitleContainer.className = `spotlight-section-title ${viewMoreUrl ? '' : 'spotlight-title-link'} headerTabs sectionTabs`;
+            sectionTitleContainer.appendChild(sectionTitleEl);
             
-            bannerContainer.appendChild(sectionTitleEl);
+            bannerContainer.appendChild(sectionTitleContainer);
         }
         
         // Create items container (for fade transitions)
@@ -1771,21 +1999,18 @@
         
         const isMobileLayout = document.documentElement.classList.contains('mobile-layout');
 
-        // Create items
-        items.forEach((item, index) => {
-            // Get item type early for use throughout
+        // Sliding window: render current + 4 prev + 4 next (9 slides). Update DOM as user navigates.
+        let currentWindowIndices = getSpotlightWindowIndices(0, items.length);
+
+        function createAndAppendSlide(item, index, eagerLoadImages) {
             const itemType = item.Type || 'Movie';
             
             const itemDiv = document.createElement('div');
             itemDiv.className = 'spotlight-item';
             itemDiv.setAttribute('data-id', item.Id);
-            itemDiv.setAttribute('data-index', index);
+            itemDiv.setAttribute('data-index', String(index));
             itemDiv.setAttribute('data-item-type', itemType);
-            if (index === 0) {
-                itemDiv.style.opacity = '1';
-            } else {
-                itemDiv.style.opacity = '0';
-            }
+            itemDiv.style.opacity = eagerLoadImages ? '1' : '0';
 
             let imageUrl = '';
 
@@ -1839,7 +2064,7 @@
                 leftImg.setAttribute('data-src', firstUrl);
                 leftImg.alt = '';
                 leftImg.draggable = false;
-                if (index === 0) {
+                if (eagerLoadImages) {
                     leftImg.src = firstUrl;
                     leftImg.loading = 'eager';
                 }
@@ -1851,7 +2076,7 @@
                 rightImg.setAttribute('data-src', secondUrl);
                 rightImg.alt = '';
                 rightImg.draggable = false;
-                if (index === 0) {
+                if (eagerLoadImages) {
                     rightImg.src = secondUrl;
                     rightImg.loading = 'eager';
                 }
@@ -1877,7 +2102,7 @@
                     singleImg.setAttribute('data-src', imageUrl);
                     singleImg.alt = '';
                     singleImg.draggable = false;
-                    if (index === 0) {
+                    if (eagerLoadImages) {
                         singleImg.src = imageUrl;
                         singleImg.loading = 'eager';
                     }
@@ -1897,11 +2122,12 @@
             
             if (hasLogo) {
                 // Use logo image instead of text title
-                const logoUrl = `${serverAddress}/Items/${item.Id}/Images/Logo?fillHeight=${fullScreen ? '300' : '200'}&quality=96&tag=${item.ImageTags.Logo}`;
+                const logoHeight = size === 'full' ? '300' : (size === 'large' ? '250' : '200');
+                const logoUrl = `${serverAddress}/Items/${item.Id}/Images/Logo?fillHeight=${logoHeight}&quality=96&tag=${item.ImageTags.Logo}`;
                 titleEl = document.createElement('div');
                 titleEl.className = 'spotlight-item-logo';
                 titleEl.setAttribute('data-background-url', logoUrl);
-                if (index === 0) titleEl.style.backgroundImage = `url("${logoUrl}")`;
+                if (eagerLoadImages) titleEl.style.backgroundImage = `url("${logoUrl}")`;
                 titleEl.alt = item.Name || 'Unknown';
             } else {
                 // Use text title as fallback
@@ -1910,6 +2136,23 @@
                 titleEl.textContent = item.Name || 'Unknown';
             }
             
+            // Helper: wrap content in native Jellyfin itemDetailsGroup > detailsGroupItem structure
+            // icon: optional Material Icons name (e.g. 'schedule') - same pattern as genres/director/writer
+            function createMetadataItem(content, tag = 'span', extraClasses = '', icon = null) {
+                const group = document.createElement('div');
+                group.className = 'headerTabs sectionTabs';
+                const item = document.createElement(tag);
+                item.className = 'emby-tab-button' + (extraClasses ? ' ' + extraClasses : '');
+                if (icon) item.setAttribute('data-icon', icon);
+                if (typeof content === 'string') {
+                    item.textContent = content;
+                } else {
+                    item.appendChild(content);
+                }
+                group.appendChild(item);
+                return group;
+            }
+
             // Combined: Year + Time + Ends At + Genres (all on one line)
             const metadataRow = document.createElement('div');
             metadataRow.className = 'spotlight-metadata-row';
@@ -1917,13 +2160,12 @@
             // Year
             const year = item.ProductionYear || (item.PremiereDate ? new Date(item.PremiereDate).getFullYear() : null);
             if (year) {
-                const yearEl = document.createElement('span');
-                yearEl.textContent = year;
-                metadataRow.appendChild(yearEl);
+                metadataRow.appendChild(createMetadataItem(String(year)));
             }
             
-            // Runtime
-            if (item.RunTimeTicks) {
+            // Runtime and estimated end time (Movies only - not for Series/Season/Episode)
+            const isSeriesType = itemType === 'Series' || itemType === 'Season' || itemType === 'Episode';
+            if (!isSeriesType && item.RunTimeTicks) {
                 const runtimeMinutes = Math.round(item.RunTimeTicks / 10000000 / 60);
                 const hours = Math.floor(runtimeMinutes / 60);
                 const minutes = runtimeMinutes % 60;
@@ -1934,62 +2176,47 @@
                     runtimeText = `${minutes}m`;
                 }
                 
-                const runtimeEl = document.createElement('span');
-                runtimeEl.textContent = runtimeText;
-                metadataRow.appendChild(runtimeEl);
+                metadataRow.appendChild(createMetadataItem(runtimeText));
                 
                 // End time (when it would end if started now)
                 const now = new Date();
-                // RunTimeTicks is in 100-nanosecond intervals, convert to milliseconds
                 const runtimeMs = item.RunTimeTicks / 10000;
                 const endTime = new Date(now.getTime() + runtimeMs);
-                const endTimeEl = document.createElement('span');
-                endTimeEl.className = 'spotlight-end-time';
-                endTimeEl.textContent = `${endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-
-                metadataRow.appendChild(endTimeEl);
+                const endTimeItem = createMetadataItem(endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 'span', 'spotlight-end-time', 'schedule');
+                metadataRow.appendChild(endTimeItem);
             }
             
-            // Genres (on same line) - make clickable if IDs are available
-            if (item.Genres && item.Genres.length > 0) {
-                const genreFragment = document.createDocumentFragment();
-
-                if (item.GenreItems && item.GenreItems.length > 0) {
-                    item.GenreItems.forEach((genreItem, index) => {
-                        const genreName = genreItem.Name;
-                        const genreId = genreItem.Id;
-                        
-                        if (genreName) {
-                            const genreLink = document.createElement('a');
-                            genreLink.className = 'spotlight-genre-link';
-                            genreLink.href = `${serverAddress}/web/#/list.html?genreId=${genreId}&serverId=${serverId}`;
-                            genreLink.textContent = genreName;
-                            genreLink.addEventListener('click', (e) => {
-                                e.stopPropagation();
-                            });
-
-                            genreFragment.appendChild(genreLink);
-                        }
-                    });
+            // Genres - merged into single container, max 3 visible, tooltip shows full list on hover
+            if (item.Genres && item.Genres.length > 0 && item.GenreItems && item.GenreItems.length > 0) {
+                const genreContainer = createTruncatedList('', item.GenreItems, 3, false, 'theater_comedy', 'genre');
+                if (genreContainer) {
+                    metadataRow.appendChild(genreContainer);
                 }
-
-                metadataRow.appendChild(genreFragment);
             }
             
-            // Helper function to create truncated list that expands on ellipsis hover
+            // Helper function to create truncated list with tooltip for overflow items
             // items can be array of strings (names) or array of objects with Name and Id
-            function createTruncatedList(label, items, maxItems = 3, isPeople = false) {                
+            // icon: optional Material Icons name for full-screen display (e.g. 'movie', 'edit')
+            // linkType: 'person' | 'genre' | 'studio' | null - when set, create links
+            function createTruncatedList(label, items, maxItems = 3, isPeople = false, icon = null, linkType = null) {                
                 const container = document.createElement('div');
-                container.className = 'spotlight-truncated-list';
+                container.className = 'spotlight-truncated-list headerTabs sectionTabs';
+                container.setAttribute('data-label', label);
+                if (icon) container.setAttribute('data-icon', icon);
 
                 if (!items || items.length === 0) {
                     return container;
                 }
                 
                 const displayContainer = document.createElement('span');
-                const labelSpan = document.createElement('span');
-                labelSpan.textContent = `${label} `;
-                displayContainer.appendChild(labelSpan);
+                displayContainer.className = 'emby-tab-button';
+                if (icon) displayContainer.setAttribute('data-icon', icon);
+                if (label) {
+                    const labelSpan = document.createElement('span');
+                    labelSpan.className = 'spotlight-truncated-list-label';
+                    labelSpan.textContent = `${label} `;
+                    displayContainer.appendChild(labelSpan);
+                }
                 
                 // Extract names and IDs from items (handle both strings and objects)
                 const itemsData = items.map(item => {
@@ -2008,15 +2235,17 @@
                 
                 const hasMore = itemsData.length > maxItems;
                 
-                // Store references to hidden elements for easy show/hide
-                const hiddenElements = [];
+                // Resolve link type: explicit linkType, or fall back to isPeople for person links
+                const usePersonLinks = linkType === 'person' || (linkType !== 'genre' && linkType !== 'studio' && isPeople);
+                const useGenreLinks = linkType === 'genre';
+                const useStudioLinks = linkType === 'studio';
                 
-                // Create spans for all names (but initially hide the ones beyond maxItems)
+                // Create spans for visible names only (no layout-shifting expand)
                 itemsData.forEach((itemData, index) => {
+                    if (index >= maxItems) return;
                     let nameElement;
                     
-                    // Create link if it's a person with an ID, otherwise just text
-                    if (isPeople && itemData.id) {
+                    if (usePersonLinks && itemData.id) {
                         nameElement = document.createElement('a');
                         nameElement.className = 'spotlight-person-link';
                         nameElement.href = `${serverAddress}/web/#/details?id=${itemData.id}&serverId=${serverId}`;
@@ -2024,6 +2253,18 @@
                         nameElement.addEventListener('click', (e) => {
                             e.stopPropagation();
                         });
+                    } else if (useGenreLinks && itemData.id) {
+                        nameElement = document.createElement('a');
+                        nameElement.className = 'spotlight-genre-link';
+                        nameElement.href = `${serverAddress}/web/#/list.html?genreId=${itemData.id}&serverId=${serverId}`;
+                        nameElement.textContent = itemData.name;
+                        nameElement.addEventListener('click', (e) => e.stopPropagation());
+                    } else if (useStudioLinks && itemData.id) {
+                        nameElement = document.createElement('a');
+                        nameElement.className = 'spotlight-studio-link';
+                        nameElement.href = `${serverAddress}/web/#/list.html?studioId=${itemData.id}&serverId=${serverId}`;
+                        nameElement.textContent = itemData.name;
+                        nameElement.addEventListener('click', (e) => e.stopPropagation());
                     } else {
                         nameElement = document.createElement('span');
                         nameElement.textContent = itemData.name;
@@ -2031,61 +2272,107 @@
                     
                     nameElement.setAttribute('data-name-index', index);
                     
-                    // Hide names beyond maxItems initially
-                    if (index >= maxItems) {
-                        nameElement.style.display = 'none';
-                        hiddenElements.push(nameElement);
-                    }
-                    
                     displayContainer.appendChild(nameElement);
                     
-                    // Add comma separator (except for last item)
-                    if (index < itemsData.length - 1) {
-                        const comma = document.createElement('span');
-                        comma.textContent = ', ';
-                        comma.setAttribute('data-comma-after', index);
-                        
-                        // Hide comma if it's after the last visible item
-                        if (index >= maxItems - 1) {
-                            comma.style.cssText = 'display: none;';
-                            hiddenElements.push(comma);
-                        }
-                        displayContainer.appendChild(comma);
+                    // Bullet separator (except for last visible item - use actual count when fewer than maxItems)
+                    const lastVisibleIndex = Math.min(maxItems, itemsData.length) - 1;
+                    if (index < lastVisibleIndex) {
+                        const separator = document.createElement('span');
+                        separator.className = 'spotlight-list-separator';
+                        separator.textContent = '•';
+                        displayContainer.appendChild(separator);
                     }
                 });
                 
-                // Add ellipsis as separate hoverable element if there are more items
+                // Tooltip when more items exist (full list on hover)
                 if (hasMore) {
-                    const ellipsisElement = document.createElement('span');
-                    ellipsisElement.className = 'spotlight-ellipsis';
-                    ellipsisElement.textContent = '...';
-                    displayContainer.appendChild(ellipsisElement);
+                    // Tooltip: full list as vertical stack with clickable links (no layout shift)
+                    const tooltip = document.createElement('div');
+                    tooltip.className = 'spotlight-truncated-list-tooltip';
+                    if (label) {
+                        const labelSpan = document.createElement('span');
+                        labelSpan.className = 'spotlight-truncated-list-tooltip-label';
+                        labelSpan.textContent = label + ' ';
+                        tooltip.appendChild(labelSpan);
+                    }
+                    const listWrapper = document.createElement('div');
+                    listWrapper.className = 'spotlight-truncated-list-tooltip-items';
+                    itemsData.forEach((itemData) => {
+                        const itemRow = document.createElement('div');
+                        itemRow.className = 'spotlight-truncated-list-tooltip-item';
+                        let linkEl;
+                        if (usePersonLinks && itemData.id) {
+                            linkEl = document.createElement('a');
+                            linkEl.href = `${serverAddress}/web/#/details?id=${itemData.id}&serverId=${serverId}`;
+                            linkEl.className = 'spotlight-person-link';
+                            linkEl.textContent = itemData.name;
+                            linkEl.addEventListener('click', (e) => e.stopPropagation());
+                        } else if (useGenreLinks && itemData.id) {
+                            linkEl = document.createElement('a');
+                            linkEl.href = `${serverAddress}/web/#/list.html?genreId=${itemData.id}&serverId=${serverId}`;
+                            linkEl.className = 'spotlight-genre-link';
+                            linkEl.textContent = itemData.name;
+                            linkEl.addEventListener('click', (e) => e.stopPropagation());
+                        } else if (useStudioLinks && itemData.id) {
+                            linkEl = document.createElement('a');
+                            linkEl.href = `${serverAddress}/web/#/list.html?studioId=${itemData.id}&serverId=${serverId}`;
+                            linkEl.className = 'spotlight-studio-link';
+                            linkEl.textContent = itemData.name;
+                            linkEl.addEventListener('click', (e) => e.stopPropagation());
+                        } else {
+                            linkEl = document.createElement('span');
+                            linkEl.textContent = itemData.name;
+                        }
+                        itemRow.appendChild(linkEl);
+                        listWrapper.appendChild(itemRow);
+                    });
+                    tooltip.appendChild(listWrapper);
+                    container.appendChild(tooltip);
+                    container.style.position = 'relative';
                     
-                    let isExpanded = false;
+                    const TOOLTIP_DELAY_MS = 600;
+                    const HIDE_DELAY_MS = 150;
+                    let tooltipTimer = null;
+                    let hideTimer = null;
                     
-                    // On ellipsis hover, reveal all hidden names and hide ellipsis
-                    ellipsisElement.addEventListener('mouseenter', () => {
-                        if (!isExpanded) {
-                            // Show all hidden elements
-                            hiddenElements.forEach(el => {
-                                el.style.display = '';
-                            });
-                            ellipsisElement.style.display = 'none';
-                            isExpanded = true;
+                    const showTooltip = () => {
+                        tooltip.classList.add('visible');
+                        tooltipTimer = null;
+                    };
+                    const hideTooltip = () => {
+                        tooltip.classList.remove('visible');
+                        if (tooltipTimer) {
+                            clearTimeout(tooltipTimer);
+                            tooltipTimer = null;
+                        }
+                        if (hideTimer) {
+                            clearTimeout(hideTimer);
+                            hideTimer = null;
+                        }
+                    };
+                    const scheduleHide = () => {
+                        if (hideTimer) clearTimeout(hideTimer);
+                        hideTimer = setTimeout(hideTooltip, HIDE_DELAY_MS);
+                    };
+                    
+                    container.addEventListener('mouseenter', () => {
+                        if (hideTimer) {
+                            clearTimeout(hideTimer);
+                            hideTimer = null;
+                        }
+                        tooltipTimer = setTimeout(showTooltip, TOOLTIP_DELAY_MS);
+                    });
+                    container.addEventListener('mouseleave', () => {
+                        scheduleHide();
+                    });
+                    tooltip.addEventListener('mouseenter', () => {
+                        if (hideTimer) {
+                            clearTimeout(hideTimer);
+                            hideTimer = null;
                         }
                     });
-                    
-                    // Keep expanded state when mouse moves within the container
-                    // Only collapse when mouse leaves the entire container
-                    container.addEventListener('mouseleave', () => {
-                        if (isExpanded) {
-                            // Hide names beyond maxItems again
-                            hiddenElements.forEach(el => {
-                                el.style.display = 'none';
-                            });
-                            ellipsisElement.style.display = '';
-                            isExpanded = false;
-                        }
+                    tooltip.addEventListener('mouseleave', () => {
+                        hideTooltip();
                     });
                 }
                 
@@ -2093,39 +2380,39 @@
                 return container;
             }
             
+            // Studios - show 1 visible, rest in tooltip with links (like directors/writers)
+            const studiosData = Array.isArray(item.Studios) && item.Studios.length > 0
+                ? item.Studios
+                : (typeof item.Studio === 'string' && item.Studio)
+                    ? item.Studio.split('|').map(s => ({ Name: s.trim(), Id: null })).filter(x => x.Name)
+                    : [];
+            const studioContainer = studiosData.length > 0
+                ? createTruncatedList('Produced by', studiosData, 1, false, 'apartment', 'studio')
+                : null;
+
             // For Series: show seasons/episodes. For Movies: show director/writer
             let directorContainer = null;
             let writerContainer = null;
             let combinedContainer = null;
-            let seriesInfoContainer = null;
                 
-            // Create series info container
-            seriesInfoContainer = document.createElement('div');
-            seriesInfoContainer.className = 'spotlight-truncated-list';
+            // Create series info container (seasons/episodes count)
+            const seriesInfoContainer = document.createElement('div');
+            seriesInfoContainer.className = 'spotlight-metadata-row spotlight-series-info';
             
             if (itemType === 'Series') {
+                // Studio first (before seasons/episodes)
+                if (studioContainer) seriesInfoContainer.appendChild(studioContainer);
                 // For Series, show seasons and episodes count
                 const seasonsCount = item.ChildCount || 0;
-                
-                // Initial text with seasons count
-                const seasonsText = `${seasonsCount} ${seasonsCount === 1 ? 'season' : 'seasons'}`;
-                seriesInfoContainer.textContent = seasonsText;
-                
-                // Fetch episode count asynchronously and update
-                (async () => {
-                    try {
-                        const episodesCount = item.RecursiveItemCount || 0;
-                        
-                        // Update the series info container with episode count
-                        if (seriesInfoContainer) {
-                            const episodesText = `${episodesCount} ${episodesCount === 1 ? 'episode' : 'episodes'}`;
-                            seriesInfoContainer.textContent = `${seasonsText} - ${episodesText}`;
-                        }
-                    } catch (err) {
-                        console.error('Failed to fetch episode count:', err);
-                        // Keep just the seasons text if episode fetch fails
-                    }
-                })();
+                if (seasonsCount > 1) {
+                    const seasonsText = `${seasonsCount} ${seasonsCount === 1 ? 'season' : 'seasons'}`;
+                    seriesInfoContainer.appendChild(createMetadataItem(seasonsText));
+                }
+                const episodesCount = item.RecursiveItemCount || 0;
+                if (episodesCount > 0) {
+                    const episodesText = `${episodesCount} ${episodesCount === 1 ? 'episode' : 'episodes'}`;
+                    seriesInfoContainer.appendChild(createMetadataItem(episodesText));
+                }
             } else if (itemType === 'Movie') {
                 // For Movies, show director/writer (existing logic)
                 if (item.People && Array.isArray(item.People)) {
@@ -2143,59 +2430,57 @@
                     
                     if (areIdentical) {
                         // Combine into single "Directed and Written by" row (with person objects for links)
-                        combinedContainer = createTruncatedList('Directed and Written by', directors, 3, true);
+                        combinedContainer = createTruncatedList('Directed and Written by', directors, 1, true, 'movie');
                         // Add empty writer container to maintain spacing
                         writerContainer = document.createElement('div');
                         writerContainer.className = 'spotlight-empty-writer-container';
                     } else {
                         // Show separately (with person objects for links)
-                        directorContainer = createTruncatedList('Directed by', directors, 3, true);
-                        writerContainer = createTruncatedList('Written by', writers, 3, true);
+                        if (directors.length > 0) {
+                            directorContainer = createTruncatedList('Directed by', directors, 1, true, 'movie');
+                        }
+                        if (writers.length > 0) {
+                            writerContainer = createTruncatedList('Written by', writers, 1, true, 'edit');
+                        }
                     }
                 }
             } else if (itemType === 'Season') {
+                // Studio first (before episodes)
+                if (studioContainer) seriesInfoContainer.appendChild(studioContainer);
                 // For Seasons, show episodes count
                 const episodesCount = item.RecursiveItemCount || 0;
                 const episodesText = `${episodesCount} ${episodesCount === 1 ? 'episode' : 'episodes'}`;
-                seriesInfoContainer.textContent = episodesText;
+                seriesInfoContainer.appendChild(createMetadataItem(episodesText));
             } else if (itemType === 'Episode') {
+                // Studio first (before season/episode)
+                if (studioContainer) seriesInfoContainer.appendChild(studioContainer);
                 // For Episodes, show episode number
                 const seasonNumber = item.ParentIndexNumber || 0;
                 const seasonText = `Season ${seasonNumber}`;
                 const episodeNumber = item.IndexNumber || 0;
                 const episodeText = `Episode ${episodeNumber}`;
-                seriesInfoContainer.textContent = `${seasonText} - ${episodeText}`;
+                seriesInfoContainer.appendChild(createMetadataItem(`${seasonText} - ${episodeText}`));
             }
             
-            // Taglines for Movies, Overview for Series
-            let taglineEl = null;
-            taglineEl = document.createElement('p');
-            taglineEl.className = 'spotlight-tagline';
-            if (itemType === 'Series') {
-                // For Series, show Overview instead of Tagline
-                if (item.Overview) {                    
-                    taglineEl.textContent = item.Overview;
-                }
-            } else {
-                // For Movies, show Tagline (if available)
-                if (item.Overview && fullScreen) {
-                    taglineEl.textContent = item.Overview;
-                } else {
-                    if (item.Taglines && Array.isArray(item.Taglines) && item.Taglines.length > 0) {
-                        taglineEl.textContent = item.Taglines[0]; // Show first tagline
-                    } else if (item.Overview) {
-                        taglineEl.textContent = item.Overview;
-                    }
-                }
-            }
+            // Tagline (tagline only) and Overview (separate element) - show/hide via CSS based on spotlight type
+            const taglineEl = document.createElement('p');
+            taglineEl.className = 'emby-tab-button';
+            const tagline = (item.Taglines && Array.isArray(item.Taglines) && item.Taglines.length > 0)
+                ? item.Taglines[0] : '';
+            if (tagline) taglineEl.textContent = tagline;
+
+            const overviewEl = document.createElement('p');
+            overviewEl.className = 'spotlight-overview';
+            if (item.Overview) overviewEl.textContent = item.Overview;
             
             // Buttons container
             const buttonsContainer = document.createElement('div');
-            buttonsContainer.className = 'spotlight-buttons-container';
+            buttonsContainer.className = 'spotlight-buttons-container mainDetailButtons';
             
             // Play button (material icon span button)
             const playButton = document.createElement('button');
-            playButton.className = 'spotlight-play-button emby-button';
+            playButton.className = 'emby-button submit-button raised button-flat btnPlay detailButton';
+            playButton.title = 'Play';
             const playIcon = document.createElement('span');
             playIcon.className = 'material-icons';
             playIcon.textContent = 'play_arrow';
@@ -2221,7 +2506,7 @@
             
             // Watchlist button (material icon span button with bookmark icon)
             const watchlistButton = document.createElement('button');
-            watchlistButton.className = 'spotlight-watchlist-button emby-button';
+            watchlistButton.className = 'emby-button button-flat';
             
             // Check watchlist status - try to get from cache or API
             let isInWatchlist = false;
@@ -2238,6 +2523,7 @@
             const watchlistIcon = document.createElement('span');
             watchlistIcon.className = 'material-icons';
             watchlistIcon.textContent = 'bookmark';
+            watchlistIcon.title = isInWatchlist ? 'Remove from Watchlist' : 'Add to Watchlist';
             watchlistButton.appendChild(watchlistIcon);
             if (isInWatchlist) {
                 watchlistButton.classList.add('watchlisted');
@@ -2272,10 +2558,11 @@
             
             // Info button (shows overview on hover)
             const infoButton = document.createElement('button');
-            infoButton.className = 'spotlight-info-button emby-button';
+            infoButton.className = 'emby-button button-flat';
             const infoIcon = document.createElement('span');
             infoIcon.className = 'material-icons';
             infoIcon.textContent = 'info';
+            infoIcon.title = 'Go To Item';
             infoButton.appendChild(infoIcon);
             
             // Overview tooltip (hidden by default, shown on hover)
@@ -2295,24 +2582,16 @@
 
             if (rating && typeof rating === 'number') {
                 const ratingContainer = document.createElement('div');
-                ratingContainer.className = 'spotlight-rating-container';
+                ratingContainer.className = 'starRatingContainer mediaInfoItem spotlight-rating-container';
                 
                 const starIcon = document.createElement('span');
-                starIcon.className = 'material-icons spotlight-rating-star';
-                starIcon.textContent = 'star';
-                
-                const ratingValue = document.createElement('span');
-                ratingValue.className = 'spotlight-rating-value';
-                if (rating && typeof rating === 'number') {
-                    ratingValue.textContent = rating.toFixed(1);
-                } else {
-                    ratingValue.textContent = 'N/A';
-                    ratingValue.classList.add('na');
+                starIcon.className = 'material-icons starIcon star spotlight-rating-star';
+
+                if (rating && typeof rating === 'number') {   
+                    ratingContainer.innerText = rating.toFixed(1);
+                    ratingContainer.prepend(starIcon);
+                    buttonsContainer.appendChild(ratingContainer);
                 }
-                
-                ratingContainer.appendChild(starIcon);
-                ratingContainer.appendChild(ratingValue);
-                buttonsContainer.appendChild(ratingContainer);
             }
             
             // Build overlay content in order: Name, Rating, Year+Time+EndsAt+Genres, Directed by, Written by, Taglines, Buttons
@@ -2337,35 +2616,54 @@
                 emptyWriterContainer.className = 'spotlight-empty-writer-container';
 
                 if (combinedContainer) {
-                    metadataContainer.appendChild(combinedContainer);
-                    metadataContainer.appendChild(emptyWriterContainer);
-                } else {
-                    if (directorContainer) {
-                        metadataContainer.appendChild(directorContainer);
-                    }
-
-                    if (writerContainer) {
-                        metadataContainer.appendChild(writerContainer);
-                        if (!directorContainer) {
-                            metadataContainer.appendChild(emptyDirectorContainer);
-                        }
-                    } else {
-                        if (!directorContainer) {
-                            metadataContainer.appendChild(emptyDirectorContainer);
-                        }
-                        metadataContainer.appendChild(emptyWriterContainer);
-                    }
+                    const creditsRow = document.createElement('div');
+                    creditsRow.className = 'spotlight-metadata-row spotlight-credits-row';
+                    if (studioContainer) creditsRow.appendChild(studioContainer);
+                    creditsRow.appendChild(combinedContainer);
+                    metadataContainer.appendChild(creditsRow);
+                } else if (directorContainer || writerContainer) {
+                    const creditsRow = document.createElement('div');
+                    creditsRow.className = 'spotlight-metadata-row spotlight-credits-row';
+                    if (studioContainer) creditsRow.appendChild(studioContainer);
+                    if (directorContainer) creditsRow.appendChild(directorContainer);
+                    if (writerContainer) creditsRow.appendChild(writerContainer);
+                    metadataContainer.appendChild(creditsRow);
+                } else if (studioContainer) {
+                    const studioRow = document.createElement('div');
+                    studioRow.className = 'spotlight-metadata-row spotlight-credits-row';
+                    studioRow.appendChild(studioContainer);
+                    metadataContainer.appendChild(studioRow);
                 }
             }
-            if (metadataContainer.children.length > 0) {
-                overlay.appendChild(metadataContainer);
-            }
-            if (taglineEl) {
-                overlay.appendChild(taglineEl);
-            }
-            overlay.appendChild(buttonsContainer);
-            
+            // Fixed 4-section grid: Logo, Metadata, Overview, Buttons (always render all to prevent layout shift)
+            const logoSection = document.createElement('div');
+            logoSection.className = 'spotlight-logo-section';
+            logoSection.appendChild(titleEl);
+
+            const metadataSection = document.createElement('div');
+            metadataSection.className = 'spotlight-metadata-section';
+            metadataSection.appendChild(metadataContainer);
+
+            const overviewSection = document.createElement('div');
+            overviewSection.className = 'spotlight-overview-section';
+            if (overviewEl.textContent) overviewSection.appendChild(overviewEl);
+
+            const buttonsSection = document.createElement('div');
+            buttonsSection.className = 'spotlight-buttons-section';
+            buttonsSection.appendChild(buttonsContainer);
+
+            overlay.appendChild(logoSection);
+            overlay.appendChild(metadataSection);
+            overlay.appendChild(overviewSection);
+            overlay.appendChild(buttonsSection);
+
             itemDiv.appendChild(overlay);
+            if (taglineEl.textContent) {
+                const taglineContainer = document.createElement('div');
+                taglineContainer.className = 'spotlight-tagline headerTabs sectionTabs';
+                taglineContainer.appendChild(taglineEl);
+                itemDiv.appendChild(taglineContainer);
+            }
             
             // ClearArt image (bottom right corner, if enabled and available)
             if (showClearArt && item.ImageTags?.Art) {
@@ -2373,7 +2671,7 @@
                 const clearArtEl = document.createElement('img');
                 clearArtEl.className = 'spotlight-clearart';
                 clearArtEl.setAttribute('data-src', clearArtUrl);
-                if (index === 0) clearArtEl.src = clearArtUrl;
+                if (eagerLoadImages) clearArtEl.src = clearArtUrl;
                 clearArtEl.alt = item.Name || 'Unknown';
                 itemDiv.appendChild(clearArtEl);
             }
@@ -2384,6 +2682,12 @@
             });
             
             itemsContainer.appendChild(itemDiv);
+            return itemDiv;
+        }
+
+        // Initial render: create slides for window around index 0
+        currentWindowIndices.forEach((idx) => {
+            createAndAppendSlide(items[idx], idx, idx === 0);
         });
         
         bannerContainer.appendChild(itemsContainer);
@@ -2396,13 +2700,13 @@
         
         // Navigation buttons (top right)
         if (showNavButtons && items.length > 1) {
-            const navContainer = document.createElement('div');
-            navContainer.className = 'spotlight-nav-container';
+            const navButtonsContainer = document.createElement('div');
+            navButtonsContainer.className = 'spotlight-nav-buttons-container emby-tab-button emby-tab-button-active';
             
             const prevButton = document.createElement('button');
             prevButton.className = 'spotlight-nav-button spotlight-nav-prev emby-button';
             const prevIcon = document.createElement('span');
-            prevIcon.className = 'material-icons';
+            prevIcon.className = 'material-icons emby-button-foreground';
             prevIcon.textContent = 'chevron_left';
             prevButton.appendChild(prevIcon);
             prevButton.addEventListener('click', (e) => {
@@ -2414,7 +2718,7 @@
             const nextButton = document.createElement('button');
             nextButton.className = 'spotlight-nav-button spotlight-nav-next emby-button';
             const nextIcon = document.createElement('span');
-            nextIcon.className = 'material-icons';
+            nextIcon.className = 'material-icons emby-button-foreground';
             nextIcon.textContent = 'chevron_right';
             nextButton.appendChild(nextIcon);
             nextButton.addEventListener('click', (e) => {
@@ -2423,18 +2727,23 @@
                 goToItem((currentIndex + 1) % items.length, true);
             });
             
-            navContainer.appendChild(prevButton);
-            navContainer.appendChild(nextButton);
+            navButtonsContainer.appendChild(prevButton);
+            navButtonsContainer.appendChild(nextButton);
+
+            const navContainer = document.createElement('div');
+            navContainer.className = 'spotlight-nav-container headerTabs sectionTabs';
+            navContainer.appendChild(navButtonsContainer);
+
             bannerContainer.appendChild(navContainer);
         }
         
         // Pause button (bottom right)
         if (autoPlay && items.length > 1) {
-            const navContainer = bannerContainer.querySelector('.spotlight-nav-container');
+            const navButtonsContainer = bannerContainer.querySelector('.spotlight-nav-container .spotlight-nav-buttons-container');
             const pauseButton = document.createElement('button');
             pauseButton.className = 'spotlight-pause-button spotlight-nav-button emby-button';
             const pauseIcon = document.createElement('span');
-            pauseIcon.className = 'material-icons';
+            pauseIcon.className = 'material-icons emby-button-foreground';
             pauseIcon.textContent = 'pause';
             pauseButton.appendChild(pauseIcon);
             pauseButton.addEventListener('click', (e) => {
@@ -2448,7 +2757,8 @@
                     pauseIcon.textContent = 'pause';
                 }
             });
-            navContainer.insertBefore(pauseButton, navContainer.firstChild);
+            
+            navButtonsContainer.insertBefore(pauseButton, navButtonsContainer.firstChild);
         }
         
         // Slide state container (dots or numeric "N / X")
@@ -2524,6 +2834,21 @@
         // Go to item function (fade transition)
         function goToItem(index, resetTimer = true) {
             if (index === currentIndex) return;
+            
+            const newWindowIndices = getSpotlightWindowIndices(index, items.length);
+            const indexToRemove = currentWindowIndices.find(i => !newWindowIndices.includes(i));
+            const indexToAdd = newWindowIndices.find(i => !currentWindowIndices.includes(i));
+            
+            if (indexToRemove !== undefined) {
+                const slideToRemove = bannerContainer.querySelector(`.spotlight-item[data-index="${indexToRemove}"]`);
+                if (slideToRemove) slideToRemove.remove();
+            }
+            if (indexToAdd !== undefined) {
+                const newSlide = createAndAppendSlide(items[indexToAdd], indexToAdd, false);
+                newSlide.style.opacity = '0';
+            }
+            currentWindowIndices = newWindowIndices;
+            
             ensureSlideImagesLoaded(index);
             ensureSlideImagesLoaded((index + 1) % items.length);
             
@@ -2725,9 +3050,8 @@
         
         container.appendChild(bannerContainer);
 
-        if (fullScreen) {
-            container.dataset.fullScreen = 'true';
-        }
+        container.dataset.layout = layout;
+        container.dataset.size = size;
         
         return container;
     }
@@ -3412,27 +3736,45 @@
         
         const observerOptions = {
             threshold: 0.1, // Trigger when 10% of element is visible
-            rootMargin: '100px' // Start loading 100px before element enters viewport
+            rootMargin: '800px' // Start loading well before element enters viewport to avoid grey flash
         };
         
         lazyImageObserver = new IntersectionObserver((entries) => {
             entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    const cardImageContainer = entry.target;
-                    const imageUrl = cardImageContainer.getAttribute('data-src');
-                    
-                    if (imageUrl) {
-                        // Load the image
-                        cardImageContainer.style.backgroundImage = `url("${imageUrl}")`;
-                        // Remove lazy class and add loaded class
-                        cardImageContainer.classList.remove('lazy');
-                        cardImageContainer.classList.add('lazy-loaded');
-                        // Remove data-src to prevent re-loading
-                        cardImageContainer.removeAttribute('data-src');
-                        // Unobserve this element
-                        lazyImageObserver.unobserve(cardImageContainer);
+                if (!entry.isIntersecting) return;
+                const cardImageContainer = entry.target;
+                const imageUrl = cardImageContainer.getAttribute('data-src');
+                if (!imageUrl) return;
+                if (cardImageContainer.hasAttribute('data-loading')) return;
+
+                cardImageContainer.setAttribute('data-loading', 'true');
+                const img = new Image();
+                img.onload = () => {
+                    cardImageContainer.style.backgroundImage = `url("${imageUrl}")`;
+                    cardImageContainer.classList.remove('lazy');
+                    cardImageContainer.classList.add('lazy-loaded');
+                    cardImageContainer.removeAttribute('data-src');
+                    cardImageContainer.removeAttribute('data-loading');
+                    cardImageContainer.classList.remove('lazy-hidden');
+                    const canvas = cardImageContainer.previousElementSibling;
+                    if (canvas && canvas.tagName === 'CANVAS' && canvas.classList.contains('blurhash-canvas')) {
+                        canvas.classList.add('lazy-hidden');
                     }
-                }
+                    lazyImageObserver.unobserve(cardImageContainer);
+                };
+                img.onerror = () => {
+                    cardImageContainer.removeAttribute('data-loading');
+                    cardImageContainer.removeAttribute('data-src');
+                    cardImageContainer.classList.remove('lazy');
+                    cardImageContainer.classList.add('lazy-loaded');
+                    cardImageContainer.classList.remove('lazy-hidden');
+                    const canvas = cardImageContainer.previousElementSibling;
+                    if (canvas && canvas.tagName === 'CANVAS' && canvas.classList.contains('blurhash-canvas')) {
+                        canvas.classList.add('lazy-hidden');
+                    }
+                    lazyImageObserver.unobserve(cardImageContainer);
+                };
+                img.src = imageUrl;
             });
         }, observerOptions);
     }
