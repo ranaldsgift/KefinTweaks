@@ -1623,12 +1623,12 @@
                 const person = await getRandomPerson(config.personType);
                 return person ? { 
                     id: person.Id, 
-                    name: person.Name, 
+                    name: person.Name || person.name, 
                     metadata: { 
-                        Person: person.Name,
-                        Actor: person.Name,
-                        Director: person.Name,
-                        Writer: person.Name
+                        Person: person.Name || person.name,
+                        Actor: person.Name || person.name,
+                        Director: person.Name || person.name,
+                        Writer: person.Name || person.name
                     } 
                 } : null;
                 
@@ -1802,7 +1802,10 @@
         }
     }
 
-    async function renderNextDiscoveryGroup(container) {
+    async function renderNextDiscoveryGroup() {
+        const container = document.querySelector('.libraryPage:not(.hide) .homeSectionsContainer');
+        if (!container) return;
+
         if (state.isRenderingDiscovery) return;
         state.isRenderingDiscovery = true;
         container.dataset.loadingDiscovery = 'true';
@@ -2004,7 +2007,7 @@
 
                     // Add spotlight fields if needed
                     if (instanceConfig.spotlight || instanceConfig.renderMode === 'Spotlight') {
-                        queryOptions.Fields = 'PrimaryImageAspectRatio,DateCreated,Overview,Taglines,ProductionYear,RecursiveItemCount,ChildCount,UserData,People,Genres,ParentBackdropImageTags';
+                        queryOptions.Fields = 'PrimaryImageAspectRatio,DateCreated,Overview,Taglines,ProductionYear,RecursiveItemCount,ChildCount,UserData,People,Genres,ParentBackdropImageTags,Studios';
 
                         const spotlightConfig = instanceConfig.spotlightConfig || {};
                         const adminSpotlightConfig = window.KefinHomeScreen.getConfig()?.SPOTLIGHT_SETTINGS || {};
@@ -2292,10 +2295,17 @@
         return null;
     }
 
+    let _topPeople = null;
+    async function getTopPeople() {
+        if (_topPeople) return _topPeople;
+        _topPeople = await PeopleCache.getTopPeople();
+        return _topPeople;
+    }
+
     async function getRandomPerson(type) {
         if (!PeopleCache) return null;
         
-        const peopleData = await PeopleCache.getTopPeople();
+        const peopleData = await getTopPeople();
         if (!peopleData) return null;
         
         let list = [];
