@@ -216,8 +216,15 @@
     async function getSeasonsCount(item, includeSpecials = false) {
         if (!seriesSeasonsCountCache.has(item.Id)) {
             // Get Seasons from apiHelper.getQuery
-            const data = await apiHelper.getQuery(`${ApiClient.serverAddress()}/Shows/${item.Id}/Seasons?UserId=${ApiClient.getCurrentUserId()}`);
-            let seasons = data.Items || [];
+            const response = await apiHelper.getQuery(`${ApiClient.serverAddress()}/Shows/${item.Id}/Seasons`, { useCache: true });
+            
+            if (!response.data) {
+                response.data = await response.dataPromise;
+            }
+
+            const data = response.data;
+
+            let seasons = data.Items || data ||[];
 
             if (!includeSpecials) {
                 seasons = seasons.filter(season => season.IndexNumber !== 0);
@@ -232,8 +239,12 @@
     async function getEpisodesCount(seriesId, seasonIndex = null, includeSpecials = false) {
 
         if (!seriesSeasonEpisodeCountCache.has(seriesId)) {
-            const data = await apiHelper.getQuery(`${ApiClient.serverAddress()}/Shows/${seriesId}/Episodes?UserId=${ApiClient.getCurrentUserId()}`);
-            let episodes = data.Items || [];
+            const response = await apiHelper.getQuery(`${ApiClient.serverAddress()}/Shows/${seriesId}/Episodes`, { useCache: true });
+            if (!response.data) {
+                response.data = await response.dataPromise;
+            }
+            const data = response.data;
+            let episodes = data.Items || data || [];
 
             // Create a Season:EpisodesCount map
             const seasonEpisodeCountMap = new Map();
