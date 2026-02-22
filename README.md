@@ -8,7 +8,7 @@
 <hr style="background: #b4c5fb !important; margin-bottom: 10px;">
 
 <p align="center">
-<a href="https://github.com/jellyfin/jellyfin/releases/tag/v10.10.7"><img alt="Jellyfin Version 10.10.7" src="https://img.shields.io/jsdelivr/gh/hm/ranaldsgift/kefintweaks?style=for-the-badge&logo=javascript&logoColor=b4c5fb&labelColor=08396c&color=0e0922&cacheSeconds=3600"/></a>
+<img alt="JS Delivr hits" src="https://img.shields.io/jsdelivr/gh/hm/ranaldsgift/kefintweaks?style=for-the-badge&logo=javascript&logoColor=b4c5fb&labelColor=08396c&color=0e0922&cacheSeconds=3600"/>
 <a href="https://github.com/jellyfin/jellyfin/releases/latest"><img alt="Jellyfin Latest Version" src="https://img.shields.io/badge/Jellyfin-10.11-blue.svg?style=for-the-badge&logo=github&logoColor=b4c5fb&labelColor=08396c&color=0e0922"/></a>
 <a href="https://github.com/jellyfin/jellyfin/releases/tag/v10.10.7"><img alt="Jellyfin Version 10.10.7" src="https://img.shields.io/badge/Jellyfin-10.10-blue.svg?style=for-the-badge&logo=github&logoColor=b4c5fb&labelColor=08396c&color=0e0922"/></a></p>
 <p align="center">
