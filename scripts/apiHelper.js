@@ -852,7 +852,7 @@
             });
 
             if (isSpotlight) {
-                params.set('Fields', 'PrimaryImageAspectRatio,DateCreated,Overview,Taglines,ProductionYear,RecursiveItemCount,ChildCount,UserData,People,Genres,ParentBackdropImageTags');
+                params.set('Fields', 'PrimaryImageAspectRatio,DateCreated,Overview,Taglines,ProductionYear,RecursiveItemCount,ChildCount,UserData,People,Genres,ParentBackdropImageTags,Studios');
             }
             
             // Map all queryOptions to params
