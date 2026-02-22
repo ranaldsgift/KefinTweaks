@@ -556,7 +556,7 @@
     
     function createPopover(items, currentItem, onItemClick) {
         const popover = document.createElement('div');
-        popover.className = 'kefinTweaks-popover';
+        popover.className = 'kefinTweaks-popover itemDetailsGroup';
         popover.style.display = 'block'; // Ensure it's visible
         
         log('Creating popover with', items.length, 'items');
@@ -565,7 +565,7 @@
         
         items.forEach(item => {
             const itemElement = document.createElement('div');
-            itemElement.className = 'kefinTweaks-popover-item';
+            itemElement.className = 'kefinTweaks-popover-item detailsGroupItem';
             
             if (currentItem && item.Id === currentItem.Id) {
                 itemElement.classList.add('selected');
@@ -618,16 +618,31 @@
         const popoverContainer = document.getElementById('kefinTweaks-popover-container');
         if (popoverContainer) {
             // Calculate the left offset to align with the trigger element
-            // Since breadcrumbs are now in the header, we need to calculate relative to the page
             const triggerRect = triggerElement.getBoundingClientRect();
             const popoverContainerRect = popoverContainer.getBoundingClientRect();
-            
-            // Calculate offset from popover container to trigger element
             const leftOffset = triggerRect.left - popoverContainerRect.left - 22;
             popover.style.left = `${leftOffset}px`;
             
+            // Decide whether to open above or below based on viewport space
+            // When breadcrumbs are at the bottom of the page, open above
+            const viewportHeight = window.innerHeight;
+            const spaceBelow = viewportHeight - triggerRect.bottom;
+            const spaceAbove = triggerRect.top;
+            const showAbove = spaceBelow < spaceAbove;
+            
+            popoverContainer.classList.toggle('kefinTweaks-popover-container--above', showAbove);
+            popover.classList.toggle('kefinTweaks-popover--above', showAbove);
+            // Clear inline top when above so CSS bottom: 100% takes effect; restore when below
+            if (showAbove) {
+                popoverContainer.style.top = '';
+                popoverContainer.style.bottom = '100%';
+            } else {
+                popoverContainer.style.top = 'calc(100% - 15px)';
+                popoverContainer.style.bottom = '';
+            }
+            
             popoverContainer.appendChild(popover);
-            log('Popover added to popover container with left offset:', leftOffset);
+            log('Popover added to popover container with left offset:', leftOffset, 'showAbove:', showAbove);
         } else {
             log('Popover container not found, falling back to trigger element');
             triggerElement.style.position = 'relative';
@@ -656,9 +671,15 @@
             }
 
             const url = ApiClient.getUrl(`Users/${currentUserId}/Items/${itemId}`);
-            const response = await ApiClient.getJSON(url);
-            log('Retrieved item details:', response.Name, response.Type);
-            return response;
+            const response = await window.apiHelper.getQuery(url, { useCache: true });
+
+            if (!response.data) {
+                response.data = await response.dataPromise;
+            }
+
+            const item = response.data;
+            log('Retrieved item details:', item.Name, item.Type);
+            return item;
         } catch (err) {
             console.error('Failed to get item details:', err);
             return null;
@@ -667,13 +688,14 @@
     
     async function getSeasons(seriesId) {
         try {
-            const url = ApiClient.getUrl(`Shows/${seriesId}/Seasons`, {
-                userId: ApiClient.getCurrentUserId(),
-                imageTypeLimit: 1
-            });
-            const response = await ApiClient.getJSON(url);
-            log('Retrieved seasons:', response.Items?.length || 0);
-            return response.Items || [];
+            const url = ApiClient.getUrl(`Shows/${seriesId}/Seasons`);
+            const response = await window.apiHelper.getQuery(url, { useCache: true });
+            if (!response.data) {
+                response.data = await response.dataPromise;
+            }
+            const seasons = response.data.Items || response.data || [];
+            log('Retrieved seasons:', seasons.length);
+            return seasons;
         } catch (err) {
             error('Failed to get seasons:', err);
             return [];
@@ -693,9 +715,13 @@
                 AlbumArtistIds: artistId,
                 SortBy: 'PremiereDate,ProductionYear,Sortname'
             });
-            const response = await ApiClient.getJSON(url);
-            log('Retrieved albums:', response.Items?.length || 0);
-            return response.Items || [];
+            const response = await window.apiHelper.getQuery(url, { useCache: true });
+            if (!response.data) {
+                response.data = await response.dataPromise;
+            }
+            const albums = response.data.Items || response.data || [];
+            log('Retrieved albums:', albums.length);
+            return albums;
         } catch (err) {
             error('Failed to get albums:', err);
             return [];
@@ -716,8 +742,11 @@
                 AlbumArtistIds: idsParam,
                 SortBy: 'PremiereDate,ProductionYear,Sortname'
             });
-            const response = await ApiClient.getJSON(url);
-            const items = response.Items || [];
+            const response = await window.apiHelper.getQuery(url, { useCache: true });
+            if (!response.data) {
+                response.data = await response.dataPromise;
+            }
+            const items = response.data.Items || response.data || [];
             // Deduplicate by Id when multiple artists overlap
             const unique = [];
             const seen = new Set();
@@ -746,9 +775,13 @@
                 StartIndex: 0,
                 SortBy: 'IndexNumber,SortName'
             });
-            const response = await ApiClient.getJSON(url);
-            log('Retrieved songs:', response.Items?.length || 0);
-            return response.Items || [];
+            const response = await window.apiHelper.getQuery(url, { useCache: true });
+            if (!response.data) {
+                response.data = await response.dataPromise;
+            }
+            const songs = response.data.Items || response.data || [];
+            log('Retrieved songs:', songs.length);
+            return songs;
         } catch (err) {
             error('Failed to get songs:', err);
             return [];

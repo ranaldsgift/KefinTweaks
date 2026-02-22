@@ -32,6 +32,18 @@
         top: 100%;
         left: 0;
         z-index: 1001;
+        pointer-events: all;
+    }
+
+    /* When breadcrumbs are at bottom of page, open popover above */
+    .kefinTweaks-popover-container.kefinTweaks-popover-container--above {
+        top: auto;
+        bottom: 100%;
+    }
+
+    .kefinTweaks-popover.kefinTweaks-popover--above {
+        margin-top: 0;
+        margin-bottom: 8px;
     }
 
     .kefinTweaks-breadcrumbs span {
@@ -50,11 +62,9 @@
     /* Popover styles for seasons and albums */
     .kefinTweaks-popover {
         position: relative;
-        background-color: rgba(29, 38, 53, 0.95);
         border: 1px solid rgba(255, 255, 255, 0.2);
         border-radius: 4px;
         padding: 0;
-        min-width: 200px;
         max-height: 300px;
         overflow-y: auto;
         z-index: 1001;
@@ -100,4 +110,17 @@
     .headerLeft {
         overflow: visible;
     }
+}
+
+.kefinTweaks-popover.itemDetailsGroup:has(.detailsGroupItem:not(.hide)) {
+    padding: 0 !important;
+    overflow-y: auto !important;
+    backdrop-filter: blur(50px);
+}
+.kefinTweaks-popover.itemDetailsGroup:has(.detailsGroupItem:not(.hide)) .kefinTweaks-popover-item.detailsGroupItem {
+    padding: .5em 2em;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    width: initial !important;
+    max-width: initial !important;
 }
