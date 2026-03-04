@@ -10,6 +10,22 @@
     const MODAL_ID = 'kefinTweaksSourceModal';
     let versionsCache = null;
 
+    function getAuthHeader() {
+        const token = ApiClient.accessToken();
+        const client = typeof ApiClient.applicationName === 'function' ? ApiClient.applicationName() : 'Jellyfin Web';
+        const device = typeof ApiClient.deviceName === 'function' ? ApiClient.deviceName() : (navigator.userAgent.includes('Chrome') ? 'Chrome' : 'Browser');
+        const deviceId = typeof ApiClient.deviceId === 'function' ? ApiClient.deviceId() : '';
+        const version = ApiClient._appVersion || ApiClient._serverVersion || '';
+        const parts = [
+            `Client="${encodeURIComponent(client)}"`,
+            `Device="${encodeURIComponent(device)}"`,
+            `DeviceId="${encodeURIComponent(deviceId)}"`,
+            `Version="${encodeURIComponent(version)}"`,
+            `Token="${encodeURIComponent(token)}"`
+        ];
+        return `MediaBrowser ${parts.join(', ')}`;
+    }
+
     // jsDelivr URL patterns
     const JSDELIVR_BASE = 'https://cdn.jsdelivr.net/gh/ranaldsgift/KefinTweaks';
     const GITHUB_REPO = 'ranaldsgift/KefinTweaks';
@@ -31,16 +47,15 @@
     // Find JavaScript Injector plugin
     async function findJavaScriptInjectorPlugin() {
         try {
-            if (!window.ApiClient || !window.ApiClient._serverAddress || !window.ApiClient.accessToken) {
+            if (!window.ApiClient || !window.ApiClient._serverAddress || window.ApiClient.accessToken() === null) {
                 return null;
             }
 
             const server = ApiClient._serverAddress;
-            const token = ApiClient.accessToken();
 
             const response = await fetch(`${server}/Plugins`, {
                 headers: {
-                    'X-Emby-Token': token
+                    'Authorization': getAuthHeader()
                 }
             });
 
@@ -74,11 +89,10 @@
             }
 
             const server = ApiClient._serverAddress;
-            const token = ApiClient.accessToken();
 
             const response = await fetch(`${server}/Plugins/${pluginId}/Configuration`, {
                 headers: {
-                    'X-Emby-Token': token
+                    'Authorization': getAuthHeader()
                 }
             });
 
@@ -198,12 +212,11 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             }
 
             const server = ApiClient._serverAddress;
-            const token = ApiClient.accessToken();
 
             const response = await fetch(`${server}/Plugins/${pluginId}/Configuration`, {
                 method: 'POST',
                 headers: {
-                    'X-Emby-Token': token,
+                    'Authorization': getAuthHeader(),
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify(injectorConfig)
@@ -546,7 +559,17 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
 
         footer.appendChild(okBtn);
 
+        // Close original KefinTweaksConfiguration Modal if it is open
+        const kefinTweaksConfigurationModals = document.querySelectorAll('[data-modal-id="kefinTweaksConfigModal"]');
+        if (kefinTweaksConfigurationModals.length > 0) {
+            kefinTweaksConfigurationModals.forEach(modal => {
+                modal.remove();
+            });
+        }
+
         createSimpleModal(SUCCESS_MODAL_ID, `${isInitialInstall ? 'Plugin Installed' : 'Plugin Updated'}`, content, footer);
+
+        
     }
 
     // Open source configuration modal
@@ -867,12 +890,11 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
 
             // Save the updated configuration
             const server = ApiClient._serverAddress;
-            const token = ApiClient.accessToken();
 
             const response = await fetch(`${server}/Plugins/${pluginId}/Configuration`, {
                 method: 'POST',
                 headers: {
-                    'X-Emby-Token': token,
+                    'Authorization': getAuthHeader(),
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify(injectorConfig)
@@ -1305,6 +1327,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         if (hash && hash.includes('dashboard/plugins')) {
             const pluginsPage = document.querySelector('#pluginsPage:not(.hide)');
             if (!pluginsPage) {
+                console.log('[KefinTweaks Installer] Plugins page not found');
                 return;
             }
 
@@ -1314,13 +1337,16 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                 // Support for Jellyfin 10.11.X
                 installedPlugins = document.querySelector('#pluginsPage:not(.hide)>div>div>div:last-child>div');
             }
-            
-            if (pluginsPage && installedPlugins) {
-                // Small delay to ensure DOM is ready
-                setTimeout(() => {
-                    addKefinTweaksPluginCard(installedPlugins);
-                }, 100);
+
+            if (!installedPlugins || !pluginsPage) {
+                console.log('[KefinTweaks Installer] Installed plugins or plugins page not found');
+                return;
             }
+
+            // Small delay to ensure DOM is ready
+            setTimeout(() => {
+                addKefinTweaksPluginCard(installedPlugins);
+            }, 100);
         }
     }
 
@@ -1329,6 +1355,9 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         const maxRetries = 100; // 10 seconds (100 * 100ms)
         
         try {
+            // Check if there is a valid config with a root url already, and load the injector if so
+            checkAndLoadInjector();
+
             // Check if ApiClient is available and user is logged in
             if (!window.ApiClient || !window.ApiClient._loggedIn) {
                 if (retryCount < maxRetries) {
@@ -1341,9 +1370,6 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                     return;
                 }
             }
-
-            // Check if there is a valid config with a root url already, and load the injector if so
-            checkAndLoadInjector();
 
             // Check if user is admin
             const userIsAdmin = await isAdmin();
