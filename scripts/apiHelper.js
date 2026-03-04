@@ -138,6 +138,42 @@
         if (!response.ok) {
             throw new Error(`PlayLast request failed with HTTP ${response.status}: ${response.statusText}`);
         }        
+    }    
+
+    /**
+     * Check if user is admin
+     * @returns {Promise<boolean>} - True if user is admin, false otherwise
+     */
+    async function isAdmin() {
+        try {
+            if (window.ApiClient && window.ApiClient.getCurrentUser) {
+                const user = await window.ApiClient.getCurrentUser();
+                return user && user.Policy && user.Policy.IsAdministrator === true;
+            }
+        } catch (error) {
+            console.warn('[KefinTweaks APIHelper] Could not check admin status:', error);
+        }
+        return false;
+    }
+
+    /**
+     * Build MediaBrowser Authorization header
+     * @returns {string} - Authorization header
+     */
+    function getAuthHeader() {
+        const token = ApiClient.accessToken();
+        const client = typeof ApiClient.applicationName === 'function' ? ApiClient.applicationName() : 'Jellyfin Web';
+        const device = typeof ApiClient.deviceName === 'function' ? ApiClient.deviceName() : (navigator.userAgent.includes('Chrome') ? 'Chrome' : 'Browser');
+        const deviceId = typeof ApiClient.deviceId === 'function' ? ApiClient.deviceId() : '';
+        const version = ApiClient._appVersion || ApiClient._serverVersion || '';
+        const parts = [
+            `Client="${encodeURIComponent(client)}"`,
+            `Device="${encodeURIComponent(device)}"`,
+            `DeviceId="${encodeURIComponent(deviceId)}"`,
+            `Version="${encodeURIComponent(version)}"`,
+            `Token="${encodeURIComponent(token)}"`
+        ];
+        return `MediaBrowser ${parts.join(', ')}`;
     }
     
     /**
@@ -497,7 +533,28 @@
             }
             
             LOG('Queue updated successfully');
-        }
+        },
+        /**
+         * Get the list of plugins from the server
+         * @returns {Promise<Array>} - Array of plugin objects
+         */
+        getPlugins: async function() {
+            if (!window.ApiClient || !window.ApiClient._serverAddress || window.ApiClient.accessToken() === null) {
+                return [];
+            }
+
+            const server = ApiClient._serverAddress;
+
+            const response = await fetch(`${server}/Plugins`, {
+                headers: { 'Authorization': getAuthHeader() }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            return await response.json();
+        },
     };
     
     // Expose apiHelper to global window object
