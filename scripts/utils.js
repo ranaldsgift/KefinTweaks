@@ -14,6 +14,9 @@
     
     // Store the original onViewShow function
     let originalOnViewShow = null;
+    const state = {
+        previousHash: null,
+    }
     
     // Initialize the utils by hooking into Emby.Page.onViewShow
     function initialize() {
@@ -34,15 +37,38 @@
                         ERR('Error in original onViewShow handler:', err);
                     }
                 }
+
+                const view = getCurrentView() ?? args[0];
                 
                 // Call our registered handlers
-                notifyHandlers(args[0], args[1], window.location.hash);
+                notifyHandlers(view, args[1], window.location.hash, state.previousHash);
+                state.previousHash = window.location.hash;
             };
             
             LOG('Hooked into Emby.Page.onViewShow');
         } else {
             WARN('Emby.Page.onViewShow not found - utils may not work correctly');
         }
+    }
+
+    /**
+     * Build MediaBrowser Authorization header
+     * @returns {string} - Authorization header
+     */
+    function getAuthHeader() {
+        const token = ApiClient.accessToken();
+        const client = typeof ApiClient.applicationName === 'function' ? ApiClient.applicationName() : 'Jellyfin Web';
+        const device = typeof ApiClient.deviceName === 'function' ? ApiClient.deviceName() : (navigator.userAgent.includes('Chrome') ? 'Chrome' : 'Browser');
+        const deviceId = typeof ApiClient.deviceId === 'function' ? ApiClient.deviceId() : '';
+        const version = ApiClient._appVersion || ApiClient._serverVersion || '';
+        const parts = [
+            `Client="${encodeURIComponent(client)}"`,
+            `Device="${encodeURIComponent(device)}"`,
+            `DeviceId="${encodeURIComponent(deviceId)}"`,
+            `Version="${encodeURIComponent(version)}"`,
+            `Token="${encodeURIComponent(token)}"`
+        ];
+        return `MediaBrowser ${parts.join(', ')}`;
     }
     
     // Array to store registered handlers
@@ -182,7 +208,7 @@
      * @param {string} view - The view name
      * @param {Element} element - The view element
      */
-    function notifyHandlers(view, element, hash) {
+    function notifyHandlers(view, element, hash, previousHash) {
         // Clear cache when view changes to ensure fresh data
         const currentItemId = getItemIdFromUrl();
         if (cachedItemId !== currentItemId) {
@@ -201,7 +227,7 @@
             if (shouldCallHandler(config, view)) {
                 try {
                     // Pass the promise as third parameter - handlers can await if needed
-                    config.callback(view, element, hash, itemPromise);
+                    config.callback(view, element, hash, itemPromise, previousHash);
                 } catch (err) {
                     ERR('Error in onViewPage handler:', err);
                 }
@@ -216,8 +242,12 @@
      * @returns {boolean} Whether the handler should be called
      */
     function shouldCallHandler(config, view) {
-        const { pages } = config.options;
+        const { pages, triggerOnSameHash = true } = config.options;
         
+        if (state.previousHash === window.location.hash && !triggerOnSameHash) {
+            return false;
+        }
+
         // If no specific pages are specified, call for all pages
         if (pages.length === 0) return true;
         
@@ -407,39 +437,7 @@
                 throw new Error('No config provided and window.KefinTweaksConfig is not available');
             }
             
-            // Find JavaScript Injector plugin
-            const server = window.ApiClient.serverAddress();
-            const token = window.ApiClient.accessToken();
-            
-            if (!server || !token) {
-                throw new Error('Server address or access token not available');
-            }
-            
-            let pluginsResponse = await fetch(`${server}/Plugins`, {
-                headers: { 'X-Emby-Token': token }
-            });
-            
-            // Handle 401 Unauthorized - retry once after waiting if waitForLogin is enabled
-            if (pluginsResponse.status === 401 && shouldWaitForLogin) {
-                WARN('Received 401 Unauthorized, waiting for login and retrying...');
-                const loggedIn = await waitForLogin(5000); // Wait up to 5 more seconds
-                if (loggedIn) {
-                    // Retry with fresh token
-                    const freshToken = window.ApiClient.accessToken();
-                    pluginsResponse = await fetch(`${server}/Plugins`, {
-                        headers: { 'X-Emby-Token': freshToken }
-                    });
-                }
-            }
-            
-            if (!pluginsResponse.ok) {
-                if (pluginsResponse.status === 401) {
-                    throw new Error('Unauthorized - user may not be logged in or session expired');
-                }
-                throw new Error(`Failed to get plugins: ${pluginsResponse.status} ${pluginsResponse.statusText}`);
-            }
-            
-            const pluginsData = await pluginsResponse.json();
+            const pluginsData = await apiHelper.getPlugins();
             const pluginsList = Array.isArray(pluginsData) ? pluginsData : (pluginsData.Items || []);
             
             const plugin = pluginsList.find(p => p.Name === 'JavaScript Injector' || p.Name === 'JS Injector');
@@ -453,7 +451,7 @@
             // Get current injector config
             const configUrl = `${server}/Plugins/${pluginId}/Configuration`;
             const configResponse = await fetch(configUrl, {
-                headers: { 'X-Emby-Token': token }
+                headers: { 'Authorization': getAuthHeader() }
             });
             
             if (!configResponse.ok) {
@@ -496,7 +494,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
             const saveResponse = await fetch(configUrl, {
                 method: 'POST',
                 headers: {
-                    'X-Emby-Token': token,
+                    'Authorization': getAuthHeader(),
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify(injectorConfig)
@@ -573,6 +571,30 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
 
     let _watchlistTabIndex = null;
 
+    async function fetchWatchlistTabIndex() {
+        // Fetch the tab index as we do in addCustomMenuLink
+        try {
+            const response = await fetch(`${ApiClient._serverAddress}/CustomTabs/Config`, {
+                method: "GET",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-Emby-Token": ApiClient._serverInfo.AccessToken || ApiClient.accessToken(),
+                },
+            });
+            const data = await response.json();
+            let tabIndex = null;
+            data.forEach((tab, index) => {
+                if (tab.ContentHtml.indexOf('sections watchlist') !== -1) {
+                    tabIndex = index + 2;
+                }
+            });
+            return tabIndex;
+        } catch (err) {
+            ERR('Failed to fetch watchlist tab index:', err);
+            return null;
+        }
+    }
+
 	/**
 	 * Get watchlist tab index, fetching if not yet set
 	 * @returns {number|null} The watchlist tab index or null if not found
@@ -582,26 +604,21 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
 			return _watchlistTabIndex;
 		}
 
-		// Fetch the tab index as we do in addCustomMenuLink
-		try {
-			const response = await fetch(`${ApiClient._serverAddress}/CustomTabs/Config`, {
-				method: "GET",
-				headers: {
-					"Content-Type": "application/json",
-					"X-Emby-Token": ApiClient._serverInfo.AccessToken || ApiClient.accessToken(),
-				},
-			});
-			const data = await response.json();
-			data.forEach((tab, index) => {
-				if (tab.ContentHtml.indexOf('sections watchlist') !== -1) {
-					_watchlistTabIndex = index + 2;
-					LOG('Fetched and stored watchlist tab index:', _watchlistTabIndex);
-				}
-			});
-		} catch (err) {
-			ERR('Failed to fetch watchlist tab index:', err);
-		}
+        // Check if the tab index is already stored in local storage
+        const storedTabIndex = localStorage.getItem(`kefinTweaks_watchlistTabIndex_${ApiClient.serverId()}`);
+        if (storedTabIndex) {
+            _watchlistTabIndex = Number(storedTabIndex);
+            LOG('Loaded watchlist tab index from local storage:', _watchlistTabIndex);
 
+            // Fetch tab in the background in case it has changed
+            fetchWatchlistTabIndex();
+            return _watchlistTabIndex;
+        }
+
+        _watchlistTabIndex = await fetchWatchlistTabIndex();
+
+        // Save to local storage
+        localStorage.setItem(`kefinTweaks_watchlistTabIndex_${ApiClient.serverId()}`, _watchlistTabIndex);
 		return _watchlistTabIndex;
 	}
 
