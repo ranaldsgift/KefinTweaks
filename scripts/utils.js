@@ -50,6 +50,26 @@
             WARN('Emby.Page.onViewShow not found - utils may not work correctly');
         }
     }
+
+    /**
+     * Build MediaBrowser Authorization header
+     * @returns {string} - Authorization header
+     */
+    function getAuthHeader() {
+        const token = ApiClient.accessToken();
+        const client = typeof ApiClient.applicationName === 'function' ? ApiClient.applicationName() : 'Jellyfin Web';
+        const device = typeof ApiClient.deviceName === 'function' ? ApiClient.deviceName() : (navigator.userAgent.includes('Chrome') ? 'Chrome' : 'Browser');
+        const deviceId = typeof ApiClient.deviceId === 'function' ? ApiClient.deviceId() : '';
+        const version = ApiClient._appVersion || ApiClient._serverVersion || '';
+        const parts = [
+            `Client="${encodeURIComponent(client)}"`,
+            `Device="${encodeURIComponent(device)}"`,
+            `DeviceId="${encodeURIComponent(deviceId)}"`,
+            `Version="${encodeURIComponent(version)}"`,
+            `Token="${encodeURIComponent(token)}"`
+        ];
+        return `MediaBrowser ${parts.join(', ')}`;
+    }
     
     // Array to store registered handlers
     const handlers = [];
@@ -417,39 +437,7 @@
                 throw new Error('No config provided and window.KefinTweaksConfig is not available');
             }
             
-            // Find JavaScript Injector plugin
-            const server = window.ApiClient.serverAddress();
-            const token = window.ApiClient.accessToken();
-            
-            if (!server || !token) {
-                throw new Error('Server address or access token not available');
-            }
-            
-            let pluginsResponse = await fetch(`${server}/Plugins`, {
-                headers: { 'X-Emby-Token': token }
-            });
-            
-            // Handle 401 Unauthorized - retry once after waiting if waitForLogin is enabled
-            if (pluginsResponse.status === 401 && shouldWaitForLogin) {
-                WARN('Received 401 Unauthorized, waiting for login and retrying...');
-                const loggedIn = await waitForLogin(5000); // Wait up to 5 more seconds
-                if (loggedIn) {
-                    // Retry with fresh token
-                    const freshToken = window.ApiClient.accessToken();
-                    pluginsResponse = await fetch(`${server}/Plugins`, {
-                        headers: { 'X-Emby-Token': freshToken }
-                    });
-                }
-            }
-            
-            if (!pluginsResponse.ok) {
-                if (pluginsResponse.status === 401) {
-                    throw new Error('Unauthorized - user may not be logged in or session expired');
-                }
-                throw new Error(`Failed to get plugins: ${pluginsResponse.status} ${pluginsResponse.statusText}`);
-            }
-            
-            const pluginsData = await pluginsResponse.json();
+            const pluginsData = await apiHelper.getPlugins();
             const pluginsList = Array.isArray(pluginsData) ? pluginsData : (pluginsData.Items || []);
             
             const plugin = pluginsList.find(p => p.Name === 'JavaScript Injector' || p.Name === 'JS Injector');
@@ -463,7 +451,7 @@
             // Get current injector config
             const configUrl = `${server}/Plugins/${pluginId}/Configuration`;
             const configResponse = await fetch(configUrl, {
-                headers: { 'X-Emby-Token': token }
+                headers: { 'Authorization': getAuthHeader() }
             });
             
             if (!configResponse.ok) {
@@ -506,7 +494,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
             const saveResponse = await fetch(configUrl, {
                 method: 'POST',
                 headers: {
-                    'X-Emby-Token': token,
+                    'Authorization': getAuthHeader(),
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify(injectorConfig)

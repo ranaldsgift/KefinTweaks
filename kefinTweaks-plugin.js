@@ -10,6 +10,22 @@
     const MODAL_ID = 'kefinTweaksSourceModal';
     let versionsCache = null;
 
+    function getAuthHeader() {
+        const token = ApiClient.accessToken();
+        const client = typeof ApiClient.applicationName === 'function' ? ApiClient.applicationName() : 'Jellyfin Web';
+        const device = typeof ApiClient.deviceName === 'function' ? ApiClient.deviceName() : (navigator.userAgent.includes('Chrome') ? 'Chrome' : 'Browser');
+        const deviceId = typeof ApiClient.deviceId === 'function' ? ApiClient.deviceId() : '';
+        const version = ApiClient._appVersion || ApiClient._serverVersion || '';
+        const parts = [
+            `Client="${encodeURIComponent(client)}"`,
+            `Device="${encodeURIComponent(device)}"`,
+            `DeviceId="${encodeURIComponent(deviceId)}"`,
+            `Version="${encodeURIComponent(version)}"`,
+            `Token="${encodeURIComponent(token)}"`
+        ];
+        return `MediaBrowser ${parts.join(', ')}`;
+    }
+
     // jsDelivr URL patterns
     const JSDELIVR_BASE = 'https://cdn.jsdelivr.net/gh/ranaldsgift/KefinTweaks';
     const GITHUB_REPO = 'ranaldsgift/KefinTweaks';
@@ -31,16 +47,15 @@
     // Find JavaScript Injector plugin
     async function findJavaScriptInjectorPlugin() {
         try {
-            if (!window.ApiClient || !window.ApiClient._serverAddress || !window.ApiClient.accessToken) {
+            if (!window.ApiClient || !window.ApiClient._serverAddress || window.ApiClient.accessToken() === null) {
                 return null;
             }
 
             const server = ApiClient._serverAddress;
-            const token = ApiClient.accessToken();
 
             const response = await fetch(`${server}/Plugins`, {
                 headers: {
-                    'X-Emby-Token': token
+                    'Authorization': getAuthHeader()
                 }
             });
 
@@ -74,11 +89,10 @@
             }
 
             const server = ApiClient._serverAddress;
-            const token = ApiClient.accessToken();
 
             const response = await fetch(`${server}/Plugins/${pluginId}/Configuration`, {
                 headers: {
-                    'X-Emby-Token': token
+                    'Authorization': getAuthHeader()
                 }
             });
 
@@ -198,12 +212,11 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             }
 
             const server = ApiClient._serverAddress;
-            const token = ApiClient.accessToken();
 
             const response = await fetch(`${server}/Plugins/${pluginId}/Configuration`, {
                 method: 'POST',
                 headers: {
-                    'X-Emby-Token': token,
+                    'Authorization': getAuthHeader(),
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify(injectorConfig)
@@ -877,12 +890,11 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
 
             // Save the updated configuration
             const server = ApiClient._serverAddress;
-            const token = ApiClient.accessToken();
 
             const response = await fetch(`${server}/Plugins/${pluginId}/Configuration`, {
                 method: 'POST',
                 headers: {
-                    'X-Emby-Token': token,
+                    'Authorization': getAuthHeader(),
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify(injectorConfig)
@@ -1315,6 +1327,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         if (hash && hash.includes('dashboard/plugins')) {
             const pluginsPage = document.querySelector('#pluginsPage:not(.hide)');
             if (!pluginsPage) {
+                console.log('[KefinTweaks Installer] Plugins page not found');
                 return;
             }
 
@@ -1324,13 +1337,16 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                 // Support for Jellyfin 10.11.X
                 installedPlugins = document.querySelector('#pluginsPage:not(.hide)>div>div>div:last-child>div');
             }
-            
-            if (pluginsPage && installedPlugins) {
-                // Small delay to ensure DOM is ready
-                setTimeout(() => {
-                    addKefinTweaksPluginCard(installedPlugins);
-                }, 100);
+
+            if (!installedPlugins || !pluginsPage) {
+                console.log('[KefinTweaks Installer] Installed plugins or plugins page not found');
+                return;
             }
+
+            // Small delay to ensure DOM is ready
+            setTimeout(() => {
+                addKefinTweaksPluginCard(installedPlugins);
+            }, 100);
         }
     }
 
