@@ -757,21 +757,13 @@
             return;
         }
 
-        let playlistItemsContainer = activePage.querySelector('.childrenItemsContainer');
+        let playlistItemsContainer = activePage.querySelector('.childrenItemsContainer') || activePage.querySelector('#listChildrenCollapsible .itemsContainer');
         if (!playlistItemsContainer) {
-            playlistItemsContainer = activePage.querySelector('#listChildrenCollapsible');
-            if (!playlistItemsContainer) {
-                WARN('Playlist items container not found');
-                return;
-            }
+            WARN('Playlist items container not found');
+            return;
         }
-
-        // Find items container
-        const itemsContainer = playlistItemsContainer.querySelector('.childrenItemsContainer') || 
-                              playlistItemsContainer.querySelector('#listChildrenCollapsible') ||
-                              playlistItemsContainer;
-
-        return itemsContainer;
+        
+        return playlistItemsContainer;
     }
 
     /**
@@ -825,17 +817,7 @@
         let debounceTimer = null;
 
         playlistObserver = new MutationObserver((mutations) => {
-            if (ignoreNextMutation) {
-                ignoreNextMutation = false;
-                return;
-            }
-
             const sortKey = getCurrentSort(playlistId);
-
-            if (sortKey === 'default') {
-                return;
-            }
-
             let shouldReapply = false;
 
             mutations.forEach((mutation) => {
@@ -846,13 +828,10 @@
                         mutation.addedNodes.forEach((node) => {
                             if (node.nodeType === Node.ELEMENT_NODE) {
                                 // If listItem was added, we need to reapply
-                                if (node.classList?.contains('listItem') || 
-                                    node.classList?.contains('childrenItemsContainer') ||
-                                    node.classList?.contains('listChildrenCollapsible') ||
-                                    node.querySelector?.('.listItem[data-playlistitemid]') ||
-                                    node.querySelector?.('.childrenItemsContainer') ||
-                                    node.querySelector?.('#listChildrenCollapsible')) {
-                                    shouldReapply = true;
+                                if (node.classList?.contains('listItem')) {
+                                        LOG('Playlist container re-rendered, re-applying sort for:', playlistId);
+                                        node.setAttribute('data-action', 'link');
+                                        shouldReapply = true;
                                 }
                             }
                         });
@@ -860,7 +839,7 @@
                 }
             });
 
-            if (shouldReapply) {
+            if (sortKey !== 'default' && shouldReapply) {
                 // Debounce to avoid multiple rapid re-applications
                 clearTimeout(debounceTimer);
                 debounceTimer = setTimeout(() => {
@@ -870,10 +849,12 @@
             }
         });
 
-        // Observe the playlist items container with childList changes
+        // Observe the playlist items container for childList and data-action attribute changes
         playlistObserver.observe(playlistItemsContainer, {
             childList: true,
-            subtree: true
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['data-action']
         });
 
         LOG('MutationObserver set up for playlist:', playlistId);
@@ -895,13 +876,10 @@
         }
 
         // Find playlist items container
-        let playlistItemsContainer = activePage.querySelector('.childrenItemsContainer');
+        let playlistItemsContainer = getPlaylistItemsContainer();
         if (!playlistItemsContainer) {
-            playlistItemsContainer = activePage.querySelector('#listChildrenCollapsible');
-            if (!playlistItemsContainer) {
-                WARN('Playlist items container not found');
-                return;
-            }
+            WARN('Playlist items container not found');
+            return;
         }
 
         // Check if already processed (but allow re-processing if button is missing)
@@ -921,16 +899,6 @@
             return;
         }
 
-        // Find items container
-        const itemsContainer = playlistItemsContainer.querySelector('.childrenItemsContainer') || 
-                              playlistItemsContainer.querySelector('#listChildrenCollapsible') ||
-                              playlistItemsContainer;
-        
-        if (!itemsContainer) {
-            WARN('Items container not found');
-            return;
-        }
-
         LOG('Adding playlist sorting for:', playlistId);
 
         // Fetch playlist children
@@ -943,7 +911,7 @@
         // Store playlist data
         playlistData.set(playlistId, {
             items: children,
-            itemsContainer: itemsContainer
+            itemsContainer: playlistItemsContainer
         });
 
         // Add sort button (only if it doesn't exist)
@@ -977,67 +945,23 @@
             return;
         }
         
-        let childrenItemsContainer = libraryPage.querySelector('.childrenItemsContainer');
+        let childrenItemsContainer = getPlaylistItemsContainer();
         if (!childrenItemsContainer) {
-            childrenItemsContainer = libraryPage.querySelector('#listChildrenCollapsible');
-            if (!childrenItemsContainer) {
-                WARN('Children items container not found');
-                return;
-            }
+            WARN('Children items container not found');
+            return;
         }
-        
+
         const playlistItems = childrenItemsContainer.querySelectorAll('.listItem[data-playlistitemid]');
         LOG(`Found ${playlistItems.length} playlist items`);
-        
         playlistItems.forEach((item, index) => {
-            if (item.dataset.customPlaylistButton === 'true') {
-                LOG(`Playlist item ${index} already has a custom button, skipping`);
-                return;
-            }
-
             const playlistItemId = item.getAttribute('data-playlistitemid');
-            const serverId = ApiClient.serverId();
-            
             if (!playlistItemId) {
                 WARN(`Playlist item ${index} has no data-playlistitemid`);
                 return;
             }
-            
-            // Remove existing click handlers
-            item.removeAttribute('data-action');
+            item.setAttribute('data-action', 'link');
             item.style.cursor = 'pointer';
-            
-            // Add new click handler to navigate to details page
-            item.addEventListener('click', (e) => {
-                handlePlaylistItemClick(e, item, playlistItemId, serverId);
-            });
-
-            item.dataset.customPlaylistButton = 'true';
         });
-    }
-
-    function handlePlaylistItemClick(e, item, playlistItemId, serverId) {
-        // Check if the click target is within the listViewUserDataButtons container
-        const buttonsContainer = item.querySelector('.listViewUserDataButtons');
-        if (buttonsContainer && buttonsContainer.contains(e.target)) {
-            LOG(`Click on button detected, not navigating for item: ${playlistItemId}`);
-            return; // Don't navigate when clicking on buttons
-        }
-        
-        e.preventDefault();
-        e.stopPropagation();
-        
-        const detailsUrl = `/details?id=${playlistItemId}&serverId=${serverId}`;
-        LOG(`Navigating to: ${detailsUrl}`);
-        
-        // Use Jellyfin's navigation method
-        if (Dashboard) {
-            Dashboard.navigate(detailsUrl);
-        } else {
-            // Fallback to direct navigation
-            const fullDetailsUrl = `${ApiClient.serverAddress()}/web/#${detailsUrl}`;
-            window.location.href = fullDetailsUrl;
-        }
     }
     
     /**
@@ -1050,13 +974,10 @@
             return;
         }
         
-        let childrenItemsContainer = libraryPage.querySelector('.childrenItemsContainer');
+        let childrenItemsContainer = getPlaylistItemsContainer();
         if (!childrenItemsContainer) {
-            childrenItemsContainer = libraryPage.querySelector('#listChildrenCollapsible');
-            if (!childrenItemsContainer) {
-                WARN('Children items container not found for play buttons');
-                return;
-            }
+            WARN('Children items container not found for play buttons');
+            return;
         }
         
         const playlistItems = childrenItemsContainer.querySelectorAll('.listItem[data-playlistitemid]');
@@ -1185,17 +1106,10 @@
                 return;
             }
             
-            let childrenItemsContainer = libraryPage.querySelector('.childrenItemsContainer');
+            let childrenItemsContainer = getPlaylistItemsContainer();
             if (!childrenItemsContainer) {
-                childrenItemsContainer = libraryPage.querySelector('#listChildrenCollapsible');
-                if (!childrenItemsContainer) {
-                    if (attempts < maxAttempts) {
-                        setTimeout(pollForElements, pollInterval);
-                    } else {
-                        WARN('Children items container not found after 10 seconds');
-                    }
-                    return;
-                }
+                WARN('Children items container not found after 10 seconds');
+                return;
             }
 
             const playlistItems = childrenItemsContainer.querySelectorAll('.listItem[data-playlistitemid]');
@@ -1231,9 +1145,10 @@
 
 
         const css = `
-        .itemsContainer:not([data-sort-key="default"]) .listViewDragHandle {
-            display: none;
-        }
+        [data-kefin-playlist="true"]:has(#listChildrenCollapsible[data-sort-key]:not([data-sort-key="default"])) .listViewDragHandle,
+[data-kefin-playlist="true"]:has(.childrenItemsContainer[data-sort-key]:not([data-sort-key="default"])) .listViewDragHandle {
+    display: none;
+}
         `;
 
         const style = document.createElement('style');
