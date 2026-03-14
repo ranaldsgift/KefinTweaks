@@ -3585,12 +3585,12 @@
 
         function getMaxPosition() {
             // Ensure we scroll enough to see the last card
-            return scroller.scrollWidth - scroller.clientWidth + 300;
+            return scroller.scrollWidth - scroller.clientWidth;
         }
 
         function setPosition(newPosition, options) {
             const opts = options || {};
-            const maxPosition = getMaxPosition();
+            const maxPosition = getMaxPosition() + 300;
             const clampedPosition = Math.min(Math.max(newPosition, 0), Math.max(maxPosition, 0));
 
             // Control whether movement is animated or immediate
@@ -3602,18 +3602,17 @@
 
             scroller.style.transform = `translateX(-${clampedPosition}px)`;
             scroller.style.setProperty('--scroll-x', String(clampedPosition));
-            scroller.setAttribute('data-max-scroll', clampedPosition >= maxPosition ? 'true' : 'false');
 
             const verticalSection = scroller.closest('.emby-scroller-container');
-            if (verticalSection && typeof updateScrollButtonStateForSection === 'function') {
+            if (verticalSection && typeof applyScrollButtonState === 'function') {
                 if (opts.animate) {
                     const onTransitionEnd = () => {
                         scroller.removeEventListener('transitionend', onTransitionEnd);
-                        updateScrollButtonStateForSection(verticalSection);
+                        applyScrollButtonState(verticalSection);
                     };
                     scroller.addEventListener('transitionend', onTransitionEnd);
                 } else {
-                    requestAnimationFrame(() => updateScrollButtonStateForSection(verticalSection));
+                    requestAnimationFrame(() => applyScrollButtonState(verticalSection));
                 }
             }
         }
@@ -4236,10 +4235,9 @@
     // Overflow check: run checkSectionOverflow when .emby-scroller-container with .itemsContainer appears in DOM
     let overflowMutationObserver = null;
 
-    // Single shared IntersectionObserver for scroll button state (first/last card visibility per section)
-    let scrollButtonsStateObserver = null;
-    const scrollButtonsSectionState = new WeakMap(); // verticalSection -> { firstVisible, lastVisible }
-    
+    // Run updateScrollButtonStateForSection once when a section becomes visible (so --max-scroll is computed after layout)
+    let scrollSectionVisibilityObserver = null;
+
     /**
      * Initialize the global IntersectionObserver for lazy loading images
      * Watches when elements enter the viewport and loads their images
@@ -4327,105 +4325,63 @@
     }
 
     /**
-     * Check if two DOMRects intersect (used for "visible in scroller" with root: null).
-     */
-    function rectsIntersect(a, b) {
-        return !(a.right < b.left || a.left > b.right || a.bottom < b.top || a.top > b.bottom);
-    }
-
-    /**
-     * Check if container fully contains child horizontally (entire card visible in scroller).
-     */
-    function rectContainsRectHorizontally(containerRect, childRect) {
-        return containerRect.left <= childRect.left && childRect.right <= containerRect.right;
-    }
-
-    /**
-     * Apply scroll button state for a section from scrollButtonsSectionState WeakMap.
+     * Apply scroll button state for a section from --scroll-x and --max-scroll on the scroller.
      */
     function applyScrollButtonState(verticalSection) {
-        const state = scrollButtonsSectionState.get(verticalSection);
-        if (!state) return;
         const scroller = verticalSection.querySelector('.emby-scroller');
         const scrollButtons = verticalSection.querySelector('.emby-scrollbuttons');
         const leftButton = scrollButtons && scrollButtons.querySelector('button[data-direction="left"]');
         const rightButton = scrollButtons && scrollButtons.querySelector('button[data-direction="right"]');
         if (!scroller || !scrollButtons || !leftButton || !rightButton) return;
-        const scrollX = parseFloat(window.getComputedStyle(scroller).getPropertyValue('--scroll-x')) || 0;
-        leftButton.disabled = state.firstVisible && scrollX === 0;
-        rightButton.disabled = state.lastVisible || scroller.getAttribute('data-max-scroll') === 'true';
-        if (state.firstVisible && state.lastVisible) {
-            scrollButtons.setAttribute('data-no-controls', 'true');
-        } else {
-            scrollButtons.removeAttribute('data-no-controls');
-        }
+        const scrollX = parseFloat(scroller.style.getPropertyValue('--scroll-x')) || 0;
+        const maxScroll = parseFloat(scroller.style.getPropertyValue('--max-scroll')) || 0;
+        leftButton.disabled = scrollX <= 0;
+        rightButton.disabled = scrollX >= maxScroll - 1;
     }
 
     /**
-     * Compute first/last visibility for a section and apply button state (e.g. initial sync).
+     * Set --max-scroll on the scroller from dimensions and apply button state. Called once when section is visible so layout is ready.
      */
     function updateScrollButtonStateForSection(verticalSection) {
-        const itemsContainer = verticalSection.querySelector('.itemsContainer');
         const scroller = verticalSection.querySelector('.emby-scroller');
-        const first = itemsContainer && itemsContainer.firstElementChild;
-        const last = itemsContainer && itemsContainer.lastElementChild;
-        if (!itemsContainer || !scroller || !first || !last) return;
-        const scrollerRect = scroller.getBoundingClientRect();
-        const firstVisible = rectsIntersect(first.getBoundingClientRect(), scrollerRect);
-        const lastVisible = rectContainsRectHorizontally(scrollerRect, last.getBoundingClientRect());
-        scrollButtonsSectionState.set(verticalSection, { firstVisible, lastVisible });
+        if (!scroller) return;
+        const maxScroll = Math.max(0, (scroller.scrollWidth - scroller.clientWidth) || 0);
+        scroller.style.setProperty('--max-scroll', String(maxScroll));
         applyScrollButtonState(verticalSection);
     }
 
     /**
-     * Initialize the single shared IntersectionObserver for scroll button state (lazy).
+     * Ensure scroll section visibility observer exists. When a section becomes visible, runs updateScrollButtonStateForSection once then unobserves.
      */
-    function initScrollButtonsStateObserver() {
-        if (scrollButtonsStateObserver) return;
-        scrollButtonsStateObserver = new IntersectionObserver((entries) => {
-            const sectionsAffected = new Set();
+    function getScrollSectionVisibilityObserver() {
+        if (scrollSectionVisibilityObserver) return scrollSectionVisibilityObserver;
+        scrollSectionVisibilityObserver = new IntersectionObserver((entries) => {
             entries.forEach(entry => {
-                const verticalSection = entry.target.closest('.emby-scroller-container');
-                if (!verticalSection) return;
-                const itemsContainer = entry.target.parentElement;
-                if (!itemsContainer || !itemsContainer.classList.contains('itemsContainer')) return;
-                const scroller = itemsContainer.parentElement;
-                if (!scroller) return;
-                const scrollerRect = scroller.getBoundingClientRect();
-                const cardRect = entry.boundingClientRect;
-                const isFirst = entry.target === itemsContainer.firstElementChild;
-                const visibleInScroller = isFirst
-                    ? rectsIntersect(cardRect, scrollerRect)
-                    : rectContainsRectHorizontally(scrollerRect, cardRect);
-                const state = scrollButtonsSectionState.get(verticalSection) || { firstVisible: false, lastVisible: false };
-                if (isFirst) state.firstVisible = visibleInScroller; else state.lastVisible = visibleInScroller;
-                scrollButtonsSectionState.set(verticalSection, state);
-                sectionsAffected.add(verticalSection);
+                if (!entry.isIntersecting) return;
+                const verticalSection = entry.target;
+                scrollSectionVisibilityObserver.unobserve(verticalSection);
+                updateScrollButtonStateForSection(verticalSection);
             });
-            sectionsAffected.forEach(applyScrollButtonState);
-        }, { root: null, threshold: 0.1 });
+        }, { root: null, threshold: 0.01 });
+        return scrollSectionVisibilityObserver;
     }
 
     /**
-     * Register a scrollable section's first/last card with the shared observer and run initial sync.
+     * Register a scrollable section: when it becomes visible, set --max-scroll once and apply initial button state.
      */
     function registerScrollSectionScrollButtons(verticalSection) {
         const itemsContainer = verticalSection.querySelector('.itemsContainer');
+        const scroller = verticalSection.querySelector('.emby-scroller');
         const first = itemsContainer && itemsContainer.firstElementChild;
         const last = itemsContainer && itemsContainer.lastElementChild;
         if (!first || !last) {
-            const scrollButtons = verticalSection.querySelector('.emby-scrollbuttons');
-            const leftButton = scrollButtons && scrollButtons.querySelector('button[data-direction="left"]');
-            const rightButton = scrollButtons && scrollButtons.querySelector('button[data-direction="right"]');
-            if (leftButton) leftButton.disabled = true;
-            if (rightButton) rightButton.disabled = true;
-            if (scrollButtons && !first && !last) scrollButtons.setAttribute('data-no-controls', 'true');
+            if (scroller) {
+                scroller.style.setProperty('--max-scroll', '0');
+                applyScrollButtonState(verticalSection);
+            }
             return;
         }
-        if (!scrollButtonsStateObserver) initScrollButtonsStateObserver();
-        scrollButtonsStateObserver.observe(first);
-        scrollButtonsStateObserver.observe(last);
-        requestAnimationFrame(() => updateScrollButtonStateForSection(verticalSection));
+        getScrollSectionVisibilityObserver().observe(verticalSection);
     }
 
     /**
