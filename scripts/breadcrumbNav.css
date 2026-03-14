@@ -66,7 +66,7 @@
         border-radius: 4px;
         padding: 0;
         max-height: 300px;
-        overflow-y: auto;
+        overflow-y: auto !important;
         z-index: 1001;
         display: block;
         margin-top: 8px;
