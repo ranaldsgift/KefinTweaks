@@ -669,11 +669,9 @@
             });
         }
         
-        // Hide suggestions when clicking outside
-        document.addEventListener('click', (e) => {
-            if (!badgeContainer.contains(e.target) && !suggestionsDiv.contains(e.target)) {
-                suggestionsDiv.style.display = 'none';
-            }
+        // Hide suggestions when focus leaves the input
+        input.addEventListener('blur', () => {
+            suggestionsDiv.style.display = 'none';
         });
         
         // Setup chevron button (triggers dropdown like down arrow)
@@ -689,6 +687,7 @@
                     // Dropdown is closed, open it
                     if (input.value.trim().length === 0) {
                         showAllSuggestions();
+                        input.focus();
                     } else {
                         // Trigger input event to show filtered suggestions
                         input.dispatchEvent(new Event('input', { bubbles: true }));
