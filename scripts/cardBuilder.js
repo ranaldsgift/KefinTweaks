@@ -40,6 +40,27 @@
         }
         return arr;
     }
+
+    /**
+     * Updates the scroll buttons for a scrollable container
+     * @param {HTMLElement} scroller - The scroller element
+     */
+    function updateScrollableContainerScrollButtons(scroller) {
+        const verticalSection = scroller.parentElement;
+        if (!verticalSection) return;
+
+        const scrollButtons = verticalSection.querySelector('.emby-scrollbuttons');
+        if (!scrollButtons) return;
+
+        const leftButton = scrollButtons.querySelector('button[data-direction="left"]');
+        const rightButton = scrollButtons.querySelector('button[data-direction="right"]');
+        if (!leftButton || !rightButton) return;
+
+        const currentPosition = Math.abs(new DOMMatrixReadOnly(window.getComputedStyle(scroller).transform)?.m41 || 0);
+        const maxPosition = scroller.scrollWidth - scroller.clientWidth;
+        leftButton.disabled = currentPosition === 0;
+        rightButton.disabled = currentPosition >= maxPosition;
+    }
     
     /**
      * Sorts items based on sort order and direction
@@ -223,6 +244,12 @@
     function postProcessItems(sectionConfig, itemsData) {
         let processed = itemsData?.Items || itemsData || [];
 
+        // When ParentId is on the query (e.g. Popular Genres per library), assign it to each item for genre card links
+        const queryParentId = sectionConfig.queries?.[0]?.ParentId;
+        if (queryParentId && Array.isArray(processed)) {
+            processed.forEach(item => { item.ParentId = queryParentId; });
+        }
+
         // Check if the IsUnplayed filter is set on any of the queries
         const isUnplayedFilter = sectionConfig.queries?.some(query => query.queryOptions?.IsUnplayed === true || query.queryOptions?.Filters?.includes('IsUnplayed'));
         if (isUnplayedFilter) {
@@ -306,11 +333,14 @@
             });
         }
 
-        if (sectionConfig.queries?.[0]?.queryOptions?.SortBy === 'Random') {
+        const limit = sectionConfig.itemLimit || sectionConfig.queries?.[0]?.queryOptions?.Limit || 0;
+
+        if (sectionConfig.queries?.[0]?.queryOptions?.SortBy === 'Random' || sectionConfig.sortBy === 'Random') {        
+            if (limit > 0 && sectionConfig.limitBeforeSort === true) {
+                processed = processed.slice(0, limit);
+            }
             processed = shuffle(processed);
         }
-
-        const limit = sectionConfig.itemLimit || sectionConfig.queries?.[0]?.queryOptions?.Limit || 0;
 
         // Apply local limits for non-API sources
         if (limit > 0) {
@@ -496,7 +526,6 @@
                         // Also update the show-all-button text if it exists
                         const showAllButton = content.querySelector('.show-all-button');
                         if (showAllButton) {
-                            showAllButton.textContent = 'Collapse';
                             showAllButton.title = 'Show items in scrollable layout';
                         }
                         // Hide scroll buttons if they exist
@@ -750,6 +779,10 @@
                     content.setAttribute('data-section-id', sectionConfig.id);
                     content.style.order = sectionConfig.order;
                     content.dataset.order = sectionConfig.order;
+
+                    if (sectionConfig.hideCardFooter === true) {
+                        content.dataset.hideCardFooter = 'true';
+                    }
                     
                     // Add refresh button to rendered section
                     const sectionTitleContainer = content.querySelector('.sectionTitleContainer');
@@ -778,12 +811,20 @@
 
                 let sectionElement = null;
                 if (sectionConfig.spotlight || sectionConfig.renderMode === 'Spotlight') {
-                    sectionElement = createSkeletonSpotlightSection(sectionConfig.name, { viewMoreUrl: sectionConfig.viewMoreUrl });
+                    const spotlightSettings = sectionConfig.spotlightConfig ?? {};
+                    if (sectionConfig.viewMoreUrl) {
+                        spotlightSettings.viewMoreUrl = sectionConfig.viewMoreUrl;
+                    }
+                    sectionElement = createSkeletonSpotlightSection(sectionConfig.name, spotlightSettings);
                 } else {
                     sectionElement = createProgressivelyEnhancedScrollableContainer(sectionConfig.name, sectionConfig.viewMoreUrl, sectionConfig.cardFormat, sectionConfig.overflowCard);
                 }
                 sectionElement.setAttribute('data-section-id', sectionConfig.id);
                 sectionElement.style.order = sectionConfig.order;
+
+                if (sectionConfig.hideCardFooter === true) {
+                    sectionElement.dataset.hideCardFooter = 'true';
+                }
                 //container.appendChild(sectionElement);
                 
                 // set section element content-visibility to hidden
@@ -821,23 +862,35 @@
                 }    
             }
 
+            container.appendChild(fragment);
+
+            // Update the scroll buttons for all scrollable containers
+            /* const scrollableContainers = container.querySelectorAll('.emby-scroller');
+            for (const scroller of scrollableContainers) {
+                updateScrollableContainerScrollButtons(scroller);
+            } */
+
+
             // Batch append sections to avoid Jellyfin emby-scroller processing
             // all at once (causes render lag when many sections are added)
             /* const BATCH_SIZE = 4;
             const sectionNodes = Array.from(fragment.childNodes);
             for (let i = 0; i < sectionNodes.length; i += BATCH_SIZE) {
                 const batch = sectionNodes.slice(i, i + BATCH_SIZE);
-                batch.forEach(node => container.appendChild(node));
+                const batchFragment = document.createDocumentFragment();
+                batch.forEach(node => batchFragment.appendChild(node));
+                container.appendChild(batchFragment);
                 if (i + BATCH_SIZE < sectionNodes.length) {
                     await new Promise(resolve => requestAnimationFrame(resolve));
+                    await new Promise(resolve => setTimeout(resolve, 0));
                 }
             } */
 
-            for (const sectionElement of sectionElements) {
+            /* for (const sectionElement of sectionElements) {
                 container.appendChild(sectionElement);
                 await new Promise(resolve => requestAnimationFrame(resolve));
                 await new Promise(resolve => setTimeout(resolve, 0));
-            }
+            } */
 
             /* for (const sectionElement of sectionElements) {
                 sectionElement.style.contentVisibility = 'hidden';
@@ -980,7 +1033,6 @@
                             // Also update the show-all-button text if it exists
                             const showAllButton = content.querySelector('.show-all-button');
                             if (showAllButton) {
-                                showAllButton.textContent = 'Collapse';
                                 showAllButton.title = 'Show items in scrollable layout';
                             }
                             // Hide scroll buttons if they exist
@@ -999,7 +1051,10 @@
                     }
 
                     sectionElement.replaceWith(content);
-                    checkSectionOverflow(content, true);
+                    // Update the scroll buttons for the new content
+                    //updateScrollableContainerScrollButtons(content.querySelector('.emby-scroller'));
+
+                    //checkSectionOverflow(content, true);
                     //setTimeout(() => checkSectionOverflow(content, true), 150);
 
                     // If revealSectionsSequentially is enabled and section hasn't been revealed yet, re-observe it
@@ -1424,27 +1479,40 @@
     function createJellyfinCardElement(item, overflowCard = false, cardFormat = null, customFooterText = null, forcedImageType = null) {
         const serverId = ApiClient.serverId();
         const serverAddress = ApiClient.serverAddress();
-        
+        const itemId = item.Id || '';
+        const itemType = item.Type || 'Folder';
+        const isCustomCard = !!(item.cardUrl || item.posterUrl || item.thumbUrl || item.squareUrl || item.imageUrl);
+        let parentItem = null;
+
+        if (item.Type === 'Timer') {
+            parentItem = item;
+            item = parentItem.ProgramInfo;
+        }
+
         // Determine card type based on cardFormat override or item type
         let cardClass, padderClass, imageParams;
         cardFormat = cardFormat?.toLowerCase() || null;
         forcedImageType = forcedImageType?.toLowerCase() || null;
-        
+
         // Use custom footer text from item property if not explicitly provided
         if (!customFooterText && item.CustomFooterText) {
             customFooterText = item.CustomFooterText;
         }
-        
+
         if (cardFormat) {
             // Use specified cardFormat
-            if (cardFormat === 'backdrop' || cardFormat === 'thumb' || forcedImageType) {
+            if (cardFormat === 'backdrop' || cardFormat === 'thumb' || cardFormat === 'logo' || cardFormat === 'clear art' || forcedImageType) {
                 cardClass = overflowCard ? 'overflowBackdropCard' : 'backdropCard';
                 padderClass = 'cardPadder-backdrop';
                 imageParams = 'fillHeight=267&fillWidth=474';
-            } else if (cardFormat === 'square') {
+            } else if (cardFormat === 'square' || cardFormat === 'disc') {
                 cardClass = overflowCard ? 'overflowSquareCard' : 'squareCard';
                 padderClass = 'cardPadder-square';
                 imageParams = 'fillHeight=297&fillWidth=297';
+            } else if (cardFormat === 'banner') {
+                cardClass = overflowCard ? 'overflowBannerCard' : 'bannerCard';
+                padderClass = 'cardPadder-banner';
+                imageParams = 'fillHeight=100&fillWidth=540';
             } else {
                 // portrait (default)
                 cardClass = overflowCard ? 'overflowPortraitCard' : 'portraitCard';
@@ -1453,11 +1521,11 @@
             }
         } else {
             // Use item type to determine card type
-            if (item.Type === 'Episode' || item.Type === 'TvChannel') {
+            if (itemType === 'Episode' || itemType === 'TvChannel') {
                 cardClass = overflowCard ? 'overflowBackdropCard' : 'backdropCard';
                 padderClass = 'cardPadder-backdrop';
                 imageParams = 'fillHeight=267&fillWidth=474';
-            } else if (['MusicAlbum', 'Audio', 'Artist', 'MusicArtist'].includes(item.Type)) {
+            } else if (['MusicAlbum', 'Audio', 'Artist', 'MusicArtist'].includes(itemType)) {
                 cardClass = overflowCard ? 'overflowSquareCard' : 'squareCard';
                 padderClass = 'cardPadder-square';
                 imageParams = 'fillHeight=297&fillWidth=297';
@@ -1473,11 +1541,26 @@
         const card = document.createElement('div');
         card.className = `card ${cardClass} card-hoverable card-withuserdata`;
         card.setAttribute('data-index', '0');
-        card.setAttribute('data-isfolder', item.Type === 'MusicAlbum' || item.Type === 'Artist' ? 'true' : 'false');
+        card.setAttribute('data-isfolder', itemType === 'MusicAlbum' || itemType === 'Artist' ? 'true' : 'false');
         card.setAttribute('data-serverid', serverId);
-        card.setAttribute('data-id', item.Id);
-        card.setAttribute('data-type', item.Type);
-        card.setAttribute('data-mediatype', item.MediaType || 'Video');
+        if (!isCustomCard) card.setAttribute('data-id', itemId);
+        if (isCustomCard) card.setAttribute('data-custom-card', 'true');
+        card.setAttribute('data-type', itemType);
+        const mediaType = item.MediaType === 'Unknown' && item.ChannelId ? 'Video' : item.MediaType;
+        card.setAttribute('data-mediatype', mediaType || 'Video');
+
+        if (item.ChannelId) {
+            card.setAttribute('data-channelid', item.ChannelId);
+        }
+
+        if (item.StartDate) {
+            card.setAttribute('data-startdate', item.StartDate);
+        }
+
+        if (item.EndDate) {
+            card.setAttribute('data-enddate', item.EndDate);
+        }
+
         card.setAttribute('data-prefix', item.Name?.startsWith('The ') ? 'THE' : '');
 
         if (item.UserData?.PlaybackPositionTicks && item.UserData?.PlaybackPositionTicks > 0) {
@@ -1486,7 +1569,7 @@
 
         // Card box container
         const cardBox = document.createElement('div');
-        cardBox.className = 'cardBox cardBox-bottompadded';
+        cardBox.className = `cardBox cardBox-bottompadded ${cardFormat === 'button' ? 'emby-button emby-button-foreground raised' : ''}`;
 
         // Card scalable container
         const cardScalable = document.createElement('div');
@@ -1501,17 +1584,17 @@
         cardIcon.setAttribute('aria-hidden', 'true');
         
         // Set icon based on item type
-        if (item.Type === 'Movie') {
+        if (itemType === 'Movie') {
             cardIcon.textContent = 'movie';
-        } else if (item.Type === 'Series') {
+        } else if (itemType === 'Series') {
             cardIcon.textContent = 'tv';
-        } else if (item.Type === 'Episode') {
+        } else if (itemType === 'Episode') {
             cardIcon.textContent = 'play_circle';
-        } else if (item.Type === 'MusicAlbum') {
+        } else if (itemType === 'MusicAlbum') {
             cardIcon.textContent = 'album';
-        } else if (item.Type === 'Audio') {
+        } else if (itemType === 'Audio') {
             cardIcon.textContent = 'music_note';
-        } else if (item.Type === 'Artist') {
+        } else if (itemType === 'Artist') {
             cardIcon.textContent = 'person';
         } else {
             cardIcon.textContent = 'folder';
@@ -1527,9 +1610,16 @@
         // lazy-hidden only when we have no blurhash (grey card until image loads)
         blurhashCanvas.className = 'blurhash-canvas';
 
+        let cardUrl = item.cardUrl || `${ApiClient._serverAddress}/web/#/details?id=${itemId}&serverId=${serverId}`;
+
+        if (!item.cardUrl && itemType === 'Genre') {
+            const parentParam = item.ParentId ? `&parentId=${item.ParentId}` : '';
+            cardUrl = `${ApiClient._serverAddress}/web/#/list.html?genreId=${item.Id}&serverId=${serverId}${parentParam}`;
+        }
+
         // Card image container
         const cardImageContainer = document.createElement('a');
-        cardImageContainer.href = `${ApiClient._serverAddress}/web/#/details?id=${item.Id}&serverId=${serverId}`;
+        cardImageContainer.href = cardUrl;
         cardImageContainer.className = 'cardImageContainer coveredImage cardContent itemAction lazy blurhashed lazy-image-fadein-fast';
         cardImageContainer.setAttribute('data-action', 'link');
         cardImageContainer.setAttribute('aria-label', item.Name || 'Unknown');
@@ -1540,7 +1630,21 @@
              cardImageContainer.style.backgroundImage = `url("${imageUrl}")`;
         } else  */
         let imageUrl = '';
-        if (cardFormat === 'backdrop') {
+
+        const hasCustomImages = item.posterUrl || item.thumbUrl || item.squareUrl || item.imageUrl;
+
+        const imageItem = item.Type === 'Timer' ? item.ProgramInfo : item;
+
+        if (hasCustomImages) {
+            if (cardFormat === 'backdrop' || cardFormat === 'thumb') {
+                imageUrl = `${item.thumbUrl || item.imageUrl || item.posterUrl || item.squareUrl}`;
+            } else if (cardFormat === 'square') {
+                imageUrl = `${item.squareUrl || item.imageUrl || item.posterUrl || item.thumbUrl}`;
+            } else {
+                // portrait/poster or default
+                imageUrl = `${item.posterUrl || item.imageUrl || item.thumbUrl || item.squareUrl}`;
+            }
+        } else if (cardFormat === 'backdrop') {
             if (item.BackdropImageTags[0]) {
                 imageUrl = `${serverAddress}/Items/${item.Id}/Images/Backdrop?${imageParams}&quality=96&tag=${item.BackdropImageTags[0]}`;
             } else if (item.ParentBackdropImageTags && item.ParentBackdropImageTags[0]) {
@@ -1555,6 +1659,8 @@
                 imageUrl = item.BackdropImageTags && item.BackdropImageTags[0] ? `${serverAddress}/Items/${item.Id}/Images/Backdrop?${imageParams}&quality=96&tag=${item.BackdropImageTags[0]}` : item.ImageTags?.Primary ? `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.ImageTags?.Primary}` : '';
             } else if (item.ImageTags?.Primary) {
                 imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.ImageTags?.Primary}`;
+            } else if (item.PrimaryImageTag) { 
+                imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.PrimaryImageTag}`;
             } else if (item.SeriesPrimaryImageTag) {
                 imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.SeriesPrimaryImageTag}`;
             } else if (item.BackdropImageTags && item.BackdropImageTags[0]) {
@@ -1573,20 +1679,48 @@
                 imageUrl = `${serverAddress}/Items/${item.Id}/Images/Thumb?${imageParams}&quality=96&tag=${item.ImageTags?.Thumb}`;
             }
         } else if (cardFormat === 'thumb') {
-
             if (forcedImageType && state.useEpisodeImages && item.Type === 'Episode') {
+                // Explicit override for episodes – always use the episode's primary image
                 imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.ImageTags?.Primary}`;
             } else if (item.ImageTags?.Thumb) {
+                // Prefer explicit thumb on the item
                 imageUrl = `${serverAddress}/Items/${item.Id}/Images/Thumb?${imageParams}&quality=96&tag=${item.ImageTags?.Thumb}`;
             } else if (item.ParentThumbImageTag) {
+                // Fall back to a parent thumb (e.g. series thumb for episodes)
                 imageUrl = `${serverAddress}/Items/${item.SeriesId}/Images/Thumb?${imageParams}&quality=96&tag=${item.ParentThumbImageTag}`;
-            } else if (item.ParentBackdropImageTags && item.ParentBackdropImageTags.length > 0) {
-                imageUrl = `${serverAddress}/Items/${item.ParentBackdropItemId}/Images/Backdrop?${imageParams}&quality=96&tag=${item.ParentBackdropImageTags[0]}`;
-            } else if (item.SeriesPrimaryImageTag) {
-                imageUrl = `${serverAddress}/Items/${item.SeriesId}/Images/Primary?${imageParams}&quality=96&tag=${item.SeriesPrimaryImageTag}`;
-            } else if (item.ImageTags?.Primary) {
-                imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.ImageTags.Primary}`;
+            } else {
+                // No item or parent thumb – decide between primary vs backdrop based on primary orientation
+                const primaryAspect = typeof item.PrimaryImageAspectRatio === 'number' ? item.PrimaryImageAspectRatio : null;
+                const hasPrimary = !!item.ImageTags?.Primary;
+                const primaryLooksLikeThumb = hasPrimary && primaryAspect !== null && primaryAspect >= 1.5;
+
+                if (primaryLooksLikeThumb) {
+                    // Primary is a wide (e.g. 16:9) thumbnail – use it directly
+                    imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.ImageTags.Primary}`;
+                } else if (item.BackdropImageTags && item.BackdropImageTags.length > 0) {
+                    // Primary looks like a poster – prefer the item's backdrop
+                    imageUrl = `${serverAddress}/Items/${item.Id}/Images/Backdrop?${imageParams}&quality=96&tag=${item.BackdropImageTags[0]}`;
+                } else if (item.ParentBackdropImageTags && item.ParentBackdropImageTags.length > 0) {
+                    // Fall back to a parent backdrop if the item has none
+                    imageUrl = `${serverAddress}/Items/${item.ParentBackdropItemId}/Images/Backdrop?${imageParams}&quality=96&tag=${item.ParentBackdropImageTags[0]}`;
+                } else if (hasPrimary) {
+                    // No usable backdrop – final fallback to the item's primary (likely poster)
+                    imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.ImageTags.Primary}`;
+                } else if (item.SeriesPrimaryImageTag) {
+                    // As an absolute last resort, try the series primary
+                    imageUrl = `${serverAddress}/Items/${item.SeriesId}/Images/Primary?${imageParams}&quality=96&tag=${item.SeriesPrimaryImageTag}`;
+                }
             }
+        } else if (cardFormat === 'logo' && (item.ImageTags?.Logo || item.ParentLogoImageTag)) {
+            const logoTag = item.ImageTags?.Logo || item.ParentLogoImageTag;
+            const itemId = item.ImageTags?.Logo ? item.Id : item.ParentLogoItemId;
+            imageUrl = `${serverAddress}/Items/${itemId}/Images/Logo?${imageParams}&quality=96&tag=${logoTag}`;
+        } else if (cardFormat === 'clear art' && item.ImageTags?.Art) {
+            imageUrl = `${serverAddress}/Items/${item.Id}/Images/Art?${imageParams}&quality=96&tag=${item.ImageTags.Art}`;
+        } else if (cardFormat === 'banner' && item.ImageTags?.Banner) {
+            imageUrl = `${serverAddress}/Items/${item.Id}/Images/Banner?${imageParams}&quality=96&tag=${item.ImageTags.Banner}`;
+        } else if (cardFormat === 'disc' && item.ImageTags?.Disc) {
+            imageUrl = `${serverAddress}/Items/${item.Id}/Images/Disc?${imageParams}&quality=96&tag=${item.ImageTags.Disc}`;
         } else if (item.ImageTags?.Primary) {
             if (item.IsJellyseerr) {
                 // Jellyseerr items use external image URLs
@@ -1636,8 +1770,8 @@
             cardImageContainer.appendChild(iconSpan);
         }
 
-        const blurhashStr = getBlurhashForCard(item, cardFormat, forcedImageType);
-        if (!blurhashStr) {
+        const blurhashStr = !item.imageUrl ? getBlurhashForCard(item, cardFormat, forcedImageType) : null;
+        if (!blurhashStr || cardFormat === 'logo' || cardFormat === 'clear art' || cardFormat === 'disc') {
             blurhashCanvas.classList.add('lazy-hidden');
         } else {
             // Draw blurhash immediately so placeholder is visible ASAP (canvas is behind cardImageContainer)
@@ -1658,43 +1792,76 @@
         }
         //countIndicator indicator
 
-        
-        const cardIndicators = document.createElement('div');
-        cardIndicators.className = 'cardIndicators';
+        if (!isCustomCard) {
+            const cardIndicators = document.createElement('div');
+            cardIndicators.className = 'cardIndicators';
 
-        if (item.UserData?.Played) {
-            const playedIndicator = document.createElement('div');
-            playedIndicator.className = 'playedIndicator indicator';
-            const playedIndicatorIcon = document.createElement('span');
-            playedIndicatorIcon.className = 'material-icons indicatorIcon check';
-            playedIndicatorIcon.setAttribute('aria-hidden', 'true');
-            playedIndicator.appendChild(playedIndicatorIcon);
-            cardIndicators.appendChild(playedIndicator);
-        }
+            if (item.UserData?.Played) {
+                const playedIndicator = document.createElement('div');
+                playedIndicator.className = 'playedIndicator indicator';
+                const playedIndicatorIcon = document.createElement('span');
+                playedIndicatorIcon.className = 'material-icons indicatorIcon check';
+                playedIndicatorIcon.setAttribute('aria-hidden', 'true');
+                playedIndicator.appendChild(playedIndicatorIcon);
+                cardIndicators.appendChild(playedIndicator);
+            }
 
-        if (item.UserData?.UnplayedItemCount && item.UserData?.UnplayedItemCount > 0) {
-            const unplayedIndicator = document.createElement('div');
-            unplayedIndicator.className = 'countIndicator indicator';
-            unplayedIndicator.textContent = item.UserData?.UnplayedItemCount;
-            cardIndicators.appendChild(unplayedIndicator);
-        }
+            if (item.UserData?.UnplayedItemCount && item.UserData?.UnplayedItemCount > 0) {
+                const unplayedIndicator = document.createElement('div');
+                unplayedIndicator.className = 'countIndicator indicator';
+                unplayedIndicator.textContent = item.UserData?.UnplayedItemCount;
+                cardIndicators.appendChild(unplayedIndicator);
+            }
 
-        if (cardIndicators.childElementCount > 0) {
-            cardImageContainer.appendChild(cardIndicators);
-        }
+            if (item.LocationType === 'Virtual') {
+                const virtualIndicator = document.createElement('div');
+                virtualIndicator.className = 'missingIndicator';
+                virtualIndicator.textContent = 'Missing';
+                cardIndicators.appendChild(virtualIndicator);
+            }
 
-        if (item.UserData?.PlayedPercentage && item.UserData?.PlayedPercentage > 0) {
-            const innerCardFooter = document.createElement('div');
-            innerCardFooter.className = 'innerCardFooter fullInnerCardFooter innerCardFooterClear';
-            cardBox.appendChild(innerCardFooter);
-            const itemProgressBar = document.createElement('div');
-            itemProgressBar.className = 'itemProgressBar';
-            const itemProgressBarForeground = document.createElement('div');
-            itemProgressBarForeground.className = 'itemProgressBarForeground';
-            itemProgressBarForeground.style.width = `${item.UserData?.PlayedPercentage}%`;
-            itemProgressBar.appendChild(itemProgressBarForeground);
-            innerCardFooter.appendChild(itemProgressBar);
-            cardImageContainer.appendChild(innerCardFooter);
+            if (parentItem && parentItem.Type === 'Timer') {
+                const timerIndicator = document.createElement('span');
+                timerIndicator.className = 'material-icons timerIndicator indicatorIcon fiber_manual_record';
+                timerIndicator.setAttribute('aria-hidden', 'true');
+                cardIndicators.appendChild(timerIndicator);
+            }
+
+            if (cardIndicators.childElementCount > 0) {
+                cardImageContainer.appendChild(cardIndicators);
+            }
+
+            if (item.UserData?.PlayedPercentage && item.UserData?.PlayedPercentage > 0) {
+                const innerCardFooter = document.createElement('div');
+                innerCardFooter.className = 'innerCardFooter fullInnerCardFooter innerCardFooterClear';
+                cardBox.appendChild(innerCardFooter);
+                const itemProgressBar = document.createElement('div');
+                itemProgressBar.className = 'itemProgressBar';
+                const itemProgressBarForeground = document.createElement('div');
+                itemProgressBarForeground.className = 'itemProgressBarForeground';
+                itemProgressBarForeground.style.width = `${item.UserData?.PlayedPercentage}%`;
+                itemProgressBar.appendChild(itemProgressBarForeground);
+                innerCardFooter.appendChild(itemProgressBar);
+                cardImageContainer.appendChild(innerCardFooter);
+            }
+
+            if (item.ChannelId && item.StartDate && item.RunTimeTicks && (Date.now() >= new Date(item.StartDate).getTime() && Date.now() <= new Date(item.EndDate).getTime())) {
+                // Get current progress based on current time and StartDate + EndDate
+                const progress = (new Date().getTime() - new Date(item.StartDate).getTime()) / (new Date(item.EndDate).getTime() - new Date(item.StartDate).getTime());
+                const progressPercentage = progress * 100;
+
+                const innerCardFooter = document.createElement('div');
+                innerCardFooter.className = 'innerCardFooter fullInnerCardFooter innerCardFooterClear';
+                cardBox.appendChild(innerCardFooter);
+                const itemProgressBar = document.createElement('div');
+                itemProgressBar.className = 'itemProgressBar';
+                const itemProgressBarForeground = document.createElement('div');
+                itemProgressBarForeground.className = 'itemProgressBarForeground';
+                itemProgressBarForeground.style.width = `${progressPercentage}%`;
+                itemProgressBar.appendChild(itemProgressBarForeground);
+                innerCardFooter.appendChild(itemProgressBar);
+                cardImageContainer.appendChild(innerCardFooter);
+            }
         }
 
         // Card overlay container
@@ -1702,91 +1869,116 @@
         cardOverlayContainer.className = 'cardOverlayContainer itemAction';
         cardOverlayContainer.setAttribute('data-action', 'link');
 
-        // Overlay link
+        // Overlay link (first so it sits under buttons)
         const overlayLink = document.createElement('a');
-        overlayLink.href = `${ApiClient._serverAddress}/web/#/details?id=${item.Id}&serverId=${serverId}`;
+        overlayLink.href = cardUrl;
         overlayLink.className = 'cardImageContainer';
-
-        // Play button
-        const playButton = document.createElement('button');
-        playButton.setAttribute('is', 'paper-icon-button-light');
-        playButton.className = 'cardOverlayButton cardOverlayButton-hover itemAction paper-icon-button-light cardOverlayFab-primary';
-        playButton.setAttribute('data-action', 'resume');
-        
-        const playIcon = document.createElement('span');
-        playIcon.className = 'material-icons cardOverlayButtonIcon cardOverlayButtonIcon-hover play_arrow';
-        playIcon.setAttribute('aria-hidden', 'true');
-        playButton.appendChild(playIcon);
-
-        // Button container for additional overlay buttons (watchlist, etc.)
-        const buttonContainer = document.createElement('div');
-        buttonContainer.className = 'cardOverlayButton-br flex';
-
-        // Watched button
-        const watchedButton = document.createElement('button');
-        watchedButton.setAttribute('is', 'emby-playstatebutton');
-        watchedButton.type = 'button';
-        watchedButton.setAttribute('data-action', 'none');
-        watchedButton.className = 'cardOverlayButton cardOverlayButton-hover itemAction paper-icon-button-light emby-button';
-        watchedButton.setAttribute('data-id', item.Id);
-        watchedButton.setAttribute('data-serverid', serverId);
-        watchedButton.setAttribute('data-itemtype', item.Type);
-        watchedButton.setAttribute('data-played', item.UserData?.Played || 'false');
-        watchedButton.title = 'Mark played';
-        
-        const watchedIcon = document.createElement('span');
-        watchedIcon.className = 'material-icons cardOverlayButtonIcon cardOverlayButtonIcon-hover check playstatebutton-icon-unplayed';
-        watchedIcon.setAttribute('aria-hidden', 'true');
-        watchedButton.appendChild(watchedIcon);
-        buttonContainer.appendChild(watchedButton);
-
-        // Favorite button
-        const favoriteButton = document.createElement('button');
-        favoriteButton.setAttribute('is', 'emby-ratingbutton');
-        favoriteButton.type = 'button';
-        favoriteButton.setAttribute('data-action', 'none');
-        favoriteButton.className = 'cardOverlayButton cardOverlayButton-hover itemAction paper-icon-button-light emby-button';
-        favoriteButton.setAttribute('data-id', item.Id);
-        favoriteButton.setAttribute('data-serverid', serverId);
-        favoriteButton.setAttribute('data-itemtype', item.Type);
-        favoriteButton.setAttribute('data-likes', '');
-        favoriteButton.setAttribute('data-isfavorite', item.UserData?.IsFavorite || 'false');
-        favoriteButton.title = 'Add to favorites';
-        
-        const favoriteIcon = document.createElement('span');
-        favoriteIcon.className = 'material-icons cardOverlayButtonIcon cardOverlayButtonIcon-hover favorite';
-        favoriteIcon.setAttribute('aria-hidden', 'true');
-        favoriteButton.appendChild(favoriteIcon);
-        buttonContainer.appendChild(favoriteButton);
-
-        const moreButton = document.createElement('button');
-        moreButton.setAttribute('is', 'paper-icon-button-light');
-        moreButton.className = 'cardOverlayButton cardOverlayButton-hover itemAction paper-icon-button-light';
-        moreButton.setAttribute('data-action', 'menu');
-        moreButton.title = 'More';
-        const moreIcon = document.createElement('span');
-        moreIcon.className = 'material-icons cardOverlayButtonIcon cardOverlayButtonIcon-hover more_vert';
-        moreIcon.setAttribute('aria-hidden', 'true');
-        moreButton.appendChild(moreIcon);
-
-        buttonContainer.appendChild(moreButton);
-
-
-        // Assemble overlay
         cardOverlayContainer.appendChild(overlayLink);
-        cardOverlayContainer.appendChild(playButton);
-        cardOverlayContainer.appendChild(buttonContainer);
+
+        if (!isCustomCard) {
+            // Play button
+            const playButton = document.createElement('button');
+            playButton.setAttribute('is', 'paper-icon-button-light');
+            playButton.className = 'cardOverlayButton cardOverlayButton-hover itemAction paper-icon-button-light cardOverlayFab-primary';
+            playButton.setAttribute('data-action', 'resume');
+
+            const playIcon = document.createElement('span');
+            playIcon.className = 'material-icons cardOverlayButtonIcon cardOverlayButtonIcon-hover play_arrow';
+            playIcon.setAttribute('aria-hidden', 'true');
+            playButton.appendChild(playIcon);
+
+            // Button container for additional overlay buttons (watchlist, etc.)
+            const buttonContainer = document.createElement('div');
+            buttonContainer.className = 'cardOverlayButton-br flex';
+
+            // Watched button
+            const watchedButton = document.createElement('button');
+            watchedButton.setAttribute('is', 'emby-playstatebutton');
+            watchedButton.type = 'button';
+            watchedButton.setAttribute('data-action', 'none');
+            watchedButton.className = 'cardOverlayButton cardOverlayButton-hover itemAction paper-icon-button-light emby-button';
+            watchedButton.setAttribute('data-id', itemId);
+            watchedButton.setAttribute('data-serverid', serverId);
+            watchedButton.setAttribute('data-itemtype', itemType);
+            watchedButton.setAttribute('data-played', item.UserData?.Played || 'false');
+            watchedButton.title = 'Mark played';
+
+            const watchedIcon = document.createElement('span');
+            watchedIcon.className = 'material-icons cardOverlayButtonIcon cardOverlayButtonIcon-hover check playstatebutton-icon-unplayed';
+            watchedIcon.setAttribute('aria-hidden', 'true');
+            watchedButton.appendChild(watchedIcon);
+            buttonContainer.appendChild(watchedButton);
+
+            // Favorite button
+            const favoriteButton = document.createElement('button');
+            favoriteButton.setAttribute('is', 'emby-ratingbutton');
+            favoriteButton.type = 'button';
+            favoriteButton.setAttribute('data-action', 'none');
+            favoriteButton.className = 'cardOverlayButton cardOverlayButton-hover itemAction paper-icon-button-light emby-button';
+            favoriteButton.setAttribute('data-id', itemId);
+            favoriteButton.setAttribute('data-serverid', serverId);
+            favoriteButton.setAttribute('data-itemtype', itemType);
+            favoriteButton.setAttribute('data-likes', '');
+            favoriteButton.setAttribute('data-isfavorite', item.UserData?.IsFavorite || 'false');
+            favoriteButton.title = 'Add to favorites';
+
+            const favoriteIcon = document.createElement('span');
+            favoriteIcon.className = 'material-icons cardOverlayButtonIcon cardOverlayButtonIcon-hover favorite';
+            favoriteIcon.setAttribute('aria-hidden', 'true');
+            favoriteButton.appendChild(favoriteIcon);
+            buttonContainer.appendChild(favoriteButton);
+
+            const moreButton = document.createElement('button');
+            moreButton.setAttribute('is', 'paper-icon-button-light');
+            moreButton.className = 'cardOverlayButton cardOverlayButton-hover itemAction paper-icon-button-light';
+            moreButton.setAttribute('data-action', 'menu');
+            moreButton.title = 'More';
+            const moreIcon = document.createElement('span');
+            moreIcon.className = 'material-icons cardOverlayButtonIcon cardOverlayButtonIcon-hover more_vert';
+            moreIcon.setAttribute('aria-hidden', 'true');
+            moreButton.appendChild(moreIcon);
+
+            buttonContainer.appendChild(moreButton);
+
+            cardOverlayContainer.appendChild(playButton);
+            cardOverlayContainer.appendChild(buttonContainer);
+        }
 
         // Card text container - different structure for episodes
+        const cardTextFragment = document.createDocumentFragment();
+
         const cardTextContainer = document.createElement('div');
         cardTextContainer.className = 'cardText cardTextCentered cardText-first';
 
-        if (item.Type === 'Episode') {
+        if (parentItem && parentItem.Type === 'Timer') {
+            const cardFooter = document.createElement('div');
+            cardFooter.className = 'cardFooter cardFooter-withlogo';
+            const cardFooterLogo = document.createElement('div');
+            cardFooterLogo.className = 'lazy cardFooterLogo lazy-image-fadein-fast';
+            const imageUrl = `${serverAddress}/Items/${parentItem.ChannelId}/Images/Primary?height=40&tag=${parentItem.ChannelPrimaryImageTag}&quality=90`;
+            cardFooterLogo.style.backgroundImage = `url(${imageUrl})`;
+            cardFooter.appendChild(cardFooterLogo);
+
+            const cardFooterText = document.createElement('div');
+            cardFooterText.className = 'cardText cardText-first';
+            cardFooterText.textContent = item.Name || 'Unknown';
+            cardFooter.appendChild(cardFooterText);
+
+            const cardFooterSecondaryText = document.createElement('div');
+            cardFooterSecondaryText.className = 'cardText cardText-secondary';
+            // format the start and end time to 12:21 AM - 2:39 AM
+            const startTime = new Date(parentItem.StartDate).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+            const endTime = new Date(parentItem.EndDate).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+            cardFooterSecondaryText.textContent = startTime + ' - ' + endTime;
+            cardFooter.appendChild(cardFooterSecondaryText);
+
+            cardTextFragment.appendChild(cardFooter);
+        } else if (itemType === 'Episode') {
             // Episodes: Series name as primary, episode title as secondary
             const seriesLink = document.createElement('a');
-            seriesLink.href = `${ApiClient._serverAddress}/web/#/details?id=${item.SeriesId || item.Id}&serverId=${serverId}`;
+            seriesLink.href = `${ApiClient._serverAddress}/web/#/details?id=${item.SeriesId || itemId}&serverId=${serverId}`;
             seriesLink.className = 'itemAction textActionButton';
-            seriesLink.setAttribute('data-id', item.SeriesId || item.Id);
+            if (!isCustomCard) seriesLink.setAttribute('data-id', item.SeriesId || itemId);
             seriesLink.setAttribute('data-serverid', serverId);
             seriesLink.setAttribute('data-type', 'Series');
             seriesLink.setAttribute('data-mediatype', 'undefined');
@@ -1799,71 +1991,16 @@
             const seriesBdi = document.createElement('bdi');
             seriesBdi.appendChild(seriesLink);
             cardTextContainer.appendChild(seriesBdi);
+            cardTextFragment.appendChild(cardTextContainer);
 
             // Episode title as secondary
             const secondaryText = document.createElement('div');
             secondaryText.className = 'cardText cardTextCentered cardText-secondary';
             const episodeLink = document.createElement('a');
-            episodeLink.href = `${ApiClient._serverAddress}/web/#/details?id=${item.Id}&serverId=${serverId}`;
-            episodeLink.className = 'itemAction textActionButton';
-            episodeLink.setAttribute('data-id', item.Id);
-            episodeLink.setAttribute('data-serverid', serverId);
-            episodeLink.setAttribute('data-type', 'Episode');
-            episodeLink.setAttribute('data-mediatype', 'undefined');
-            episodeLink.setAttribute('data-channelid', 'undefined');
-            episodeLink.setAttribute('data-isfolder', 'false');
-            episodeLink.setAttribute('data-action', 'link');
-            episodeLink.title = item.Name || 'Unknown Episode';
-            episodeLink.textContent = item.Name || 'Unknown Episode';
-
-            const episodeBdi = document.createElement('bdi');
-            episodeBdi.appendChild(episodeLink);
-            secondaryText.appendChild(episodeBdi);
-        } else {
-            // Default: Item name as primary, year as secondary
-            const titleLink = document.createElement('a');
-            titleLink.href = `${ApiClient._serverAddress}/web/#/details?id=${item.Id}&serverId=${serverId}`;
-            titleLink.className = 'itemAction textActionButton';
-            titleLink.setAttribute('data-id', item.Id);
-            titleLink.setAttribute('data-serverid', serverId);
-            titleLink.setAttribute('data-type', item.Type);
-            titleLink.setAttribute('data-mediatype', 'undefined');
-            titleLink.setAttribute('data-channelid', 'undefined');
-            titleLink.setAttribute('data-isfolder', item.Type === 'MusicAlbum' || item.Type === 'Artist' || item.Type === 'MusicArtist' ? 'true' : 'false');
-            titleLink.setAttribute('data-action', 'link');
-            titleLink.title = item.Name || 'Unknown';
-            titleLink.textContent = item.Name || 'Unknown';
-
-            const titleBdi = document.createElement('bdi');
-            titleBdi.appendChild(titleLink);
-            cardTextContainer.appendChild(titleBdi);
-
-            // Secondary text (year)
-            const secondaryText = document.createElement('div');
-            secondaryText.className = 'cardText cardTextCentered cardText-secondary';
-            const yearBdi = document.createElement('bdi');
-            yearBdi.textContent = item.CustomFooterText || item.ProductionYear || item.PremiereDate?.substring(0, 4) || '';
-            secondaryText.appendChild(yearBdi);
-        }
-
-        // Assemble card (blurhash already drawn above when blurhashStr was set)
-        cardScalable.appendChild(cardPadder);
-        cardScalable.appendChild(blurhashCanvas);
-        cardScalable.appendChild(cardImageContainer);
-        cardScalable.appendChild(cardOverlayContainer);
-
-        cardBox.appendChild(cardScalable);
-        cardBox.appendChild(cardTextContainer);
-        
-        // Add secondary text after primary text
-        if (item.Type === 'Episode') {
-            const secondaryText = document.createElement('div');
-            secondaryText.className = 'cardText cardTextCentered cardText-secondary';
-            const episodeLink = document.createElement('a');
             const episodeName = item.IndexNumber && item.ParentIndexNumber ? `S${item.ParentIndexNumber}:E${item.IndexNumber} - ${item.Name}` : item.Name;
-            episodeLink.href = `${ApiClient._serverAddress}/web/#/details?id=${item.Id}&serverId=${serverId}`;
+            episodeLink.href = `${ApiClient._serverAddress}/web/#/details?id=${itemId}&serverId=${serverId}`;
             episodeLink.className = 'itemAction textActionButton';
-            episodeLink.setAttribute('data-id', item.Id);
+            if (!isCustomCard) episodeLink.setAttribute('data-id', itemId);
             episodeLink.setAttribute('data-serverid', serverId);
             episodeLink.setAttribute('data-type', 'Episode');
             episodeLink.setAttribute('data-mediatype', 'undefined');
@@ -1876,7 +2013,7 @@
             const episodeBdi = document.createElement('bdi');
             episodeBdi.appendChild(episodeLink);
             secondaryText.appendChild(episodeBdi);
-            cardBox.appendChild(secondaryText);
+            cardTextFragment.appendChild(secondaryText);
             
             // Add custom footer text if provided (e.g., air date)
             if (customFooterText) {
@@ -1885,16 +2022,55 @@
                 const footerBdi = document.createElement('bdi');
                 footerBdi.textContent = customFooterText;
                 footerText.appendChild(footerBdi);
-                cardBox.appendChild(footerText);
+                cardTextFragment.appendChild(footerText);
             }
         } else {
+            // Default: Item name as primary, year as secondary
+            const titleLink = document.createElement('a');
+            titleLink.href = cardUrl;
+            titleLink.className = 'itemAction textActionButton';
+            if (!isCustomCard) titleLink.setAttribute('data-id', itemId);
+            titleLink.setAttribute('data-serverid', serverId);
+            titleLink.setAttribute('data-type', itemType);
+            titleLink.setAttribute('data-mediatype', 'undefined');
+            titleLink.setAttribute('data-channelid', 'undefined');
+            titleLink.setAttribute('data-isfolder', itemType === 'MusicAlbum' || itemType === 'Artist' || itemType === 'MusicArtist' ? 'true' : 'false');
+            titleLink.setAttribute('data-action', 'link');
+            titleLink.title = item.Name || 'Unknown';
+            titleLink.textContent = item.Name || 'Unknown';
+
+            const titleBdi = document.createElement('bdi');
+            titleBdi.appendChild(titleLink);
+            cardTextContainer.appendChild(titleBdi);
+            cardTextFragment.appendChild(cardTextContainer);
+
+            // Secondary text (year)
+            const secondaryTextContent = item.ProductionYear || item.PremiereDate?.substring(0, 4) || '';
             const secondaryText = document.createElement('div');
             secondaryText.className = 'cardText cardTextCentered cardText-secondary';
             const yearBdi = document.createElement('bdi');
-            yearBdi.textContent = item.CustomFooterText || item.ProductionYear || item.PremiereDate?.substring(0, 4) || '';
+            yearBdi.textContent = secondaryTextContent || item.CustomFooterText;
             secondaryText.appendChild(yearBdi);
-            cardBox.appendChild(secondaryText);
+            cardTextFragment.appendChild(secondaryText);
+
+            if (secondaryTextContent && item.CustomFooterText) {
+                const footerText = document.createElement('div');
+                footerText.className = 'cardText cardTextCentered cardText-secondary';
+                const footerBdi = document.createElement('bdi');
+                footerBdi.textContent = item.CustomFooterText;
+                footerText.appendChild(footerBdi);
+                cardTextFragment.appendChild(footerText);
+            }
         }
+
+        // Assemble card (blurhash already drawn above when blurhashStr was set)
+        cardScalable.appendChild(cardPadder);
+        cardScalable.appendChild(blurhashCanvas);
+        cardScalable.appendChild(cardImageContainer);
+        cardScalable.appendChild(cardOverlayContainer);
+
+        cardBox.appendChild(cardScalable);
+        cardBox.appendChild(cardTextFragment);
         
         card.appendChild(cardBox);
 
@@ -1920,30 +2096,56 @@
         }
 
         const {
-            autoPlay = true,    
+            autoPlay = true,
             interval = 10000,
             showSlideState = true,
             showDots = true,
             showNavButtons = true,
             showClearArt = false,
             panAnimation = true,
-            fullScreen = false,
+            spotlightLayout,
             spotlightSize,
-            dualBackdrops = true,
-            viewMoreUrl = null,
-            pauseOnHover = !fullScreen  // Default: don't pause on hover in fullscreen (continue cycling)
+            tileCount: tileCountOpt,
+            cycleBackdrops = false,
+            cycleBackdropsTime = 10000,
+            entranceAnimationFirst = 'fadeIn',
+            entranceAnimationSecond = 'fadeIn',
+            entranceAnimationThird = 'fadeIn',
+            slideAnimationFirst = 'kenBurnsZoomIn',
+            slideAnimationSecond = 'kenBurnsZoomIn',
+            slideAnimationThird = 'kenBurnsZoomIn',
+            viewMoreUrl = null
         } = options;
-        const layout = fullScreen ? 'Borderless' : 'Border';
+        // Backward compat: derive layout/size from fullScreen if new keys missing
+        const fullScreen = options.fullScreen === true;
+        const layout = spotlightLayout ?? (fullScreen ? 'Borderless' : 'Border');
         const size = spotlightSize ?? (fullScreen ? 'full' : 'normal');
-        
+        let tileCount = tileCountOpt;
+        if (tileCount == null || tileCount < 1 || tileCount > 3) {
+            tileCount = size === 'full' ? 1 : size === 'large' ? 2 : 3;
+        }
+        tileCount = Math.max(1, Math.min(3, Math.floor(tileCount)));
         const serverId = ApiClient.serverId();
         const serverAddress = ApiClient.serverAddress();
+        const sectionKey = 'spotlight_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
+        const cycleBackdropMap = new Map();
         let currentIndex = 0;
         let autoPlayTimer = null;
+        let cycleBackdropTimer = null;
+        let advanceDue = false;
         let isPaused = false;
         let isVisible = true; // updated by Intersection Observer; start true so initial startAutoPlay runs
         let currentSlideAnimationComplete = false;
-        
+
+        function shuffleArray(arr) {
+            const a = arr.slice();
+            for (let i = a.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [a[i], a[j]] = [a[j], a[i]];
+            }
+            return a;
+        }
+
         // Create main container
         const container = document.createElement('div');
         container.className = 'spotlight-section padded-left';
@@ -1986,9 +2188,13 @@
                 sectionTitleEl.textContent = title;
             }
 
+            const sectionTitleWrapper = document.createElement('div');
+            sectionTitleWrapper.className = `spotlight-section-title ${viewMoreUrl ? '' : 'spotlight-title-link '}headerTabs sectionTabs`;
+            sectionTitleWrapper.appendChild(sectionTitleEl);
+
             const sectionTitleContainer = document.createElement('div');
-            sectionTitleContainer.className = `spotlight-section-title ${viewMoreUrl ? '' : 'spotlight-title-link'} headerTabs sectionTabs`;
-            sectionTitleContainer.appendChild(sectionTitleEl);
+            sectionTitleContainer.className = 'spotlight-section-title-container';
+            sectionTitleContainer.appendChild(sectionTitleWrapper);
             
             bannerContainer.appendChild(sectionTitleContainer);
         }
@@ -1996,8 +2202,13 @@
         // Create items container (for fade transitions)
         const itemsContainer = document.createElement('div');
         itemsContainer.className = 'spotlight-items-container';
-        
-        const isMobileLayout = document.documentElement.classList.contains('mobile-layout');
+
+        function applyAnimationToImg(img, entranceName, slideName) {
+            img.style.setProperty('--spotlight-entrance-animation', entranceName);
+            img.style.setProperty('--spotlight-slide-animation', slideName);
+            img.setAttribute('data-entrance-animation', entranceName);
+            img.setAttribute('data-slide-animation', slideName);
+        }
 
         // Sliding window: render current + 4 prev + 4 next (9 slides). Update DOM as user navigates.
         let currentWindowIndices = getSpotlightWindowIndices(0, items.length);
@@ -2010,7 +2221,6 @@
             itemDiv.setAttribute('data-id', item.Id);
             itemDiv.setAttribute('data-index', String(index));
             itemDiv.setAttribute('data-item-type', itemType);
-            itemDiv.style.opacity = eagerLoadImages ? '1' : '0';
 
             let imageUrl = '';
 
@@ -2038,75 +2248,102 @@
                 backdropWidth = 640;
             }
 
-            // On non-mobile layouts, if we have more than one backdrop, render two side-by-side
-            if (!isMobileLayout && backdropSources.length > 1 && dualBackdrops) {                
-                const firstBackdropIndex = Math.floor(Math.random() * backdropSources.length);
-                let secondBackdropIndex = Math.floor(Math.random() * backdropSources.length);
+            const buildBackdropUrl = (src, idx) =>
+                `${serverAddress}/Items/${src.itemId}/Images/Backdrop/${idx}?fillWidth=${backdropWidth}&quality=96&tag=${src.tag}`;
 
-                if (secondBackdropIndex === firstBackdropIndex) {
-                    // Get another random backdrop index that is not the same as the first one
-                    secondBackdropIndex = (secondBackdropIndex + 1) % backdropSources.length;
-                }
+            /* Cap layers by available backdrops so we never build dual/triple with undefined sources. */
+            const effectiveTileCount = Math.min(tileCount, Math.max(1, backdropSources.length));
 
-                // Pick two distinct random backdrops
-                const first = backdropSources[firstBackdropIndex];
-                const second = backdropSources[secondBackdropIndex];
-
-                const firstUrl = `${serverAddress}/Items/${first.itemId}/Images/Backdrop/${firstBackdropIndex}?fillWidth=${backdropWidth}&quality=96&tag=${first.tag}`;
-                const secondUrl = `${serverAddress}/Items/${second.itemId}/Images/Backdrop/${secondBackdropIndex}?fillWidth=${backdropWidth}&quality=96&tag=${second.tag}`;
-
+            if (effectiveTileCount >= 2 && backdropSources.length >= 2) {
+                const indices = shuffleArray(backdropSources.map((_, i) => i));
+                const pick = (i) => backdropSources[indices[i]];
                 const dualBackgroundContainer = document.createElement('div');
                 dualBackgroundContainer.className = 'spotlight-background-dual';
 
                 const leftLayer = document.createElement('div');
                 leftLayer.className = 'spotlight-background-layer spotlight-background-layer-left';
                 const leftImg = document.createElement('img');
-                leftImg.setAttribute('data-src', firstUrl);
+                const leftUrl = buildBackdropUrl(pick(0), indices[0]);
+                leftImg.setAttribute('data-src', leftUrl);
                 leftImg.alt = '';
                 leftImg.draggable = false;
+                applyAnimationToImg(leftImg, entranceAnimationFirst, slideAnimationFirst);
                 if (eagerLoadImages) {
-                    leftImg.src = firstUrl;
+                    leftImg.src = leftUrl;
                     leftImg.loading = 'eager';
                 }
                 leftLayer.appendChild(leftImg);
+                dualBackgroundContainer.appendChild(leftLayer);
+
+                if (effectiveTileCount >= 3) {
+                    const centerLayer = document.createElement('div');
+                    centerLayer.className = 'spotlight-background-layer spotlight-background-layer-center';
+                    const centerImg = document.createElement('img');
+                    const centerUrl = buildBackdropUrl(pick(1), indices[1]);
+                    centerImg.setAttribute('data-src', centerUrl);
+                    centerImg.alt = '';
+                    centerImg.draggable = false;
+                    applyAnimationToImg(centerImg, entranceAnimationSecond, slideAnimationSecond);
+                    if (eagerLoadImages) {
+                        centerImg.src = centerUrl;
+                        centerImg.loading = 'eager';
+                    }
+                    centerLayer.appendChild(centerImg);
+                    dualBackgroundContainer.appendChild(centerLayer);
+                }
 
                 const rightLayer = document.createElement('div');
                 rightLayer.className = 'spotlight-background-layer spotlight-background-layer-right';
                 const rightImg = document.createElement('img');
-                rightImg.setAttribute('data-src', secondUrl);
+                const rightIdx = effectiveTileCount >= 3 ? 2 : 1;
+                const rightUrl = buildBackdropUrl(pick(rightIdx), indices[rightIdx]);
+                rightImg.setAttribute('data-src', rightUrl);
                 rightImg.alt = '';
                 rightImg.draggable = false;
+                applyAnimationToImg(rightImg, effectiveTileCount >= 3 ? entranceAnimationThird : entranceAnimationSecond, effectiveTileCount >= 3 ? slideAnimationThird : slideAnimationSecond);
                 if (eagerLoadImages) {
-                    rightImg.src = secondUrl;
+                    rightImg.src = rightUrl;
                     rightImg.loading = 'eager';
                 }
                 rightLayer.appendChild(rightImg);
-
-                dualBackgroundContainer.appendChild(leftLayer);
                 dualBackgroundContainer.appendChild(rightLayer);
                 itemDiv.appendChild(dualBackgroundContainer);
             } else {
-                // Fallback: single backdrop or primary image, including mobile layouts
-                if (backdropSources.length) {
+                let singleUrl = '';
+                if (cycleBackdrops && tileCount === 1 && backdropSources.length > 0) {
+                    const shuffled = shuffleArray(backdropSources.map((s, i) => ({ src: s, idx: i })));
+                    const urls = shuffled.map(({ src, idx }) => `${serverAddress}/Items/${src.itemId}/Images/Backdrop/${idx}?fillWidth=${backdropWidth}&quality=96&tag=${src.tag}`);
+                    const mapKey = sectionKey + '_' + item.Id;
+                    cycleBackdropMap.set(mapKey, { shuffledUrls: urls, currentIndex: 0 });
+                    singleUrl = urls[0];
+                } else if (backdropSources.length) {
                     const first = backdropSources[0];
-                    imageUrl = `${serverAddress}/Items/${first.itemId}/Images/Backdrop?fillWidth=${backdropWidth}&quality=96&tag=${first.tag}`;
+                    singleUrl = `${serverAddress}/Items/${first.itemId}/Images/Backdrop?fillWidth=${backdropWidth}&quality=96&tag=${first.tag}`;
                 } else if (item.ImageTags?.Primary) {
-                    imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?fillWidth=${backdropWidth}&quality=96&tag=${item.ImageTags.Primary}`;
+                    singleUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?fillWidth=${backdropWidth}&quality=96&tag=${item.ImageTags.Primary}`;
                 }
-
-                if (imageUrl) {
-                    // Use img in a layer (like dual) so pan animation can be applied
+                if (singleUrl) {
                     const singleBackdropContainer = document.createElement('div');
-                    singleBackdropContainer.className = 'spotlight-background-single';
+                    singleBackdropContainer.className = 'spotlight-background-single' + (cycleBackdrops && tileCount === 1 && backdropSources.length > 0 ? ' cycle-backdrops' : '');
                     const singleImg = document.createElement('img');
-                    singleImg.setAttribute('data-src', imageUrl);
+                    singleImg.setAttribute('data-src', singleUrl);
                     singleImg.alt = '';
                     singleImg.draggable = false;
+                    applyAnimationToImg(singleImg, entranceAnimationFirst, slideAnimationFirst);
                     if (eagerLoadImages) {
-                        singleImg.src = imageUrl;
+                        singleImg.src = singleUrl;
                         singleImg.loading = 'eager';
                     }
                     singleBackdropContainer.appendChild(singleImg);
+                    if (cycleBackdrops && tileCount === 1 && backdropSources.length > 0) {
+                        const singleImgNext = document.createElement('img');
+                        singleImgNext.setAttribute('data-src', singleUrl);
+                        singleImgNext.alt = '';
+                        singleImgNext.draggable = false;
+                        singleImgNext.style.opacity = '0';
+                        applyAnimationToImg(singleImgNext, entranceAnimationFirst, slideAnimationFirst);
+                        singleBackdropContainer.appendChild(singleImgNext);
+                    }
                     itemDiv.appendChild(singleBackdropContainer);
                 }
             }
@@ -2131,7 +2368,7 @@
                 titleEl.alt = item.Name || 'Unknown';
             } else {
                 // Use text title as fallback
-                titleEl = document.createElement('h3');
+                titleEl = document.createElement('div');
                 titleEl.className = 'spotlight-item-title';
                 titleEl.textContent = item.Name || 'Unknown';
             }
@@ -2558,7 +2795,7 @@
             
             // Info button (shows overview on hover)
             const infoButton = document.createElement('button');
-            infoButton.className = 'emby-button button-flat';
+            infoButton.className = 'emby-button button-flat spotlight-info-button';
             const infoIcon = document.createElement('span');
             infoIcon.className = 'material-icons';
             infoIcon.textContent = 'info';
@@ -2676,11 +2913,6 @@
                 itemDiv.appendChild(clearArtEl);
             }
             
-            // Click to navigate (but not on buttons)
-            infoButton.addEventListener('click', (e) => {
-                window.location.href = `${serverAddress}/web/#/details?id=${item.Id}&serverId=${serverId}`;
-            });
-            
             itemsContainer.appendChild(itemDiv);
             return itemDiv;
         }
@@ -2692,10 +2924,42 @@
         
         bannerContainer.appendChild(itemsContainer);
 
+        // Mark the initially visible slide (index 0) as active so only it is shown
+        const firstItemActive = bannerContainer.querySelector('.spotlight-item[data-index="0"]');
+        if (firstItemActive) {
+            firstItemActive.setAttribute('data-active', 'true');
+        }
+
+        // Delegated handler: info button click -> navigate to item details for the current slide
+        bannerContainer.addEventListener('click', (e) => {
+            const infoBtn = e.target.closest('.spotlight-info-button');
+            if (!infoBtn || !bannerContainer.contains(infoBtn)) return;
+
+            e.preventDefault();
+            e.stopPropagation();
+
+            const slide = infoBtn.closest('.spotlight-item');
+            if (!slide) return;
+
+            const itemId = slide.getAttribute('data-id');
+            if (!itemId) return;
+
+            const detailsUrl = `#/details?id=${itemId}&serverId=${serverId}`;
+            if (typeof Dashboard !== 'undefined' && Dashboard && typeof Dashboard.navigate === 'function') {
+                Dashboard.navigate(detailsUrl);
+            } else {
+                const fullDetailsUrl = `${serverAddress}/web/#${detailsUrl}`;
+                window.location.href = fullDetailsUrl;
+            }
+        });
+
         // Apply initial pan animation to first slide (helper also sets up completion tracking)
         if (panAnimation && items.length > 0) {
-            const firstItem = bannerContainer.querySelector('.spotlight-item[data-index="0"]');
-            if (firstItem) applyPanAnimationToSlide(firstItem);
+            const firstItemPan = bannerContainer.querySelector('.spotlight-item[data-index="0"]');
+            if (firstItemPan) {
+                applyPanAnimationToSlide(firstItemPan);
+                startCycleBackdropTimer(firstItemPan, items[0].Id);
+            }
         }
         
         // Navigation buttons (top right)
@@ -2750,7 +3014,10 @@
                 e.stopPropagation();
                 isPaused = !isPaused;
                 if (isPaused) {
-                    clearInterval(autoPlayTimer);
+                    if (autoPlayTimer) {
+                        clearTimeout(autoPlayTimer);
+                        autoPlayTimer = null;
+                    }
                     pauseIcon.textContent = 'play_arrow';
                 } else {
                     startAutoPlay();
@@ -2807,6 +3074,27 @@
         }
 
         // Apply pan animation to a slide and track when it completes (for re-trigger on viewport re-entry)
+        const SLIDE_ANIMATION_NAMES = new Set([
+            'kenBurnsZoomOut', 'kenBurnsZoomIn', 'kenBurnsZoomOutFullscreen', 'kenBurnsZoomInFullscreen',
+            'kenBurnsPanRight', 'kenBurnsPanLeft', 'kenBurnsPanUp', 'kenBurnsDiagonal', 'fadeInScale',
+            'parallaxFloat', 'depthPulse', 'slowRotate', 'breathe', 'heatHaze', 'colorWash', 'vignetteIn'
+        ]);
+        const SLIDE_ANIMATION_FINAL_TRANSFORM = {
+            kenBurnsZoomIn: 'scale3d(1.12, 1.12, 1)',
+            kenBurnsZoomOut: 'scale3d(1.02, 1.02, 1)',
+            kenBurnsZoomInFullscreen: 'scale3d(1.12, 1.12, 1)',
+            kenBurnsZoomOutFullscreen: 'scale3d(1.08, 1.08, 1)',
+            kenBurnsPanRight: 'scale3d(1.1, 1.1, 1) translateX(2%)',
+            kenBurnsPanLeft: 'scale3d(1.1, 1.1, 1) translateX(-2%)',
+            kenBurnsPanUp: 'scale3d(1.1, 1.1, 1) translateY(-2%)',
+            kenBurnsDiagonal: 'scale3d(1.13, 1.13, 1) translate(2%, -2%)',
+            fadeInScale: 'scale3d(1, 1, 1)',
+            parallaxFloat: 'scale3d(1, 1, 1) translateY(0)',
+            depthPulse: 'scale3d(1, 1, 1)',
+            slowRotate: 'scale3d(1.15, 1.15, 1) rotate(3deg)',
+            breathe: 'scale3d(1, 1, 1)',
+            heatHaze: 'scale3d(1.05, 1.05, 1) skewX(0deg)'
+        };
         function applyPanAnimationToSlide(slideElement) {
             if (!slideElement || !panAnimation) return;
             const imgs = slideElement.querySelectorAll('.spotlight-background-layer img, .spotlight-background-single img');
@@ -2818,34 +3106,120 @@
                 if (finishedCount >= imgs.length) currentSlideAnimationComplete = true;
             };
             imgs.forEach(img => {
+                img.style.transform = '';
                 img.classList.remove('animate');
-                void img.offsetWidth; // force reflow to restart animation
                 img.classList.add('animate');
+                const slideName = img.getAttribute('data-slide-animation') || '';
                 const handler = (e) => {
-                    if (['kenBurnsZoomOut', 'kenBurnsZoomIn', 'kenBurnsZoomOutFullscreen', 'kenBurnsZoomInFullscreen'].includes(e.animationName)) {
+                    if (e.animationName === slideName || SLIDE_ANIMATION_NAMES.has(e.animationName)) {
                         img.removeEventListener('animationend', handler);
                         checkAllDone();
+                        var finalTransform = SLIDE_ANIMATION_FINAL_TRANSFORM[e.animationName];
+                        if (finalTransform) {
+                            requestAnimationFrame(() => { img.style.transform = finalTransform; });
+                        }
                     }
                 };
                 img.addEventListener('animationend', handler);
             });
         }
 
-        // Go to item function (fade transition)
+        function startCycleBackdropTimer(slideElement, itemId) {
+            if (cycleBackdropTimer) {
+                clearInterval(cycleBackdropTimer);
+                cycleBackdropTimer = null;
+            }
+            if (!cycleBackdrops || tileCount !== 1 || !isVisible) return;
+            const container = slideElement.querySelector('.spotlight-background-single.cycle-backdrops');
+            const imgs = container ? container.querySelectorAll('img') : [];
+            const mapKey = sectionKey + '_' + itemId;
+            const entry = cycleBackdropMap.get(mapKey);
+            if (!entry || !entry.shuffledUrls.length) return;
+            var cycleCount = 0;
+            var maxCycles = Math.max(0, Math.ceil(interval / cycleBackdropsTime) - 1);
+            if (imgs.length >= 2) {
+                const bottomImg = imgs[0];
+                const topImg = imgs[1];
+                const crossfadeDuration = '0.8s';
+                cycleBackdropTimer = setInterval(() => {
+                    if (!isVisible) return;
+                    if (cycleCount >= maxCycles) {
+                        if (cycleBackdropTimer) {
+                            clearInterval(cycleBackdropTimer);
+                            cycleBackdropTimer = null;
+                        }
+                        return;
+                    }
+                    cycleCount++;
+                    entry.currentIndex = (entry.currentIndex + 1) % entry.shuffledUrls.length;
+                    const nextUrl = entry.shuffledUrls[entry.currentIndex];
+                    const preload = new Image();
+                    preload.onload = () => {
+                        topImg.src = nextUrl;
+                        topImg.setAttribute('data-src', nextUrl);
+                        topImg.style.transition = 'opacity ' + crossfadeDuration + ' ease-in-out';
+                        topImg.style.opacity = '0';
+                        requestAnimationFrame(() => {
+                            requestAnimationFrame(() => { topImg.style.opacity = '1'; });
+                        });
+                        const handler = (e) => {
+                            if (e.propertyName !== 'opacity') return;
+                            topImg.removeEventListener('transitionend', handler);
+                            bottomImg.src = nextUrl;
+                            bottomImg.setAttribute('data-src', nextUrl);
+                            topImg.style.opacity = '0';
+                        };
+                        topImg.addEventListener('transitionend', handler);
+                    };
+                    preload.src = nextUrl;
+                }, cycleBackdropsTime);
+            } else {
+                const img = slideElement.querySelector('.spotlight-background-single img');
+                if (!img) return;
+                cycleBackdropTimer = setInterval(() => {
+                    if (!isVisible) return;
+                    if (cycleCount >= maxCycles) {
+                        if (cycleBackdropTimer) {
+                            clearInterval(cycleBackdropTimer);
+                            cycleBackdropTimer = null;
+                        }
+                        return;
+                    }
+                    cycleCount++;
+                    entry.currentIndex = (entry.currentIndex + 1) % entry.shuffledUrls.length;
+                    const nextUrl = entry.shuffledUrls[entry.currentIndex];
+                    const preload = new Image();
+                    preload.onload = () => {
+                        img.style.opacity = '0';
+                        img.style.transition = 'opacity 0.8s ease-in-out';
+                        requestAnimationFrame(() => {
+                            img.src = nextUrl;
+                            img.setAttribute('data-src', nextUrl);
+                            requestAnimationFrame(() => { img.style.opacity = '1'; });
+                        });
+                    };
+                    preload.src = nextUrl;
+                }, cycleBackdropsTime);
+            }
+        }
+
+        // Go to item function (crossfade transition, then only active slide is visible)
         function goToItem(index, resetTimer = true) {
             if (index === currentIndex) return;
-            
+            if (cycleBackdropTimer) {
+                clearInterval(cycleBackdropTimer);
+                cycleBackdropTimer = null;
+            }
             const newWindowIndices = getSpotlightWindowIndices(index, items.length);
             const indexToRemove = currentWindowIndices.find(i => !newWindowIndices.includes(i));
             const indexToAdd = newWindowIndices.find(i => !currentWindowIndices.includes(i));
             
+            var slideToRemove = undefined;
             if (indexToRemove !== undefined) {
-                const slideToRemove = bannerContainer.querySelector(`.spotlight-item[data-index="${indexToRemove}"]`);
-                if (slideToRemove) slideToRemove.remove();
+                slideToRemove = bannerContainer.querySelector(`.spotlight-item[data-index="${indexToRemove}"]`);
             }
             if (indexToAdd !== undefined) {
-                const newSlide = createAndAppendSlide(items[indexToAdd], indexToAdd, false);
-                newSlide.style.opacity = '0';
+                createAndAppendSlide(items[indexToAdd], indexToAdd, false);
             }
             currentWindowIndices = newWindowIndices;
             
@@ -2854,13 +3228,42 @@
             
             const currentItem = bannerContainer.querySelector(`.spotlight-item[data-index="${currentIndex}"]`);
             const nextItem = bannerContainer.querySelector(`.spotlight-item[data-index="${index}"]`);
-            
-            if (currentItem && nextItem) {
-                currentItem.style.opacity = '0';
-                nextItem.style.opacity = '1';
-                applyPanAnimationToSlide(nextItem);
+
+            // Prune the slide that left the window so the container never exceeds 9 items.
+            // If it's not the one we're fading out, remove it now; otherwise remove it in onFadeOutEnd.
+            if (slideToRemove && slideToRemove.parentNode && slideToRemove !== currentItem) {
+                slideToRemove.remove();
             }
             
+            if (currentItem && nextItem) {
+                // Start crossfade: outgoing stays visible but fades out; incoming becomes visible and fades in
+                currentItem.removeAttribute('data-active');
+                currentItem.setAttribute('data-fade-out', 'true');
+                nextItem.setAttribute('data-active', 'true');
+                nextItem.setAttribute('data-entering', 'true');
+                applyPanAnimationToSlide(nextItem);
+                startCycleBackdropTimer(nextItem, items[index].Id);
+
+                // After next frame, remove data-entering so incoming slide transitions from 0 to 1
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        nextItem.removeAttribute('data-entering');
+                    });
+                });
+
+                // When outgoing slide opacity transition ends, clear its fade-out state and prune if it left the window
+                const onFadeOutEnd = (e) => {
+                    if (e.propertyName !== 'opacity') return;
+                    currentItem.removeEventListener('transitionend', onFadeOutEnd);
+                    currentItem.removeAttribute('data-fade-out');
+                    if (slideToRemove && slideToRemove.parentNode) {
+                        slideToRemove.remove();
+                    }
+                };
+                currentItem.addEventListener('transitionend', onFadeOutEnd);
+            } else if (slideToRemove && slideToRemove.parentNode) {
+                slideToRemove.remove();
+            }
             currentIndex = index;
             
             // Update slide state (dots or data attrs for numeric)
@@ -2885,46 +3288,39 @@
             
             // Reset auto-play timer when manually navigating (always reset delay)
             if (resetTimer && autoPlay && !isPaused) {
-                clearInterval(autoPlayTimer);
-                autoPlayTimer = null;
+                if (autoPlayTimer) {
+                    clearTimeout(autoPlayTimer);
+                    autoPlayTimer = null;
+                }
+                advanceDue = false;
                 startAutoPlay();
             }
         }
         
-        // Auto-play function (only runs when section is visible in viewport)
+        // Auto-play: single-timeout per slide, controlled only by pause/visibility (hover is ignored)
         function startAutoPlay() {
-            // Always clear any existing timer first
             if (autoPlayTimer) {
-                clearInterval(autoPlayTimer);
+                clearTimeout(autoPlayTimer);
                 autoPlayTimer = null;
             }
-            
             if (!autoPlay || items.length <= 1 || isPaused || !isVisible) return;
-            if (pauseOnHover && isHovering) return;
-            
-            autoPlayTimer = setInterval(() => {
-                // Don't reset timer when auto-advancing (to maintain interval)
-                goToItem((currentIndex + 1) % items.length, false);
-            }, interval);
+            autoPlayTimer = setTimeout(onAutoPlayTimerFired, interval);
         }
-        
-        // Pause on hover - prevent auto-cycling when hovering (skipped when pauseOnHover is false, e.g. fullscreen)
-        let isHovering = false;
-        bannerContainer.addEventListener('mouseenter', () => {
-            isHovering = true;
-            if (pauseOnHover && autoPlayTimer) {
-                clearInterval(autoPlayTimer);
-                autoPlayTimer = null;
+
+        function onAutoPlayTimerFired() {
+            autoPlayTimer = null;
+            if (isPaused) {
+                advanceDue = true;
+                return;
             }
-        });
-        
-        bannerContainer.addEventListener('mouseleave', () => {
-            isHovering = false;
-            // Only restart if auto-play is enabled, not paused, not hovering, and section is visible
-            if (autoPlay && !isPaused && !isHovering && isVisible) {
-                startAutoPlay();
+            if (!autoPlay || !isVisible || items.length <= 1) return;
+            goToItem((currentIndex + 1) % items.length, false);
+            advanceDue = false;
+            // Schedule next slide timer for the new current slide
+            if (autoPlay && !isPaused && isVisible && items.length > 1) {
+                autoPlayTimer = setTimeout(onAutoPlayTimerFired, interval);
             }
-        });
+        }
         
         // Only cycle when spotlight is in view: stop when off-screen to avoid loading images unnecessarily
         const visibilityObserver = new IntersectionObserver(
@@ -2935,50 +3331,16 @@
                 isVisible = entry.isIntersecting;
                 if (!isVisible) {
                     if (autoPlayTimer) {
-                        clearInterval(autoPlayTimer);
+                        clearTimeout(autoPlayTimer);
                         autoPlayTimer = null;
                     }
+                    if (cycleBackdropTimer) {
+                        clearInterval(cycleBackdropTimer);
+                        cycleBackdropTimer = null;
+                    }
                 } else {
-                    // Re-entering viewport: advance slide (don't restart animation)
-                    if (!wasVisible && autoPlay && !isPaused && !(pauseOnHover && isHovering) && items.length > 1) {
-                        const currentItem = bannerContainer.querySelector(`.spotlight-item[data-index="${currentIndex}"]`);
-                        if (panAnimation && currentItem) {
-                            if (currentSlideAnimationComplete) {
-                                // Animation done - cycle to next card immediately
-                                goToItem((currentIndex + 1) % items.length, true);
-                            } else {
-                                // Animation still playing - schedule cycle for when it finishes + interval
-                                const imgs = currentItem.querySelectorAll('.spotlight-background-layer img, .spotlight-background-single img');
-                                if (imgs.length > 0) {
-                                    let finishedCount = 0;
-                                    const checkAllDone = () => {
-                                        finishedCount++;
-                                        if (finishedCount >= imgs.length) {
-                                            currentSlideAnimationComplete = true;
-                                            setTimeout(() => {
-                                                if (autoPlay && !isPaused && isVisible && items.length > 1) {
-                                                    goToItem((currentIndex + 1) % items.length, true);
-                                                }
-                                            }, interval);
-                                        }
-                                    };
-                                    imgs.forEach(img => {
-                                        const handler = (e) => {
-                                            if (['kenBurnsZoomOut', 'kenBurnsZoomIn', 'kenBurnsZoomOutFullscreen', 'kenBurnsZoomInFullscreen'].includes(e.animationName)) {
-                                                img.removeEventListener('animationend', handler);
-                                                checkAllDone();
-                                            }
-                                        };
-                                        img.addEventListener('animationend', handler);
-                                    });
-                                } else {
-                                    startAutoPlay();
-                                }
-                            }
-                        } else {
-                            startAutoPlay();
-                        }
-                    } else if (autoPlay && !isPaused && !(pauseOnHover && isHovering)) {
+                    // Re-entering viewport: schedule a fresh timer for the current slide
+                    if (autoPlay && !isPaused) {
                         startAutoPlay();
                     }
                 }
@@ -2986,6 +3348,19 @@
             { root: null, rootMargin: '0px', threshold: 0 }
         );
         visibilityObserver.observe(container);
+        
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                if (autoPlayTimer) {
+                    clearTimeout(autoPlayTimer);
+                    autoPlayTimer = null;
+                }
+            } else {
+                if (autoPlay && !isPaused && isVisible) {
+                    startAutoPlay();
+                }
+            }
+        });
         
         // Start auto-play (will no-op if container not yet in DOM or not visible once observer runs)
         if (autoPlay) {
@@ -3052,7 +3427,8 @@
 
         container.dataset.layout = layout;
         container.dataset.size = size;
-        
+        container.dataset.tileCount = String(tileCount);
+
         return container;
     }
 
@@ -3063,6 +3439,7 @@
      * @param {boolean} forceUpdate - If true, update even when data-expandable is already set (e.g. on resize)
      */
     function checkSectionOverflow(verticalSection, forceUpdate = false) {
+        return;
         if (!verticalSection || verticalSection.nodeType !== 1) return;
         const itemsContainer = verticalSection.querySelector('.itemsContainer');
         const scroller = verticalSection.querySelector('.emby-scroller');
@@ -3134,17 +3511,18 @@
         const showAllButton = document.createElement('button');
         showAllButton.type = 'button';
         showAllButton.className = 'show-all-button';
-        showAllButton.textContent = 'Expand';
         showAllButton.title = 'Show all items';
         sectionTitleContainer.appendChild(showAllButton);
 
         // Create scroller container
         const scroller = document.createElement('div');
-        scroller.setAttribute('is', 'emby-scroller');
+        //scroller.setAttribute('is', 'emby-scroller');
+
+        const isMobile = document.documentElement.classList.contains('layout-mobile');
 
         scroller.setAttribute('data-horizontal', 'true');
         scroller.setAttribute('data-centerfocus', 'card');
-        scroller.className = 'padded-top-focusscale padded-bottom-focusscale emby-scroller custom-scroller';
+        scroller.className = `padded-top-focusscale padded-bottom-focusscale emby-scroller custom-scroller${isMobile ? ' scrollX hiddenScrollX' : ''}`;
         scroller.setAttribute('data-scroll-mode-x', 'custom');
         // Enable mobile swipe scrolling
         scroller.style.scrollSnapType = 'none';
@@ -3155,11 +3533,12 @@
 		scroller.style.overscrollBehaviorY = 'auto';
 		// iOS inertia scrolling
 		scroller.style.webkitOverflowScrolling = 'touch';
+		scroller.style.setProperty('--scroll-x', '0');
 
         // Create items container
         const itemsContainer = document.createElement('div');
         itemsContainer.setAttribute('is', 'emby-itemscontainer');
-        itemsContainer.className = 'focuscontainer-x itemsContainer scrollSlider animatedScrollX';
+        itemsContainer.className = `focuscontainer-x itemsContainer scrollSlider${!isMobile ? ' animatedScrollX' : ''}`;
         itemsContainer.style.whiteSpace = 'nowrap';
 
         // If the items contain more episodes than non-episodes, and the card format is Poster, set the forced image type to Primary
@@ -3178,7 +3557,7 @@
 
         // Create the left/right scroll buttons for the scroller
 
-/*         const scrollButtons = document.createElement('div');
+        const scrollButtons = document.createElement('div');
         //scrollButtons.setAttribute('is', 'emby-scrollbuttons');
         scrollButtons.className = 'emby-scrollbuttons padded-right';
 
@@ -3195,10 +3574,60 @@
         leftSpan.setAttribute('aria-hidden', 'true');
         leftButton.appendChild(leftSpan);
 
+        // Shared helpers for translateX-based scrolling
+        function getCurrentPosition() {
+            const v = scroller.style.getPropertyValue('--scroll-x');
+            if (v !== '' && !isNaN(parseFloat(v))) return parseFloat(v);
+            const matrix = new DOMMatrixReadOnly(window.getComputedStyle(scroller).transform);
+            const translateX = matrix.m41 || 0;
+            return Math.abs(translateX);
+        }
+
+        function getMaxPosition() {
+            // Ensure we scroll enough to see the last card
+            return scroller.scrollWidth - scroller.clientWidth + 300;
+        }
+
+        function setPosition(newPosition, options) {
+            const opts = options || {};
+            const maxPosition = getMaxPosition();
+            const clampedPosition = Math.min(Math.max(newPosition, 0), Math.max(maxPosition, 0));
+
+            // Control whether movement is animated or immediate
+            if (opts.animate) {
+                scroller.style.transition = 'transform 270ms ease-out';
+            } else {
+                scroller.style.transition = 'none';
+            }
+
+            scroller.style.transform = `translateX(-${clampedPosition}px)`;
+            scroller.style.setProperty('--scroll-x', String(clampedPosition));
+            scroller.setAttribute('data-max-scroll', clampedPosition >= maxPosition ? 'true' : 'false');
+
+            const verticalSection = scroller.closest('.emby-scroller-container');
+            if (verticalSection && typeof updateScrollButtonStateForSection === 'function') {
+                if (opts.animate) {
+                    const onTransitionEnd = () => {
+                        scroller.removeEventListener('transitionend', onTransitionEnd);
+                        updateScrollButtonStateForSection(verticalSection);
+                    };
+                    scroller.addEventListener('transitionend', onTransitionEnd);
+                } else {
+                    requestAnimationFrame(() => updateScrollButtonStateForSection(verticalSection));
+                }
+            }
+        }
+
         leftButton.addEventListener('click', () => {
             // Scroll backward by viewport width
-            const scrollAmount = scroller.clientWidth; // 80% of visible width
-            scroller.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
+            const itemsContainer = scroller.querySelector('.itemsContainer');
+            if (!itemsContainer) return;
+            const scrollAmount = itemsContainer.clientWidth;
+
+            const currentPosition = getCurrentPosition();
+            const newPosition = scrollAmount > currentPosition ? 0 : currentPosition - scrollAmount;
+
+            setPosition(newPosition, { animate: true });
         });
 
         scrollButtons.appendChild(leftButton);
@@ -3216,43 +3645,50 @@
         rightButton.appendChild(rightSpan);
 
         rightButton.addEventListener('click', () => {
-            // Scroll forward by width of the scroller parent
-            const paddingLeft = parseFloat(window.getComputedStyle(scroller).paddingLeft) || 0;
-            const paddingRight = parseFloat(window.getComputedStyle(scroller).paddingRight) || 0;
-            const scrollAmount = scroller.clientWidth - paddingLeft - paddingRight;
-            scroller.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+            const itemsContainer = scroller.querySelector('.itemsContainer');
+
+            if (!itemsContainer) return;
+
+            const scrollAmount = itemsContainer.clientWidth;
+
+            const currentPosition = getCurrentPosition();
+            const newPosition = currentPosition + scrollAmount;
+
+            setPosition(newPosition, { animate: true });
         });
 
         scrollButtons.appendChild(rightButton);
 
         // Update button states based on scroll position
         function updateScrollButtons() {
-            const scrollLeft = scroller.scrollLeft;
-            const maxScroll = scroller.scrollWidth - scroller.clientWidth;
-            
+            const currentPosition = getCurrentPosition();
+            const maxPosition = getMaxPosition();
+
             // Disable left button at start
-            leftButton.disabled = scrollLeft <= 1; // 1px threshold for rounding
-            
+            leftButton.disabled = currentPosition === 0;
+
             // Disable right button at end
-            rightButton.disabled = scrollLeft >= maxScroll - 1;
+            rightButton.disabled = currentPosition >= maxPosition;
         }
 
-        // Listen for scroll events to update button states
-        scroller.addEventListener('scroll', updateScrollButtons, { passive: true });
-
         // Update on resize (for responsive layouts)
-        const resizeObserver = new ResizeObserver(() => updateScrollButtons());
-        resizeObserver.observe(scroller);
+        /* const resizeObserver = new ResizeObserver(() => updateScrollButtons());
+        resizeObserver.observe(scroller); */
 
         // Initial button state on creation
-        updateScrollButtons();
+        //updateScrollButtons();
 
-        // Touch and drag support
+        // Call updateScrollButtons when the container is added to the DOM
+        /* verticalSection.addEventListener('DOMContentLoaded', () => {
+            updateScrollButtons();
+        }); */
         let dragState = {
             isDragging: false,
             startX: 0,
             startY: 0,
-            startScrollLeft: 0,
+            startPosition: 0,
+            currentPosition: 0,
+            maxPosition: 0,
             hasMoved: false,
             lastX: 0,
             lastTime: 0,
@@ -3260,136 +3696,197 @@
             momentumId: null
         };
 
-        function onDragStart(e) {
-            // Only handle left mouse button for drag (button 0)
-            // Allow middle click (button 1) and right click (button 2) to work normally
-            if (e.type === 'mousedown' && e.button !== 0) {
-                return;
-            }
-            
-            // Get initial touch/mouse position
-            const point = e.touches ? e.touches[0] : e;
-            
-            // Cancel any existing momentum animation
-            if (dragState.momentumId !== null) {
-                cancelAnimationFrame(dragState.momentumId);
-                dragState.momentumId = null;
-            }
-            
-            dragState.isDragging = true;
-            dragState.startX = point.clientX;
-            dragState.startY = point.clientY;
-            dragState.startScrollLeft = scroller.scrollLeft;
-            dragState.hasMoved = false;
-            dragState.lastX = point.clientX;
-            dragState.lastTime = Date.now();
-            dragState.velocity = 0;
-            
-            // Add move and end listeners
-            if (e.touches) {
-                document.addEventListener('touchmove', onDragMove, { passive: false });
-                document.addEventListener('touchend', onDragEnd, { passive: true });
-            } else {
-                document.addEventListener('mousemove', onDragMove);
-                document.addEventListener('mouseup', onDragEnd);
-                e.preventDefault(); // Prevent text selection on mouse drag
-            }
-        }
 
-        function onDragMove(e) {
-            if (!dragState.isDragging) return;
-            
-            const point = e.touches ? e.touches[0] : e;
-            const deltaX = dragState.startX - point.clientX;
-            const deltaY = dragState.startY - point.clientY;
-            
-            // Directional check: require horizontal movement to be dominant
-            // Only trigger horizontal scroll if:
-            // 1. Moved more than 10px horizontally (increased threshold)
-            // 2. Horizontal movement is greater than vertical movement (directional check)
-            if (Math.abs(deltaX) > 10 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
-                dragState.hasMoved = true;
-                scroller.scrollLeft = dragState.startScrollLeft + deltaX;
-                
-                // Calculate velocity for momentum scrolling
-                const currentTime = Date.now();
-                const timeDelta = currentTime - dragState.lastTime;
-                if (timeDelta > 0) {
-                    const positionDelta = point.clientX - dragState.lastX;
-                    dragState.velocity = positionDelta / timeDelta; // pixels per millisecond
+        if (!isMobile) {
+            // Movement threshold (px) before we treat the gesture as a drag. Avoids getMaxPosition/layout work on simple clicks.
+            const DRAG_THRESHOLD_PX = 8;
+
+            // Touch and drag support (translateX-based). Expensive drag setup runs only after pointer moves past threshold.
+            function onPointerDown(e) {
+                // Only handle left mouse button for drag (button 0)
+                if (e.type === 'mousedown' && e.button !== 0) {
+                    return;
                 }
-                dragState.lastX = point.clientX;
-                dragState.lastTime = currentTime;
-                
-                // Prevent default to stop page scrolling on touch
+
+                const point = e.touches ? e.touches[0] : e;
+
+                // Cancel any existing momentum animation
+                if (dragState.momentumId !== null) {
+                    cancelAnimationFrame(dragState.momentumId);
+                    dragState.momentumId = null;
+                }
+
+                // Store only cheap state until we know it's a drag
+                dragState.startX = point.clientX;
+                dragState.startY = point.clientY;
+                dragState.isDragging = false;
+
+                function checkThreshold(moveEvent) {
+                    const p = moveEvent.touches ? moveEvent.touches[0] : moveEvent;
+                    const dx = p.clientX - dragState.startX;
+                    const dy = p.clientY - dragState.startY;
+                    if (Math.abs(dx) < DRAG_THRESHOLD_PX && Math.abs(dy) < DRAG_THRESHOLD_PX) return;
+
+                    // Committing to drag: do expensive work once
+                    dragState.isDragging = true;
+                    dragState.startPosition = getCurrentPosition();
+                    dragState.currentPosition = dragState.startPosition;
+                    dragState.maxPosition = getMaxPosition();
+                    dragState.hasMoved = false;
+                    dragState.lastX = p.clientX;
+                    dragState.lastTime = Date.now();
+                    dragState.velocity = 0;
+
+                    cleanupPending();
+                    if (e.touches) {
+                        document.addEventListener('touchmove', onDragMove, { passive: false });
+                        document.addEventListener('touchend', onDragEnd, { passive: true });
+                    } else {
+                        document.addEventListener('mousemove', onDragMove);
+                        document.addEventListener('mouseup', onDragEnd);
+                    }
+                    if (!moveEvent.touches) moveEvent.preventDefault();
+                }
+
+                function cleanupPending() {
+                    if (e.touches) {
+                        document.removeEventListener('touchmove', checkThreshold);
+                        document.removeEventListener('touchend', onPointerUp);
+                    } else {
+                        document.removeEventListener('mousemove', checkThreshold);
+                        document.removeEventListener('mouseup', onPointerUp);
+                    }
+                }
+
+                function onPointerUp(upEvent) {
+                    if (!dragState.isDragging) cleanupPending();
+                }
+
                 if (e.touches) {
+                    document.addEventListener('touchmove', checkThreshold, { passive: false });
+                    document.addEventListener('touchend', onPointerUp, { passive: true });
+                } else {
+                    document.addEventListener('mousemove', checkThreshold);
+                    document.addEventListener('mouseup', onPointerUp);
                     e.preventDefault();
                 }
             }
-        }
 
-        function onDragEnd(e) {
-            if (!dragState.isDragging) return;
-            
-            // Clean up listeners
-            if (e.type === 'touchend') {
-                document.removeEventListener('touchmove', onDragMove);
-                document.removeEventListener('touchend', onDragEnd);
-            } else {
-                document.removeEventListener('mousemove', onDragMove);
-                document.removeEventListener('mouseup', onDragEnd);
+            function onDragMove(e) {
+                console.log('onDragMove', dragState.currentPosition);
+                if (!dragState.isDragging) return;
+                
+                const point = e.touches ? e.touches[0] : e;
+                const deltaX = dragState.startX - point.clientX;
+                const deltaY = dragState.startY - point.clientY;
+                
+                // Directional check: require horizontal movement to be dominant
+                // Only trigger horizontal scroll if:
+                // 1. Moved more than 10px horizontally (increased threshold)
+                // 2. Horizontal movement is greater than vertical movement (directional check)
+                if (Math.abs(deltaX) > 10 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
+                    dragState.hasMoved = true;
+
+                    const rawNewPosition = dragState.startPosition + deltaX;
+                    // Clamp using cached maxPosition to avoid repeated layout work
+                    const clampedPosition = Math.min(Math.max(rawNewPosition, 0), Math.max(dragState.maxPosition, 0));
+                    dragState.currentPosition = clampedPosition;
+
+                    setPosition(clampedPosition, { animate: false });
+                    
+                    // Calculate velocity for momentum scrolling
+                    const currentTime = Date.now();
+                    const timeDelta = currentTime - dragState.lastTime;
+                    if (timeDelta > 0) {
+                        const positionDelta = point.clientX - dragState.lastX;
+                        dragState.velocity = positionDelta / timeDelta; // pixels per millisecond
+                    }
+                    dragState.lastX = point.clientX;
+                    dragState.lastTime = currentTime;
+                    
+                    // Prevent default to stop page scrolling on touch
+                    if (e.touches) {
+                        e.preventDefault();
+                    }
+                }
             }
-            
-            // If user dragged, prevent click events from firing
-            if (dragState.hasMoved) {
-                // Temporarily disable clicks on the scroller
-                scroller.style.pointerEvents = 'none';
-                requestAnimationFrame(() => {
-                    scroller.style.pointerEvents = '';
-                });
-            }
-            
-            dragState.isDragging = false;
-            
-            // Apply momentum scrolling if there's sufficient velocity
-            const friction = 0.93; // Higher = slides longer
-            const velocityThreshold = 0.1; // pixels per millisecond
-            
-            if (Math.abs(dragState.velocity) > velocityThreshold) {
-                const step = () => {
-                    if (Math.abs(dragState.velocity) > velocityThreshold) {
-                        const maxScroll = scroller.scrollWidth - scroller.clientWidth;
-                        const currentScroll = scroller.scrollLeft;
-                        const newScroll = currentScroll - dragState.velocity * 16; // 16ms approx for 60fps
-                        
-                        // Apply scroll with boundary checking
-                        if (newScroll <= 0) {
-                            scroller.scrollLeft = 0;
-                            dragState.velocity = 0;
-                        } else if (newScroll >= maxScroll) {
-                            scroller.scrollLeft = maxScroll;
-                            dragState.velocity = 0;
-                        } else {
-                            scroller.scrollLeft = newScroll;
+
+            function onDragEnd(e) {
+                console.log('onDragEnd', dragState.currentPosition);
+                if (!dragState.isDragging) return;
+                
+                // Clean up listeners
+                if (e.type === 'touchend') {
+                    document.removeEventListener('touchmove', onDragMove);
+                    document.removeEventListener('touchend', onDragEnd);
+                } else {
+                    document.removeEventListener('mousemove', onDragMove);
+                    document.removeEventListener('mouseup', onDragEnd);
+                }
+                
+                // If user dragged, prevent click events from firing
+                if (dragState.hasMoved) {
+                    // Temporarily disable clicks on the scroller
+                    scroller.style.pointerEvents = 'none';
+                    requestAnimationFrame(() => {
+                        scroller.style.pointerEvents = '';
+                    });
+                }
+                
+                dragState.isDragging = false;
+                
+                // Apply momentum scrolling if there's sufficient velocity
+                // Tunable constants to better match native Jellyfin inertia
+                const friction = 0.965; // Higher = slides longer
+                const velocityThreshold = 0.01; // pixels per millisecond
+                const velocityBoost = 2.0; // Scale swipe strength to increase carry distance
+                
+                // Boost the measured velocity before starting momentum to increase travel distance
+                dragState.velocity *= velocityBoost;
+
+                if (Math.abs(dragState.velocity) > velocityThreshold) {
+                    let currentPosition = dragState.currentPosition;
+                    const maxPosition = dragState.maxPosition;
+                    let lastTimestamp = 0;
+
+                    const step = (timestamp) => {
+                        // Compute frame time in ms using rAF timestamp
+                        const frameTime = lastTimestamp ? (timestamp - lastTimestamp) : 16;
+                        lastTimestamp = timestamp;
+
+                        if (Math.abs(dragState.velocity) > velocityThreshold) {
+                            currentPosition -= dragState.velocity * frameTime;
+
+                            // Clamp locally to avoid extra layout work
+                            currentPosition = Math.min(Math.max(currentPosition, 0), Math.max(maxPosition, 0));
+                            setPosition(currentPosition, { animate: false });
+
+                            // If we've hit an edge, stop the momentum
+                            if (currentPosition === 0 || currentPosition === maxPosition) {
+                                dragState.velocity = 0;
+                                dragState.momentumId = null;
+                                return;
+                            }
+
                             dragState.velocity *= friction; // Apply deceleration
                             dragState.momentumId = requestAnimationFrame(step);
+                        } else {
+                            dragState.velocity = 0;
+                            dragState.momentumId = null;
                         }
-                    } else {
-                        dragState.velocity = 0;
-                        dragState.momentumId = null;
-                    }
-                };
-                
-                dragState.momentumId = requestAnimationFrame(step);
-            } else {
-                dragState.velocity = 0;
-                dragState.momentumId = null;
+                    };
+                    
+                    dragState.momentumId = requestAnimationFrame(step);
+                } else {
+                    dragState.velocity = 0;
+                    dragState.momentumId = null;
+                }
             }
-        }
 
-        // Attach drag start listeners
-        scroller.addEventListener('touchstart', onDragStart, { passive: true });
-        scroller.addEventListener('mousedown', onDragStart); */
+            // Attach drag start listeners (threshold inside onPointerDown defers getMaxPosition until real drag)
+            scroller.addEventListener('mousedown', onPointerDown);
+
+        }
 
         // Overflow detection will be handled by ResizeObserver below
 
@@ -3420,13 +3917,14 @@
                 // Switch back to scroll view
                 itemsContainer.removeAttribute('data-expanded');
                 if (scrollButtons) scrollButtons.style.display = '';
-                showAllButton.textContent = 'Expand';
                 showAllButton.title = 'Show all items in a grid layout';
+                setPosition(dragState.currentPosition, { animate: true });
             } else {
                 // Switch to grid view
+                dragState.currentPosition = getCurrentPosition();
+                setPosition(0, { animate: false });
                 itemsContainer.setAttribute('data-expanded', 'true');
                 if (scrollButtons) scrollButtons.style.display = 'none';
-                showAllButton.textContent = 'Collapse';
                 showAllButton.title = 'Show items in scrollable layout';
             }
 
@@ -3436,7 +3934,7 @@
         });
 
         // Track window size to detect actual window resize events
-        let lastWindowWidth = window.innerWidth;
+        /* let lastWindowWidth = window.innerWidth;
         let lastWindowHeight = window.innerHeight;
 
         // Window resize handler - only update data-expandable on actual window resize
@@ -3459,14 +3957,17 @@
         }
 
         // Listen for window resize events
-        window.addEventListener('resize', handleWindowResize);
+        window.addEventListener('resize', handleWindowResize); */
 
         // Initial overflow check is done when section is detected in the DOM by overflowMutationObserver
 
         // Assemble the section
         verticalSection.appendChild(sectionTitleContainer);
-        //verticalSection.appendChild(scrollButtons);
+        //const scrollButtons2 = document.createElement('div');
+        verticalSection.appendChild(scrollButtons);
         verticalSection.appendChild(scroller);
+
+        registerScrollSectionScrollButtons(verticalSection);
 
         return verticalSection;
     }
@@ -3500,7 +4001,7 @@
         card.setAttribute('data-skeleton', 'true');
         
         const cardBox = document.createElement('div');
-        cardBox.className = 'cardBox cardBox-bottompadded';
+        cardBox.className = `cardBox cardBox-bottompadded`;
         
         const cardScalable = document.createElement('div');
         cardScalable.className = 'cardScalable';
@@ -3517,33 +4018,36 @@
     }
 
     /**
-     * Creates a skeleton spotlight section for progressive enhancement
+     * Creates a skeleton spotlight section for progressive enhancement.
+     * Layout/size are derived from options so the skeleton matches the final spotlight (Border/Borderless, Normal/Large/Full).
      * @param {string} title - Title for the spotlight section
-     * @param {Object} options - Options for the spotlight carousel
+     * @param {Object} options - Options for the spotlight carousel (viewMoreUrl, spotlightLayout, spotlightSize, fullScreen)
      * @returns {HTMLElement} - Skeleton spotlight container
      */
     function createSkeletonSpotlightSection(title, options = {}) {
-        const { viewMoreUrl = null } = options;
-        
+        const { viewMoreUrl = null, spotlightLayout, spotlightSize, fullScreen } = options;
+        const layout = spotlightLayout ?? (fullScreen === true ? 'Borderless' : 'Border');
+        const size = spotlightSize ?? (fullScreen === true ? 'full' : 'normal');
+
         // Create main container (same structure as real spotlight)
         const container = document.createElement('div');
         container.className = 'spotlight-section padded-left';
-        
+        container.dataset.layout = layout;
+        container.dataset.size = size;
+
         // Create banner container
         const bannerContainer = document.createElement('div');
         bannerContainer.className = 'spotlight-banner-container';
-        
-        // Add section title
+
+        // Add section title (same structure as createSpotlightSection for minimal layout shift)
         if (title) {
             let sectionTitleEl;
-            
             if (viewMoreUrl) {
                 const titleLink = document.createElement('a');
-                titleLink.className = 'spotlight-section-title spotlight-title-link';
+                titleLink.className = 'emby-tab-button emby-tab-button-active emby-button-foreground';
                 titleLink.textContent = title;
                 titleLink.title = 'See All';
                 titleLink.style.textDecoration = 'none';
-                
                 if (typeof viewMoreUrl === 'function') {
                     titleLink.addEventListener('click', (e) => {
                         e.preventDefault();
@@ -3556,30 +4060,35 @@
                         e.stopPropagation();
                     });
                 }
-                
                 sectionTitleEl = titleLink;
             } else {
                 sectionTitleEl = document.createElement('div');
-                sectionTitleEl.className = 'spotlight-section-title';
+                sectionTitleEl.className = 'emby-tab-button emby-tab-button-active emby-button-foreground';
                 sectionTitleEl.textContent = title;
             }
-            
-            bannerContainer.appendChild(sectionTitleEl);
+            const sectionTitleWrapper = document.createElement('div');
+            sectionTitleWrapper.className = `spotlight-section-title ${viewMoreUrl ? '' : 'spotlight-title-link '}headerTabs sectionTabs`;
+            sectionTitleWrapper.appendChild(sectionTitleEl);
+            const sectionTitleContainer = document.createElement('div');
+            sectionTitleContainer.className = 'spotlight-section-title-container';
+            sectionTitleContainer.appendChild(sectionTitleWrapper);
+            bannerContainer.appendChild(sectionTitleContainer);
         }
-        
-        // Create skeleton item (single placeholder)
+
+        // Create skeleton item (single full-container placeholder)
         const itemsContainer = document.createElement('div');
         itemsContainer.className = 'spotlight-items-container';
-        
+
         const skeletonItem = document.createElement('div');
         skeletonItem.className = 'spotlight-item skeleton-spotlight-item';
         skeletonItem.setAttribute('data-index', '0');
+        skeletonItem.setAttribute('data-active', 'true');
         skeletonItem.style.cssText = 'background: rgba(255,255,255,0.12); animation: skeleton-pulse 1.5s ease-in-out infinite;';
-        
+
         itemsContainer.appendChild(skeletonItem);
         bannerContainer.appendChild(itemsContainer);
         container.appendChild(bannerContainer);
-        
+
         return container;
     }
 
@@ -3594,7 +4103,7 @@
     function createProgressivelyEnhancedScrollableContainer(title, viewMoreUrl = null, cardFormat = null, overflowCard = false) {
         // Create the main vertical section container (same structure as createScrollableContainer)
         const verticalSection = document.createElement('div');
-        verticalSection.className = 'verticalSection custom-scroller-container';
+        verticalSection.className = 'verticalSection emby-scroller-container custom-scroller-container';
         
         // Persist the card format if provided (ensures consistency for random/updates)
         if (cardFormat) {
@@ -3726,6 +4235,10 @@
 
     // Overflow check: run checkSectionOverflow when .emby-scroller-container with .itemsContainer appears in DOM
     let overflowMutationObserver = null;
+
+    // Single shared IntersectionObserver for scroll button state (first/last card visibility per section)
+    let scrollButtonsStateObserver = null;
+    const scrollButtonsSectionState = new WeakMap(); // verticalSection -> { firstVisible, lastVisible }
     
     /**
      * Initialize the global IntersectionObserver for lazy loading images
@@ -3811,6 +4324,108 @@
                 });
             });
         });
+    }
+
+    /**
+     * Check if two DOMRects intersect (used for "visible in scroller" with root: null).
+     */
+    function rectsIntersect(a, b) {
+        return !(a.right < b.left || a.left > b.right || a.bottom < b.top || a.top > b.bottom);
+    }
+
+    /**
+     * Check if container fully contains child horizontally (entire card visible in scroller).
+     */
+    function rectContainsRectHorizontally(containerRect, childRect) {
+        return containerRect.left <= childRect.left && childRect.right <= containerRect.right;
+    }
+
+    /**
+     * Apply scroll button state for a section from scrollButtonsSectionState WeakMap.
+     */
+    function applyScrollButtonState(verticalSection) {
+        const state = scrollButtonsSectionState.get(verticalSection);
+        if (!state) return;
+        const scroller = verticalSection.querySelector('.emby-scroller');
+        const scrollButtons = verticalSection.querySelector('.emby-scrollbuttons');
+        const leftButton = scrollButtons && scrollButtons.querySelector('button[data-direction="left"]');
+        const rightButton = scrollButtons && scrollButtons.querySelector('button[data-direction="right"]');
+        if (!scroller || !scrollButtons || !leftButton || !rightButton) return;
+        const scrollX = parseFloat(window.getComputedStyle(scroller).getPropertyValue('--scroll-x')) || 0;
+        leftButton.disabled = state.firstVisible && scrollX === 0;
+        rightButton.disabled = state.lastVisible || scroller.getAttribute('data-max-scroll') === 'true';
+        if (state.firstVisible && state.lastVisible) {
+            scrollButtons.setAttribute('data-no-controls', 'true');
+        } else {
+            scrollButtons.removeAttribute('data-no-controls');
+        }
+    }
+
+    /**
+     * Compute first/last visibility for a section and apply button state (e.g. initial sync).
+     */
+    function updateScrollButtonStateForSection(verticalSection) {
+        const itemsContainer = verticalSection.querySelector('.itemsContainer');
+        const scroller = verticalSection.querySelector('.emby-scroller');
+        const first = itemsContainer && itemsContainer.firstElementChild;
+        const last = itemsContainer && itemsContainer.lastElementChild;
+        if (!itemsContainer || !scroller || !first || !last) return;
+        const scrollerRect = scroller.getBoundingClientRect();
+        const firstVisible = rectsIntersect(first.getBoundingClientRect(), scrollerRect);
+        const lastVisible = rectContainsRectHorizontally(scrollerRect, last.getBoundingClientRect());
+        scrollButtonsSectionState.set(verticalSection, { firstVisible, lastVisible });
+        applyScrollButtonState(verticalSection);
+    }
+
+    /**
+     * Initialize the single shared IntersectionObserver for scroll button state (lazy).
+     */
+    function initScrollButtonsStateObserver() {
+        if (scrollButtonsStateObserver) return;
+        scrollButtonsStateObserver = new IntersectionObserver((entries) => {
+            const sectionsAffected = new Set();
+            entries.forEach(entry => {
+                const verticalSection = entry.target.closest('.emby-scroller-container');
+                if (!verticalSection) return;
+                const itemsContainer = entry.target.parentElement;
+                if (!itemsContainer || !itemsContainer.classList.contains('itemsContainer')) return;
+                const scroller = itemsContainer.parentElement;
+                if (!scroller) return;
+                const scrollerRect = scroller.getBoundingClientRect();
+                const cardRect = entry.boundingClientRect;
+                const isFirst = entry.target === itemsContainer.firstElementChild;
+                const visibleInScroller = isFirst
+                    ? rectsIntersect(cardRect, scrollerRect)
+                    : rectContainsRectHorizontally(scrollerRect, cardRect);
+                const state = scrollButtonsSectionState.get(verticalSection) || { firstVisible: false, lastVisible: false };
+                if (isFirst) state.firstVisible = visibleInScroller; else state.lastVisible = visibleInScroller;
+                scrollButtonsSectionState.set(verticalSection, state);
+                sectionsAffected.add(verticalSection);
+            });
+            sectionsAffected.forEach(applyScrollButtonState);
+        }, { root: null, threshold: 0.1 });
+    }
+
+    /**
+     * Register a scrollable section's first/last card with the shared observer and run initial sync.
+     */
+    function registerScrollSectionScrollButtons(verticalSection) {
+        const itemsContainer = verticalSection.querySelector('.itemsContainer');
+        const first = itemsContainer && itemsContainer.firstElementChild;
+        const last = itemsContainer && itemsContainer.lastElementChild;
+        if (!first || !last) {
+            const scrollButtons = verticalSection.querySelector('.emby-scrollbuttons');
+            const leftButton = scrollButtons && scrollButtons.querySelector('button[data-direction="left"]');
+            const rightButton = scrollButtons && scrollButtons.querySelector('button[data-direction="right"]');
+            if (leftButton) leftButton.disabled = true;
+            if (rightButton) rightButton.disabled = true;
+            if (scrollButtons && !first && !last) scrollButtons.setAttribute('data-no-controls', 'true');
+            return;
+        }
+        if (!scrollButtonsStateObserver) initScrollButtonsStateObserver();
+        scrollButtonsStateObserver.observe(first);
+        scrollButtonsStateObserver.observe(last);
+        requestAnimationFrame(() => updateScrollButtonStateForSection(verticalSection));
     }
 
     /**

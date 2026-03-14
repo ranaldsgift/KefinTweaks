@@ -13,9 +13,24 @@
     border-radius: 8px;
 }
 
+.layout-mobile .spotlight-banner-container {
+    display: flex;
+    justify-items: center;
+    align-items: center;
+    justify-content: center;
+}
+
 /* Size variants */
+/* .spotlight-section[data-layout="Borderless"][data-size="full"][data-order="1"] .spotlight-banner-container {
+    height: 94vh !important;
+} */
+
 .spotlight-section[data-size="full"] .spotlight-banner-container {
     height: 94vh !important;
+}
+
+.layout-mobile .spotlight-section[data-size="full"] .spotlight-banner-container {
+    height: 80vh !important;
 }
 
 .spotlight-items-container {
@@ -33,6 +48,38 @@
     background-size: cover;
     background-position: center;
     transition: opacity 0.8s ease-in-out;
+    contain: paint;
+    isolation: isolate;
+}
+
+.spotlight-item:not([data-active]):not([data-fade-out]) {
+    display: none;
+}
+
+/* Crossfade: outgoing slide fades to 0 */
+.spotlight-item[data-fade-out] {
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Crossfade: incoming slide starts at 0, then transitions to 1 when data-entering is removed */
+.spotlight-item[data-active][data-entering] {
+    opacity: 0;
+}
+
+.spotlight-item[data-active]:not([data-entering]) {
+    opacity: 1;
+}
+
+/* Skeleton spotlight: single full-container placeholder; fill area and match layout/size */
+.skeleton-spotlight-item {
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
+}
+.spotlight-section[data-layout="Border"] .skeleton-spotlight-item {
+    border-radius: 8px;
 }
 
 /* Dual-backdrop background with masked crossfade */
@@ -62,24 +109,17 @@
     pointer-events: none;
 }
 
-.spotlight-background-layer img.animate {
+.spotlight-background-layer img.animate,
+.spotlight-background-single img.animate {
     filter: blur(0);
-    transform: scale(1);
-    transition: filter 0.3s ease-in-out, transform 0.3s ease-in-out;
-    will-change: transform;
+    transition: filter 0.3s ease-in-out;
     backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    transform-origin: center center;
+    animation: var(--spotlight-slide-animation, kenBurnsZoomIn) 20s linear;
 }
 
-.spotlight-background-layer-left img.animate {
-    animation: kenBurnsZoomOut 20s ease-out forwards;
-    transform-origin: center right;
-}
-.spotlight-background-layer-right img.animate {
-    animation: kenBurnsZoomIn 20s ease-out forwards;
-    transform-origin: center left;
-}
-
-/* Single backdrop (when dual backdrops disabled or only one image) - same pan animation */
+/* Single backdrop (when tileCount is 1 or only one image) */
 .spotlight-background-single {
     position: absolute;
     inset: 0;
@@ -95,11 +135,16 @@
     pointer-events: none;
 }
 
-.spotlight-background-single img.animate {
-    animation: kenBurnsZoomIn 15s ease-out forwards;
-    will-change: transform;
-    backface-visibility: hidden;
-    transform-origin: center center;
+/* Cycle backdrops: two stacked layers for crossfade (same as slide transition) */
+.spotlight-background-single.cycle-backdrops img {
+    position: absolute;
+    inset: 0;
+}
+.spotlight-background-single.cycle-backdrops img:first-child {
+    z-index: 1;
+}
+.spotlight-background-single.cycle-backdrops img:last-child {
+    z-index: 2;
 }
 
 @keyframes kenBurnsZoomIn {
@@ -116,7 +161,7 @@
       transform: scale3d(1.15, 1.15, 0.1);
     }
     to {
-      transform: scale3d(1.02, 1.02, 0);
+      transform: scale3d(1.02, 1.02, 1);
     }
   }
 
@@ -135,7 +180,7 @@
     transform: scale3d(1.15, 1.15, 0.1);
   }
   to {
-    transform: scale3d(1.08, 1.08, 0);
+    transform: scale3d(1.08, 1.08, 1);
   }
 }
 
@@ -155,23 +200,23 @@
 }
   
 @keyframes kenBurnsPanRight {
-    from { transform: scale3d(1.1, 1.1, 1) translateX(-2%); }
-    to   { transform: scale3d(1.1, 1.1, 1) translateX(2%); }
+    from { transform: scale3d(1.1, 1.1, 1) translateX(-5%); }
+    to   { transform: scale3d(1.1, 1.1, 1) translateX(5%); }
   }
   
   @keyframes kenBurnsPanLeft {
-    from { transform: scale3d(1.1, 1.1, 1) translateX(2%); }
-    to   { transform: scale3d(1.1, 1.1, 1) translateX(-2%); }
+    from { transform: scale3d(1.1, 1.1, 1) translateX(5%); }
+    to   { transform: scale3d(1.1, 1.1, 1) translateX(-5%); }
   }
   
   @keyframes kenBurnsPanUp {
-    from { transform: scale3d(1.1, 1.1, 1) translateY(2%); }
-    to   { transform: scale3d(1.1, 1.1, 1) translateY(-2%); }
+    from { transform: scale3d(1.1, 1.1, 1) translateY(5%); }
+    to   { transform: scale3d(1.1, 1.1, 1) translateY(-5%); }
   }
   
   @keyframes kenBurnsDiagonal {
-    from { transform: scale3d(1.08, 1.08, 1) translate(-2%, 2%); }
-    to   { transform: scale3d(1.13, 1.13, 1) translate(2%, -2%); }
+    from { transform: scale3d(1.08, 1.08, 1) translate(-5%, 5%); }
+    to   { transform: scale3d(1.13, 1.13, 1) translate(5%, -5%); }
   }
   
   @keyframes fadeInScale {
@@ -244,31 +289,73 @@
     -webkit-mask-image: linear-gradient(
         to right,
         rgba(0, 0, 0, 0) 0%,
-        rgba(0, 0, 0, 0.5) 10%,
-        rgba(0, 0, 0, 1) 25%,
+        rgba(0, 0, 0, 0.25) 8%,
+        rgba(0, 0, 0, 0.5) 18%,
+        rgba(0, 0, 0, 1) 35%,
         rgba(0, 0, 0, 1) 100%
     );
     mask-image: linear-gradient(
         to right,
         rgba(0, 0, 0, 0) 0%,
-        rgba(0, 0, 0, 0.5) 10%,
-        rgba(0, 0, 0, 1) 25%,
+        rgba(0, 0, 0, 0.25) 8%,
+        rgba(0, 0, 0, 0.5) 18%,
+        rgba(0, 0, 0, 1) 35%,
         rgba(0, 0, 0, 1) 100%
     );
     -webkit-mask-size: 100% 100%;
     mask-size: 100% 100%;
 }
 
-.spotlight-item[data-index="0"] {
-    opacity: 1;
+/* Three-tile: center layer ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“ symmetric soft fade on both edges for seamless left/center and center/right blend */
+.spotlight-background-layer-center {
+    left: 33.333%;
+    width: 33.334%;
+    -webkit-mask-image: linear-gradient(
+        to right,
+        rgba(0, 0, 0, 0) 0%,
+        rgba(0, 0, 0, 0.25) 8%,
+        rgba(0, 0, 0, 0.5) 18%,
+        rgba(0, 0, 0, 1) 30%,
+        rgba(0, 0, 0, 1) 70%,
+        rgba(0, 0, 0, 0.5) 82%,
+        rgba(0, 0, 0, 0.25) 92%,
+        rgba(0, 0, 0, 0) 100%
+    );
+    mask-image: linear-gradient(
+        to right,
+        rgba(0, 0, 0, 0) 0%,
+        rgba(0, 0, 0, 0.25) 8%,
+        rgba(0, 0, 0, 0.5) 18%,
+        rgba(0, 0, 0, 1) 30%,
+        rgba(0, 0, 0, 1) 70%,
+        rgba(0, 0, 0, 0.5) 82%,
+        rgba(0, 0, 0, 0.25) 92%,
+        rgba(0, 0, 0, 0) 100%
+    );
+    -webkit-mask-size: 100% 100%;
+    mask-size: 100% 100%;
 }
 
-.spotlight-item:not([data-index="0"]) {
-    opacity: 0;
+.spotlight-section .spotlight-item .spotlight-background-dual {
+    background: black;
+}
+
+.spotlight-section .spotlight-item:has(.spotlight-background-layer-center) .spotlight-background-layer {
+    width: 37.5%;
+}
+
+/* Mobile: show only left backdrop (full width) */
+.layout-mobile .spotlight-background-layer-center,
+.layout-mobile .spotlight-background-layer-right {
+    display: none !important;
+}
+.layout-mobile .spotlight-background-layer-left {
+    width: 100% !important;
+    mask-image: none !important;
 }
 
 /* Logo section heights per size - fixed to prevent layout shift when sliding between items */
-.spotlight-section { --spotlight-logo-height: 120px; }
+.spotlight-section { --spotlight-logo-height: 118px; }
 .spotlight-section[data-size="large"] { --spotlight-logo-height: 180px; }
 .spotlight-section[data-size="full"] { --spotlight-logo-height: 240px; }
 
@@ -278,7 +365,7 @@
     bottom: 0;
     left: 0;
     width: 45%;
-    background: linear-gradient(to right, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.7) 70%, transparent 100%);
+    background: linear-gradient(to right, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.7) 40%, transparent 100%);
     padding: 40px;
     color: white;
     display: grid;
@@ -289,7 +376,7 @@
     z-index: 2;
 }
 
-.spotlight-overlay .spotlight-logo-section { grid-area: logo; height: var(--spotlight-logo-height); min-height: 0; display: flex; align-items: flex-end; overflow: hidden; align-content: center; flex-wrap: wrap; }
+.spotlight-overlay .spotlight-logo-section {grid-area: logo;height: 100%;min-height: 0;display: flex;align-items: flex-end;overflow: hidden;align-content: center;flex-wrap: wrap;}
 .spotlight-overlay .spotlight-metadata-section { grid-area: metadata; }
 .spotlight-overlay .spotlight-overview-section { grid-area: overview; display: flex; flex-direction: column; justify-content: flex-start; overflow: hidden; }
 .spotlight-overlay .spotlight-buttons-section { grid-area: buttons; display: flex; align-items: center; }
@@ -299,14 +386,11 @@
 }
 
 .spotlight-section-title {
-    position: absolute;
     color: white;
     font-size: 18px;
     font-weight: 600;
     z-index: 10;
     padding: 8px 16px;
-    border-radius: 4px;
-    backdrop-filter: blur(4px);
     letter-spacing: 2px;
     word-spacing: 2px;
 }
@@ -324,19 +408,19 @@
     align-items: flex-end;
     overflow: hidden;
 }
-.spotlight-item-title:not(h3) {
-    height: 100%;
-}
 
 .spotlight-item-logo {
     height: 100%;
-    max-height: var(--spotlight-logo-height);
     width: 100%;
     object-fit: contain;
     margin: 0;
     background-size: contain;
     background-repeat: no-repeat;
     background-position: left;
+}
+
+.layout-mobile .spotlight-item-logo {
+    background-position: bottom;
 }
 
 .spotlight-clearart {
@@ -358,7 +442,6 @@
     -webkit-justify-content: center;
     justify-content: center;
     vertical-align: middle;
-    margin: 0 1em 0 0;
 }
 
 .spotlight-rating-star {
@@ -603,28 +686,12 @@
 }
 
 .spotlight-info-button {
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    background: rgba(255,255,255,0.2);
-    color: white;
-    border: 2px solid rgba(255,255,255,0.5);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 0;
     transition: all 0.2s;
     position: relative;
-}
-
-.spotlight-info-button:hover {
-    background: rgba(255,255,255,0.3);
-    border-color: rgba(255,255,255,0.7);
-}
-
-.spotlight-info-button .material-icons {
-    font-size: 28px;
 }
 
 .spotlight-overview-tooltip {
@@ -655,7 +722,7 @@
 }
 
 .spotlight-nav-container {
-    position: absolute;
+    position: absolute !important;
     top: 0px;
     right: 0px;
     display: flex;
@@ -667,12 +734,6 @@
     border-radius: 4px;
     top: 5px !important;
     right: 5px !important;
-}
-
-.spotlight-section[data-layout="Border"] .spotlight-section-title {
-    border-radius: 4px;
-    top: 5px !important;
-    left: 5px !important;
 }
 
 .spotlight-nav-button {
@@ -780,11 +841,6 @@
         -webkit-line-clamp: 1;
         bottom: 60px;
     }
-
-    .spotlight-item-logo {
-        max-width: 100%;
-        height: 125px;
-    }
 }
 
 .skeleton-card {
@@ -847,7 +903,6 @@
 
 .show-all-button {
     margin-left: 10px;
-    font-size: 12px;
     padding: 4px 8px;
     min-width: auto;
     background: transparent;
@@ -855,19 +910,20 @@
     cursor: pointer;
     align-self: center;
     border: 1px solid rgba(255, 255, 255, 0.3) !important;
-    color: var(--main-text, #fff) !important;
+    color: rgba(255, 255, 255, 0.87) !important;
+    opacity: 0.65;
     position: relative;
     display: none; /* Hidden by default */
 }
 
-[data-section-id] .sectionTitleContainer {
-    display: flex;
+.custom-scroller-container h2.sectionTitle.sectionTitle-cards {
     align-items: center;
+    text-align: left;
 }
 
-/* Show button when section is expandable */
-.emby-scroller-container[data-expandable="true"] .show-all-button {
-    display: initial !important;
+.custom-scroller-container .sectionTitleContainer {
+    display: flex;
+    align-items: center;
 }
 
 /* Expanded grid view styles */
@@ -1027,12 +1083,6 @@
     width: 100%;
 }
 
-/* Borderless: base scale so image extends past edges even before animation starts */
-.spotlight-section[data-layout="Borderless"] .spotlight-background-single img,
-.spotlight-section[data-layout="Borderless"] .spotlight-background-layer img {
-    transform: scale(1.08);
-}
-
 /* Borderless: use pre-scaled animations so image never shows hard edge at top */
 /* .spotlight-section[data-layout="Borderless"] .spotlight-background-single img.animate {
     animation: kenBurnsZoomInFullscreen 20s ease-out forwards;
@@ -1056,7 +1106,8 @@
 }
 
 .spotlight-section[data-layout="Borderless"][data-size="full"] .spotlight-overlay {
-    align-content: start;
+    grid-template-rows: 1fr auto minmax(8em, auto) minmax(48px, auto);
+    align-content: center;
     gap: 1.5em;
 }
 
@@ -1067,7 +1118,7 @@
 
 
 .spotlight-section[data-layout="Borderless"] .spotlight-overlay.has-title {
-    padding: calc(var(--spotlight-fullscreen-vertical) * 2) var(--spotlight-fullscreen-horizontal) calc(var(--spotlight-fullscreen-vertical) * 2.25) var(--spotlight-fullscreen-horizontal);
+    padding: calc(var(--spotlight-fullscreen-vertical) * 2) var(--spotlight-fullscreen-horizontal) calc(var(--spotlight-fullscreen-vertical) * 2.5) var(--spotlight-fullscreen-horizontal);
 }
 
 /* Duplicate removed - already defined above for Borderless */
@@ -1080,7 +1131,7 @@
 
 /* Duplicate removed - clearart display:none already set for Borderless above */
 
-.spotlight-section[data-layout="Borderless"] .spotlight-section-title {
+.spotlight-section[data-layout="Borderless"] .spotlight-section-title-container {
     left: var(--spotlight-fullscreen-horizontal);
     top: calc(var(--spotlight-fullscreen-vertical) * 2.5);
 }
@@ -1127,10 +1178,6 @@
     z-index: 4;
     pointer-events: none;
     line-height: 1.4;
-}
-.spotlight-tagline > *, .spotlight-section-title > *, .spotlight-nav-container > * {
-    background: rgba(0, 0, 0, 0.5);
-    border-radius: 4px;
 }
 .spotlight-section:not(.hide) .spotlight-tagline p {
     font-weight: initial !important;
@@ -1230,24 +1277,30 @@
 }
 
 .layout-mobile .spotlight-overlay {
-    width: 100% !important;
+    width: calc(100% - 2rem) !important;
     background: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.4) 40%, rgba(0,0,0,0.85) 100%) !important;
-    padding: 4rem 1rem 4rem 1rem !important;
+    padding: 4rem 1rem 2rem 1rem !important;
     align-items: start;
     align-content: start;
     grid-template-rows: auto auto 1fr minmax(48px, auto);
     grid-template-areas: "logo" "metadata" "overview" "buttons";
-    gap: 0.75em;
+    gap: 0.75rem;
 }
 
-/* Gap after TITLE: extra top padding when section has a title */
-.layout-mobile .spotlight-overlay.has-title {
-    padding-top: 6rem !important;
+.layout-mobile .spotlight-section .spotlight-section-title-container {
+    top: 15px;
+    max-width: calc(100% - 2rem);
+    left: unset !important;
+    justify-content: center;
+    margin: 0 auto !important;
 }
 
-.layout-mobile .spotlight-section .spotlight-section-title {
-    top: 1rem;
-    left: 1rem;
+.layout-mobile .spotlight-section[data-layout="Borderless"] .spotlight-section-title-container {
+    top: 3rem;
+}
+
+.layout-mobile .spotlight-section[data-layout="Borderless"]:not([data-size="Full"]) .spotlight-section-title-container {
+    top: 2rem;
 }
 
 .layout-mobile .metadata-container {
@@ -1255,8 +1308,9 @@
 }
 
 .layout-mobile .spotlight-logo-section {
-    height: auto !important;
+    height: 100% !important;
     min-height: 0 !important;
+    align-content: end;
 }
 
 .layout-mobile .spotlight-overview {
@@ -1272,8 +1326,7 @@
 }
 
 /* Native Jellyfin itemDetailsGroup structure for all spotlight metadata */
-.spotlight-section .itemDetailsGroup:has(.detailsGroupItem:not(.hide)),
-.spotlight-section .sectionTabs:has(.emby-tab-button:not(.hide)) {
+.spotlight-section .itemDetailsGroup:has(.detailsGroupItem:not(.hide)), .spotlight-section .sectionTabs:not(.spotlight-section-title):has(.emby-tab-button:not(.hide)) {
     margin: 0px !important;
     padding: 0px !important;
     width: initial !important;
@@ -1292,6 +1345,7 @@
 
 .spotlight-section .spotlight-buttons-container.mainDetailButtons {
     margin-left: 0px !important;
+    margin-top: 0px !important;
 }
 
 .spotlight-section:not(.hide) .headerTabs,
@@ -1315,12 +1369,11 @@
 
 .spotlight-section-title.headerTabs.sectionTabs,
 .spotlight-nav-container.headerTabs.sectionTabs {
-    position: absolute !important;
     display: flex !important;
     flex-direction: row !important;
 }
 
-.spotlight-section[data-layout="Border"] .spotlight-section-title {
+.spotlight-section[data-layout="Border"] .spotlight-section-title-container {
     top: 0;
 }
 
@@ -1354,7 +1407,7 @@
     margin-bottom: calc(-1 * calc(var(--spotlight-fullscreen-vertical) / 4));
 }
 .spotlight-section[data-layout="Borderless"][data-size="normal"] .spotlight-banner-container {
-    height: 33rem;
+    height: 45vh;
 }
 
 .spotlight-section[data-layout="Borderless"][data-size="normal"] .spotlight-overview-section {
@@ -1366,7 +1419,7 @@
     margin-top: -1.5em;
 }
 .spotlight-section[data-layout="Borderless"][data-size="large"] .spotlight-banner-container {
-    height: 52rem;
+    height: 69vh;
 }
 
 .spotlight-section[data-layout="Borderless"][data-size="normal"] .spotlight-overlay.has-title {
@@ -1377,7 +1430,7 @@
     --spotlight-fullscreen-vertical: 3em;
     --spotlight-fullscreen-horizontal: max(env(safe-area-inset-left), env(safe-area-inset-right), 4%);
 }
-.spotlight-section[data-layout="Borderless"][data-size="normal"] .spotlight-section-title {
+.spotlight-section[data-layout="Borderless"][data-size="normal"] .spotlight-section-title-container {
     left: var(--spotlight-fullscreen-horizontal);
     top: calc(var(--spotlight-fullscreen-vertical) * 1);
 }
@@ -1392,20 +1445,20 @@
     top: calc(var(--spotlight-fullscreen-vertical) * 1);
 }
 .spotlight-section[data-layout="Borderless"][data-size="normal"] .spotlight-overlay {
-    grid-template-rows: var(--spotlight-logo-height) auto auto minmax(48px, auto);
+    grid-template-rows: 1fr auto auto minmax(48px, auto);
 }
 .spotlight-section[data-size="normal"] .spotlight-overlay {
-    grid-template-rows: var(--spotlight-logo-height) auto auto 1fr;
+    grid-template-rows: var(--spotlight-logo-height) auto 1fr auto;
 }
 .spotlight-section[data-size="large"] .spotlight-overlay {
-    grid-template-rows: var(--spotlight-logo-height) auto auto 1fr;
+    grid-template-rows: 35% auto 1fr auto;
 }
 .spotlight-section[data-layout="Border"] .spotlight-overlay {
-    padding: 65px 40px 15px 40px;
+    padding: 85px 40px 45px 40px;
 }
-.spotlight-section[data-layout="Border"] .spotlight-section-title {
-    top: 15px !important;
-    left: 40px !important;
+.spotlight-section[data-layout="Border"] .spotlight-section-title-container {
+    top: 15px;
+    left: 40px;
 }
 .spotlight-section[data-layout="Border"] .spotlight-nav-container {
     top: 15px !important;
@@ -1413,9 +1466,6 @@
 }
 .spotlight-section[data-layout="Border"][data-size="normal"] .spotlight-section-title a {
     font-size: 1rem !important;
-}
-.spotlight-section[data-layout="Border"][data-size="normal"] .spotlight-buttons-section {
-    align-self: end;
 }
 .spotlight-section[data-layout="Border"] .spotlight-banner-container {
     border: 1px solid rgb(255 255 255 / 10%);
@@ -1434,4 +1484,249 @@
 
 .spotlight-section[data-layout="Border"][data-size="normal"] .spotlight-overview {
     -webkit-line-clamp: 2;
+}
+
+.spotlight-section[data-size="normal"] .spotlight-background-single img,
+.spotlight-section[data-size="large"] .spotlight-background-single img {
+    object-position: center 20%;
+}
+
+.layout-mobile .sectionTitleContainer-cards .sectionTitle-link > * {
+    padding-top: 0 !important;
+}
+
+button.show-all-button::after {
+    content: 'Expand';
+}
+
+.emby-scroller-container:has(.itemsContainer[data-expanded="true"]) button.show-all-button::after {
+    content: 'Collapse';
+}
+
+.layout-mobile button.show-all-button::after {
+    content: 'keyboard_arrow_down';
+    font-family: 'Material Icons';
+}
+
+.layout-mobile button.show-all-button {
+    padding: 0;
+    border: none !important;
+    font-size: 1.5rem;
+}
+
+.layout-mobile .emby-scroller-container:has(.itemsContainer[data-expanded="true"]) button.show-all-button::after {
+    content: 'keyboard_arrow_up';
+}
+
+.layout-mobile .emby-scroller-container .sectionTitleContainer .show-all-button {
+    order: 1;
+    margin-left: auto;
+    margin-right: 1rem;
+}
+
+.layout-mobile .spotlight-section .spotlight-nav-container {
+    display: none !important;    
+}
+
+.layout-mobile .spotlight-section .spotlight-overlay {
+    display: flex;
+    flex-direction: column;
+    justify-content: end;
+    align-items: center;
+}
+
+.layout-mobile .spotlight-section[data-layout="Borderless"][data-size="full"] .spotlight-overlay {
+    padding-bottom: 5rem !important;
+}
+
+.layout-mobile .spotlight-overview-section, 
+.layout-mobile .spotlight-credits-row,
+.layout-mobile .spotlight-series-info {
+    display: none;
+}
+
+.layout-mobile .spotlight-logo-section {
+    width: 100%;
+    justify-content: center;
+}
+
+.layout-mobile .spotlight-dots {
+    bottom: 1rem !important;
+}
+
+.layout-mobile .spotlight-section[data-layout="Borderless"] .spotlight-dots {
+    bottom: 2.5rem !important;
+}
+
+.layout-mobile .spotlight-section[data-layout="Borderless"]:not([data-size="Full"]) .spotlight-dots {
+    bottom: 1.5rem !important;
+}
+
+.layout-mobile .spotlight-section .spotlight-buttons-container {
+    align-content: center;
+    align-items: center;
+    justify-content: center;
+    justify-items: center;
+}
+
+.layout-mobile .spotlight-section .spotlight-section-title.sectionTabs:has(.emby-tab-button:not(.hide)) {
+    justify-self: center;
+    display: flex !important;
+    justify-content: center;
+}
+
+.layout-mobile .spotlight-section .spotlight-section-title > * {
+    max-width: 100%;
+    min-width: 0;
+    text-align: center;
+}
+
+.layout-mobile .spotlight-section .spotlight-section-title.sectionTabs:has(.emby-tab-button:not(.hide)) > * {
+    display: block !important;
+}
+
+/* .layout-mobile .spotlight-section[data-layout="Borderless"][data-order="1"] .spotlight-section-title {
+    top: 135px;
+}
+.layout-mobile .spotlight-section[data-layout="Borderless"][data-order="1"] {
+    margin-top: calc(-1 * calc(var(--spotlight-fullscreen-vertical) * 10)) !important;
+} */
+
+.layout-mobile .spotlight-section-title .emby-tab-button {
+    padding: 0.25rem !important;
+}
+.layout-mobile .spotlight-section .emby-tab-button, 
+.layout-mobile .spotlight-metadata-section span a, 
+.layout-mobile .spotlight-metadata-section span {
+    font-size: 1rem !important;
+}
+
+.layout-mobile .spotlight-section .spotlight-item-title {
+    font-size: 2rem !important;
+    text-align: center;
+}
+
+.layout-mobile .spotlight-section:not(.hide) .spotlight-tagline {
+    display: none !important;
+}
+
+.layout-mobile .spotlight-buttons-container.mainDetailButtons span {
+    font-size: 1.2rem;
+}
+
+.layout-mobile .spotlight-section .spotlight-metadata-row {
+    justify-content: center;
+    align-self: center;
+}
+
+.layout-mobile .spotlight-buttons-section {
+    justify-self: center;
+}
+
+.emby-scroller-container:has(.emby-scrollbuttons-button:not(.hide)) button.show-all-button {
+    display: flex;
+}
+
+.layout-mobile .emby-scroller-container:has(.overflowPortraitCard:nth-child(4)) button.show-all-button,
+.layout-mobile .emby-scroller-container:has(.overflowBackdropCard:nth-child(3)) button.show-all-button {
+    display: flex;
+}
+
+.emby-scroller-container[data-card-format="Button"] .cardScalable {
+    display: none;
+}
+.emby-scroller-container[data-card-format="Button"] .cardText {
+    display: flex !important;
+    padding: 0 !important;
+}
+.emby-scroller-container[data-card-format="Button"] .cardBox {
+    width: 100%;
+    justify-content: center;
+    flex-direction: column;
+    display: flex;
+    padding: 1rem !important;
+}
+.emby-scroller-container[data-card-format="Button"] .card {
+    width: auto !important;
+}
+.emby-scroller-container[data-card-format="Button"] .itemsContainer {
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+.emby-scroller-container:has([data-custom-card="true"]) .section-refresh-button {
+    display: none;
+}
+.emby-scroller-container[data-card-format="Button"] {
+    margin-bottom: 1rem;
+}
+
+.emby-scroller-container[data-card-format="Logo"] .cardScalable,
+.emby-scroller-container[data-card-format="Logo"] .cardPadder,
+.emby-scroller-container[data-card-format="Clear Art"] .cardScalable,
+.emby-scroller-container[data-card-format="Clear Art"] .cardPadder,
+.emby-scroller-container[data-card-format="Disc"] .cardScalable,
+.emby-scroller-container[data-card-format="Disc"] .cardPadder,
+.emby-scroller-container[data-section-id="liveTv-channels"] .cardScalable,
+.emby-scroller-container[data-section-id="liveTv-channels"] .cardPadder {
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+}
+
+.emby-scroller-container[data-card-format="Logo"] .cardImageContainer,
+.emby-scroller-container[data-card-format="Clear Art"] .cardImageContainer,
+.emby-scroller-container[data-section-id="liveTv-channels"] .cardImageContainer {
+    background-size: contain !important;
+}
+
+.emby-scroller-container[data-card-format="Banner"] .card {
+    width: 25vw !important;
+}
+
+.layout-mobile .emby-scroller-container[data-card-format="Banner"] .card {
+    width: 50vw !important;
+}
+
+.emby-scroller-container[data-card-format="Logo"] .cardImageContainer,
+.emby-scroller-container[data-card-format="Clear Art"] .cardImageContainer,
+.emby-scroller-container[data-card-format="Disc"] .cardImageContainer {
+    transition: opacity 0.15s ease-in-out;
+}
+
+.emby-scroller-container[data-card-format="Logo"] .cardImageContainer.lazy-hidden,
+.emby-scroller-container[data-card-format="Clear Art"] .cardImageContainer.lazy-hidden,
+.emby-scroller-container[data-card-format="Disc"] .cardImageContainer.lazy-hidden {
+    opacity: 0;
+}
+
+.emby-scroller-container[data-card-format="Logo"] .cardImageContainer.lazy-loaded,
+.emby-scroller-container[data-card-format="Clear Art"] .cardImageContainer.lazy-loaded,
+.emby-scroller-container[data-card-format="Disc"] .cardImageContainer.lazy-loaded {
+    opacity: 1;
+}
+
+:not(.layout-mobile) .emby-scroller-container[data-card-format="Logo"] .itemsContainer,
+:not(.layout-mobile) .emby-scroller-container[data-card-format="Clear Art"] .itemsContainer,
+:not(.layout-mobile) .emby-scroller-container[data-card-format="Disc"] .itemsContainer {
+    gap: 4rem;
+}
+
+.layout-mobile .emby-scroller-container[data-card-format="Logo"] .itemsContainer,
+.layout-mobile .emby-scroller-container[data-card-format="Clear Art"] .itemsContainer,
+.layout-mobile .emby-scroller-container[data-card-format="Disc"] .itemsContainer {
+    gap: 2rem;
+}
+
+.emby-scroller-container[data-hide-card-footer] .card .cardText {
+    display: none;
+}
+
+.spotlight-section-title-container {
+    position: absolute;
+    width: 100%;
+    display: flex;
+}
+
+.emby-scroller-container .emby-scrollbuttons:has([data-direction="right"]:disabled):has([data-direction="left"]:disabled) {
+    display: none;
 }
