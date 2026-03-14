@@ -447,6 +447,7 @@
             }
             
             const pluginId = plugin.Id;
+            const server = ApiClient._serverAddress;
             
             // Get current injector config
             const configUrl = `${server}/Plugins/${pluginId}/Configuration`;

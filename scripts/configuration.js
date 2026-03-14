@@ -1178,7 +1178,7 @@
     // Build script toggle switches
     function buildScriptToggles(scripts) {
         // Features that have configuration options (not just toggles)
-        const featuresWithConfig = new Set(['homeScreen', 'search', 'flattenSingleSeasonShows', 'skinManager', 'customMenuLinks', 'seriesInfo']);
+        const featuresWithConfig = new Set(['homeScreen', 'search', 'flattenSingleSeasonShows', 'skinManager', 'customMenuLinks', 'seriesInfo', 'thumbnailScrubber']);
         
         const scriptNames = [
             { key: 'watchlist', label: 'Watchlist', desc: 'Allows your users to add items to their Watchlist. The Watchlist page shows an overview of all items on a user\'s Watchlist, as well as their Series Progress and Movie History. It also includes a Statistics page with an overview of your user watched stats.' },
@@ -2550,7 +2550,7 @@
                     config.enabled = isEnabled;
                     
                     // Save the updated config to the injector
-                    await saveConfigToJavaScriptInjector(config);
+                    await KefinTweaksUtils.saveConfigToJavaScriptInjector(config);
                     
                     window.KefinTweaksConfigEnabled = isEnabled;
                     console.log('[KefinTweaks Configuration] KefinTweaks', isEnabled ? 'enabled' : 'disabled');
@@ -2669,7 +2669,7 @@
             const importBtn = e.target.closest('.import-custom-sections-btn');
             if (importBtn) {
                 showImportDialog(config, async (newConfig) => {
-                    await saveConfigToJavaScriptInjector(newConfig);
+                    await KefinTweaksUtils.saveConfigToJavaScriptInjector(newConfig);
                 });
             }
         });
@@ -2679,7 +2679,7 @@
             const importBtn = e.target.closest('.import-community-sections-btn');
             if (importBtn) {
                 showCommunityImportDialog(config, async (newConfig) => {
-                    await saveConfigToJavaScriptInjector(newConfig);
+                    await KefinTweaksUtils.saveConfigToJavaScriptInjector(newConfig);
                 });
             }
         });
@@ -3790,12 +3790,10 @@
                     }
                 });
             }
-            
-            // Hide suggestions when clicking outside
-            document.addEventListener('click', (e) => {
-                if (!badgeContainer.contains(e.target) && !suggestionsDiv.contains(e.target)) {
-                    suggestionsDiv.style.display = 'none';
-                }
+
+            // Hide suggestions when focus leaves the input
+            input.addEventListener('blur', () => {
+                suggestionsDiv.style.display = 'none';
             });
         }
         
@@ -5082,7 +5080,7 @@
     // Apply imported configuration
     async function applyImportedConfig(importedConfig, modalInstance) {
         // Save to JavaScript Injector
-        await saveConfigToJavaScriptInjector(importedConfig);
+        await KefinTweaksUtils.saveConfigToJavaScriptInjector(importedConfig);
         
         // Reload the modal with new config
         modalInstance.close();
@@ -5105,20 +5103,7 @@
                 throw new Error('ApiClient not available');
             }
 
-            const server = ApiClient._serverAddress;
-            const token = ApiClient.accessToken();
-
-            const response = await fetch(`${server}/Plugins`, {
-                headers: {
-                    'X-Emby-Token': token
-                }
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-
-            const plugins = await response.json();
+            const plugins = await aoiHelper.getPlugins();
             console.log('[KefinTweaks Configuration] Active Plugins:', plugins);
 
             // Handle both array and object with Items property
@@ -5486,7 +5471,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
 
         // Save to JavaScript Injector plugin
         try {
-            await saveConfigToJavaScriptInjector(config);
+            await KefinTweaksUtils.saveConfigToJavaScriptInjector(config);
             
             // Update global config objects so dropdown changes reflect saved values
             window.KefinTweaksConfig = config;
@@ -5530,7 +5515,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             defaultConfig.kefinTweaksRoot = existingConfig.kefinTweaksRoot;
             // Note: scriptRoot is no longer used - scripts are loaded from kefinTweaksRoot + '/scripts/'
 
-            await saveConfigToJavaScriptInjector(defaultConfig);
+            await KefinTweaksUtils.saveConfigToJavaScriptInjector(defaultConfig);
 
             if (window.KefinTweaksToaster && window.KefinTweaksToaster.toast) {
                 window.KefinTweaksToaster.toast('Configuration reset to defaults.');
