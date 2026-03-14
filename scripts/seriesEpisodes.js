@@ -255,7 +255,7 @@
             const seasonPopoverCss = `
                 .seasonPopover {
                     background-color: rgba(0, 0, 0, 0.95);
-                    position: absolute;
+                    position: absolute !important;
                     z-index: 1001;
                     display: block;
                 }
@@ -275,17 +275,23 @@
                 popover.style.left = '0';
             }
 
+            // Support both API shape (Id, Name, IndexNumber) and constructed shape (id, name, indexNumber)
+            const seasonId = (s) => s.Id != null ? s.Id : s.id;
+            const seasonName = (s) => s.Name != null ? s.Name : s.name;
+            const seasonIndex = (s) => s.IndexNumber != null ? s.IndexNumber : s.indexNumber;
+
             let selectedItemElement = null;
             seasons.forEach(season => {
                 const itemElement = document.createElement('div');
-                itemElement.className = 'kefinTweaks-popover-item';
-                
-                if (currentSeason && season.Id === currentSeason.Id) {
+                itemElement.className = 'kefinTweaks-popover-item detailsGroupItem';
+
+                const isSelected = currentSeason && (seasonId(season) === seasonId(currentSeason));
+                if (isSelected) {
                     itemElement.classList.add('selected');
                     selectedItemElement = itemElement;
                 }
-                
-                const displayText = formatSeasonName(`${season.Name}`, season.IndexNumber);
+
+                const displayText = formatSeasonName(`${seasonName(season)}`, seasonIndex(season));
                 itemElement.textContent = displayText;
                 itemElement.addEventListener('click', () => {
                     LOG(`Season selected: ${displayText}`);
