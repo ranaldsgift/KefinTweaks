@@ -21,12 +21,12 @@
         getLibraries: async function() {
             ensureApiClient();
             
-            if (__libraries) {
-                return __libraries;
+            if (__libraries?.Items) {
+                return __libraries.Items;
             }
 
             const response = await ApiClient.getItems();
-            return response.Items;
+            return response?.Items ?? [];
         },
 
         /**
