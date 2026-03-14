@@ -600,6 +600,15 @@
      * @param {Object} item - Collection item (BoxSet)
      */
     async function updateCollectionPage(item) {
+        const activePage = document.querySelector('.libraryPage:not(.hide)');
+        if (!activePage) {
+            return;
+        }
+
+        if (activePage.dataset.kefinCollectionPage === 'true') {
+            return;
+        }
+
         const unplayedItemCount = item.UserData?.UnplayedItemCount || 0;
         const totalItemCount = item.RecursiveItemCount || item.ChildCount || 0;
         const playedItemCount = totalItemCount - unplayedItemCount;
@@ -621,6 +630,7 @@
             itemMiscInfoPrimary.appendChild(mediaInfoItemIncomplete);
         }
 
+        activePage.dataset.kefinCollectionPage = 'true';
     }
 
     /**
