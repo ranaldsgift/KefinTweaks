@@ -596,6 +596,34 @@
     }
 
     /**
+     * Update collection page by adding the played item count to the page
+     * @param {Object} item - Collection item (BoxSet)
+     */
+    async function updateCollectionPage(item) {
+        const unplayedItemCount = item.UserData?.UnplayedItemCount || 0;
+        const totalItemCount = item.RecursiveItemCount || item.ChildCount || 0;
+        const playedItemCount = totalItemCount - unplayedItemCount;
+
+        const isVideoCollection = document.querySelector('.libraryPage:not(.hide) .collectionItems:has(.card[data-mediatype="Video"])').length > 0;
+        const progressText = isVideoCollection ? 'watched' : 'complete';
+        const incompleteText = isVideoCollection ? 'unwatched' : 'incomplete';
+
+        const itemMiscInfoPrimary = document.querySelector('.libraryPage:not(.hide) .itemMiscInfo-primary');
+        if (itemMiscInfoPrimary && unplayedItemCount > 0) {
+            const mediaInfoItem = document.createElement('div');
+            mediaInfoItem.className = 'mediaInfoItem';
+            mediaInfoItem.textContent = `${playedItemCount} ${progressText}`;
+            itemMiscInfoPrimary.appendChild(mediaInfoItem);
+
+            const mediaInfoItemIncomplete = document.createElement('div');
+            mediaInfoItemIncomplete.className = 'mediaInfoItem';
+            mediaInfoItemIncomplete.textContent = `${unplayedItemCount} ${incompleteText}`;
+            itemMiscInfoPrimary.appendChild(mediaInfoItemIncomplete);
+        }
+
+    }
+
+    /**
      * Initialize collections hook
      */
     function initializeCollectionsHook() {
@@ -619,7 +647,8 @@
                 // Small delay to ensure details DOM is ready
                 setTimeout(async () => {
                     if (item && item.Id && item.Type === 'BoxSet') {
-                        await addCollectionSorting(item);
+                        addCollectionSorting(item);
+                        updateCollectionPage(item);
                     }
                 }, 100);
             },

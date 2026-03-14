@@ -914,6 +914,31 @@
             itemsContainer: playlistItemsContainer
         });
 
+        // Updated played item count
+        const playedItemCount = children.filter(item => item.UserData?.Played === true).length;
+
+        const itemMiscInfoPrimary = document.querySelector('.libraryPage:not(.hide) .itemMiscInfo-primary');
+        if (itemMiscInfoPrimary && playedItemCount > 0) {
+            const isAudioPlaylist = children.every(item => item.MediaType === 'Audio');
+            const isBookPlaylist = children.every(item => item.MediaType === 'Book');
+            const progressText = isAudioPlaylist ? 'played' : isBookPlaylist ? 'read' : 'watched';
+            const incompleteText = isAudioPlaylist ? 'unplayed' : isBookPlaylist ? 'unread' : 'unwatched';
+
+            // Add CSS Var --played-item-count
+            itemMiscInfoPrimary.dataset.playedItemCount = playedItemCount;
+            itemMiscInfoPrimary.dataset.totalItemCount = children.length;
+
+            const mediaInfoItem = document.createElement('div');
+            mediaInfoItem.className = 'mediaInfoItem';
+            mediaInfoItem.textContent = `${playedItemCount} ${progressText}`;
+            itemMiscInfoPrimary.appendChild(mediaInfoItem);
+
+            const mediaInfoItemIncomplete = document.createElement('div');
+            mediaInfoItemIncomplete.className = 'mediaInfoItem';
+            mediaInfoItemIncomplete.textContent = `${children.length - playedItemCount} ${incompleteText}`;
+            itemMiscInfoPrimary.appendChild(mediaInfoItemIncomplete);
+        }
+
         // Add sort button (only if it doesn't exist)
         if (!sortButton) {
             addSortButton(detailButtons, playlistId);
