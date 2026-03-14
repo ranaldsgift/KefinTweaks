@@ -91,7 +91,43 @@
                             }
                         }
                     ]
-                }
+                },
+                {
+                    id: 'continueListening',
+                    name: 'Continue Listening',
+                    enabled: false,
+                    hidden: false,
+                    order: 10,
+                    cardFormat: 'Square',
+                    ttl: CACHE_CONFIG.FORCE_REFRESH_TTL,
+                    queries: [
+                        {
+                            path: '/UserItems/Resume',
+                            queryOptions: {
+                                MediaTypes: 'Audio',
+                                Limit: 16
+                            }
+                        }
+                    ]
+                },
+                {
+                    id: 'continueReading',
+                    name: 'Continue Reading',
+                    enabled: false,
+                    hidden: false,
+                    order: 10,
+                    cardFormat: 'Poster',
+                    ttl: CACHE_CONFIG.FORCE_REFRESH_TTL,
+                    queries: [
+                        {
+                            path: '/UserItems/Resume',
+                            queryOptions: {
+                                MediaTypes: 'Book',
+                                Limit: 16
+                            }
+                        }
+                    ]
+                },
             ]
         },
         // Upcoming Group
@@ -168,6 +204,238 @@
                 }
             ]
         },
+        // Recently Added (sections added by verifyLibrarySectionsConfig from server libraries)
+        {
+            id: 'home-recently-added',
+            name: 'Recently Added',
+            sections: []
+        },
+        // Live TV
+        {
+            id: 'home-live-tv',
+            name: 'Live TV',
+            sections: [
+                {
+                    id: 'liveTv-recordings',
+                    name: 'Recordings',
+                    enabled: false,
+                    order: 90,
+                    cardFormat: 'Poster',
+                    ttl: CACHE_CONFIG.SHORT_TTL,
+                    queries: [
+                        {
+                            path: '/LiveTv/Recordings',
+                            queryOptions: {
+                                Limit: 20,
+                            }
+                        }
+                    ]
+                },
+                {
+                    id: 'liveTv-timers',
+                    name: 'Scheduled Recordings',
+                    enabled: false,
+                    order: 91,
+                    cardFormat: 'Poster',
+                    ttl: CACHE_CONFIG.SHORT_TTL,
+                    queries: [
+                        {
+                            path: '/LiveTv/Timers',
+                            queryOptions: {
+                                IsActive: false,
+                                IsScheduled: true,
+                                Limit: 20,
+                            }
+                        }
+                    ]
+                },
+                {
+                    id: 'liveTv-browse',
+                    name: 'Live TV',
+                    enabled: false,
+                    order: 91,
+                    cardFormat: 'Button',
+                    items: [
+                        {
+                            Name: 'Programs',
+                            cardUrl: '#/livetv.html?tab=0',
+                        },
+                        {
+                            Name: 'Guide',
+                            cardUrl: '#/livetv.html?tab=1',
+                        },
+                        {
+                            Name: 'Channels',
+                            cardUrl: '#/livetv.html?tab=2',
+                        },
+                        {
+                            Name: 'Recordings',
+                            cardUrl: '#/livetv.html?tab=3',
+                        },
+                        {
+                            Name: 'Schedule',
+                            cardUrl: '#/livetv.html?tab=4',
+                        },
+                        {
+                            Name: 'Series',
+                            cardUrl: '#/livetv.html?tab=5',
+                        }
+                    ]
+                },
+                {
+                    id: 'liveTv-on-now',
+                    name: 'On Now',
+                    enabled: false,
+                    order: 92,
+                    cardFormat: 'Poster',
+                    ttl: CACHE_CONFIG.VERY_SHORT_TTL,
+                    queries: [
+                        {
+                            path: '/LiveTv/Programs/Recommended',
+                            queryOptions: {
+                                IsAiring: true,
+                                Limit: 24,
+                            }
+                        }
+                    ]
+                },
+                {
+                    id: 'liveTv-programs',
+                    name: 'Programs',
+                    enabled: false,
+                    order: 92,
+                    cardFormat: 'Poster',
+                    ttl: CACHE_CONFIG.VERY_SHORT_TTL,
+                    queries: [
+                        {
+                            path: '/LiveTv/Programs',
+                            queryOptions: {
+                                Limit: 20,
+                                SortBy: 'Random',
+                                HasAired: false,
+                            }
+                        }
+                    ]
+                },
+                {
+                    id: 'liveTv-channels',
+                    name: 'Channels',
+                    enabled: false,
+                    order: 92,
+                    cardFormat: 'Thumb',
+                    hideCardFooter: true,
+                    ttl: CACHE_CONFIG.LONG_TTL,
+                    queries: [
+                        {
+                            path: '/LiveTv/Channels',
+                            queryOptions: {
+                                Limit: 20,
+                                SortBy: 'Random',
+                            }
+                        }
+                    ]
+                },
+                {
+                    id: 'liveTv-series-on-now',
+                    name: 'Shows From Live TV',
+                    enabled: false,
+                    order: 92,
+                    cardFormat: 'Poster',
+                    ttl: CACHE_CONFIG.VERY_SHORT_TTL,
+                    queries: [
+                        {
+                            path: '/LiveTv/Programs',
+                            queryOptions: {
+                                Limit: 10,
+                                SortBy: 'Random',
+                                HasAired: false,
+                                IsSeries: true,
+                                IsMovie: false,
+                                IsSports: false,
+                                IsNews: false,
+                                IsKids: false,
+                            }
+                        }
+                    ]
+                },
+                {
+                    id: 'liveTv-movies-on-now',
+                    name: 'Movies From Live TV',
+                    enabled: false,
+                    order: 92,
+                    cardFormat: 'Poster',
+                    ttl: CACHE_CONFIG.VERY_SHORT_TTL,
+                    queries: [
+                        {
+                            path: '/LiveTv/Programs',
+                            queryOptions: {
+                                Limit: 10,
+                                SortBy: 'Random',
+                                HasAired: false,
+                                IsMovie: true,
+                            }
+                        }
+                    ]
+                },
+                {
+                    id: 'liveTv-sports-on-now',
+                    name: 'Sports From Live TV',
+                    enabled: false,
+                    order: 92,
+                    cardFormat: 'Poster',
+                    ttl: CACHE_CONFIG.VERY_SHORT_TTL,
+                    queries: [
+                        {
+                            path: '/LiveTv/Programs',
+                            queryOptions: {
+                                Limit: 10,
+                                SortBy: 'Random',
+                                HasAired: false,
+                                IsSports: true,
+                            }
+                        }
+                    ]
+                },
+                {
+                    id: 'liveTv-news-on-now',
+                    name: 'News From Live TV',
+                    enabled: false,
+                    order: 92,
+                    cardFormat: 'Poster',
+                    ttl: CACHE_CONFIG.VERY_SHORT_TTL,
+                    queries: [
+                        {
+                            path: '/LiveTv/Programs',
+                            queryOptions: {
+                                Limit: 10,
+                                SortBy: 'Random',
+                                HasAired: false,
+                                IsNews: true,
+                            }
+                        }
+                    ]
+                },
+                {
+                    id: 'liveTv-kids-on-now',
+                    name: 'Kids From Live TV',
+                    enabled: false,
+                    order: 92,
+                    cardFormat: 'Poster',
+                    ttl: CACHE_CONFIG.VERY_SHORT_TTL,
+                    queries: [
+                        {
+                            path: '/LiveTv/Programs',
+                            queryOptions: {
+                                Limit: 10,
+                                SortBy: 'Random',
+                                HasAired: false,
+                                IsKids: true,
+                            }
+                        }
+                    ]
+                },
+            ]
+        },
         // IMDb Top 250 Group
         {
             id: 'home-imdb-top-250',
@@ -195,27 +463,85 @@
         },
         // Popular TV Networks Group
         {
-            id: 'home-popular-tv-networks',
-            name: 'Popular TV Networks',
+            id: 'home-popular-studios',
+            name: 'Popular Studios',
             sections: [
                 {
-                    id: 'popularTVNetworks',
-                    name: 'Popular TV Networks',
+                    id: 'popularTVStudios',
+                    name: 'Popular TV Studios',
                     enabled: true,
                     order: 72,
                     cardFormat: 'Thumb',
-                    ttl: CACHE_CONFIG.STATIC_TTL,
+                    ttl: CACHE_CONFIG.LONG_TTL,
+                    itemLimit: 20,
+                    sortBy: 'Random',
+                    limitBeforeSort: true,
+                    hideCardFooter: true,
                     queries: [
                         {
-                            dataSource: 'StudiosCache.getPopularTVNetworks',
+                            path: '/Studios',
                             queryOptions: {
-                                SortBy: 'SortName',
-                                Limit: 20
+                                IncludeItemTypes: ['Series'],
+                                SortBy: 'ChildCount',
+                                SortOrder: 'Descending',
+                                Limit: 0
+                            }
+                        }
+                    ]
+                },
+                {
+                    id: 'popularMovieStudios',
+                    name: 'Popular Movie Studios',
+                    enabled: true,
+                    order: 72,
+                    cardFormat: 'Thumb',
+                    ttl: CACHE_CONFIG.LONG_TTL,
+                    itemLimit: 20,
+                    sortBy: 'Random',
+                    limitBeforeSort: true,
+                    hideCardFooter: true,
+                    queries: [
+                        {
+                            path: '/Studios',
+                            queryOptions: {
+                                IncludeItemTypes: ['Movie'],
+                                SortBy: 'ChildCount',
+                                SortOrder: 'Descending',
+                                Limit: 0,
+                            }
+                        }
+                    ]
+                },
+                {
+                    id: 'popularStudios',
+                    name: 'Popular Studios',
+                    enabled: false,
+                    order: 72,
+                    cardFormat: 'Thumb',
+                    ttl: CACHE_CONFIG.LONG_TTL,
+                    itemLimit: 20,
+                    sortBy: 'Random',
+                    limitBeforeSort: true,
+                    hideCardFooter: true,
+                    queries: [
+                        {
+                            path: '/Studios',
+                            queryOptions: {
+                                IncludeItemTypes: ['Movie', 'Series'],
+                                SortBy: 'ChildCount',
+                                SortOrder: 'Descending',
+                                Limit: 0,
                             }
                         }
                     ]
                 }
             ]
+        },
+        // Popular Genres (sections added by verifyLibrarySectionsConfig from server libraries)
+        {
+            id: 'home-popular-genres',
+            name: 'Popular Genres',
+            sections: []
         },
         // Watch Again Group
         {
@@ -269,8 +595,8 @@
         },
         // Resume Playlists Group
         {
-            id: 'home-resume-playlists',
-            name: 'Pick Up Where You Left Off',
+            id: 'home-playlists-collections',
+            name: 'Playlists & Collections',
             sections: [
                 {
                     id: 'resumePlaylists',
@@ -308,9 +634,201 @@
                             }
                         }
                     ]
+                },
+                {
+                    id: 'playlists',
+                    name: 'Browse by Playlist',
+                    enabled: false,
+                    order: 76,
+                    cardFormat: 'Poster',
+                    ttl: CACHE_CONFIG.DEFAULT_TTL,
+                    queries: [
+                        {
+                            queryOptions: {
+                                IncludeItemTypes: ['Playlist'],
+                                SortBy: 'Random',
+                                Limit: 20
+                            }
+                        }
+                    ]
+                },
+                {
+                    id: 'collections',
+                    name: 'Browse by Collection',
+                    enabled: false,
+                    order: 77,
+                    cardFormat: 'Poster',
+                    ttl: CACHE_CONFIG.DEFAULT_TTL,
+                    queries: [
+                        {
+                            queryOptions: {
+                                IncludeItemTypes: ['BoxSet'],
+                                SortBy: 'Random',
+                                Limit: 20
+                            }
+                        }
+                    ]
                 }
             ]
-        }
+        },
+        // Thematic Picks (static items – no remote query)
+        {
+            id: 'home-thematic-picks',
+            name: 'Thematic Picks',
+            sections: [
+                {
+                    id: 'thematic-story-origins',
+                    name: 'Story Origins',
+                    enabled: false,
+                    order: 81,
+                    cardFormat: 'Poster',
+                    sortBy: 'Random',
+                    items: [
+                        { Name: 'Based on a True Story', imageUrl: '${kefinTweaksRoot}pages/images/collections/based-on-true-story.jpg', cardUrl: '#/list.html?type=tag&tag=based%20on%20a%20true%20story|based%20on%20true%20story&serverId=${serverId}' },
+                        { Name: 'Based on a Novel', imageUrl: '${kefinTweaksRoot}pages/images/collections/based-on-novel.jpg', cardUrl: '#/list.html?type=tag&tag=based%20on%20novel%20or%20book&serverId=${serverId}' },
+                        { Name: 'Based on a Comic Book', imageUrl: '${kefinTweaksRoot}pages/images/collections/based-on-comic-book.jpg', cardUrl: '#/list.html?type=tag&tag=based%20on%20comic|comic%20book&serverId=${serverId}' },
+                        { Name: 'Based on a Video Game', imageUrl: '${kefinTweaksRoot}pages/images/collections/based-on-video-game.jpg', cardUrl: '#/list.html?type=tag&tag=based%20on%20video%20game|video%20game&serverId=${serverId}' },
+                        { Name: 'Based on a Play or Musical', imageUrl: '${kefinTweaksRoot}pages/images/collections/based-on-play-musical.jpg', cardUrl: '#/list.html?type=tag&tag=based%20on%20play%20or%20musical&serverId=${serverId}' },
+                        { Name: 'Based on a Memoir', imageUrl: '${kefinTweaksRoot}pages/images/collections/based-on-memoir.jpg', cardUrl: '#/list.html?type=tag&tag=based%20on%20memoir%20or%20autobiography&serverId=${serverId}' },
+                        { Name: 'Biography', imageUrl: '${kefinTweaksRoot}pages/images/collections/biography.jpg', cardUrl: '#/list.html?type=tag&tag=biography&serverId=${serverId}' },
+                        { Name: 'Remake / Reboot', imageUrl: '${kefinTweaksRoot}pages/images/collections/remake-reboot.jpg', cardUrl: '#/list.html?type=tag&tag=remake|reboot&serverId=${serverId}' }
+                    ]
+                },
+                {
+                    id: 'thematic-core-concepts',
+                    name: 'Core Concepts',
+                    enabled: false,
+                    order: 82,
+                    cardFormat: 'Poster',
+                    sortBy: 'Random',
+                    items: [
+                        { Name: 'Superhero', imageUrl: '${kefinTweaksRoot}pages/images/collections/superhero.jpg', cardUrl: '#/list.html?type=tag&tag=superhero&serverId=${serverId}' },
+                        { Name: 'Super Power', imageUrl: '${kefinTweaksRoot}pages/images/collections/super-power.jpg', cardUrl: '#/list.html?type=tag&tag=super%20power&serverId=${serverId}' },
+                        { Name: 'Time Travel', imageUrl: '${kefinTweaksRoot}pages/images/collections/time-travel.jpg', cardUrl: '#/list.html?type=tag&tag=time%20travel&serverId=${serverId}' },
+                        { Name: 'Time Loop', imageUrl: '${kefinTweaksRoot}pages/images/collections/time-loop.jpg', cardUrl: '#/list.html?type=tag&tag=time%20loop&serverId=${serverId}' },
+                        { Name: 'Dystopia', imageUrl: '${kefinTweaksRoot}pages/images/collections/dystopia.jpg', cardUrl: '#/list.html?type=tag&tag=dystopia&serverId=${serverId}' },
+                        { Name: 'Post-Apocalyptic Future', imageUrl: '${kefinTweaksRoot}pages/images/collections/post-apocalyptic.jpg', cardUrl: '#/list.html?type=tag&tag=post-apocalyptic%20future&serverId=${serverId}' },
+                        { Name: 'Cyberpunk', imageUrl: '${kefinTweaksRoot}pages/images/collections/cyberpunk.jpg', cardUrl: '#/list.html?type=tag&tag=cyberpunk&serverId=${serverId}' },
+                        { Name: 'Parallel Universe', imageUrl: '${kefinTweaksRoot}pages/images/collections/parallel-universe.jpg', cardUrl: '#/list.html?type=tag&tag=parallel%20universe&serverId=${serverId}' },
+                        { Name: 'Alternative Reality', imageUrl: '${kefinTweaksRoot}pages/images/collections/alternative-reality.jpg', cardUrl: '#/list.html?type=tag&tag=alternative%20reality&serverId=${serverId}' },
+                        { Name: 'Virtual Reality', imageUrl: '${kefinTweaksRoot}pages/images/collections/virtual-reality.jpg', cardUrl: '#/list.html?type=tag&tag=virtual%20reality&serverId=${serverId}' },
+                        { Name: 'Artificial Intelligence', imageUrl: '${kefinTweaksRoot}pages/images/collections/artificial-intelligence.jpg', cardUrl: '#/list.html?type=tag&tag=artificial%20intelligence|artificial%20intelligence%20(a.i.)&serverId=${serverId}' },
+                        { Name: 'Zombie', imageUrl: '${kefinTweaksRoot}pages/images/collections/zombie.jpg', cardUrl: '#/list.html?type=tag&tag=zombie|zombie%20apocalypse&serverId=${serverId}' },
+                        { Name: 'Kaiju / Giant Monster', imageUrl: '${kefinTweaksRoot}pages/images/collections/kaiju.jpg', cardUrl: '#/list.html?type=tag&tag=kaiju|giant%20monster&serverId=${serverId}' },
+                        { Name: 'Alien', imageUrl: '${kefinTweaksRoot}pages/images/collections/alien.jpg', cardUrl: '#/list.html?type=tag&tag=alien&serverId=${serverId}' },
+                        { Name: 'Vampire', imageUrl: '${kefinTweaksRoot}pages/images/collections/vampire.jpg', cardUrl: '#/list.html?type=tag&tag=vampire&serverId=${serverId}' },
+                        { Name: 'Werewolf', imageUrl: '${kefinTweaksRoot}pages/images/collections/werewolf.jpg', cardUrl: '#/list.html?type=tag&tag=werewolf&serverId=${serverId}' },
+                        { Name: 'Witchcraft', imageUrl: '${kefinTweaksRoot}pages/images/collections/witchcraft.jpg', cardUrl: '#/list.html?type=tag&tag=witchcraft&serverId=${serverId}' },
+                        { Name: 'Supernatural', imageUrl: '${kefinTweaksRoot}pages/images/collections/supernatural.jpg', cardUrl: '#/list.html?type=tag&tag=supernatural&serverId=${serverId}' },
+                        { Name: 'Ghost', imageUrl: '${kefinTweaksRoot}pages/images/collections/ghost.jpg', cardUrl: '#/list.html?type=tag&tag=ghost&serverId=${serverId}' },
+                        { Name: 'Mythology', imageUrl: '${kefinTweaksRoot}pages/images/collections/mythology.jpg', cardUrl: '#/list.html?type=tag&tag=mythology&serverId=${serverId}' },
+                        { Name: 'Magic', imageUrl: '${kefinTweaksRoot}pages/images/collections/magic.jpg', cardUrl: '#/list.html?type=tag&tag=magic&serverId=${serverId}' }
+                    ]
+                },
+                {
+                    id: 'thematic-crime-stories',
+                    name: 'Crime Stories',
+                    enabled: false,
+                    order: 83,
+                    cardFormat: 'Poster',
+                    sortBy: 'Random',
+                    items: [
+                        { Name: 'Heist', imageUrl: '${kefinTweaksRoot}pages/images/collections/heist.jpg', cardUrl: '#/list.html?type=tag&tag=heist|robbery&serverId=${serverId}' },
+                        { Name: 'True Crime', imageUrl: '${kefinTweaksRoot}pages/images/collections/true-crime.jpg', cardUrl: '#/list.html?type=tag&tag=true%20crime&serverId=${serverId}' },
+                        { Name: 'Serial Killer', imageUrl: '${kefinTweaksRoot}pages/images/collections/serial-killer.jpg', cardUrl: '#/list.html?type=tag&tag=serial%20killer&serverId=${serverId}' },
+                        { Name: 'Murder', imageUrl: '${kefinTweaksRoot}pages/images/collections/murder.jpg', cardUrl: '#/list.html?type=tag&tag=murder&serverId=${serverId}' },
+                        { Name: 'Organized Crime', imageUrl: '${kefinTweaksRoot}pages/images/collections/organized-crime.jpg', cardUrl: '#/list.html?type=tag&tag=organized%20crime&serverId=${serverId}' },
+                        { Name: 'Criminal Mastermind', imageUrl: '${kefinTweaksRoot}pages/images/collections/criminal-mastermind.jpg', cardUrl: '#/list.html?type=tag&tag=criminal%20mastermind&serverId=${serverId}' },
+                        { Name: 'Mafia / Mobster', imageUrl: '${kefinTweaksRoot}pages/images/collections/mafia.jpg', cardUrl: '#/list.html?type=tag&tag=mafia|mobster&serverId=${serverId}' },
+                        { Name: 'Gangster', imageUrl: '${kefinTweaksRoot}pages/images/collections/gangster.jpg', cardUrl: '#/list.html?type=tag&tag=gangster&serverId=${serverId}' },
+                        { Name: 'Prison', imageUrl: '${kefinTweaksRoot}pages/images/collections/prison.jpg', cardUrl: '#/list.html?type=tag&tag=prison&serverId=${serverId}' },
+                        { Name: 'Vigilante Justice', imageUrl: '${kefinTweaksRoot}pages/images/collections/vigilante.jpg', cardUrl: '#/list.html?type=tag&tag=vigilante%20justice|vigilante&serverId=${serverId}' },
+                        { Name: 'Conspiracy', imageUrl: '${kefinTweaksRoot}pages/images/collections/conspiracy.jpg', cardUrl: '#/list.html?type=tag&tag=conspiracy&serverId=${serverId}' },
+                        { Name: 'Courtroom Drama', imageUrl: '${kefinTweaksRoot}pages/images/collections/courtroom.jpg', cardUrl: '#/list.html?type=tag&tag=courtroom%20drama|courtroom&serverId=${serverId}' },
+                        { Name: 'Spy / Espionage', imageUrl: '${kefinTweaksRoot}pages/images/collections/spy.jpg', cardUrl: '#/list.html?type=tag&tag=spy|espionage&serverId=${serverId}' }
+                    ]
+                },
+                {
+                    id: 'thematic-character-perspective',
+                    name: 'Character Perspective',
+                    enabled: false,
+                    order: 84,
+                    cardFormat: 'Poster',
+                    sortBy: 'Random',
+                    items: [
+                        { Name: 'Anti Hero', imageUrl: '${kefinTweaksRoot}pages/images/collections/anti-hero.jpg', cardUrl: '#/list.html?type=tag&tag=anti%20hero&serverId=${serverId}' },
+                        { Name: 'Female Protagonist', imageUrl: '${kefinTweaksRoot}pages/images/collections/female-protagonist.jpg', cardUrl: '#/list.html?type=tag&tag=female%20protagonist&serverId=${serverId}' },
+                        { Name: 'Family', imageUrl: '${kefinTweaksRoot}pages/images/collections/family.jpg', cardUrl: '#/list.html?type=tag&tag=family&serverId=${serverId}' },
+                        { Name: 'Dysfunctional Family', imageUrl: '${kefinTweaksRoot}pages/images/collections/dysfunctional-family.jpg', cardUrl: '#/list.html?type=tag&tag=dysfunctional%20family&serverId=${serverId}' },
+                        { Name: 'LGBTQ+', imageUrl: '${kefinTweaksRoot}pages/images/collections/lgbtq.jpg', cardUrl: '#/list.html?type=tag&tag=lgbtq%2B|lgbtq|lgbt&serverId=${serverId}' },
+                        { Name: 'Unreliable Narrator', imageUrl: '${kefinTweaksRoot}pages/images/collections/unreliable-narrator.jpg', cardUrl: '#/list.html?type=tag&tag=unreliable%20narrator&serverId=${serverId}' },
+                        { Name: 'Underdog', imageUrl: '${kefinTweaksRoot}pages/images/collections/underdog.jpg', cardUrl: '#/list.html?type=tag&tag=underdog&serverId=${serverId}' },
+                        { Name: 'Mentor-Protégé', imageUrl: '${kefinTweaksRoot}pages/images/collections/mentor.jpg', cardUrl: '#/list.html?type=tag&tag=mentor%20prot%C3%A9g%C3%A9%20relationship|mentor&serverId=${serverId}' },
+                        { Name: 'Friendship', imageUrl: '${kefinTweaksRoot}pages/images/collections/friendship.jpg', cardUrl: '#/list.html?type=tag&tag=friendship&serverId=${serverId}' },
+                        { Name: 'Villain', imageUrl: '${kefinTweaksRoot}pages/images/collections/villain.jpg', cardUrl: '#/list.html?type=tag&tag=villain&serverId=${serverId}' }
+                    ]
+                },
+                {
+                    id: 'thematic-settings',
+                    name: 'Settings',
+                    enabled: false,
+                    order: 85,
+                    cardFormat: 'Poster',
+                    sortBy: 'Random',
+                    items: [
+                        { Name: 'High School', imageUrl: '${kefinTweaksRoot}pages/images/collections/high-school.jpg', cardUrl: '#/list.html?type=tag&tag=high%20school&serverId=${serverId}' },
+                        { Name: 'Workplace', imageUrl: '${kefinTweaksRoot}pages/images/collections/workplace.jpg', cardUrl: '#/list.html?type=tag&tag=workplace|workplace%20comedy|workplace%20romance&serverId=${serverId}' },
+                        { Name: 'Small Town', imageUrl: '${kefinTweaksRoot}pages/images/collections/small-town.jpg', cardUrl: '#/list.html?type=tag&tag=small%20town&serverId=${serverId}' },
+                        { Name: 'Road Trip', imageUrl: '${kefinTweaksRoot}pages/images/collections/road-trip.jpg', cardUrl: '#/list.html?type=tag&tag=road%20trip&serverId=${serverId}' },
+                        { Name: 'Island', imageUrl: '${kefinTweaksRoot}pages/images/collections/island.jpg', cardUrl: '#/list.html?type=tag&tag=island&serverId=${serverId}' },
+                        { Name: 'Period Piece', imageUrl: '${kefinTweaksRoot}pages/images/collections/period-piece.jpg', cardUrl: '#/list.html?type=tag&tag=period%20piece|period%20drama&serverId=${serverId}' },
+                        { Name: 'Victorian Era', imageUrl: '${kefinTweaksRoot}pages/images/collections/victorian-era.jpg', cardUrl: '#/list.html?type=tag&tag=victorian%20era|victorian%20england&serverId=${serverId}' },
+                        { Name: 'Medieval', imageUrl: '${kefinTweaksRoot}pages/images/collections/medieval.jpg', cardUrl: '#/list.html?type=tag&tag=medieval&serverId=${serverId}' },
+                        { Name: 'Western', imageUrl: '${kefinTweaksRoot}pages/images/collections/western.jpg', cardUrl: '#/list.html?type=tag&tag=western&serverId=${serverId}' },
+                        { Name: 'War', imageUrl: '${kefinTweaksRoot}pages/images/collections/war.jpg', cardUrl: '#/list.html?type=tag&tag=war|world%20war%20i|world%20war%20ii&serverId=${serverId}' },
+                        { Name: 'Space', imageUrl: '${kefinTweaksRoot}pages/images/collections/space.jpg', cardUrl: '#/list.html?type=tag&tag=space|spacecraft|space%20station|spaceship&serverId=${serverId}' }
+                    ]
+                },
+                {
+                    id: 'thematic-tone-style',
+                    name: 'Tone & Style',
+                    enabled: false,
+                    order: 86,
+                    cardFormat: 'Poster',
+                    sortBy: 'Random',
+                    items: [
+                        { Name: 'Dark Comedy', imageUrl: '${kefinTweaksRoot}pages/images/collections/dark-comedy.jpg', cardUrl: '#/list.html?type=tag&tag=dark%20comedy|black%20comedy&serverId=${serverId}' },
+                        { Name: 'Psychological Thriller', imageUrl: '${kefinTweaksRoot}pages/images/collections/psychological-thriller.jpg', cardUrl: '#/list.html?type=tag&tag=psychological%20thriller&serverId=${serverId}' },
+                        { Name: 'Camp', imageUrl: '${kefinTweaksRoot}pages/images/collections/camp.jpg', cardUrl: '#/list.html?type=tag&tag=camp&serverId=${serverId}' },
+                        { Name: 'Satire', imageUrl: '${kefinTweaksRoot}pages/images/collections/satire.jpg', cardUrl: '#/list.html?type=tag&tag=satire&serverId=${serverId}' },
+                        { Name: 'Mockumentary', imageUrl: '${kefinTweaksRoot}pages/images/collections/mockumentary.jpg', cardUrl: '#/list.html?type=tag&tag=mockumentary&serverId=${serverId}' },
+                        { Name: 'Neo-Noir', imageUrl: '${kefinTweaksRoot}pages/images/collections/neo-noir.jpg', cardUrl: '#/list.html?type=tag&tag=neo-noir&serverId=${serverId}' },
+                        { Name: 'Film Noir', imageUrl: '${kefinTweaksRoot}pages/images/collections/film-noir.jpg', cardUrl: '#/list.html?type=tag&tag=film%20noir|noir&serverId=${serverId}' },
+                        { Name: 'Surrealism', imageUrl: '${kefinTweaksRoot}pages/images/collections/surrealism.jpg', cardUrl: '#/list.html?type=tag&tag=surrealism&serverId=${serverId}' }
+                    ]
+                },
+                {
+                    id: 'thematic-themes-topics',
+                    name: 'Themes & Topics',
+                    enabled: false,
+                    order: 87,
+                    cardFormat: 'Poster',
+                    sortBy: 'Random',
+                    items: [
+                        { Name: 'Coming of Age', imageUrl: '${kefinTweaksRoot}pages/images/collections/coming-of-age.jpg', cardUrl: '#/list.html?type=tag&tag=coming%20of%20age&serverId=${serverId}' },
+                        { Name: 'Revenge', imageUrl: '${kefinTweaksRoot}pages/images/collections/revenge.jpg', cardUrl: '#/list.html?type=tag&tag=revenge&serverId=${serverId}' },
+                        { Name: 'Redemption', imageUrl: '${kefinTweaksRoot}pages/images/collections/redemption.jpg', cardUrl: '#/list.html?type=tag&tag=redemption&serverId=${serverId}' },
+                        { Name: 'Survival', imageUrl: '${kefinTweaksRoot}pages/images/collections/survival.jpg', cardUrl: '#/list.html?type=tag&tag=survival&serverId=${serverId}' },
+                        { Name: 'Sports', imageUrl: '${kefinTweaksRoot}pages/images/collections/sports.jpg', cardUrl: '#/list.html?type=tag&tag=sports&serverId=${serverId}' },
+                        { Name: 'Identity', imageUrl: '${kefinTweaksRoot}pages/images/collections/identity.jpg', cardUrl: '#/list.html?type=tag&tag=identity|secret%20identity|fake%20identity|mistaken%20identity&serverId=${serverId}' },
+                        { Name: 'Mental Health', imageUrl: '${kefinTweaksRoot}pages/images/collections/mental-health.jpg', cardUrl: '#/list.html?type=tag&tag=mental%20health&serverId=${serverId}' },
+                        { Name: 'Addiction', imageUrl: '${kefinTweaksRoot}pages/images/collections/addiction.jpg', cardUrl: '#/list.html?type=tag&tag=addiction|drug%20addiction|sex%20addiction&serverId=${serverId}' },
+                        { Name: 'Class Differences', imageUrl: '${kefinTweaksRoot}pages/images/collections/class-differences.jpg', cardUrl: '#/list.html?type=tag&tag=class%20differences|upper%20class|working%20class&serverId=${serverId}' },
+                        { Name: 'Faith / Religion', imageUrl: '${kefinTweaksRoot}pages/images/collections/faith-religion.jpg', cardUrl: '#/list.html?type=tag&tag=faith|religion&serverId=${serverId}' }
+                    ]
+                }
+            ]
+        },
     ];
 
     // Seasonal Sections
