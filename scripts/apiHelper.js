@@ -155,6 +155,26 @@
         }
         return false;
     }
+
+    /**
+     * Build MediaBrowser Authorization header
+     * @returns {string} - Authorization header
+     */
+    function getAuthHeader() {
+        const token = ApiClient.accessToken();
+        const client = typeof ApiClient.applicationName === 'function' ? ApiClient.applicationName() : 'Jellyfin Web';
+        const device = typeof ApiClient.deviceName === 'function' ? ApiClient.deviceName() : (navigator.userAgent.includes('Chrome') ? 'Chrome' : 'Browser');
+        const deviceId = typeof ApiClient.deviceId === 'function' ? ApiClient.deviceId() : '';
+        const version = ApiClient._appVersion || ApiClient._serverVersion || '';
+        const parts = [
+            `Client="${encodeURIComponent(client)}"`,
+            `Device="${encodeURIComponent(device)}"`,
+            `DeviceId="${encodeURIComponent(deviceId)}"`,
+            `Version="${encodeURIComponent(version)}"`,
+            `Token="${encodeURIComponent(token)}"`
+        ];
+        return `MediaBrowser ${parts.join(', ')}`;
+    }
     
     /**
      * Query cache for API responses
@@ -236,6 +256,12 @@
      * API Helper functions for Jellyfin operations
      */
     const apiHelper = {
+        /**
+         * Get the MediaBrowser Authorization header
+         * @returns {string} - Authorization header
+         */
+        getAuthHeader: getAuthHeader,
+
         /**
          * Generic data fetcher with universal caching and progressive loading support
          * @param {string} url - Full URL to fetch
@@ -867,6 +893,13 @@
                         if (key === 'Limit' && value === 0) {
                             return;
                         }
+                        // If the key is Fields and this is a spotlight query, merge the fields with the existing fields to ensure we always pull People/Genres/ParentBackdropImageTags/Studios
+                        if (key === 'Fields' && isSpotlight) {
+                            const newValue = params.get('Fields') + ',' + value;
+                            params.set(key, newValue);
+                            return;
+                        }
+                        
                         params.set(key, value);
                     }
                 }
@@ -1123,7 +1156,29 @@
                 WARN('Error getting server version:', error);
                 return null;
             }
-        }
+        },
+
+        /**
+         * Get the list of plugins from the server
+         * @returns {Promise<Array>} - Array of plugin objects
+         */
+        getPlugins: async function() {
+            if (!window.ApiClient || !window.ApiClient._serverAddress || window.ApiClient.accessToken() === null) {
+                return [];
+            }
+
+            const server = ApiClient._serverAddress;
+
+            const response = await fetch(`${server}/Plugins`, {
+                headers: { 'Authorization': getAuthHeader() }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            return await response.json();
+        },
     };
 
     const GENRE_TTL = 24 * 60 * 60 * 1000; // 24 hours
