@@ -2862,17 +2862,14 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         requestAnimationFrame(async () => {
             const cssUrls = await getSkinUrlsForCurrentVersion(skin);
             
-            if (!cssUrls || cssUrls.length === 0) {
-                LOG(`No CSS URLs found for skin: ${skin.name}`);
-                return;
+            if (cssUrls && cssUrls.length > 0) {
+                LOG(`Loading skin with ${cssUrls.length} CSS files: ${skin.name}`);
+                cssUrls.forEach(url => {
+                    if (url) { // Skip null/empty URLs
+                        loadSkinCSS(url, skin.name);
+                    }
+                });
             }
-            
-            LOG(`Loading skin with ${cssUrls.length} CSS files: ${skin.name}`);
-            cssUrls.forEach(url => {
-                if (url) { // Skip null/empty URLs
-                    loadSkinCSS(url, skin.name);
-                }
-            });
 
             // Load optional includes for this skin
             loadOptionalIncludes(skin);

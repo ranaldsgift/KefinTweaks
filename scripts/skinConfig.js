@@ -107,11 +107,6 @@
                 enabled: false
             },
             {
-                name: 'Taller Spotlight Sections',
-                url: `${getKefinTweaksRoot()}skins/optional/global/tallerSpotlightSections.css`,
-                enabled: false
-            },
-            {
                 name: 'No Clear Art on Spotlights',
                 url: `${getKefinTweaksRoot()}skins/optional/global/noClearArtOnSpotlights.css`,
                 enabled: false
@@ -134,6 +129,11 @@
             {
                 name: 'Darken Background Images',
                 url: `${getKefinTweaksRoot()}skins/optional/global/darkenBackgroundImages.css`,
+                enabled: false
+            },
+            {
+                name: 'Left Aligned Card Footer Text',
+                url: `${getKefinTweaksRoot()}skins/optional/global/leftAlignCardFooterText.css`,
                 enabled: false
             }
         ],
@@ -163,14 +163,16 @@
                         majorServerVersions: [10],
                         urls: [
                             'https://cdn.jsdelivr.net/gh/lscambo13/ElegantFin@main/Theme/ElegantFin-jellyfin-theme-build-latest-minified.css',
-                            `${getKefinTweaksRoot()}skins/elegant-kefin.css`
+                            `${getKefinTweaksRoot()}skins/elegant-kefin.css`,
+                            `${getKefinTweaksRoot()}skins/fin-kefin-10.10.css`
                         ]
                     },
                     {
                         majorServerVersions: [11],
                         urls: [
                             'https://cdn.jsdelivr.net/gh/lscambo13/ElegantFin@main/Theme/ElegantFin-jellyfin-theme-build-latest-minified.css',
-                            `${getKefinTweaksRoot()}skins/elegant-kefin.css`,                            
+                            `${getKefinTweaksRoot()}skins/elegant-kefin.css`,,
+                            `${getKefinTweaksRoot()}skins/elegant-kefin-10.11.css`,
                             `${getKefinTweaksRoot()}skins/fin-kefin-10.11.css`
                         ]
                     }
@@ -219,10 +221,19 @@
                 author: 'KartoffelChipss',
                 url: [
                     {
-                        majorServerVersions: [10, 11],
+                        majorServerVersions: [10],
                         urls: [
                             'https://cdn.jsdelivr.net/gh/KartoffelChipss/NeutralFin@latest/theme/neutralfin-minified.css',
-                            `${getKefinTweaksRoot()}skins/neutralfin-kefin.css`
+                            `${getKefinTweaksRoot()}skins/neutralfin-kefin.css`,
+                            `${getKefinTweaksRoot()}skins/fin-kefin-10.10.css`
+                        ]
+                    },
+                    {
+                        majorServerVersions: [11],
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/KartoffelChipss/NeutralFin@latest/theme/neutralfin-minified.css',
+                            `${getKefinTweaksRoot()}skins/neutralfin-kefin.css`,
+                            `${getKefinTweaksRoot()}skins/fin-kefin-10.11.css`
                         ]
                     }
                 ],
@@ -280,11 +291,21 @@
                 author: 'KBH-Reeper',
                 url: [
                     {
-                        majorServerVersions: [10, 11],
+                        majorServerVersions: [10],
                         urls: [
                             'https://cdn.jsdelivr.net/gh/KBH-Reeper/GlassFin@latest/Theme/GlassFin-Theme-latest-stable.css',
                             'https://cdn.jsdelivr.net/gh/KBH-Reeper/GlassFin@latest/Theme/PluginStyling/MediaBar-Plugin-latest.css',
-                            `${getKefinTweaksRoot()}skins/glassfin-kefin.css`
+                            `${getKefinTweaksRoot()}skins/glassfin-kefin.css`,
+                            `${getKefinTweaksRoot()}skins/fin-kefin-10.10.css`
+                        ]
+                    },
+                    {
+                        majorServerVersions: [11],
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/KBH-Reeper/GlassFin@latest/Theme/GlassFin-Theme-latest-stable.css',
+                            'https://cdn.jsdelivr.net/gh/KBH-Reeper/GlassFin@latest/Theme/PluginStyling/MediaBar-Plugin-latest.css',
+                            `${getKefinTweaksRoot()}skins/glassfin-kefin.css`,
+                            `${getKefinTweaksRoot()}skins/fin-kefin-10.11.css`
                         ]
                     }
                 ],
@@ -1070,6 +1091,51 @@
                         url: 'https://cdn.jsdelivr.net/npm/jellyskin@latest/dist/addons/gradients/sea.css'
                     },
                 ]
+            },
+            {
+                name: 'Better Jellyfin UI',
+                author: 'tromoSM',
+                url: [
+                    {
+                        majorServerVersions: [10],
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/tromoSM/better-jellyfin-ui@main/theme.css',
+                        ]
+                    },
+                    {
+                        majorServerVersions: [11],
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/tromoSM/better-jellyfin-ui@main/theme.css',
+                        ]
+                    },
+                ],
+                optionalIncludes: [
+                    {
+                        name: 'Floating Header',
+                        url: 'https://cdn.jsdelivr.net/gh/tromoSM/better-jellyfin-ui@main/options/Floating-header.css',
+                        enabled: false
+                    },
+                    {
+                        name: 'High Contrast Interface',
+                        url: 'https://cdn.jsdelivr.net/gh/tromoSM/better-jellyfin-ui@main/options/High-contrast-interface.css',
+                        enabled: false
+                    },
+                        {
+                        name: 'Scale up animation on hover card',
+                        url: 'https://cdn.jsdelivr.net/gh/tromoSM/better-jellyfin-ui@main/options/Scale-up-animation-on-hover-card.css',
+                        enabled: false
+                    },
+                    {
+                        name: 'No liquid glass borders',
+                        url: 'https://cdn.jsdelivr.net/gh/tromoSM/better-jellyfin-ui@main/options/no-liquid-glass-borders.css',
+                        enabled: false
+                    },
+                    {
+                        name: 'Alternative navigation bar',
+                        url: 'https://cdn.jsdelivr.net/gh/tromoSM/better-jellyfin-ui@main/options/alternative-navigation-bar.css',
+                        enabled: false
+                    },
+                ],
             },
             {
                 name: 'Jellyfin Better Styles',

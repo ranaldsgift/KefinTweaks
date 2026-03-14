@@ -1,6 +1,4 @@
-.series-episodes-section {
-    order: 2;
-}
+
 .homeSectionsContainer .card[data-type="Folder"] a.cardImageContainer::after {
     font-size: 2rem;
     line-height: 2.4rem;
