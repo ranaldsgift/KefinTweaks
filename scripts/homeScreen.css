@@ -1,27 +1,10 @@
-/* Please use the CSS commented below to customize the order of KefinTweaks custom home sections */
-
-/*
-[data-custom-section-id="watchlist"] {
-    order: 60 !important;
-}
-
-[data-custom-section-id="popular-tv-networks"] {
-    order: 61 !important;
-}
-
-[data-custom-section-id="new-movies"] {
-    order: 30 !important;
-}
-
-[data-custom-section-id="new-episodes"] {
-    order: 31 !important;
-}
-*/
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@200..700&display=swap');
 
 .sections.homeSectionsContainer {
     display: flex;
     flex-direction: column;
     padding-bottom: 100px;
+    gap: 1rem;
 }
 
 body[data-seasonal-background="true"]:has(.homePage:not(.hide)) #reactRoot:has(.libraryPage:not(.hide) .pageTabContent.is-active[data-index="0"])>.backgroundContainer::after {
@@ -238,6 +221,85 @@ div#discovery-loading-indicator:not(.show)::after {
     display: none !important;
 }
 
-.homeSectionsContainer > * {
-    content-visibility: auto;
+.homeSectionsContainer .card[data-type="Folder"] .cardScalable > a.cardImageContainer::after {
+  content: attr(aria-label);
+  font-family: 'Oswald';
+  font-size: 1.5rem;
+  line-height: 1.8rem;
+  max-width: calc(100% - 2rem);
+  white-space: pre-wrap;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  background: none;
+}
+
+.homeSectionsContainer .card[data-type="Folder"] .cardScalable > a.cardImageContainer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  background: linear-gradient(#000000, rgb(0 0 0 / 0%) 50%);
+  box-shadow: inset 0px 0px 20px 5px black;
+}
+
+.layout-mobile .homeSectionsContainer .card[data-type="Folder"] a.cardImageContainer::after {
+    top: 0.5rem;
+    left: 0.5rem;
+    font-size: 1.5rem !important;
+    line-height: 1.8rem !important;
+}
+
+.homeSectionsContainer .card[data-type="Folder"] .cardText {
+    display: none;
+}
+
+[data-card-format="Square"] [data-type="Person"] .cardScalable, 
+[data-card-format="Square"] [data-type="Actor"] .cardScalable, 
+[data-card-format="Square"] [data-type="Writer"] .cardScalable, 
+[data-card-format="Square"] [data-type="Director"] .cardScalable {
+    border-radius: 50% !important;
+    overflow: hidden;
+}
+
+[data-card-format="Square"] [data-type="Actor"] .cardText {
+    display: flex;
+    justify-content: center;
+}
+
+.homeSectionsContainer .section0,
+.homeSectionsContainer .section1,
+.homeSectionsContainer .section2,
+.homeSectionsContainer .section3,
+.homeSectionsContainer .section4,
+.homeSectionsContainer .section5,
+.homeSectionsContainer .section6,
+.homeSectionsContainer .section7,
+.homeSectionsContainer .section8,
+.homeSectionsContainer .section9 {
+    display: none !important;
+}
+
+.homeSectionsContainer .card[data-type="TvChannel"] a.cardImageContainer:not([style])::after {
+    content: attr(aria-label);
+    font-size: 2rem;
+    text-wrap: auto;
+    text-align: center;
+}
+
+.emby-scroller-container[data-section-id="liveTv-channels"] .itemsContainer {
+    gap: 4rem
+}
+.layout-mobile .emby-scroller-container[data-section-id="liveTv-channels"] .itemsContainer {
+    gap: 2rem;
+}
+
+[data-section-id="upcoming"] .missingIndicator {
+    display: none;
 }

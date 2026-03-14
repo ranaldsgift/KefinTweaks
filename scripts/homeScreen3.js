@@ -571,12 +571,12 @@
     async function mergeHomeSectionConfigs(defaultSections) {
 
         const performanceStartTime = performance.now();
-        const kefinHomeScreenConfig = await window.KefinHomeScreen.getConfig();
+        const kefinSections = await window.KefinHomeScreen.getSections();
         const performanceEndTime = performance.now();
         const performanceDuration = performanceEndTime - performanceStartTime;
         LOG(`Home Screen v3 Get kefin home screen config initialization time: ${performanceDuration.toFixed(2)}ms`);
 
-        return kefinHomeScreenConfig.ENABLED_NORMAL_SECTIONS;
+        return kefinSections.enabledHomeSections;
 
         // Return all enabled sections from HOME_SECTION_GROUPS
         const homeSections = flattenSectionGroups(kefinHomeScreenConfig.HOME_SECTION_GROUPS).filter(s => s.enabled === true);
@@ -1306,9 +1306,50 @@
             }
         }
 
-        // Ensure queries array exists
+        // Static items: normalize and return immediately (no queries, no dataPromise)
+        if (sectionConfig.items && sectionConfig.items.length > 0) {
+            const kefinTweaksRoot = window.KefinTweaksConfig?.kefinTweaksRoot || '';
+            const serverId = ApiClient.serverId();
+            const normalizeTemplate = (value) => (value || '')
+                .replace(/\$\{kefinTweaksRoot\}/g, kefinTweaksRoot)
+                .replace(/\$\{serverId\}/g, serverId);
+
+            const normalizedItems = sectionConfig.items.map((item, index) => {
+                const posterUrl = normalizeTemplate(item.posterUrl);
+                const thumbUrl = normalizeTemplate(item.thumbUrl);
+                const squareUrl = normalizeTemplate(item.squareUrl);
+                const imageUrl = normalizeTemplate(item.imageUrl);
+                const cardUrl = normalizeTemplate(item.cardUrl);
+
+                return {
+                    Name: item.Name,
+                    Id: item.Id || 'static-' + sectionConfig.id + '-' + index,
+                    Type: item.Type || 'Folder',
+                    posterUrl: posterUrl,
+                    thumbUrl: thumbUrl,
+                    squareUrl: squareUrl,
+                    imageUrl: imageUrl,
+                    cardUrl: cardUrl,
+                    CustomFooterText: item.cardFooter || undefined
+                };
+            });
+            const loadSectionTimerEnd = performance.now();
+            const loadSectionDuration = loadSectionTimerEnd - loadSectionTimerStart;
+            LOG(`Section ${sectionConfig.id} (static items) loaded for rendering in time: ${loadSectionDuration.toFixed(2)}ms`);
+            let postProcessedItems = normalizedItems;
+            if (window.cardBuilder.postProcessItems) {
+                postProcessedItems = window.cardBuilder.postProcessItems(sectionConfig, normalizedItems);
+            }
+
+            return {
+                config: sectionConfig,
+                result: { data: postProcessedItems }
+            };
+        }
+
+        // Ensure queries array exists when section has no static items
         if (!sectionConfig.queries || !Array.isArray(sectionConfig.queries) || sectionConfig.queries.length === 0) {
-            WARN(`Section ${sectionConfig.id} has no queries array`);
+            WARN(`Section ${sectionConfig.id} has no queries array and no static items`);
             return null;
         }
 

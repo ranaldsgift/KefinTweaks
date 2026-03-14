@@ -30,6 +30,23 @@
     };
 
     /**
+     * Check if current date is within a seasonal period (MM-DD format).
+     * @param {string} start - Start date MM-DD
+     * @param {string} end - End date MM-DD
+     * @returns {boolean}
+     */
+    function isInSeasonalPeriod(start, end) {
+        if (!start || !end) return true;
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const startDate = new Date(`${start}-${currentYear}`);
+        let endDate = new Date(`${end}-${currentYear}`);
+        if (endDate < startDate) endDate.setFullYear(currentYear + 1);
+        else if (endDate > startDate) endDate.setFullYear(currentYear);
+        return now >= startDate && now <= endDate;
+    }
+
+    /**
      * Flatten section groups into a flat array
      */
     function flattenSectionGroups(groups) {
@@ -470,6 +487,14 @@
             // Filter out hidden sections
             kefinSections = kefinSections.filter(s => !s.hidden);
 
+            // Hide seasonal sections that are not currently in their active period
+            kefinSections = kefinSections.filter(s => {
+                if (s.startDate && s.endDate) {
+                    return isInSeasonalPeriod(s.startDate, s.endDate);
+                }
+                return true;
+            });
+
             // Filter out disabled sections
             kefinSections = kefinSections.filter(s => s.enabled !== false);
 
@@ -516,7 +541,7 @@
             // Filter out mapped Jellyfin sections if their KefinTweaks equivalent exists
             const kefinSectionIds = new Set(kefinSections.map(s => s.id));
 
-            const adminKefinSections = window.KefinHomeScreen.getConfig().ENABLED_NORMAL_SECTIONS;
+            const adminKefinSections = window.KefinHomeScreen.getSections().enabledHomeSections;
             const isKefinNextUpEnabled = adminKefinSections.some(s => s.id && s.id === 'nextUp' && s.enabled === true);
             const isKefinContinueWatchingEnabled = adminKefinSections.some(s => s.id && s.id === 'continueWatching' && s.enabled === true);
             const isKefinMergeNextUpEnabled = adminKefinSections.some(s => s.id && s.id === 'continueWatchingAndNextUp' && s.enabled === true);
@@ -570,10 +595,72 @@
 
             container.innerHTML = `
                 <div class="verticalSection verticalSection-extrabottompadding">
-                    <h2 class="sectionTitle">Home Sections Order</h2>
+                    <div class="sectionTitleContainer" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5em;">
+                        <h2 class="sectionTitle">Home Sections Order</h2>
+                        <button type="button" class="emby-button raised kefin-restore-defaults-btn" title="Restore Defaults" aria-label="Restore Defaults">
+                            <span class="restoreBtn" aria-hidden="true"></span>
+                        </button>
+                    </div>
                     ${editorHTML}
                 </div>
             `;
+
+            // Restore Defaults: confirm then clear kefinHomeScreen and re-render
+            const restoreBtn = container.querySelector('.kefin-restore-defaults-btn');
+            if (restoreBtn && window.ModalSystem) {
+                restoreBtn.addEventListener('click', () => {
+                    const modalId = 'kefin-user-homescreen-restore-defaults';
+                    const content = '<p class="listItemBodyText">Restoring the default Home Screen Settings will override your existing settings. Are you sure you want to proceed?</p>';
+                    const footer = `
+                        <button type="button" class="emby-button" onclick="window.ModalSystem.close('${modalId}')">Cancel</button>
+                        <button type="button" class="emby-button raised button-submit" id="kefin-restore-defaults-confirm">Proceed</button>
+                    `;
+                    window.ModalSystem.create({
+                        id: modalId,
+                        title: 'Restore Defaults',
+                        content: content,
+                        footer: footer,
+                        closeOnBackdrop: true,
+                        closeOnEscape: true,
+                        showCloseButton: true,
+                        onOpen: (modal) => {
+                            const confirmBtn = modal.dialogFooter && modal.dialogFooter.querySelector('#kefin-restore-defaults-confirm');
+                            if (confirmBtn) {
+                                confirmBtn.addEventListener('click', async () => {
+                                    try {
+                                        if (!window.userHelper || !window.userHelper.getUserDisplayPreferences || !window.userHelper.updateDisplayPreferences) {
+                                            WARN('userHelper not available');
+                                            return;
+                                        }
+                                        const { promise } = await window.userHelper.getUserDisplayPreferences();
+                                        const displayPrefs = await promise;
+                                        if (!displayPrefs) {
+                                            WARN('Could not load display preferences');
+                                            return;
+                                        }
+                                        if (!displayPrefs.CustomPrefs) {
+                                            displayPrefs.CustomPrefs = {};
+                                        }
+                                        displayPrefs.CustomPrefs.kefinHomeScreen = '[]';
+                                        const ok = await window.userHelper.updateDisplayPreferences(displayPrefs);
+                                        if (ok) {
+                                            window.ModalSystem.close(modalId);
+                                            await renderUserHomeSectionsEditor(container);
+                                            if (window.KefinTweaksToaster && window.KefinTweaksToaster.toast) {
+                                                window.KefinTweaksToaster.toast('Home Screen settings restored to defaults.');
+                                            }
+                                        } else {
+                                            WARN('Failed to restore defaults');
+                                        }
+                                    } catch (e) {
+                                        ERR('Error restoring defaults:', e);
+                                    }
+                                });
+                            }
+                        }
+                    });
+                });
+            }
 
             // Setup event listeners
             // Find the sections-container which wraps both enabled and disabled lists

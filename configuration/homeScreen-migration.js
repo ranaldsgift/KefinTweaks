@@ -111,6 +111,7 @@
         if (discovery.renderSpotlightAboveMatching !== undefined) settings.renderSpotlightAboveMatching = discovery.renderSpotlightAboveMatching;
         if (discovery.randomizeOrder !== undefined) settings.randomizeOrder = discovery.randomizeOrder;
         if (discovery.spotlight && typeof discovery.spotlight === 'object') {
+            settings.spotlight = {};
             Object.assign(settings.spotlight, discovery.spotlight);
         }
     }

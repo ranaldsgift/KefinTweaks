@@ -21,6 +21,8 @@
         ExcludeItemIds: { label: 'Exclude Item IDs', type: 'array', hint: 'Comma-separated GUIDs' },
         GenreIds: { label: 'Genre IDs', type: 'array', hint: 'Comma-separated GUIDs' },
         PersonIds: { label: 'Person IDs', type: 'array', hint: 'Comma-separated GUIDs' },
+        PersonTypes: { label: 'Person Types', type: 'array', hint: 'Actor, Director, Writer, etc.' },
+        ExcludePersonTypes: { label: 'Exclude Person Types', type: 'array', hint: 'Actor, Director, Writer, etc.' },
         StudioIds: { label: 'Studio IDs', type: 'array', hint: 'Comma-separated GUIDs' },
         Fields: { label: 'Fields', type: 'array', hint: 'Comma-separated field names' },
         MinPremiereDate: { label: 'Min Premiere Date', type: 'date', hint: 'YYYY-MM-DD' },
@@ -66,7 +68,7 @@
         EnableUserData: { label: 'Enable User Data', type: 'boolean' }
     };
 
-    const CARD_FORMATS = ['Poster', 'Thumb', 'Backdrop', 'Square', 'Random'];
+    const CARD_FORMATS = ['Poster', 'Thumb', 'Backdrop', 'Square', 'Random', 'Button', 'Banner', 'Logo', 'Clear Art', 'Disc'];
     const SORT_ORDERS = ['None', 'Random', 'Name', 'DateCreated', 'PremiereDate', 'CommunityRating', 'CriticRating', 'DatePlayed', 'SortName', 'PlayCount', 'PlayedPercentage', 'StartDate', 'Runtime', 'ProductionYear', 'IsPlayed', 'IsUnplayed', 'ParentIndexNumber', 'IndexNumber', 'IsFolder', 'SimilarityScore', 'SearchScore', 'DateLastContentAdded', 'SeriesDatePlayed', 'ChildCount'];
     const SORT_ORDER_DIRECTIONS = ['Ascending', 'Descending'];
     const RENDER_MODE_OPTIONS = [{ value: 'Normal', label: 'Normal' }, { value: 'Spotlight', label: 'Spotlight' }, { value: 'Random', label: 'Random' }];
@@ -74,6 +76,44 @@
         { value: 'none', label: 'None' },
         { value: 'dots', label: 'Dots' },
         { value: 'numeric', label: 'Numeric' }
+    ];
+
+    const SPOTLIGHT_LAYOUT_OPTIONS = [
+        { value: 'Border', label: 'Border' },
+        { value: 'Borderless', label: 'Borderless' }
+    ];
+    const SPOTLIGHT_SIZE_OPTIONS = [
+        { value: 'normal', label: 'Normal' },
+        { value: 'large', label: 'Large' },
+        { value: 'full', label: 'Full' }
+    ];
+    const SPOTLIGHT_TILE_COUNT_OPTIONS = [
+        { value: '1', label: '1' },
+        { value: '2', label: '2' },
+        { value: '3', label: '3' }
+    ];
+    const SPOTLIGHT_ENTRANCE_OPTIONS = [
+        { value: 'fadeIn', label: 'Fade in' },
+        { value: 'fadeInUp', label: 'Fade in up' },
+        { value: 'fadeInDown', label: 'Fade in down' }
+    ];
+    const SPOTLIGHT_SLIDE_OPTIONS = [
+        { value: 'kenBurnsZoomIn', label: 'Ken Burns zoom in' },
+        { value: 'kenBurnsZoomOut', label: 'Ken Burns zoom out' },
+        { value: 'kenBurnsZoomInFullscreen', label: 'Ken Burns zoom in (fullscreen)' },
+        { value: 'kenBurnsZoomOutFullscreen', label: 'Ken Burns zoom out (fullscreen)' },
+        { value: 'kenBurnsPanRight', label: 'Ken Burns pan right' },
+        { value: 'kenBurnsPanLeft', label: 'Ken Burns pan left' },
+        { value: 'kenBurnsPanUp', label: 'Ken Burns pan up' },
+        { value: 'kenBurnsDiagonal', label: 'Ken Burns diagonal' },
+        { value: 'fadeInScale', label: 'Fade in scale' },
+        { value: 'parallaxFloat', label: 'Parallax float' },
+        { value: 'depthPulse', label: 'Depth pulse' },
+        { value: 'slowRotate', label: 'Slow rotate' },
+        { value: 'breathe', label: 'Breathe' },
+        { value: 'heatHaze', label: 'Heat haze' },
+        { value: 'colorWash', label: 'Color wash' },
+        { value: 'vignetteIn', label: 'Vignette in' }
     ];
 
     // Current config state
@@ -348,116 +388,158 @@
     }
 
     /**
-     * Verify and sync recently-added library sections with actual Jellyfin libraries
+     * Verify and sync library-based section groups (Recently Added, Popular Genres, etc.) with actual Jellyfin libraries
      * @param {Object} config - Current configuration object
-     * @returns {Object} Updated configuration with synced recently-added sections
+     * @returns {Object} Updated configuration with synced library-based sections
      */
-    async function verifyRecentlyAddedInLibraryConfig(config) {
+    async function verifyLibrarySectionsConfig(config) {
         try {
             if (!window.ApiClient || !window.ApiClient._loggedIn) {
-                WARN('User not logged in, skipping recently-added verification');
+                WARN('User not logged in, skipping library sections verification');
                 return config;
             }
 
             if (!window.dataHelper || !window.dataHelper.getLibraries) {
-                WARN('dataHelper.getLibraries not available, skipping recently-added verification');
+                WARN('dataHelper.getLibraries not available, skipping library sections verification');
                 return config;
             }
 
-            // Get current libraries
             const libraries = await window.dataHelper.getLibraries();
             if (!libraries || libraries.length === 0) {
-                LOG('No libraries found, skipping recently-added verification');
+                LOG('No libraries found, skipping library sections verification');
                 return config;
             }
 
-            // Flatten groups to get all sections
-            const allSections = flattenSectionGroups(config.HOME_SECTION_GROUPS || []);
-            
-            // Extract existing recently-added sections
-            const recentlyAddedSections = allSections.filter(s => s.id && s.id.startsWith('recently-added-'));
-            const existingLibraryIds = new Set(recentlyAddedSections.map(s => s.id.replace('recently-added-', '')));
-            
-            // Get current library IDs
-            const currentLibraryIds = new Set(libraries.map(l => l.Id));
-            
-            // Find sections to remove (libraries that no longer exist)
-            const sectionsToRemove = recentlyAddedSections.filter(s => {
-                const libId = s.id.replace('recently-added-', '');
-                return !currentLibraryIds.has(libId);
-            });
-            
-            // Find libraries to add (new libraries not in config)
-            const librariesToAdd = libraries.filter(l => !existingLibraryIds.has(l.Id) && l.CollectionType && l.CollectionType !== 'boxsets' && l.CollectionType !== 'playlists');
-            
-            if (sectionsToRemove.length === 0 && librariesToAdd.length === 0) {
-                LOG('Recently-added sections are in sync with libraries');
-                return config;
-            }
-            
-            LOG(`Syncing recently-added sections: Removing ${sectionsToRemove.length}, Adding ${librariesToAdd.length}`);
-            
-            // Remove sections for non-existent libraries
-            const sectionsToRemoveIds = new Set(sectionsToRemove.map(s => s.id));
-            
-            // Update groups by removing sections
-            const updatedGroups = (config.HOME_SECTION_GROUPS || []).map(group => {
-                if (!group.sections) return group;
-                const filteredSections = group.sections.filter(s => !sectionsToRemoveIds.has(s.id));
-                return {
-                    ...group,
-                    sections: filteredSections
-                };
-            });
-            
-            // Add sections for new libraries
-            librariesToAdd.forEach(library => {
-                let viewMoreUrl = null;
-                
-                if (library.CollectionType === 'movies') {
-                    viewMoreUrl = `#/movies.html?topParentId=${library.Id}&collectionType=movies&tab=1`;
-                } else if (library.CollectionType === 'tvshows') {
-                    viewMoreUrl = `#/tv.html?topParentId=${library.Id}&collectionType=tvshows&tab=1`;
-                }
-                
-                const newSection = {
-                    id: `recently-added-${library.Id}`,
-                    name: `Recently Added ${library.Name}`,
-                    enabled: false, // Default to disabled
-                    order: 61,
-                    cardFormat: 'Poster',
-                    viewMoreUrl: viewMoreUrl,
-                    queries: [{
-                        path: '/Items/Latest',
-                        queryOptions: {
-                            ParentId: library.Id,
-                            SortBy: 'DateCreated',
-                            SortOrder: 'Descending',
-                            Limit: 16
+            // Filter out boxsets and playlists; all templates apply to this list
+            const filteredLibraries = libraries.filter(l => l.CollectionType && l.CollectionType !== 'boxsets' && l.CollectionType !== 'playlists');
+            const currentLibraryIds = new Set(filteredLibraries.map(l => l.Id));
+
+            const libraryTemplates = [
+                {
+                    idPrefix: 'recently-added-',
+                    groupId: 'home-recently-added',
+                    groupName: 'Recently Added',
+                    sectionTemplate: {
+                        enabled: false,
+                        order: 61,
+                        cardFormat: 'Poster',
+                        buildSection: function (library) {
+                            let viewMoreUrl = null;
+                            if (library.CollectionType === 'movies') {
+                                viewMoreUrl = `#/movies.html?topParentId=${library.Id}&collectionType=movies&tab=1`;
+                            } else if (library.CollectionType === 'tvshows') {
+                                viewMoreUrl = `#/tv.html?topParentId=${library.Id}&collectionType=tvshows&tab=1`;
+                            }
+                            return {
+                                id: `recently-added-${library.Id}`,
+                                name: `Recently Added ${library.Name}`,
+                                viewMoreUrl: viewMoreUrl,
+                                queries: [{
+                                    path: '/Items/Latest',
+                                    queryOptions: {
+                                        ParentId: library.Id,
+                                        SortBy: 'DateCreated',
+                                        SortOrder: 'Descending',
+                                        Limit: 16
+                                    }
+                                }]
+                            };
                         }
-                    }]
-                };
-                
-                // Find or create "Recently Added" group
-                let recentlyAddedGroup = updatedGroups.find(g => g.name === 'Recently Added');
-                if (!recentlyAddedGroup) {
-                    recentlyAddedGroup = {
-                        name: 'Recently Added',
+                    }
+                },
+                {
+                    idPrefix: 'popular-genres-',
+                    groupId: 'home-popular-genres',
+                    groupName: 'Popular Genres',
+                    sectionTemplate: {
+                        enabled: false,
+                        order: 81,
+                        cardFormat: 'Thumb',
+                        ttl: 604800000,
+                        buildSection: function (library) {
+                            const ct = (library.CollectionType || '').toLowerCase();
+                            let includeItemTypes = ['Movie', 'Series', 'Video', 'MusicArtist', 'Book', 'AudioBook'];
+                            if (ct === 'music') includeItemTypes = ['MusicArtist'];
+                            else if (ct === 'tvshows') includeItemTypes = ['Series'];
+                            else if (ct === 'movies') includeItemTypes = ['Movie'];
+                            else if (ct === 'books') includeItemTypes = ['Book', 'AudioBook'];
+                            else if (ct === 'homevideos') includeItemTypes = ['Video'];
+                            return {
+                                id: `popular-genres-${library.Id}`,
+                                name: `Popular ${library.Name} Genres`,
+                                queries: [{
+                                    path: '/Genres',
+                                    ParentId: library.Id,
+                                    queryOptions: {
+                                        ParentId: library.Id,
+                                        IncludeItemTypes: includeItemTypes,
+                                        SortBy: 'ChildCount',
+                                        SortOrder: 'Descending',
+                                        Limit: 20
+                                    }
+                                }]
+                            };
+                        }
+                    }
+                }
+            ];
+
+            const groups = config.HOME_SECTION_GROUPS || [];
+            let updatedGroups = groups.map(g => ({ ...g, sections: Array.isArray(g.sections) ? [...g.sections] : [] }));
+            let hasChanges = false;
+
+            for (const template of libraryTemplates) {
+                let group = updatedGroups.find(g => g.id === template.groupId);
+                if (!group) {
+                    group = {
+                        id: template.groupId,
+                        name: template.groupName,
                         sections: []
                     };
-                    updatedGroups.push(recentlyAddedGroup);
+                    updatedGroups.push(group);
+                    hasChanges = true;
                 }
-                
-                recentlyAddedGroup.sections.push(newSection);
-            });
-            
-            // Update config
+
+                const groupSections = group.sections || [];
+                const templateSectionIds = groupSections.filter(s => s.id && s.id.startsWith(template.idPrefix)).map(s => s.id);
+                const existingLibraryIdsForTemplate = new Set(templateSectionIds.map(id => id.replace(template.idPrefix, '')));
+
+                const sectionsToRemove = groupSections.filter(s => {
+                    if (!s.id || !s.id.startsWith(template.idPrefix)) return false;
+                    const libId = s.id.replace(template.idPrefix, '');
+                    return !currentLibraryIds.has(libId);
+                });
+                const sectionsToRemoveIds = new Set(sectionsToRemove.map(s => s.id));
+                const librariesToAdd = filteredLibraries.filter(l => !existingLibraryIdsForTemplate.has(l.Id));
+
+                if (sectionsToRemoveIds.size > 0 || librariesToAdd.length > 0) hasChanges = true;
+
+                group.sections = groupSections.filter(s => !sectionsToRemoveIds.has(s.id));
+
+                librariesToAdd.forEach(library => {
+                    const base = template.sectionTemplate.buildSection(library);
+                    const newSection = {
+                        ...template.sectionTemplate,
+                        ...base,
+                        id: base.id,
+                        name: base.name,
+                        queries: base.queries
+                    };
+                    delete newSection.buildSection;
+                    group.sections.push(newSection);
+                });
+            }
+
+            if (!hasChanges) {
+                LOG('Library-based sections are in sync with libraries');
+                return config;
+            }
+
             config.HOME_SECTION_GROUPS = updatedGroups;
-            
-            LOG('Recently-added sections synced successfully');
+            LOG('Library-based sections synced successfully');
             return config;
         } catch (error) {
-            ERR('Error verifying recently-added library config:', error);
+            ERR('Error verifying library sections config:', error);
             return config;
         }
     }
@@ -534,7 +616,7 @@
             mergedConfig.ENABLED_DISCOVERY_SECTIONS = [...enabledDiscoverySections, ...enabledCustomDiscoverySections];
 
             // Verify and sync recently-added library sections
-            //await verifyRecentlyAddedInLibraryConfig(mergedConfig);
+            //await verifyLibrarySectionsConfig(mergedConfig);
 
             currentConfig = mergedConfig;
             return mergedConfig;
@@ -554,6 +636,39 @@
         }
         let config = loadConfig();
         return config;
+    }
+
+    /**
+     * Get enabled home sections and discovery sections
+     * @returns {Object} Object with enabledHomeSections and enabledDiscoverySections
+     */
+    function getSections() {
+
+        const config = getConfig();
+
+        const isInSeasonalPeriod = (startDate, endDate) => {
+            const currentDate = new Date();
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+
+            // Ensure the years are the same as the current date year
+            start.setFullYear(currentDate.getFullYear());
+            end.setFullYear(currentDate.getFullYear());
+
+            return currentDate >= start && currentDate <= end;
+        };
+
+        const enabledHomeSections = flattenSectionGroups(config.HOME_SECTION_GROUPS).filter(s => s.enabled === true && s.discoveryEnabled !== true && (s.startDate && s.endDate ? isInSeasonalPeriod(s.startDate, s.endDate) : true));
+        const enabledSeasonalSections = flattenSectionGroups(config.SEASONAL_SECTION_GROUPS).filter(s => s.enabled === true && s.discoveryEnabled !== true && isInSeasonalPeriod(s.startDate, s.endDate));
+        const enabledCustomSections = flattenSectionGroups(config.CUSTOM_SECTION_GROUPS).filter(s => s.enabled === true && s.discoveryEnabled !== true && (s.startDate && s.endDate ? isInSeasonalPeriod(s.startDate, s.endDate) : true));
+        const enabledDiscoverySections = flattenSectionGroups(config.DISCOVERY_SECTION_GROUPS).filter(s => s.enabled === true && (s.startDate && s.endDate ? isInSeasonalPeriod(s.startDate, s.endDate) : true));
+        const enabledCustomDiscoverySections = flattenSectionGroups(config.CUSTOM_SECTION_GROUPS).filter(s => s.enabled === true && s.discoveryEnabled === true && (s.startDate && s.endDate ? isInSeasonalPeriod(s.startDate, s.endDate) : true));
+
+
+        return {
+            enabledHomeSections: [...enabledHomeSections, ...enabledSeasonalSections, ...enabledCustomSections],
+            enabledDiscoverySections: [...enabledDiscoverySections, ...enabledCustomDiscoverySections]
+        }
     }
 
     /**
@@ -1889,16 +2004,37 @@
         if (!currentConfig) return '';
         const spotlight = currentConfig.SPOTLIGHT_SETTINGS || {};
         const defaults = window.KefinHomeConfig2?.SPOTLIGHT_SETTINGS || {};
+        const spotlightLayout = spotlight.spotlightLayout ?? (spotlight.fullScreen === true ? 'Borderless' : 'Border');
+        const spotlightSize = spotlight.spotlightSize ?? (spotlight.fullScreen === true ? 'full' : 'normal');
+        const tileCount = spotlight.tileCount ?? (spotlightSize === 'full' ? 1 : spotlightSize === 'large' ? 2 : 3);
+        const tileCountStr = String(Math.max(1, Math.min(3, parseInt(tileCount, 10) || 1)));
+        const tc = Math.max(1, Math.min(3, parseInt(tileCount, 10) || 1));
+        const cycleRowDisplay = tc > 1 ? 'none' : 'block';
+        function animRow(n) {
+            const ord = n === 1 ? 'First' : n === 2 ? 'Second' : 'Third';
+            return buildSelect('spotlight-entranceAnimation' + ord, SPOTLIGHT_ENTRANCE_OPTIONS, spotlight['entranceAnimation' + ord] ?? defaults['entranceAnimation' + ord] ?? 'fadeIn', 'Entrance animation ' + n) +
+                buildSelect('spotlight-slideAnimation' + ord, SPOTLIGHT_SLIDE_OPTIONS, spotlight['slideAnimation' + ord] ?? defaults['slideAnimation' + ord] ?? 'kenBurnsZoomIn', 'Slide animation ' + n);
+        }
         return `
             <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-bottom: 0.5em;">Default behavior for spotlight sections on the home screen. Per-section overrides can be set when editing a section.</div>
             <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.75em 1.5em;">
+                ${buildSelect('spotlight-spotlightLayout', SPOTLIGHT_LAYOUT_OPTIONS, spotlightLayout, 'Layout')}
+                ${buildSelect('spotlight-spotlightSize', SPOTLIGHT_SIZE_OPTIONS, spotlightSize, 'Size')}
+                ${buildSelect('spotlight-tileCount', SPOTLIGHT_TILE_COUNT_OPTIONS, tileCountStr, 'Tiled backdrop count')}
                 ${buildToggleSlider('spotlight-autoPlay', spotlight.autoPlay !== false, 'Auto-play', { includeHiddenCheckbox: true })}
                 ${buildSelect('spotlight-slideState', SLIDE_STATE_OPTIONS, (spotlight.showSlideState === false ? 'none' : (spotlight.showDots === false ? 'numeric' : 'dots')), 'Slide state')}
                 ${buildToggleSlider('spotlight-showNavButtons', spotlight.showNavButtons !== false, 'Show prev/next buttons', { includeHiddenCheckbox: true })}
                 ${buildToggleSlider('spotlight-showClearArt', spotlight.showClearArt === true, 'Show clear art', { includeHiddenCheckbox: true })}
                 ${buildToggleSlider('spotlight-panAnimation', spotlight.panAnimation !== false, 'Pan animation', { includeHiddenCheckbox: true })}
-                ${buildToggleSlider('spotlight-fullScreen', spotlight.fullScreen === true, 'Full screen', { includeHiddenCheckbox: true })}
-                ${buildToggleSlider('spotlight-dualBackdrops', spotlight.dualBackdrops !== false, 'Dual backdrops', { includeHiddenCheckbox: true })}
+                <div id="spotlight-animation-dropdowns" style="grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.75em 1.5em;">
+                    <div id="spotlight-anim-first">${animRow(1)}</div>
+                    <div id="spotlight-anim-second" style="display: ${tc >= 2 ? 'block' : 'none'};">${animRow(2)}</div>
+                    <div id="spotlight-anim-third" style="display: ${tc >= 3 ? 'block' : 'none'};">${animRow(3)}</div>
+                </div>
+                <div id="spotlight-cycle-backdrops-row" style="display: ${cycleRowDisplay}; grid-column: 1 / -1;">
+                    ${buildToggleSlider('spotlight-cycleBackdrops', spotlight.cycleBackdrops === true, 'Cycle backdrops', { includeHiddenCheckbox: true })}
+                    ${buildTextInput('spotlight-cycleBackdropsTime', spotlight.cycleBackdropsTime ?? defaults.cycleBackdropsTime ?? 10000, 'Cycle backdrops time (ms)', 'number')}
+                </div>
                 ${buildTextInput('spotlight-interval', spotlight.interval ?? defaults.interval ?? 10000, 'Auto-play interval (ms)', 'number')}
             </div>
         `;
@@ -1917,22 +2053,77 @@
         const spotlightDefaults = window.KefinHomeConfig2?.SPOTLIGHT_SETTINGS || {};
         const sectionSpotlight = section.spotlightConfig || {};
         const spotlightOpts = { ...spotlightDefaults, ...globalSpotlight, ...sectionSpotlight };
+        const spotlightLayout = spotlightOpts.spotlightLayout ?? (spotlightOpts.fullScreen === true ? 'Borderless' : 'Border');
+        const spotlightSize = spotlightOpts.spotlightSize ?? (spotlightOpts.fullScreen === true ? 'full' : 'normal');
+        const tileCount = spotlightOpts.tileCount ?? (spotlightSize === 'full' ? 1 : spotlightSize === 'large' ? 2 : 3);
+        const tc = Math.max(1, Math.min(3, parseInt(tileCount, 10) || 1));
+        const tileCountStr = String(tc);
+        const cycleRowDisplay = tc > 1 ? 'none' : 'block';
+        function animRow(n) {
+            const ord = n === 1 ? 'First' : n === 2 ? 'Second' : 'Third';
+            return buildSelect(idPrefix + 'spotlight-entranceAnimation' + ord, SPOTLIGHT_ENTRANCE_OPTIONS, spotlightOpts['entranceAnimation' + ord] ?? 'fadeIn', 'Entrance animation ' + n) +
+                buildSelect(idPrefix + 'spotlight-slideAnimation' + ord, SPOTLIGHT_SLIDE_OPTIONS, spotlightOpts['slideAnimation' + ord] ?? 'kenBurnsZoomIn', 'Slide animation ' + n);
+        }
         const containerId = idPrefix + 'spotlight-options-container';
         return `
                 <div id="${containerId}" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em; display: ${isSpotlight ? 'block' : 'none'};">
                     <div class="listItemBodyText" style="font-weight: 500; margin-bottom: 0.75em;">Spotlight Options</div>
                     <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.75em 1.5em;">
+                        ${buildSelect(idPrefix + 'spotlight-spotlightLayout', SPOTLIGHT_LAYOUT_OPTIONS, spotlightLayout, 'Layout')}
+                        ${buildSelect(idPrefix + 'spotlight-spotlightSize', SPOTLIGHT_SIZE_OPTIONS, spotlightSize, 'Size')}
+                        ${buildSelect(idPrefix + 'spotlight-tileCount', SPOTLIGHT_TILE_COUNT_OPTIONS, tileCountStr, 'Tiled backdrop count')}
                         ${buildToggleSlider(idPrefix + 'spotlight-autoPlay', spotlightOpts.autoPlay !== false, 'Auto-play', { includeHiddenCheckbox: true })}
                         ${buildSelect(idPrefix + 'spotlight-slideState', SLIDE_STATE_OPTIONS, (spotlightOpts.showSlideState === false ? 'none' : (spotlightOpts.showDots === false ? 'numeric' : 'dots')), 'Slide state')}
                         ${buildToggleSlider(idPrefix + 'spotlight-showNavButtons', spotlightOpts.showNavButtons !== false, 'Show prev/next buttons', { includeHiddenCheckbox: true })}
                         ${buildToggleSlider(idPrefix + 'spotlight-showClearArt', spotlightOpts.showClearArt === true, 'Show clear art', { includeHiddenCheckbox: true })}
                         ${buildToggleSlider(idPrefix + 'spotlight-panAnimation', spotlightOpts.panAnimation !== false, 'Pan animation', { includeHiddenCheckbox: true })}
-                        ${buildToggleSlider(idPrefix + 'spotlight-fullScreen', spotlightOpts.fullScreen === true, 'Full screen', { includeHiddenCheckbox: true })}
-                        ${buildToggleSlider(idPrefix + 'spotlight-dualBackdrops', spotlightOpts.dualBackdrops !== false, 'Dual backdrops', { includeHiddenCheckbox: true })}
+                        <div id="${idPrefix}spotlight-animation-dropdowns" style="grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.75em 1.5em;">
+                            <div id="${idPrefix}spotlight-anim-first">${animRow(1)}</div>
+                            <div id="${idPrefix}spotlight-anim-second" style="display: ${tc >= 2 ? 'block' : 'none'};">${animRow(2)}</div>
+                            <div id="${idPrefix}spotlight-anim-third" style="display: ${tc >= 3 ? 'block' : 'none'};">${animRow(3)}</div>
+                        </div>
+                        <div id="${idPrefix}spotlight-cycle-backdrops-row" style="display: ${cycleRowDisplay}; grid-column: 1 / -1;">
+                            ${buildToggleSlider(idPrefix + 'spotlight-cycleBackdrops', spotlightOpts.cycleBackdrops === true, 'Cycle backdrops', { includeHiddenCheckbox: true })}
+                            ${buildTextInput(idPrefix + 'spotlight-cycleBackdropsTime', spotlightOpts.cycleBackdropsTime ?? 10000, 'Cycle backdrops time (ms)', 'number')}
+                        </div>
                         ${buildTextInput(idPrefix + 'spotlight-interval', spotlightOpts.interval ?? 10000, 'Auto-play interval (ms)', 'number')}
                     </div>
                 </div>
         `;
+    }
+
+    /**
+     * Attach event listeners for spotlight settings (Size -> tileCount, tileCount -> cycle row + animation dropdown visibility).
+     * @param {HTMLElement} container - Container that has the spotlight form (e.g. #global-settings-content or spotlight options div)
+     * @param {string} idPrefix - Prefix for input ids, e.g. 'spotlight-' or 'section-spotlight-' or 'discovery-spotlight-'
+     */
+    function attachSpotlightSettingsListeners(container, idPrefix) {
+        if (!container) return;
+        const sizeSelect = container.querySelector('#' + idPrefix + 'spotlightSize');
+        const tileCountSelect = container.querySelector('#' + idPrefix + 'tileCount');
+        const cycleRow = container.querySelector('#' + idPrefix + 'cycle-backdrops-row');
+        const cycleCheckbox = container.querySelector('#' + idPrefix + 'cycleBackdrops');
+        const animSecond = container.querySelector('#' + idPrefix + 'anim-second');
+        const animThird = container.querySelector('#' + idPrefix + 'anim-third');
+        function updateFromTileCount(tc) {
+            const t = parseInt(tc, 10) || 1;
+            if (cycleRow) cycleRow.style.display = t > 1 ? 'none' : 'block';
+            if (cycleCheckbox && t > 1) cycleCheckbox.checked = false;
+            if (animSecond) animSecond.style.display = t >= 2 ? 'block' : 'none';
+            if (animThird) animThird.style.display = t >= 3 ? 'block' : 'none';
+        }
+        if (sizeSelect) {
+            sizeSelect.addEventListener('change', () => {
+                if (!tileCountSelect) return;
+                const v = sizeSelect.value;
+                tileCountSelect.value = v === 'full' ? '1' : v === 'large' ? '2' : '3';
+                updateFromTileCount(tileCountSelect.value);
+            });
+        }
+        if (tileCountSelect) {
+            tileCountSelect.addEventListener('change', () => updateFromTileCount(tileCountSelect.value));
+            updateFromTileCount(tileCountSelect.value);
+        }
     }
 
     /**
@@ -2768,17 +2959,28 @@
 
             // Spotlight options (saved when Render Mode = Spotlight)
             if (renderMode === 'Spotlight') {
-                const slideStateVal = dialog.querySelector('#discovery-spotlight-slideState')?.value || 'dots';
+                const p = 'discovery-spotlight-';
+                const slideStateVal = dialog.querySelector('#' + p + 'slideState')?.value || 'dots';
+                const tileCountVal = Math.max(1, Math.min(3, parseInt(dialog.querySelector('#' + p + 'tileCount')?.value || '1', 10)));
                 discovery.spotlightConfig = {
-                    autoPlay: dialog.querySelector('#discovery-spotlight-autoPlay')?.checked !== false,
-                    interval: parseInt(dialog.querySelector('#discovery-spotlight-interval')?.value || '10000', 10),
+                    spotlightLayout: dialog.querySelector('#' + p + 'spotlightLayout')?.value || 'Border',
+                    spotlightSize: dialog.querySelector('#' + p + 'spotlightSize')?.value || 'normal',
+                    tileCount: tileCountVal,
+                    autoPlay: dialog.querySelector('#' + p + 'autoPlay')?.checked !== false,
+                    interval: parseInt(dialog.querySelector('#' + p + 'interval')?.value || '10000', 10),
                     showSlideState: slideStateVal !== 'none',
                     showDots: slideStateVal === 'dots',
-                    showNavButtons: dialog.querySelector('#discovery-spotlight-showNavButtons')?.checked !== false,
-                    showClearArt: dialog.querySelector('#discovery-spotlight-showClearArt')?.checked === true,
-                    panAnimation: dialog.querySelector('#discovery-spotlight-panAnimation')?.checked !== false,
-                    fullScreen: dialog.querySelector('#discovery-spotlight-fullScreen')?.checked === true,
-                    dualBackdrops: dialog.querySelector('#discovery-spotlight-dualBackdrops')?.checked !== false
+                    showNavButtons: dialog.querySelector('#' + p + 'showNavButtons')?.checked !== false,
+                    showClearArt: dialog.querySelector('#' + p + 'showClearArt')?.checked === true,
+                    panAnimation: dialog.querySelector('#' + p + 'panAnimation')?.checked !== false,
+                    entranceAnimationFirst: dialog.querySelector('#' + p + 'entranceAnimationFirst')?.value || 'fadeIn',
+                    entranceAnimationSecond: dialog.querySelector('#' + p + 'entranceAnimationSecond')?.value || 'fadeIn',
+                    entranceAnimationThird: dialog.querySelector('#' + p + 'entranceAnimationThird')?.value || 'fadeIn',
+                    slideAnimationFirst: dialog.querySelector('#' + p + 'slideAnimationFirst')?.value || 'kenBurnsZoomIn',
+                    slideAnimationSecond: dialog.querySelector('#' + p + 'slideAnimationSecond')?.value || 'kenBurnsZoomIn',
+                    slideAnimationThird: dialog.querySelector('#' + p + 'slideAnimationThird')?.value || 'kenBurnsZoomIn',
+                    cycleBackdrops: dialog.querySelector('#' + p + 'cycleBackdrops')?.checked === true,
+                    cycleBackdropsTime: parseInt(dialog.querySelector('#' + p + 'cycleBackdropsTime')?.value || '10000', 10)
                 };
             } else {
                 delete discovery.spotlightConfig;
@@ -2876,17 +3078,28 @@
                 section.renderMode = renderMode;
 
                 if (renderMode === 'Spotlight') {
-                    const slideStateVal = dialog.querySelector('#section-spotlight-slideState')?.value || 'dots';
+                    const p = 'section-spotlight-';
+                    const slideStateVal = dialog.querySelector('#' + p + 'slideState')?.value || 'dots';
+                    const tileCountVal = Math.max(1, Math.min(3, parseInt(dialog.querySelector('#' + p + 'tileCount')?.value || '1', 10)));
                     section.spotlightConfig = {
-                        autoPlay: dialog.querySelector('#section-spotlight-autoPlay')?.checked !== false,
-                        interval: parseInt(dialog.querySelector('#section-spotlight-interval')?.value || '10000', 10),
+                        spotlightLayout: dialog.querySelector('#' + p + 'spotlightLayout')?.value || 'Border',
+                        spotlightSize: dialog.querySelector('#' + p + 'spotlightSize')?.value || 'normal',
+                        tileCount: tileCountVal,
+                        autoPlay: dialog.querySelector('#' + p + 'autoPlay')?.checked !== false,
+                        interval: parseInt(dialog.querySelector('#' + p + 'interval')?.value || '10000', 10),
                         showSlideState: slideStateVal !== 'none',
                         showDots: slideStateVal === 'dots',
-                        showNavButtons: dialog.querySelector('#section-spotlight-showNavButtons')?.checked !== false,
-                        showClearArt: dialog.querySelector('#section-spotlight-showClearArt')?.checked === true,
-                        panAnimation: dialog.querySelector('#section-spotlight-panAnimation')?.checked !== false,
-                        fullScreen: dialog.querySelector('#section-spotlight-fullScreen')?.checked === true,
-                        dualBackdrops: dialog.querySelector('#section-spotlight-dualBackdrops')?.checked !== false
+                        showNavButtons: dialog.querySelector('#' + p + 'showNavButtons')?.checked !== false,
+                        showClearArt: dialog.querySelector('#' + p + 'showClearArt')?.checked === true,
+                        panAnimation: dialog.querySelector('#' + p + 'panAnimation')?.checked !== false,
+                        entranceAnimationFirst: dialog.querySelector('#' + p + 'entranceAnimationFirst')?.value || 'fadeIn',
+                        entranceAnimationSecond: dialog.querySelector('#' + p + 'entranceAnimationSecond')?.value || 'fadeIn',
+                        entranceAnimationThird: dialog.querySelector('#' + p + 'entranceAnimationThird')?.value || 'fadeIn',
+                        slideAnimationFirst: dialog.querySelector('#' + p + 'slideAnimationFirst')?.value || 'kenBurnsZoomIn',
+                        slideAnimationSecond: dialog.querySelector('#' + p + 'slideAnimationSecond')?.value || 'kenBurnsZoomIn',
+                        slideAnimationThird: dialog.querySelector('#' + p + 'slideAnimationThird')?.value || 'kenBurnsZoomIn',
+                        cycleBackdrops: dialog.querySelector('#' + p + 'cycleBackdrops')?.checked === true,
+                        cycleBackdropsTime: parseInt(dialog.querySelector('#' + p + 'cycleBackdropsTime')?.value || '10000', 10)
                     };
                 }
             }
@@ -3132,17 +3345,28 @@
 
         // Spotlight options (saved to spotlightConfig when Render Mode = Spotlight)
         if (renderMode === 'Spotlight') {
-            const slideStateVal = dialog.querySelector('#section-spotlight-slideState')?.value || 'dots';
+            const p = 'section-spotlight-';
+            const slideStateVal = dialog.querySelector('#' + p + 'slideState')?.value || 'dots';
+            const tileCountVal = Math.max(1, Math.min(3, parseInt(dialog.querySelector('#' + p + 'tileCount')?.value || '1', 10)));
             section.spotlightConfig = {
-                autoPlay: dialog.querySelector('#section-spotlight-autoPlay')?.checked !== false,
-                interval: parseInt(dialog.querySelector('#section-spotlight-interval')?.value || '10000', 10),
+                spotlightLayout: dialog.querySelector('#' + p + 'spotlightLayout')?.value || 'Border',
+                spotlightSize: dialog.querySelector('#' + p + 'spotlightSize')?.value || 'normal',
+                tileCount: tileCountVal,
+                autoPlay: dialog.querySelector('#' + p + 'autoPlay')?.checked !== false,
+                interval: parseInt(dialog.querySelector('#' + p + 'interval')?.value || '10000', 10),
                 showSlideState: slideStateVal !== 'none',
                 showDots: slideStateVal === 'dots',
-                showNavButtons: dialog.querySelector('#section-spotlight-showNavButtons')?.checked !== false,
-                showClearArt: dialog.querySelector('#section-spotlight-showClearArt')?.checked === true,
-                panAnimation: dialog.querySelector('#section-spotlight-panAnimation')?.checked !== false,
-                fullScreen: dialog.querySelector('#section-spotlight-fullScreen')?.checked === true,
-                dualBackdrops: dialog.querySelector('#section-spotlight-dualBackdrops')?.checked !== false
+                showNavButtons: dialog.querySelector('#' + p + 'showNavButtons')?.checked !== false,
+                showClearArt: dialog.querySelector('#' + p + 'showClearArt')?.checked === true,
+                panAnimation: dialog.querySelector('#' + p + 'panAnimation')?.checked !== false,
+                entranceAnimationFirst: dialog.querySelector('#' + p + 'entranceAnimationFirst')?.value || 'fadeIn',
+                entranceAnimationSecond: dialog.querySelector('#' + p + 'entranceAnimationSecond')?.value || 'fadeIn',
+                entranceAnimationThird: dialog.querySelector('#' + p + 'entranceAnimationThird')?.value || 'fadeIn',
+                slideAnimationFirst: dialog.querySelector('#' + p + 'slideAnimationFirst')?.value || 'kenBurnsZoomIn',
+                slideAnimationSecond: dialog.querySelector('#' + p + 'slideAnimationSecond')?.value || 'kenBurnsZoomIn',
+                slideAnimationThird: dialog.querySelector('#' + p + 'slideAnimationThird')?.value || 'kenBurnsZoomIn',
+                cycleBackdrops: dialog.querySelector('#' + p + 'cycleBackdrops')?.checked === true,
+                cycleBackdropsTime: parseInt(dialog.querySelector('#' + p + 'cycleBackdropsTime')?.value || '10000', 10)
             };
         } else {
             delete section.spotlightConfig;
@@ -3205,7 +3429,11 @@
         };
 
         const slideStateVal = dialog.querySelector('#spotlight-slideState')?.value || 'dots';
+        const tileCountVal = parseInt(dialog.querySelector('#spotlight-tileCount')?.value || '1', 10);
         const spotlight = {
+            spotlightLayout: dialog.querySelector('#spotlight-spotlightLayout')?.value || 'Border',
+            spotlightSize: dialog.querySelector('#spotlight-spotlightSize')?.value || 'normal',
+            tileCount: Math.max(1, Math.min(3, tileCountVal)),
             autoPlay: dialog.querySelector('#spotlight-autoPlay')?.checked !== false,
             interval: parseInt(dialog.querySelector('#spotlight-interval')?.value || '10000', 10),
             showSlideState: slideStateVal !== 'none',
@@ -3213,8 +3441,14 @@
             showNavButtons: dialog.querySelector('#spotlight-showNavButtons')?.checked !== false,
             showClearArt: dialog.querySelector('#spotlight-showClearArt')?.checked === true,
             panAnimation: dialog.querySelector('#spotlight-panAnimation')?.checked !== false,
-            fullScreen: dialog.querySelector('#spotlight-fullScreen')?.checked === true,
-            dualBackdrops: dialog.querySelector('#spotlight-dualBackdrops')?.checked !== false
+            entranceAnimationFirst: dialog.querySelector('#spotlight-entranceAnimationFirst')?.value || 'fadeIn',
+            entranceAnimationSecond: dialog.querySelector('#spotlight-entranceAnimationSecond')?.value || 'fadeIn',
+            entranceAnimationThird: dialog.querySelector('#spotlight-entranceAnimationThird')?.value || 'fadeIn',
+            slideAnimationFirst: dialog.querySelector('#spotlight-slideAnimationFirst')?.value || 'kenBurnsZoomIn',
+            slideAnimationSecond: dialog.querySelector('#spotlight-slideAnimationSecond')?.value || 'kenBurnsZoomIn',
+            slideAnimationThird: dialog.querySelector('#spotlight-slideAnimationThird')?.value || 'kenBurnsZoomIn',
+            cycleBackdrops: dialog.querySelector('#spotlight-cycleBackdrops')?.checked === true,
+            cycleBackdropsTime: parseInt(dialog.querySelector('#spotlight-cycleBackdropsTime')?.value || '10000', 10)
         };
 
         const homeSettings = {
@@ -3633,6 +3867,7 @@
                         const isSpotlight = renderModeSelect.value === 'Spotlight';
                         if (cardFormatContainer) cardFormatContainer.style.display = isSpotlight ? 'none' : 'block';
                         if (spotlightOptionsContainer) spotlightOptionsContainer.style.display = isSpotlight ? 'block' : 'none';
+                        if (isSpotlight && spotlightOptionsContainer) attachSpotlightSettingsListeners(spotlightOptionsContainer, 'section-spotlight-');
                     };
                     renderModeSelect.addEventListener('change', updateRenderModeDependentVisibility);
                     updateRenderModeDependentVisibility(); // Set initial state
@@ -3643,7 +3878,9 @@
                 const discoverySpotlightOptionsContainer = modalInstance.dialogContent.querySelector('#discovery-spotlight-options-container');
                 if (discoveryRenderModeSelect && discoverySpotlightOptionsContainer) {
                     const updateDiscoverySpotlightVisibility = () => {
-                        discoverySpotlightOptionsContainer.style.display = discoveryRenderModeSelect.value === 'Spotlight' ? 'block' : 'none';
+                        const isSpotlight = discoveryRenderModeSelect.value === 'Spotlight';
+                        discoverySpotlightOptionsContainer.style.display = isSpotlight ? 'block' : 'none';
+                        if (isSpotlight) attachSpotlightSettingsListeners(discoverySpotlightOptionsContainer, 'discovery-spotlight-');
                     };
                     discoveryRenderModeSelect.addEventListener('change', updateDiscoverySpotlightVisibility);
                     updateDiscoverySpotlightVisibility(); // Set initial state
@@ -4287,6 +4524,7 @@
             const contentContainer = dialog.querySelector('#global-settings-content');
             if (contentContainer) {
                 contentContainer.innerHTML = buildGlobalSettingsPanelContent(subTab);
+                if (subTab === 'spotlight') attachSpotlightSettingsListeners(contentContainer, 'spotlight-');
             }
         });
         /* dialog.querySelectorAll('.section-type-nav-btn').forEach(btn => {
@@ -5617,7 +5855,7 @@
             // Load config
             const config = await loadConfig();
 
-            await verifyRecentlyAddedInLibraryConfig(config);
+            await verifyLibrarySectionsConfig(config);
 
             // Build content
             const content = document.createElement('div');
@@ -5740,7 +5978,7 @@
                     queryUrl = null;
                 } else if (window.apiHelper && window.apiHelper.buildQueryFromSection) {
                     // Use shared builder for consistency
-                    queryUrl = window.apiHelper.buildQueryFromSection(query, userId, serverUrl);
+                    queryUrl = window.apiHelper.buildQueryFromSection(query, userId, serverUrl, section.renderMode === 'Spotlight');
                 } else {
                     // Fallback to individual builders
                     if (query.path) {
@@ -5948,6 +6186,7 @@
     // Export getConfig for use by other scripts
     window.KefinHomeScreen = window.KefinHomeScreen || {};
     window.KefinHomeScreen.getConfig = getConfig;
+    window.KefinHomeScreen.getSections = getSections;
 
     LOG('Home Screen Configuration UI loaded');
     

@@ -77,8 +77,12 @@ span.listItemBodyText.secondary.seasonal-tag {
     border-radius: 5px;
 }
 
-.homeScreenSettingsContainer:has(#kefin-user-home-sections-editor) form>div:first-child {
+.homeScreenSettingsContainer:has(#kefin-user-home-sections-editor) form>div:first-child > *:not(.verticalSection-extrabottompadding) {
     display: none;
+}
+
+.homeScreenSettingsContainer:has(#kefin-user-home-sections-editor) form>div:first-child {
+    margin-bottom: 0;
 }
 
 .homeScreenSettingsContainer form {
@@ -92,4 +96,8 @@ span.listItemBodyText.secondary.seasonal-tag {
 
 .homeScreenSettingsContainer #kefin-user-home-sections-editor {
     order: 1;
+}
+
+.kefin-restore-defaults-btn .restoreBtn::after {
+    content: 'Restore Defaults';
 }
