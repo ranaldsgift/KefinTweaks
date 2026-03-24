@@ -18,6 +18,45 @@
     // Standard Home Sections (non-seasonal)
     // New streamlined format with queries array, organized into groups
     const KEFINTWEAKS_HOME_SECTION_GROUPS = [
+        // My Media Sections
+        {
+            id: 'home-my-media',
+            name: 'My Media',
+            sections: [
+                {
+                    id: 'my-media',
+                    name: 'My Media',
+                    enabled: true,
+                    order: 5,
+                    cardFormat: 'Thumb',
+                    ttl: CACHE_CONFIG.LONG_TTL,
+                    queries: [
+                        {
+                            queryOptions: {
+                                Limit: 0,
+                                Recursive: false
+                            }
+                        }
+                    ],
+                },
+                {
+                    id: 'my-media-small',
+                    name: 'My Media (Small)',
+                    enabled: true,
+                    order: 6,
+                    cardFormat: 'Button',
+                    ttl: CACHE_CONFIG.LONG_TTL,
+                    queries: [
+                        {
+                            queryOptions: {
+                                Limit: 0,
+                                Recursive: false
+                            }
+                        }
+                    ]
+                }
+            ]
+        },
         // Continue Watching Group
         {
             id: 'home-continue-watching',
