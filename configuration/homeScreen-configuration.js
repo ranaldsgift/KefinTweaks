@@ -69,7 +69,7 @@
     };
 
     const CARD_FORMATS = ['Poster', 'Thumb', 'Backdrop', 'Square', 'Random', 'Button', 'Banner', 'Logo', 'Clear Art', 'Disc'];
-    const SORT_ORDERS = ['None', 'Random', 'Name', 'DateCreated', 'PremiereDate', 'CommunityRating', 'CriticRating', 'DatePlayed', 'SortName', 'PlayCount', 'PlayedPercentage', 'StartDate', 'Runtime', 'ProductionYear', 'IsPlayed', 'IsUnplayed', 'ParentIndexNumber', 'IndexNumber', 'IsFolder', 'SimilarityScore', 'SearchScore', 'DateLastContentAdded', 'SeriesDatePlayed', 'ChildCount'];
+    const SORT_ORDERS = ['Default', 'Random', 'Name', 'SortName', 'DateCreated', 'PremiereDate', 'CommunityRating', 'CriticRating', 'DatePlayed', 'SortName', 'PlayCount', 'PlayedPercentage', 'StartDate', 'Runtime', 'ProductionYear', 'IsPlayed', 'IsUnplayed', 'ParentIndexNumber', 'IndexNumber', 'IsFolder', 'SimilarityScore', 'SearchScore', 'DateLastContentAdded', 'SeriesDatePlayed', 'ChildCount'];
     const SORT_ORDER_DIRECTIONS = ['Ascending', 'Descending'];
     const RENDER_MODE_OPTIONS = [{ value: 'Normal', label: 'Normal' }, { value: 'Spotlight', label: 'Spotlight' }, { value: 'Random', label: 'Random' }];
     const SLIDE_STATE_OPTIONS = [
