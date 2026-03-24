@@ -116,7 +116,6 @@ div#discovery-loading-indicator:not(.show)::after {
     font-size: 14px;
     color: #666;
     transition: opacity 0.3s ease;
-    order: 99999 !important;
     position: relative;
     justify-content: start;
 }
@@ -189,7 +188,6 @@ div#discovery-loading-indicator:not(.show)::after {
     font-size: 14px;
     color: #666;
     transition: opacity 0.3s ease;
-    order: 99999 !important;
     position: relative;
     justify-content: start; 
     min-height: 200px;
