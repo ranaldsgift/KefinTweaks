@@ -61,7 +61,7 @@
         discoveryEnabled: true,
         discoveryBufferPromise: null,
         discoveryBuffer: [],
-        discoverySectionOrder: 1000,
+        discoverySectionOrder: 100000000,
         discoverySectionsRemain: true,
         ensuringDiscoveryBuffer: false,
         infiniteScrollHandler: null,
@@ -116,7 +116,7 @@
         loadingDiv = document.createElement('div');
         loadingDiv.className = 'discovery-loading-indicator';
         loadingDiv.id = 'discovery-loading-indicator';
-        loadingDiv.style.order = '99999';
+        loadingDiv.style.order = '1000000000';
         loadingDiv.innerHTML = `
             <div class="spinner"></div>
         `;
@@ -823,7 +823,7 @@
             return [];
         }
 
-        const homeScreenConfig = window.KefinTweaksConfig && window.KefinTweaksConfig.homeScreenConfig;
+        const homeScreenConfig = window.KefinHomeScreen.getConfig();
         
         // Get default discovery sections
         const defaultDiscovery = flattenSectionGroups(Config.DISCOVERY_SECTION_GROUPS || []);
@@ -1640,7 +1640,7 @@
             case 'Genre':
                 const genre = await getRandomGenre();
                 return genre ? { id: genre.Id, name: genre.Name, metadata: { Genre: genre.Name } } : null;
-                
+
             case 'Person':
                 if (config.sourceType && config.sourceType.includes('watched')) {
                     const result = await getRandomPersonFromHistory(config.personType, config.sourceType);
