@@ -32,9 +32,11 @@
                     ttl: CACHE_CONFIG.LONG_TTL,
                     queries: [
                         {
+                            path: '/UserViews',
                             queryOptions: {
                                 Limit: 0,
-                                Recursive: false
+                                Recursive: false,
+                                SortBy: 'Default',
                             }
                         }
                     ],
@@ -48,9 +50,11 @@
                     ttl: CACHE_CONFIG.LONG_TTL,
                     queries: [
                         {
+                            path: '/UserViews',
                             queryOptions: {
                                 Limit: 0,
-                                Recursive: false
+                                Recursive: false,
+                                SortBy: 'Default',
                             }
                         }
                     ]
