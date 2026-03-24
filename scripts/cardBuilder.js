@@ -2161,7 +2161,7 @@
             if (viewMoreUrl) {
                 // Create clickable title
                 const titleLink = document.createElement('a');
-                titleLink.className = 'emby-tab-button emby-tab-button-active emby-button-foreground';
+                titleLink.className = 'emby-tab-button emby-tab-button-active';
                 titleLink.textContent = title;
                 titleLink.title = 'See All';
                 titleLink.style.textDecoration = 'none';
@@ -2184,7 +2184,7 @@
             } else {
                 // Regular non-clickable title
                 sectionTitleEl = document.createElement('div');
-                sectionTitleEl.className = 'emby-tab-button emby-tab-button-active emby-button-foreground';
+                sectionTitleEl.className = 'emby-tab-button emby-tab-button-active';
                 sectionTitleEl.textContent = title;
             }
 
@@ -2701,7 +2701,7 @@
             
             // Tagline (tagline only) and Overview (separate element) - show/hide via CSS based on spotlight type
             const taglineEl = document.createElement('p');
-            taglineEl.className = 'emby-tab-button';
+            taglineEl.className = 'emby-tab-button emby-tab-button-active';
             const tagline = (item.Taglines && Array.isArray(item.Taglines) && item.Taglines.length > 0)
                 ? item.Taglines[0] : '';
             if (tagline) taglineEl.textContent = tagline;
@@ -2819,7 +2819,7 @@
 
             if (rating && typeof rating === 'number') {
                 const ratingContainer = document.createElement('div');
-                ratingContainer.className = 'starRatingContainer mediaInfoItem spotlight-rating-container';
+                ratingContainer.className = 'emby-button button-flat starRatingContainer mediaInfoItem spotlight-rating-container';
                 
                 const starIcon = document.createElement('span');
                 starIcon.className = 'material-icons starIcon star spotlight-rating-star';
@@ -2970,7 +2970,7 @@
             const prevButton = document.createElement('button');
             prevButton.className = 'spotlight-nav-button spotlight-nav-prev emby-button';
             const prevIcon = document.createElement('span');
-            prevIcon.className = 'material-icons emby-button-foreground';
+            prevIcon.className = 'material-icons';
             prevIcon.textContent = 'chevron_left';
             prevButton.appendChild(prevIcon);
             prevButton.addEventListener('click', (e) => {
@@ -2982,7 +2982,7 @@
             const nextButton = document.createElement('button');
             nextButton.className = 'spotlight-nav-button spotlight-nav-next emby-button';
             const nextIcon = document.createElement('span');
-            nextIcon.className = 'material-icons emby-button-foreground';
+            nextIcon.className = 'material-icons';
             nextIcon.textContent = 'chevron_right';
             nextButton.appendChild(nextIcon);
             nextButton.addEventListener('click', (e) => {
@@ -3007,7 +3007,7 @@
             const pauseButton = document.createElement('button');
             pauseButton.className = 'spotlight-pause-button spotlight-nav-button emby-button';
             const pauseIcon = document.createElement('span');
-            pauseIcon.className = 'material-icons emby-button-foreground';
+            pauseIcon.className = 'material-icons';
             pauseIcon.textContent = 'pause';
             pauseButton.appendChild(pauseIcon);
             pauseButton.addEventListener('click', (e) => {
@@ -3084,10 +3084,10 @@
             kenBurnsZoomOut: 'scale3d(1.02, 1.02, 1)',
             kenBurnsZoomInFullscreen: 'scale3d(1.12, 1.12, 1)',
             kenBurnsZoomOutFullscreen: 'scale3d(1.08, 1.08, 1)',
-            kenBurnsPanRight: 'scale3d(1.1, 1.1, 1) translateX(2%)',
-            kenBurnsPanLeft: 'scale3d(1.1, 1.1, 1) translateX(-2%)',
-            kenBurnsPanUp: 'scale3d(1.1, 1.1, 1) translateY(-2%)',
-            kenBurnsDiagonal: 'scale3d(1.13, 1.13, 1) translate(2%, -2%)',
+            kenBurnsPanRight: 'scale3d(1.1, 1.1, 1) translateX(5%)',
+            kenBurnsPanLeft: 'scale3d(1.1, 1.1, 1) translateX(-5%)',
+            kenBurnsPanUp: 'scale3d(1.1, 1.1, 1) translateY(-5%)',
+            kenBurnsDiagonal: 'scale3d(1.13, 1.13, 1) translate(5%, -5%)',
             fadeInScale: 'scale3d(1, 1, 1)',
             parallaxFloat: 'scale3d(1, 1, 1) translateY(0)',
             depthPulse: 'scale3d(1, 1, 1)',
