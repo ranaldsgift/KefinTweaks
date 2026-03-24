@@ -671,7 +671,10 @@
         
         // Hide suggestions when focus leaves the input
         input.addEventListener('blur', () => {
-            suggestionsDiv.style.display = 'none';
+            // If the user isn't targeting the suggestions div, hide them
+            if (!document.activeElement.closest(suggestionsDiv)) {
+                suggestionsDiv.style.display = 'none';
+            }
         });
         
         // Setup chevron button (triggers dropdown like down arrow)
