@@ -26,7 +26,7 @@
                 {
                     id: 'my-media',
                     name: 'My Media',
-                    enabled: true,
+                    enabled: false,
                     order: 5,
                     cardFormat: 'Thumb',
                     ttl: CACHE_CONFIG.LONG_TTL,
@@ -42,7 +42,7 @@
                 {
                     id: 'my-media-small',
                     name: 'My Media (Small)',
-                    enabled: true,
+                    enabled: false,
                     order: 6,
                     cardFormat: 'Button',
                     ttl: CACHE_CONFIG.LONG_TTL,
