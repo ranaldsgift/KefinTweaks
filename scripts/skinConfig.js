@@ -378,6 +378,51 @@
                 ]
             },
             {
+                name: 'NetFin',
+                author: 'ya0903',
+                url: [
+                    {
+                        majorServerVersions: [10, 11],
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/ya0903/NetFin@main/netfin.css',
+                        ]
+                    },
+                ],
+                colorSchemes: [],
+                optionalIncludes: [
+                    {
+                        name: 'Mobile Buttons Size Adjustment',
+                        url: `${getKefinTweaksRoot()}skins/optional/NetFin/mobileButtonsSizeAdjustment.css`,
+                        enabled: false
+                    },
+                    {
+                        name: 'Disable Card Hover Effect',
+                        url: `${getKefinTweaksRoot()}skins/optional/ElegantFin/cardHoverEffect.css`,
+                        enabled: false
+                    },
+                    {
+                        name: 'Center Overlay Play Button',
+                        url: `${getKefinTweaksRoot()}skins/optional/ElegantFin/centerPlayButton.css`,
+                        enabled: false
+                    },
+                    {
+                        name: 'Extra Overlay Buttons',
+                        url: `${getKefinTweaksRoot()}skins/optional/ElegantFin/extraOverlayButtons.css`,
+                        enabled: false
+                    },
+                    {
+                        name: 'Library Label Visibility',
+                        url: `${getKefinTweaksRoot()}skins/optional/ElegantFin/libraryLabelVisibility.css`,
+                        enabled: false
+                    },
+                    {
+                        name: 'Solid App Bar',
+                        url: `${getKefinTweaksRoot()}skins/optional/ElegantFin/solidAppBar.css`,
+                        enabled: false
+                    }
+                ]
+            },
+            {
                 name: 'Jellypane',
                 author: 'tedhinklater',
                 url: [ // TODO: Update this when we get the specific 10.10.X / 10.11.X versions

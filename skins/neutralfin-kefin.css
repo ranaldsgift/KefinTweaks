@@ -5,3 +5,7 @@
 .detailSection:has(.series-episodes-section)>#listChildrenCollapsible {
     grid-column: 1 / 5;
 }
+
+#slides-container {
+    top: calc(var(--appBarHeight) * 2 + 1.25em) !important;
+}

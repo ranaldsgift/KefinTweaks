@@ -12,3 +12,13 @@ div#kefinTweaks-breadcrumbs-wrapper {
 .series-episodes-section {
     pointer-events: all;
 }
+.sections.homeSectionsContainer,
+[dir="ltr"] .homeSectionsContainer .spotlight-section.padded-left {
+    padding-left: 0 !important;
+}
+.homePage {
+    width: 100% !important;
+}
+.homeSectionsContainer .emby-scroller-container > * {
+    padding-left: max(env(safe-area-inset-left), 0.5%) !important;
+}
