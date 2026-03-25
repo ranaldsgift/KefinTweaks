@@ -383,7 +383,7 @@
     z-index: 2;
 }
 
-.spotlight-overlay .spotlight-logo-section {grid-area: logo;height: 100%;min-height: 0;display: flex;align-items: flex-end;overflow: hidden;align-content: center;flex-wrap: wrap;}
+.spotlight-overlay .spotlight-logo-section {grid-area: logo;height: 100%;min-height: 0;display: flex;align-items: flex-end;overflow: hidden;align-content: end;flex-wrap: wrap;}
 .spotlight-overlay .spotlight-metadata-section { grid-area: metadata; }
 .spotlight-overlay .spotlight-overview-section {grid-area: overview;display: flex;flex-direction: column;justify-content: flex-start;overflow: hidden;gap: 0;}
 .spotlight-overlay .spotlight-buttons-section {grid-area: buttons;display: flex;align-items: start;}
@@ -437,6 +437,7 @@
     background-size: contain;
     background-repeat: no-repeat;
     background-position: left;
+    max-height: 300px;
 }
 
 .layout-mobile .spotlight-item-logo {
