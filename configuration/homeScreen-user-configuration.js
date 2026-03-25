@@ -24,6 +24,8 @@
     // Map Jellyfin sections to their KefinTweaks equivalents
     // When a KefinTweaks section exists, it replaces the Jellyfin section in the UI
     const JELLYFIN_HOME_SECTIONS_MAP = {
+        'smalllibrarytiles': 'my-media',
+        'librarybuttons': 'my-media-small',
         'resume': 'continueWatching',
         'nextup': 'nextUp',
         'latestmedia': 'recently-added*' // Pattern match - any section starting with 'recently-added-'
