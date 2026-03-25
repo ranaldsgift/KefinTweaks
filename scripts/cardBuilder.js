@@ -1541,13 +1541,21 @@
         const card = document.createElement('div');
         card.className = `card ${cardClass} card-hoverable card-withuserdata`;
         card.setAttribute('data-index', '0');
-        card.setAttribute('data-isfolder', itemType === 'MusicAlbum' || itemType === 'Artist' ? 'true' : 'false');
+        card.setAttribute('data-isfolder', itemType === 'MusicAlbum' || itemType === 'Artist' || item.IsFolder ? 'true' : 'false');
         card.setAttribute('data-serverid', serverId);
         if (!isCustomCard) card.setAttribute('data-id', itemId);
         if (isCustomCard) card.setAttribute('data-custom-card', 'true');
         card.setAttribute('data-type', itemType);
         const mediaType = item.MediaType === 'Unknown' && item.ChannelId ? 'Video' : item.MediaType;
         card.setAttribute('data-mediatype', mediaType || 'Video');
+        
+        if (item.CollectionType) {
+            card.setAttribute('data-collectiontype', item.CollectionType);
+        }
+
+        if (item.IsFolder && item.Path) {
+            card.setAttribute('data-path', item.Path);
+        }
 
         if (item.ChannelId) {
             card.setAttribute('data-channelid', item.ChannelId);
@@ -1610,11 +1618,32 @@
         // lazy-hidden only when we have no blurhash (grey card until image loads)
         blurhashCanvas.className = 'blurhash-canvas';
 
-        let cardUrl = item.cardUrl || `${ApiClient._serverAddress}/web/#/details?id=${itemId}&serverId=${serverId}`;
+        let libraryUrl = '';
+        if (item.Type === 'CollectionFolder') {
+            switch (item.CollectionType) {
+                case 'movies':
+                    libraryUrl = `#/movies.html?topParentId=${item.Id}&collectionType=movies`;
+                    break;
+                case 'tvshows':
+                    libraryUrl = `#/tv.html?topParentId=${item.Id}&collectionType=tvshows`;
+                    break;
+                case 'music':
+                    libraryUrl = `#/music.html?topParentId=${item.Id}&collectionType=music`;
+                    break;
+                case 'livetv':
+                    libraryUrl = `#/livetv.html`;
+                    break;
+                default:
+                    libraryUrl = `#/list.html?parentId=${item.Id}&serverId=${serverId}`;
+                    break;
+            }
+        }
+
+        let cardUrl = item.cardUrl || libraryUrl || `#/details?id=${itemId}&serverId=${serverId}`;
 
         if (!item.cardUrl && itemType === 'Genre') {
             const parentParam = item.ParentId ? `&parentId=${item.ParentId}` : '';
-            cardUrl = `${ApiClient._serverAddress}/web/#/list.html?genreId=${item.Id}&serverId=${serverId}${parentParam}`;
+            cardUrl = `#/list.html?genreId=${item.Id}&serverId=${serverId}${parentParam}`;
         }
 
         // Card image container
@@ -2034,7 +2063,12 @@
             titleLink.setAttribute('data-type', itemType);
             titleLink.setAttribute('data-mediatype', 'undefined');
             titleLink.setAttribute('data-channelid', 'undefined');
-            titleLink.setAttribute('data-isfolder', itemType === 'MusicAlbum' || itemType === 'Artist' || itemType === 'MusicArtist' ? 'true' : 'false');
+            titleLink.setAttribute('data-isfolder', itemType === 'MusicAlbum' || itemType === 'Artist' || itemType === 'MusicArtist' || item.IsFolder ? 'true' : 'false');
+            
+            if (item.CollectionType) {
+                titleLink.setAttribute('data-collectiontype', item.CollectionType);
+            }
+
             titleLink.setAttribute('data-action', 'link');
             titleLink.title = item.Name || 'Unknown';
             titleLink.textContent = item.Name || 'Unknown';
