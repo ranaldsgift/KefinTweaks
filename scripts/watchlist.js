@@ -5714,7 +5714,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		if (lastWatchedEpisode) {
 			const timeAgo = formatTimeAgo(lastWatchedEpisode.UserData.LastPlayedDate);
 			const formattedDate = formatLastWatchedDate(lastWatchedEpisode.UserData.LastPlayedDate);
-			const episodeInfo = `${lastWatchedEpisode.ParentIndexNumber}x${lastWatchedEpisode.IndexNumber.toString().padStart(2, '0')} "${lastWatchedEpisode.Name}"`;
+			const episodeInfo = lastWatchedEpisode.ParentIndexNumber && lastWatchedEpisode.IndexNumber ? `${lastWatchedEpisode.ParentIndexNumber}x${lastWatchedEpisode.IndexNumber.toString().padStart(2, '0')} ${lastWatchedEpisode.Name}` : lastWatchedEpisode.Name;
 			lastWatchedInfo = `Last watched <strong>${episodeInfo}</strong> ${timeAgo} on ${formattedDate}.`;
 		}
 
