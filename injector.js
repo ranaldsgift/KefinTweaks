@@ -624,7 +624,7 @@
     }
 
     async function loadConfigurationJS() {
-        const configDependencyNames = ['modal', 'toaster', 'utils'];
+        const configDependencyNames = ['modal', 'toaster', 'utils', 'apiHelper', 'indexedDBCache'];
         for (const depName of configDependencyNames) {
             const depScript = SCRIPT_DEFINITIONS.find(script => script.name === depName);
             if (depScript) {
