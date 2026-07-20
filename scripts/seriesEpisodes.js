@@ -536,8 +536,11 @@
         const hideSingleSeasonContainer = window.KefinTweaksConfig?.flattenSingleSeasonShows?.hideSingleSeasonContainer === true;
 
         // ElegantFin handling :)
+        // NOTE: do NOT set overflow:hidden on the section — it clips the
+        // horizontal episode scroller and prevents full-bleed page width.
+        // Keep overflow on the inner .emby-scroller only (browser default).
         seasonSection.style.cssText = `
-            overflow: hidden;
+            overflow: visible;
             display: block;
         `;
 
