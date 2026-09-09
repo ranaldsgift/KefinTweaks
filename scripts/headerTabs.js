@@ -93,7 +93,7 @@
                     `${serverAddress}/DisplayPreferences/usersettings?userId=${userId}&client=emby`,
                     {
                         headers: {
-                            'X-Emby-Token': accessToken
+                            'Authorization': apiHelper.getAuthHeader()
                         }
                     }
                 );
@@ -345,7 +345,7 @@
                     method: "GET",
                     headers: {
                         "Content-Type": "application/json",
-                        "X-Emby-Token": ApiClient._serverInfo.AccessToken || ApiClient.accessToken(),
+                        "Authorization": apiHelper.getAuthHeader(),
                     },
                 });
                 const customTabs = await response.json();

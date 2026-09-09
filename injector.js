@@ -7,6 +7,22 @@
 
     console.log('[KefinTweaks Injector] Initializing...');
 
+    function getAuthHeader() {
+        const token = ApiClient.accessToken();
+        const client = typeof ApiClient.applicationName === 'function' ? ApiClient.applicationName() : 'Jellyfin Web';
+        const device = typeof ApiClient.deviceName === 'function' ? ApiClient.deviceName() : (navigator.userAgent.includes('Chrome') ? 'Chrome' : 'Browser');
+        const deviceId = typeof ApiClient.deviceId === 'function' ? ApiClient.deviceId() : '';
+        const version = ApiClient._appVersion || ApiClient._serverVersion || '';
+        const parts = [
+            `Client="${encodeURIComponent(client)}"`,
+            `Device="${encodeURIComponent(device)}"`,
+            `DeviceId="${encodeURIComponent(deviceId)}"`,
+            `Version="${encodeURIComponent(version)}"`,
+            `Token="${encodeURIComponent(token)}"`
+        ];
+        return `MediaBrowser ${parts.join(', ')}`;
+    }
+
     // Check for global configuration reset
     try {
         const config = window.KefinTweaksConfig || {};
@@ -110,7 +126,7 @@
             name: 'utils',
             script: 'utils.js',
             css: null,
-            dependencies: [],
+            dependencies: ['apiHelper'],
             description: 'Common utilities for page view management and MutationObserver conversion'
         },
         {
@@ -131,7 +147,7 @@
             name: 'skinManager',
             script: 'skinManager.js',
             css: 'defaultSkin.css',
-            dependencies: ['utils', 'skinConfigLegacyDefaults', 'skinConfig', 'modal'],
+            dependencies: ['utils', 'skinConfigLegacyDefaults', 'skinConfig', 'modal', 'apiHelper'],
             priority: true, // Load immediately after dependencies to reduce UI disruption
             description: 'Adds skin selection dropdown to display preferences page and manages skin CSS loading'
         },
@@ -202,7 +218,7 @@
             name: 'headerTabs',
             script: 'headerTabs.js',
             css: null,
-            dependencies: [],
+            dependencies: ['apiHelper'],
             description: 'Header tab improvements'
         },
         {
@@ -230,7 +246,7 @@
             name: 'updoot',
             script: 'updoot.js',
             css: null,
-            dependencies: [],
+            dependencies: ['apiHelper'],
             description: 'Upvote functionality provided by https://github.com/BobHasNoSoul/jellyfin-updoot'
         },
         {
@@ -251,14 +267,14 @@
             name: 'removeContinue',
             script: 'removeContinue.js',
             css: null,
-            dependencies: [],
+            dependencies: ['apiHelper'],
             description: 'Adds remove from continue watching functionality to cards with data-position-ticks'
         },
         {
             name: 'subtitleSearch',
             script: 'subtitleSearch.js',
             css: 'subtitleSearch.css',
-            dependencies: ['toaster'],
+            dependencies: ['toaster', 'apiHelper'],
             description: 'Adds subtitle search functionality to the video OSD, allowing users to search and download subtitles from remote sources'
         },
         {
@@ -624,7 +640,7 @@
     }
 
     async function loadConfigurationJS() {
-        const configDependencyNames = ['modal', 'toaster', 'utils', 'apiHelper', 'indexedDBCache'];
+        const configDependencyNames = ['modal', 'toaster', 'apiHelper', 'utils', 'indexedDBCache'];
         for (const depName of configDependencyNames) {
             const depScript = SCRIPT_DEFINITIONS.find(script => script.name === depName);
             if (depScript) {
@@ -839,11 +855,10 @@
             }
 
             const server = ApiClient._serverAddress;
-            const token = ApiClient.accessToken();
 
             const response = await fetch(`${server}/Plugins`, {
                 headers: {
-                    'X-Emby-Token': token
+                    'Authorization': getAuthHeader()
                 }
             });
 
@@ -870,11 +885,10 @@
             }
 
             const server = ApiClient._serverAddress;
-            const token = ApiClient.accessToken();
 
             const response = await fetch(`${server}/Plugins/${pluginId}/Configuration`, {
                 headers: {
-                    'X-Emby-Token': token
+                    'Authorization': getAuthHeader()
                 }
             });
 
@@ -897,12 +911,11 @@
             }
 
             const server = ApiClient._serverAddress;
-            const token = ApiClient.accessToken();
 
             const response = await fetch(`${server}/Plugins/${pluginId}/Configuration`, {
                 method: 'POST',
                 headers: {
-                    'X-Emby-Token': token,
+                    'Authorization': getAuthHeader(),
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify(config)
@@ -956,11 +969,10 @@
 
             // Get current CustomTabs config
             const server = ApiClient._serverAddress;
-            const token = ApiClient.accessToken();
 
             const response = await fetch(`${server}/CustomTabs/Config`, {
                 headers: {
-                    'X-Emby-Token': token
+                    'Authorization': getAuthHeader()
                 }
             });
 

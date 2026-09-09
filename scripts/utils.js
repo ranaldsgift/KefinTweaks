@@ -51,26 +51,6 @@
         }
     }
 
-    /**
-     * Build MediaBrowser Authorization header
-     * @returns {string} - Authorization header
-     */
-    function getAuthHeader() {
-        const token = ApiClient.accessToken();
-        const client = typeof ApiClient.applicationName === 'function' ? ApiClient.applicationName() : 'Jellyfin Web';
-        const device = typeof ApiClient.deviceName === 'function' ? ApiClient.deviceName() : (navigator.userAgent.includes('Chrome') ? 'Chrome' : 'Browser');
-        const deviceId = typeof ApiClient.deviceId === 'function' ? ApiClient.deviceId() : '';
-        const version = ApiClient._appVersion || ApiClient._serverVersion || '';
-        const parts = [
-            `Client="${encodeURIComponent(client)}"`,
-            `Device="${encodeURIComponent(device)}"`,
-            `DeviceId="${encodeURIComponent(deviceId)}"`,
-            `Version="${encodeURIComponent(version)}"`,
-            `Token="${encodeURIComponent(token)}"`
-        ];
-        return `MediaBrowser ${parts.join(', ')}`;
-    }
-    
     // Array to store registered handlers
     const handlers = [];
     
@@ -452,7 +432,7 @@
             // Get current injector config
             const configUrl = `${server}/Plugins/${pluginId}/Configuration`;
             const configResponse = await fetch(configUrl, {
-                headers: { 'Authorization': getAuthHeader() }
+                headers: { 'Authorization': apiHelper.getAuthHeader() }
             });
             
             if (!configResponse.ok) {
@@ -495,7 +475,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
             const saveResponse = await fetch(configUrl, {
                 method: 'POST',
                 headers: {
-                    'Authorization': getAuthHeader(),
+                    'Authorization': apiHelper.getAuthHeader(),
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify(injectorConfig)
@@ -579,7 +559,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
                 method: "GET",
                 headers: {
                     "Content-Type": "application/json",
-                    "X-Emby-Token": ApiClient._serverInfo.AccessToken || ApiClient.accessToken(),
+                    "Authorization": apiHelper.getAuthHeader(),
                 },
             });
             const data = await response.json();

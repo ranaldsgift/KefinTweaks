@@ -29,11 +29,11 @@
         async function fetchItemDetails(itemId) {
             console.log('Fetching item details for itemId:', itemId);
             try {
-                const url = `${serverUrl}/Items/${itemId}?api_key=${apiKey}`; // Fixed typo from original: 'melalui' to 'apiKey'
+                const url = `${serverUrl}/Items/${itemId}`;
                 console.log('Requesting:', url);
                 const response = await fetch(url, {
                     method: 'GET',
-                    headers: { 'X-Emby-Token': apiKey }
+                    headers: { 'Authorization': apiHelper.getAuthHeader() }
                 });
                 if (!response.ok) {
                     console.error('Fetch item details failed:', `HTTP ${response.status}`);

@@ -21,7 +21,6 @@
     async function getActiveSession() {
         ensureApiClient();
         
-        const token = ApiClient.accessToken();
         const serverUrl = ApiClient.serverAddress();
         const deviceId = ApiClient.deviceId();
         
@@ -39,7 +38,7 @@
             method: 'GET',
             headers: {
                 'Accept': 'application/json',
-                'Authorization': `MediaBrowser Token="${token}"`
+                'Authorization': getAuthHeader()
             }
         });
         
@@ -71,7 +70,6 @@
         const session = await getActiveSession();
         const sessionId = session.Id;
         
-        const token = ApiClient.accessToken();
         const serverUrl = ApiClient.serverAddress();
 
         const limitedIds = ids.slice(0, MAX_PLAY_NOW_IDS);
@@ -102,7 +100,7 @@
         const response = await fetch(`${serverUrl}/Sessions/${sessionId}/Playing?${params.toString()}`, {
             method: 'POST',
             headers: {
-                'X-Emby-Token': token,
+                'Authorization': getAuthHeader(),
             }
         });
         
@@ -115,7 +113,6 @@
         const session = await getActiveSession();
         const sessionId = session.Id;
         
-        const token = ApiClient.accessToken();
         const serverUrl = ApiClient.serverAddress();
 
         const params = new URLSearchParams({
@@ -131,7 +128,7 @@
         const response = await fetch(`${serverUrl}/Sessions/${sessionId}/Playing?${params.toString()}`, {
             method: 'POST',
             headers: {
-                'X-Emby-Token': token
+                'Authorization': getAuthHeader()
             }
         });
         
@@ -276,10 +273,9 @@
             
             // Fetch from API
             try {
-                const token = ApiClient.accessToken();
                 const response = await fetch(url, {
                     headers: {
-                        'X-Emby-Token': token,
+                        'Authorization': getAuthHeader(),
                         'Accept': 'application/json'
                     }
                 });
@@ -426,7 +422,7 @@
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-Emby-Token': ApiClient.accessToken()
+                    'Authorization': getAuthHeader()
                 },
                 body: JSON.stringify({
                     Rating: rating,
@@ -502,7 +498,6 @@
                 throw new Error('No active session found');
             }
             
-            const token = ApiClient.accessToken();
             const serverUrl = ApiClient.serverAddress();
             
             // Build NowPlayingQueue array - each item needs at least an Id
@@ -522,7 +517,7 @@
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `MediaBrowser Token="${token}"`
+                    'Authorization': getAuthHeader()
                 },
                 body: JSON.stringify(payload)
             });
@@ -555,6 +550,8 @@
 
             return await response.json();
         },
+
+        getAuthHeader,
     };
     
     // Expose apiHelper to global window object

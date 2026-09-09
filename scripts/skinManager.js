@@ -26,6 +26,11 @@
 
     function getMajorServerVersion(version) {
         const versionParts = version.split('.');
+        const firstPartInt = parseInt(versionParts[0], 10);
+        if (firstPartInt >= 12) {
+            return 12;
+        }
+
         if (versionParts.length >= 2) {
             const majorVersion = parseInt(versionParts[1], 10);
             if (!isNaN(majorVersion)) {
@@ -360,7 +365,7 @@
             
             // Find JavaScript Injector plugin
             const pluginsResponse = await fetch(`${server}/Plugins`, {
-                headers: { 'X-Emby-Token': token }
+                headers: { 'Authorization': apiHelper.getAuthHeader() }
             });
             
             if (!pluginsResponse.ok) {
@@ -382,7 +387,7 @@
             // Get current injector config
             const configUrl = `${server}/Plugins/${pluginId}/Configuration`;
             const configResponse = await fetch(configUrl, {
-                headers: { 'X-Emby-Token': token }
+                headers: { 'Authorization': apiHelper.getAuthHeader() }
             });
             
             if (!configResponse.ok) {
@@ -421,7 +426,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             const saveResponse = await fetch(configUrl, {
                 method: 'POST',
                 headers: {
-                    'X-Emby-Token': token,
+                    'Authorization': apiHelper.getAuthHeader(),
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify(injectorConfig)

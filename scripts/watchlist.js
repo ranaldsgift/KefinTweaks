@@ -1263,13 +1263,13 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		
 		try {
 			const episodeUrl = `${serverUrl}/Items/${episodeId}?UserId=${userId}&Fields=ParentId`;
-			const episodeRes = await fetch(episodeUrl, { headers: { "Authorization": `MediaBrowser Token=\"${token}\"` } });
+			const episodeRes = await fetch(episodeUrl, { headers: { "Authorization": apiHelper.getAuthHeader() } });
 			const episodeData = await episodeRes.json();
 			
 			// Get the series ID from the episode's parent (season) parent
 			if (episodeData.ParentId) {
 				const seasonUrl = `${serverUrl}/Items/${episodeData.ParentId}?UserId=${userId}&Fields=ParentId`;
-				const seasonRes = await fetch(seasonUrl, { headers: { "Authorization": `MediaBrowser Token=\"${token}\"` } });
+				const seasonRes = await fetch(seasonUrl, { headers: { "Authorization": apiHelper.getAuthHeader() } });
 				const seasonData = await seasonRes.json();
 				
 				return seasonData.ParentId || null;
@@ -1351,7 +1351,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			try {
 				// Fetch the series item
 				const seriesUrl = `${serverUrl}/Items/${seriesId}?UserId=${userId}&Fields=UserData,RecursiveItemCount&EnableImageTypes=Primary,Banner`;
-				const seriesRes = await fetch(seriesUrl, { headers: { "Authorization": `MediaBrowser Token=\"${token}\"` } });
+				const seriesRes = await fetch(seriesUrl, { headers: { "Authorization": apiHelper.getAuthHeader() } });
 				const series = await seriesRes.json();
 				
 				if (!series || !series.Id) {
@@ -2505,7 +2505,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		const seriesUrl = `${serverUrl}/Items?IncludeItemTypes=Series&UserId=${userId}&Recursive=true&Fields=UserData,RecursiveItemCount&EnableImageTypes=Primary,Banner`;
 		
 		try {
-			const seriesRes = await fetch(seriesUrl, { headers: { "Authorization": `MediaBrowser Token=\"${token}\"` } });
+			const seriesRes = await fetch(seriesUrl, { headers: { "Authorization": apiHelper.getAuthHeader() } });
 			const seriesData = await seriesRes.json();
 			const series = seriesData.Items || [];
 
@@ -2596,7 +2596,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			
 			// Get all episodes including missing ones to get accurate TotalRecordCount
 			const episodesUrl = `${serverUrl}/Shows/${series.Id}/Episodes?UserId=${userId}&Fields=UserData&EnableImageTypes=Primary`;
-			const episodesRes = await fetch(episodesUrl, { headers: { "Authorization": `MediaBrowser Token=\"${token}\"` } });
+			const episodesRes = await fetch(episodesUrl, { headers: { "Authorization": apiHelper.getAuthHeader() } });
 			const episodesData = await episodesRes.json();
 			let episodes = episodesData.Items || [];
 
@@ -2736,7 +2736,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			const toggleRes = await fetch(toggleUrl, {
 				method: method,
 				headers: { 
-					"Authorization": `MediaBrowser Token="${token}"`
+					"Authorization": apiHelper.getAuthHeader()
 				}
 			});
 			
@@ -3803,7 +3803,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		const url = `${serverUrl}/Users/${userId}/Items?IncludeItemTypes=Playlist&Recursive=true&Fields=ChildCount`;
 		const response = await fetch(url, {
 			headers: {
-				'Authorization': `MediaBrowser Token="${token}"`
+				'Authorization': apiHelper.getAuthHeader()
 			}
 		});
 
@@ -4039,7 +4039,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		const response = await fetch(`${serverUrl}/Playlists?${params.toString()}`, {
 			method: 'POST',
 			headers: {
-				'Authorization': `MediaBrowser Token="${token}"`
+				'Authorization': apiHelper.getAuthHeader()
 			}
 		});
 
@@ -4062,7 +4062,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		// Remove existing entries
 		const existingItemsResponse = await fetch(`${serverUrl}/Playlists/${playlistId}/Items`, {
 			headers: {
-				'Authorization': `MediaBrowser Token="${token}"`
+				'Authorization': apiHelper.getAuthHeader()
 			}
 		});
 
@@ -4082,7 +4082,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			const deleteResponse = await fetch(`${serverUrl}/Playlists/${playlistId}/Items?${params.toString()}`, {
 				method: 'DELETE',
 				headers: {
-					'Authorization': `MediaBrowser Token="${token}"`
+					'Authorization': apiHelper.getAuthHeader()
 				}
 			});
 			if (!deleteResponse.ok) {
@@ -4102,7 +4102,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			const response = await fetch(`${serverUrl}/Playlists/${playlistId}/Items?${params.toString()}`, {
 				method: 'POST',
 				headers: {
-					'Authorization': `MediaBrowser Token="${token}"`
+					'Authorization': apiHelper.getAuthHeader()
 				}
 			});
 			if (!response.ok) {
@@ -4269,7 +4269,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 					if (item.ParentId) {
 						try {
 							const seasonUrl = `${serverUrl}/Items/${item.ParentId}?UserId=${userId}&Fields=Name`;
-							const seasonRes = await fetch(seasonUrl, { headers: { "Authorization": `MediaBrowser Token=\"${token}\"` } });
+							const seasonRes = await fetch(seasonUrl, { headers: { "Authorization": apiHelper.getAuthHeader() } });
 							const seasonData = await seasonRes.json();
 							if (seasonData.Name) {
 								exportItem.SeasonName = seasonData.Name;
@@ -4405,7 +4405,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		let allLibraryItems = [];
 		try {
 			const url = `${serverUrl}/Items?${queryParams.toString()}`;
-			const res = await fetch(url, { headers: { "Authorization": `MediaBrowser Token=\"${token}\"` } });
+			const res = await fetch(url, { headers: { "Authorization": apiHelper.getAuthHeader() } });
 			const libraryData = await res.json();
 			allLibraryItems = libraryData.Items || [];
 			LOG(`Fetched ${allLibraryItems.length} items from library matching import criteria`);
@@ -4439,7 +4439,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		for (const type of watchlistTypes) {
 			try {
 				const url = `${serverUrl}/Items?Filters=Likes&IncludeItemTypes=${type}&UserId=${userId}&Recursive=true&Fields=ProviderIds`;
-				const res = await fetch(url, { headers: { "Authorization": `MediaBrowser Token=\"${token}\"` } });
+				const res = await fetch(url, { headers: { "Authorization": apiHelper.getAuthHeader() } });
 				const watchlistData = await res.json();
 				const items = watchlistData.Items || [];
 				for (const item of items) {
@@ -4547,7 +4547,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		for (const type of types) {
 			try {
 				const url = `${serverUrl}/Items?Filters=Likes&IncludeItemTypes=${type}&UserId=${userId}&Recursive=true&Fields=Id`;
-				const res = await fetch(url, { headers: { "Authorization": `MediaBrowser Token=\"${token}\"` } });
+				const res = await fetch(url, { headers: { "Authorization": apiHelper.getAuthHeader() } });
 				const data = await res.json();
 				const items = data.Items || [];
 
@@ -4869,7 +4869,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				try {
 					// Fetch the series item
 					const seriesUrl = `${serverUrl}/Items/${seriesId}?UserId=${userId}&Fields=UserData,RecursiveItemCount&EnableImageTypes=Primary,Banner`;
-					const seriesRes = await fetch(seriesUrl, { headers: { "Authorization": `MediaBrowser Token=\"${token}\"` } });
+					const seriesRes = await fetch(seriesUrl, { headers: { "Authorization": apiHelper.getAuthHeader() } });
 					const series = await seriesRes.json();
 					
 					if (!series || !series.Id) {
@@ -5251,7 +5251,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		const url = `${serverUrl}/Items?IncludeItemTypes=Movie&UserId=${userId}&Recursive=true&Filters=IsPlayed&Fields=UserData,ProviderIds&EnableImageTypes=Primary,Backdrop,Thumb&ImageTypeLimit=1&SortBy=DatePlayed&SortOrder=Descending`;
 
 		try {
-			const res = await fetch(url, { headers: { "Authorization": `MediaBrowser Token=\"${token}\"` } });
+			const res = await fetch(url, { headers: { "Authorization": apiHelper.getAuthHeader() } });
 			const data = await res.json();
 			const movies = data.Items || [];
 
@@ -6033,7 +6033,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		try {
 			LOG(`Fetching episodes from API for series: ${seriesId}`);
 			const episodesUrl = `${serverUrl}/Shows/${seriesId}/Episodes?UserId=${userId}&Fields=UserData&EnableImageTypes=Primary`;
-			const episodesRes = await fetch(episodesUrl, { headers: { "Authorization": `MediaBrowser Token=\"${token}\"` } });
+			const episodesRes = await fetch(episodesUrl, { headers: { "Authorization": apiHelper.getAuthHeader() } });
 			const episodesData = await episodesRes.json();
 			let episodes = episodesData.Items || [];
 
@@ -6203,7 +6203,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			const response = await fetch(markPlayedUrl, {
 				method: isWatched ? 'POST' : 'DELETE',
 				headers: { 
-					"Authorization": `MediaBrowser Token="${token}"`,
+					"Authorization": apiHelper.getAuthHeader(),
 					"Content-Type": "application/json"
 				}
 			});
@@ -6328,7 +6328,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				const response = await fetch(markPlayedUrl, {
 					method: 'POST',
 					headers: { 
-						"Authorization": `MediaBrowser Token="${token}"`,
+						"Authorization": apiHelper.getAuthHeader(),
 						"Content-Type": "application/json"
 					}
 				});
@@ -7124,7 +7124,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				method: "GET",
 				headers: {
 					"Content-Type": "application/json",
-					"X-Emby-Token": ApiClient._serverInfo.AccessToken || ApiClient.accessToken(),
+					"Authorization": apiHelper.getAuthHeader(),
 				},
 			});
 			const data = await response.json();
@@ -7229,7 +7229,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				method: "GET",
 				headers: {
 				"Content-Type": "application/json",
-				"X-Emby-Token": ApiClient._serverInfo.AccessToken || ApiClient.accessToken(),
+				"Authorization": apiHelper.getAuthHeader(),
 				},
 			})
 			.then((r) => r.json())
@@ -7795,7 +7795,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
         const token = apiClient.accessToken();
         
         const url = `${serverUrl}/Items?IncludeItemTypes=Series&UserId=${userId}&Recursive=true&Fields=UserData,RecursiveItemCount`;
-        const res = await fetch(url, { headers: { "Authorization": `MediaBrowser Token=\"${token}\"` } });
+        const res = await fetch(url, { headers: { "Authorization": apiHelper.getAuthHeader() } });
         const data = await res.json();
         const series = data.Items || [];
         
@@ -7823,7 +7823,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
         const token = apiClient.accessToken();
         
         fetch(`${serverUrl}/Items?IncludeItemTypes=Series&UserId=${userId}&Recursive=true&Fields=UserData,ChildCount,RecursiveItemCount`, { 
-            headers: { "Authorization": `MediaBrowser Token=\"${token}\"` } 
+            headers: { "Authorization": apiHelper.getAuthHeader() } 
         })
         .then(res => res.json())
         .then(data => {

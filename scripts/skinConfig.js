@@ -107,7 +107,7 @@
                         ]
                     },
                     {
-                        majorServerVersions: [11],
+                        majorServerVersions: [11, 12],
                         urls: [
                             'https://cdn.jsdelivr.net/gh/lscambo13/ElegantFin@main/Theme/ElegantFin-jellyfin-theme-build-latest-minified.css',
                             `${getKefinTweaksRoot()}skins/elegant-kefin.css`,                            
@@ -159,7 +159,7 @@
                 author: 'KartoffelChipss',
                 url: [
                     {
-                        majorServerVersions: [10, 11],
+                        majorServerVersions: [10, 11, 12],
                         urls: [
                             'https://cdn.jsdelivr.net/gh/KartoffelChipss/NeutralFin@latest/theme/neutralfin-minified.css',
                             'https://cdn.jsdelivr.net/gh/KartoffelChipss/Jellyfin-Lucide@main/theme/jellyfin-lucide.css',
@@ -211,7 +211,7 @@
                 author: 'KBH-Reeper',
                 url: [
                     {
-                        majorServerVersions: [10, 11],
+                        majorServerVersions: [10, 11, 12],
                         urls: [
                             'https://cdn.jsdelivr.net/gh/KBH-Reeper/GlassFin@latest/Theme/GlassFin-Theme-latest-stable.css',
                             'https://cdn.jsdelivr.net/gh/KBH-Reeper/GlassFin@latest/Theme/PluginStyling/MediaBar-Plugin-latest.css',
@@ -296,7 +296,7 @@
                         urls: ['https://cdn.jsdelivr.net/gh/ranaldsgift/Jellypane@main/jellypane.css']
                     },
                     {
-                        majorServerVersions: [11],
+                        majorServerVersions: [11, 12],
                         urls: ['https://cdn.jsdelivr.net/gh/tedhinklater/Jellypane@main/jellypane.css']
                     },
                 ],
@@ -311,7 +311,7 @@
                         urls: ['https://cdn.jsdelivr.net/gh/tedhinklater/finimalism@main/finimalism7.css']
                     },
                     {
-                        majorServerVersions: [11],
+                        majorServerVersions: [11, 12],
                         urls: ['https://cdn.jsdelivr.net/gh/tedhinklater/finimalism@main/finimalism10.11.css']
                     }
                 ],
@@ -338,7 +338,7 @@
                         urls: ['https://cdn.jsdelivr.net/gh/n00bcodr/jellyfish@main/theme.css']
                     },
                     {
-                        majorServerVersions: [11],
+                        majorServerVersions: [11, 12],
                         urls: [
                             'https://cdn.jsdelivr.net/gh/n00bcodr/jellyfish@main/theme.css',
                             'https://cdn.jsdelivr.net/gh/n00bcodr/jellyfish@main/10.11_fixes.css'
@@ -428,7 +428,7 @@
                 author: 'alexyle',
                 url: [
                     {
-                        majorServerVersions: [10, 11],
+                        majorServerVersions: [10, 11, 12],
                         urls: ['https://cdn.jsdelivr.net/gh/alexyle/jellyfin-theme@main/glassmorphism/theme.css']
                     }
                 ],
@@ -491,7 +491,7 @@
                         ]
                     },
                     {
-                        majorServerVersions: [11],
+                        majorServerVersions: [11, 12],
                         urls: [
                             'https://cdn.jsdelivr.net/gh/JamsRepos/Jamfin@latest/theme/complete.css',
                             `${getKefinTweaksRoot()}skins/jamfin-kefin.css`
@@ -539,7 +539,7 @@
                         ]
                     },
                     {
-                        majorServerVersions: [11],
+                        majorServerVersions: [11, 12],
                         urls: [
                             'https://cdn.jsdelivr.net/gh/loof2736/scyfin@latest/CSS/scyfin-theme.css',
                             `${getKefinTweaksRoot()}skins/scyfin-kefin.css`
@@ -581,7 +581,7 @@
                 author: 'Catppuccin',
                 url: [
                     {
-                        majorServerVersions: [10, 11],
+                        majorServerVersions: [10, 11, 12],
                         urls: ['https://jellyfin.catppuccin.com/theme.css']
                     }
                 ],
@@ -616,7 +616,7 @@
                         ]
                     },
                     {
-                        majorServerVersions: [11],
+                        majorServerVersions: [11, 12],
                         urls: [
                             'https://cdn.jsdelivr.net/gh/LitCastVlog/Flow@main/CSS/ScyFlow-oneliner.css',
                             'https://cdn.jsdelivr.net/gh/LitCastVlog/Flow@main/CSS/ScyFlow-Compatibility.css',
@@ -719,7 +719,7 @@
                 author: 'CTalvio',
                 url: [
                     {
-                        majorServerVersions: [10, 11],
+                        majorServerVersions: [10, 11, 12],
                         urls: [
                             'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/base.css',
                             'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/accentlist.css',

@@ -162,7 +162,7 @@
         const response = await fetch(userDataUrl, {
             method: 'GET',
             headers: { 
-                "Authorization": `MediaBrowser Token="${token}"`,
+                "Authorization": apiHelper.getAuthHeader(),
                 "Content-Type": "application/json"
             }
         });
@@ -196,7 +196,7 @@
         const response = await fetch(userDataUrl, {
             method: 'POST',
             headers: { 
-                "Authorization": `MediaBrowser Token="${token}"`,
+                "Authorization": apiHelper.getAuthHeader(),
                 "Content-Type": "application/json"
             },
             body: JSON.stringify(updatedUserData)

@@ -24,7 +24,7 @@
             LOG(`Fetching Next Up episode for series: ${seriesId}`);
             const nextUpUrl = `${serverUrl}/Shows/NextUp?SeriesId=${seriesId}&UserId=${userId}&Fields=MediaSourceCount`;
             const nextUpRes = await fetch(nextUpUrl, { 
-                headers: { "Authorization": `MediaBrowser Token="${token}"` } 
+                headers: { "Authorization": apiHelper.getAuthHeader() } 
             });
             
             if (!nextUpRes.ok) {
@@ -69,7 +69,7 @@
             LOG(`Fetching episodes for series: ${seriesId}`);
             const episodesUrl = `${serverUrl}/Shows/${seriesId}/Episodes?UserId=${userId}&Fields=UserData`;
             const episodesRes = await fetch(episodesUrl, { 
-                headers: { "Authorization": `MediaBrowser Token="${token}"` } 
+                headers: { "Authorization": apiHelper.getAuthHeader() } 
             });
             
             if (!episodesRes.ok) {

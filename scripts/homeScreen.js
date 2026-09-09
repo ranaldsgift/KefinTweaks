@@ -1112,7 +1112,7 @@
         try {
             const response = await fetch(url, {
                 headers: {
-                    "Authorization": `MediaBrowser Token="${token}"`
+                    "Authorization": apiHelper.getAuthHeader()
                 }
             });
             
@@ -1552,7 +1552,7 @@
         try {
             const response = await fetch(url, {
                 headers: {
-                    'Authorization': `MediaBrowser Token="${ApiClient.accessToken()}"`
+                    'Authorization': apiHelper.getAuthHeader()
                 }
             });
             
@@ -1649,7 +1649,7 @@
         try {
             const response = await fetch(`${serverUrl}/Genres?IncludeItemTypes=Movie`, {
                 headers: {
-                    "Authorization": `MediaBrowser Token="${token}"`
+                    "Authorization": apiHelper.getAuthHeader()
                 }
             });
             
@@ -1745,7 +1745,7 @@
                 queries.map(async (query) => {
                     const response = await fetch(query.url, {
                         headers: {
-                            "Authorization": `MediaBrowser Token="${token}"`
+                            "Authorization": apiHelper.getAuthHeader()
                         }
                     });
                     
@@ -1854,7 +1854,7 @@
                 
                 const response = await fetch(url, {
                     headers: {
-                        "Authorization": `MediaBrowser Token="${token}"`
+                        "Authorization": apiHelper.getAuthHeader()
                     }
                 });
                 
@@ -2214,7 +2214,7 @@
         try {
             const response = await fetch(url, {
                 headers: {
-                    "Authorization": `MediaBrowser Token="${token}"`
+                    "Authorization": apiHelper.getAuthHeader()
                 }
             });
             
@@ -2251,7 +2251,7 @@
         try {
             const response = await fetch(url, {
                 headers: {
-                    "Authorization": `MediaBrowser Token="${token}"`
+                    "Authorization": apiHelper.getAuthHeader()
                 }
             });
             
@@ -2565,7 +2565,7 @@
                     const studiosUrl = `${serverUrl}/Studios?SortBy=SortName&SortOrder=Ascending&IncludeItemTypes=Series&Recursive=true&Fields=DateCreated%2CPrimaryImageAspectRatio&StartIndex=0&ParentId=${library.Id}&userId=${userId}${filterParam}`;
                     const response = await fetch(studiosUrl, {
                         headers: {
-                            "Authorization": `MediaBrowser Token="${token}"`
+                            "Authorization": apiHelper.getAuthHeader()
                         }
                     });
                     
@@ -2646,7 +2646,7 @@
             
             const response = await fetch(url, {
                 headers: {
-                    "Authorization": `MediaBrowser Token="${token}"`
+                    "Authorization": apiHelper.getAuthHeader()
                 }
             });
             
@@ -2680,7 +2680,7 @@
             
             const response = await fetch(url, {
                 headers: {
-                    "Authorization": `MediaBrowser Token="${token}"`
+                    "Authorization": apiHelper.getAuthHeader()
                 }
             });
             
@@ -3828,7 +3828,7 @@
                         const movieUrl = `${serverUrl}/Users/${userId}/Items/${recentMovie.Id}?Fields=People`;
                         const movieResponse = await fetch(movieUrl, {
                             headers: {
-                                "Authorization": `MediaBrowser Token="${token}"`
+                                "Authorization": apiHelper.getAuthHeader()
                             }
                         });
                         
@@ -3890,7 +3890,7 @@
                         const movieUrl = `${serverUrl}/Users/${userId}/Items/${recentMovie.Id}?Fields=People`;
                         const movieResponse = await fetch(movieUrl, {
                             headers: {
-                                "Authorization": `MediaBrowser Token="${token}"`
+                                "Authorization": apiHelper.getAuthHeader()
                             }
                         });
                         
@@ -3958,7 +3958,7 @@
                         const movieUrl = `${serverUrl}/Users/${userId}/Items/${recentMovie.Id}?Fields=People`;
                         const movieResponse = await fetch(movieUrl, {
                             headers: {
-                                "Authorization": `MediaBrowser Token="${token}"`
+                                "Authorization": apiHelper.getAuthHeader()
                             }
                         });
                         
@@ -4708,7 +4708,7 @@
             
             const response = await fetch(url, {
                 headers: {
-                    "Authorization": `MediaBrowser Token="${token}"`
+                    "Authorization": apiHelper.getAuthHeader()
                 }
             });
             
@@ -5391,7 +5391,7 @@
             const serverAddress = ApiClient.serverAddress();
             const token = ApiClient.accessToken();
             const genresResponse = await fetch(`${serverAddress}/Genres?IncludeItemTypes=Movie`, {
-                headers: { "Authorization": `MediaBrowser Token="${token}"` }
+                headers: { "Authorization": apiHelper.getAuthHeader() }
             });
             
             if (!genresResponse.ok) {

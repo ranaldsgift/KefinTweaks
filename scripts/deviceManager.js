@@ -132,7 +132,7 @@
                 method: 'DELETE',
                 headers: {
                     'Accept': 'application/json',
-                    'Authorization': `MediaBrowser Token="${token}"`
+                    'Authorization': apiHelper.getAuthHeader()
                 }
             });
             

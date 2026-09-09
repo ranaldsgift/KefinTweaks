@@ -24,7 +24,7 @@
             LOG(`Fetching Next Up episode for series: ${seriesId}`);
             const nextUpUrl = `${serverUrl}/Shows/NextUp?SeriesId=${seriesId}&UserId=${userId}&Fields=MediaSourceCount`;
             const nextUpRes = await fetch(nextUpUrl, { 
-                headers: { "Authorization": `MediaBrowser Token="${token}"` } 
+                headers: { "Authorization": apiHelper.getAuthHeader() } 
             });
             
             if (!nextUpRes.ok) {
@@ -63,7 +63,7 @@
             LOG(`Fetching season data for season ID: ${seasonId}`);
             const seasonUrl = `${serverUrl}/Items/${seasonId}?UserId=${userId}`;
             const seasonRes = await fetch(seasonUrl, { 
-                headers: { "Authorization": `MediaBrowser Token="${token}"` } 
+                headers: { "Authorization": apiHelper.getAuthHeader() } 
             });
             
             if (!seasonRes.ok) {
@@ -95,7 +95,7 @@
             LOG(`Fetching episodes for series: ${seriesId}${seasonId ? ` (Season ID: ${seasonId})` : ''}`);
             const episodesUrl = `${serverUrl}/Shows/${seriesId}/Episodes?UserId=${userId}&Fields=UserData`;
             const episodesRes = await fetch(episodesUrl, { 
-                headers: { "Authorization": `MediaBrowser Token="${token}"` } 
+                headers: { "Authorization": apiHelper.getAuthHeader() } 
             });
             
             if (!episodesRes.ok) {
@@ -559,18 +559,17 @@
 
         // Insert episodes section right after NextUp section (or at the beginning if no NextUp)
         const detailPageContent = activePage.querySelector('.detailPageContent');
-        if (detailPageContent) {
-            if (nextUpSection && nextUpSection.parentNode) {
-                nextUpSection.parentNode.insertBefore(seasonSection, nextUpSection.nextSibling);
-            } else {
-                // Find a good insertion point - after NextUp or before childrenCollapsible
-                const childrenCollapsible = activePage.querySelector('.detailSection #listChildrenCollapsible') || 
-                                           activePage.querySelector('#childrenCollapsible');
-                if (childrenCollapsible && childrenCollapsible.parentNode) {
-                    childrenCollapsible.parentNode.insertBefore(seasonSection, childrenCollapsible);
-                } else {
-                    detailPageContent.insertBefore(seasonSection, detailPageContent.firstChild);
-                }
+        if (nextUpSection && nextUpSection.parentNode) {
+            nextUpSection.parentNode.insertBefore(seasonSection, nextUpSection.nextSibling);
+        } else {
+            // Find a good insertion point - after NextUp or before childrenCollapsible
+            const childrenCollapsible = activePage.querySelector('.detailSection #listChildrenCollapsible') || 
+                                        activePage.querySelector('#childrenCollapsible');
+            if (childrenCollapsible && childrenCollapsible.parentNode) {
+                childrenCollapsible.parentNode.insertBefore(seasonSection, childrenCollapsible);
+            } 
+            else if (detailPageContent){
+                detailPageContent.insertBefore(seasonSection, detailPageContent.firstChild);
             }
         }
 
@@ -817,7 +816,9 @@
         }
 
         // Mark as processed
-        activePage.dataset.seriesEpisodesProcessed = 'true';
+        if (activePage.querySelector('.series-episodes-section')) {
+            activePage.dataset.seriesEpisodesProcessed = 'true';
+        }
     }
 
     /**

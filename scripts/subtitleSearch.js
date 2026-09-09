@@ -338,7 +338,7 @@
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',
-                    'Authorization': `MediaBrowser Token="${token}"`
+                    'Authorization': apiHelper.getAuthHeader()
                 }
             });
             
@@ -425,7 +425,7 @@
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',
-                    'Authorization': `MediaBrowser Token="${token}"`
+                    'Authorization': apiHelper.getAuthHeader()
                 }
             });
             
@@ -512,7 +512,7 @@
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',
-                    'Authorization': `MediaBrowser Token="${token}"`
+                    'Authorization': apiHelper.getAuthHeader()
                 }
             });
             
@@ -588,7 +588,7 @@
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',
-                    'Authorization': `MediaBrowser Token="${token}"`
+                    'Authorization': apiHelper.getAuthHeader()
                 }
             });
             
@@ -638,7 +638,7 @@
             const response = await fetch(`${serverUrl}/Sessions/${sessionId}/Command`, {
                 method: 'POST',
                 headers: {
-                    'X-Emby-Token': token,
+                    'Authorization': apiHelper.getAuthHeader(),
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
@@ -788,7 +788,7 @@
             const commandResponse = await fetch(`${serverUrl}/Sessions/${sessionId}/Playing?${params.toString()}`, {
                 method: 'POST',
                 headers: {
-                    'X-Emby-Token': token
+                    'Authorization': apiHelper.getAuthHeader()
                 }
             });
             
@@ -903,7 +903,7 @@
             const response = await fetch(`${serverUrl}/Items/${itemId}/RemoteSearch/Subtitles/${subId}`, {
                 method: 'POST',
                 headers: {
-                    'Authorization': `MediaBrowser Token="${token}"`
+                    'Authorization': apiHelper.getAuthHeader()
                 }
             });
             
