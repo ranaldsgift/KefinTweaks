@@ -146,21 +146,27 @@
         return null;
     }
 
-    // Load default config from URL
+    // Load default config from URL (resolves floating refs first, same as injector load)
     async function loadDefaultConfig(rootUrl) {
+        const normalizedRoot = rootUrl.endsWith('/') ? rootUrl : rootUrl + '/';
+        const resolvedRoot = await resolveRootVersion(normalizedRoot);
+        if (resolvedRoot !== normalizedRoot) {
+            console.log('[KefinTweaks Installer] Resolved default-config root from', normalizedRoot, 'to', resolvedRoot);
+        }
+
         return new Promise((resolve, reject) => {
             try {
-                const defaultConfigUrl = `${rootUrl}kefinTweaks-default-config.js`;
-                
+                const defaultConfigUrl = `${resolvedRoot}kefinTweaks-default-config.js`;
+
                 if (window.KefinTweaksDefaultConfig) {
                     resolve(window.KefinTweaksDefaultConfig);
                     return;
                 }
-                
+
                 const script = document.createElement('script');
                 script.src = defaultConfigUrl;
                 script.async = true;
-                
+
                 script.onload = () => {
                     if (window.KefinTweaksDefaultConfig) {
                         resolve(window.KefinTweaksDefaultConfig);
@@ -168,11 +174,11 @@
                         reject(new Error('Default config file loaded but window.KefinTweaksDefaultConfig is not defined'));
                     }
                 };
-                
+
                 script.onerror = () => {
                     reject(new Error(`Failed to load default config file: ${defaultConfigUrl}`));
                 };
-                
+
                 document.head.appendChild(script);
             } catch (error) {
                 reject(error);
@@ -330,9 +336,12 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         dialog.className = 'focuscontainer dialog smoothScrollY ui-body-a background-theme-a formDialog centeredDialog opened';
         dialog.style.display = 'flex';
         dialog.style.flexDirection = 'column';
-        dialog.style.maxHeight = '90vh';
-        dialog.style.maxWidth = '600px';
-        dialog.style.width = '90vw';
+
+        if (window.innerWidth < 900) {
+            dialog.style.maxHeight = '90vh';
+            dialog.style.maxWidth = '600px';
+            dialog.style.width = '90vw';
+        }
 
         if (title) {
             const header = document.createElement('div');
@@ -727,14 +736,15 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                     // Create minimal config if loading fails
                     defaultConfig = {
                         kefinTweaksRoot: kefinTweaksRoot,
+                        enabled: true,
                         scripts: {},
-                        homeScreen: {},
                         exclusiveElsewhere: {},
                         search: {},
                         skins: [],
                         defaultSkin: null,
                         themes: [],
-                        customMenuLinks: []
+                        customMenuLinks: [],
+                        optionalIncludes: []
                     };
                 }
 
@@ -1020,23 +1030,41 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
     // Make function globally accessible
     window.openKefinTweaksSourceModal = openKefinTweaksSourceModal;
 
+    // Prevent concurrent card inserts (async config fetch races past DOM checks)
+    let pluginCardAddInProgress = false;
+    let pluginCardObserver = null;
+    let tryRenderToken = 0;
+
+    function ensureSingleKefinTweaksPluginCard() {
+        const cards = document.querySelectorAll('[data-id="kefinTweaksPlugin"]');
+        for (let i = 1; i < cards.length; i++) {
+            cards[i].remove();
+        }
+        return cards[0] || null;
+    }
+
     // Add plugin card to plugins page
     function addKefinTweaksPluginCard(installedPlugins) {
         if (!installedPlugins) {
             return;
         }
 
-        // Check if card already exists in either container
-        if (document.querySelector('[data-id="kefinTweaksPlugin"]')) {
+        if (ensureSingleKefinTweaksPluginCard()) {
             return;
         }
+
+        if (pluginCardAddInProgress) {
+            return;
+        }
+        pluginCardAddInProgress = true;
 
         const pluginsPage = document.querySelector('#pluginsPage:not(.hide)');
         if (!pluginsPage) {
+            pluginCardAddInProgress = false;
             return;
         }
 
-        // Find or create frontEndPlugins container
+        // Find or create frontEndPlugins container (only one)
         let frontEndPlugins = pluginsPage.querySelector('.frontEndPlugins');
         
         if (!frontEndPlugins) {
@@ -1067,22 +1095,25 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                              installedPlugins.firstElementChild;
         
         if (!existingCard) {
-            // Set up MutationObserver to watch for plugin cards being added
+            if (pluginCardObserver) {
+                // Already waiting for native plugin cards; keep in-progress lock
+                return;
+            }
+
             console.log('[KefinTweaks Installer] No existing plugin card found, setting up MutationObserver');
             
-            const observer = new MutationObserver((mutations) => {
-                // Check if any child was added
+            pluginCardObserver = new MutationObserver((mutations) => {
                 for (const mutation of mutations) {
                     if (mutation.addedNodes.length > 0) {
-                        // Check if we now have a card to clone
                         const cardToClone = installedPlugins.querySelector('.card[data-id]') || 
                                           installedPlugins.querySelector(':first-child') ||
                                           installedPlugins.firstElementChild;
                         
                         if (cardToClone) {
                             console.log('[KefinTweaks Installer] Plugin card detected, disconnecting observer');
-                            observer.disconnect();
-                            // Try adding our card again
+                            pluginCardObserver.disconnect();
+                            pluginCardObserver = null;
+                            pluginCardAddInProgress = false;
                             addKefinTweaksPluginCard(installedPlugins);
                             return;
                         }
@@ -1090,16 +1121,18 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                 }
             });
             
-            // Observe child additions to the installedPlugins container
-            observer.observe(installedPlugins, {
+            pluginCardObserver.observe(installedPlugins, {
                 childList: true,
                 subtree: false
             });
             
-            // Disconnect after 10 seconds if no cards appear
             setTimeout(() => {
-                observer.disconnect();
-                console.warn('[KefinTweaks Installer] MutationObserver timeout: No plugin cards appeared after 10 seconds');
+                if (pluginCardObserver) {
+                    pluginCardObserver.disconnect();
+                    pluginCardObserver = null;
+                    pluginCardAddInProgress = false;
+                    console.warn('[KefinTweaks Installer] MutationObserver timeout: No plugin cards appeared after 10 seconds');
+                }
             }, 10000);
             
             return;
@@ -1314,134 +1347,241 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                 };
             }
 
-            // Append to frontEndPlugins container instead of installedPlugins
+            // Append only if still missing (guards against concurrent async completions)
+            if (ensureSingleKefinTweaksPluginCard()) {
+                return;
+            }
             frontEndPlugins.appendChild(card);
         }).catch(err => {
             console.error('[KefinTweaks Installer] Error getting config for card:', err);
+        }).finally(() => {
+            pluginCardAddInProgress = false;
         });
     }
 
-    // Check for plugins page and add card
-    function checkForPluginsPage(view, element, hash) {
-
-        if (hash && hash.includes('dashboard/plugins')) {
-            const pluginsPage = document.querySelector('#pluginsPage:not(.hide)');
-            if (!pluginsPage) {
-                console.log('[KefinTweaks Installer] Plugins page not found');
-                return;
-            }
-
-            let installedPlugins = pluginsPage.querySelector('.installedPlugins');
-
-            if (!installedPlugins) {
-                // Support for Jellyfin 10.11.X
-                installedPlugins = document.querySelector('#pluginsPage:not(.hide)>div>div>div:last-child>div');
-            }
-
-            if (!installedPlugins || !pluginsPage) {
-                console.log('[KefinTweaks Installer] Installed plugins or plugins page not found');
-                return;
-            }
-
-            // Small delay to ensure DOM is ready
-            setTimeout(() => {
-                addKefinTweaksPluginCard(installedPlugins);
-            }, 100);
+    // Try to render the Front End Plugins card when on the plugins page
+    async function tryRenderPluginsPage(retryCount = 0) {
+        const maxRetries = 50; // ~5s (50 * 100ms)
+        if (retryCount === 0) {
+            tryRenderToken += 1;
         }
-    }
+        const token = tryRenderToken;
 
-    // Check if user is logged in and admin
-    async function checkUserAndSetup(retryCount = 0) {
-        const maxRetries = 100; // 10 seconds (100 * 100ms)
-        
-        try {
-            // Check if there is a valid config with a root url already, and load the injector if so
-            checkAndLoadInjector();
+        const hash = window.location.hash || '';
 
-            // Check if ApiClient is available and user is logged in
-            if (!window.ApiClient || !window.ApiClient._loggedIn) {
-                if (retryCount < maxRetries) {
-                    setTimeout(() => {
-                        checkUserAndSetup(retryCount + 1);
-                    }, 100);
-                    return;
-                } else {
-                    console.log('[KefinTweaks Installer] User not logged in after polling, skipping setup');
-                    return;
-                }
-            }
+        if (!hash.includes('dashboard/plugins')) {
+            return;
+        }
 
-            // Check if user is admin
-            const userIsAdmin = await isAdmin();
-            if (!userIsAdmin) {
-                console.log('[KefinTweaks Installer] User is not admin, skipping setup');
-                return;
-            }
+        const pluginsPage = document.querySelector('#pluginsPage:not(.hide)');
+        let installedPlugins = pluginsPage ? pluginsPage.querySelector('.installedPlugins') : null;
 
-            // User is logged in and is admin, proceed with setup
-            console.log('[KefinTweaks Installer] User is admin, setting up functionality');
+        if (!installedPlugins && pluginsPage) {
+            // Support for Jellyfin 10.11.X
+            installedPlugins = document.querySelector('#pluginsPage:not(.hide)>div>div>div:last-child>div');
+        }
 
-            // Add CSS
-            const css = document.createElement('style');
-            css.textContent = `
-                [data-id="kefinTweaksPlugin"] .cardImageContainer::after,
-                [data-id="kefinTweaksPlugin"] .MuiButtonBase-root.MuiCardActionArea-root::after {
-                    content: 'KefinTweaks';
-                    position: absolute;
-                    font-size: 2em;
-                    top: 50%;
-                    transform: translateY(-50%);
-                }
-            `;
-            document.head.appendChild(css);
-            
-            // Hook into Emby.Page.onViewShow
-            setupOnViewShow();
-        } catch (error) {
-            console.error('[KefinTweaks Installer] Error checking user:', error);
-            // Retry on error
+        if (!pluginsPage || !installedPlugins) {
             if (retryCount < maxRetries) {
                 setTimeout(() => {
-                    checkUserAndSetup(retryCount + 1);
+                    if (token !== tryRenderToken) {
+                        return;
+                    }
+                    tryRenderPluginsPage(retryCount + 1);
                 }, 100);
             }
+            return;
         }
+
+        ensureSingleKefinTweaksPluginCard();
+
+        if (!(await isAdmin())) {
+            return;
+        }
+
+        if (token !== tryRenderToken) {
+            return;
+        }
+
+        addKefinTweaksPluginCard(installedPlugins);
     }
 
     // Hook into Emby.Page.onViewShow
     function setupOnViewShow() {
-        const originalOnViewShow = window.Emby?.Page?.onViewShow;
-        
-        if (window.Emby && window.Emby.Page) {
-            window.Emby.Page.onViewShow = function(...args) {
-                // Call original handler if it exists
-                if (originalOnViewShow) {
-                    try {
-                        originalOnViewShow.apply(this, args);
-                    } catch (err) {
-                        console.warn('[KefinTweaks Installer] Error in original onViewShow:', err);
-                    }
-                }
-                
-                // Check for plugins page
-                const hash = window.location.hash;
-                checkForPluginsPage(args[0], args[1], hash);
-            };
-            
-            console.log('[KefinTweaks Installer] Hooked into Emby.Page.onViewShow');
-        } else {
-            // Retry if Emby.Page not ready yet
+        if (!(window.Emby && window.Emby.Page)) {
             setTimeout(setupOnViewShow, 100);
+            return;
         }
+
+        if (window.Emby.Page._kefinTweaksOnViewShowHooked) {
+            return;
+        }
+        window.Emby.Page._kefinTweaksOnViewShowHooked = true;
+
+        const originalOnViewShow = window.Emby.Page.onViewShow;
+
+        window.Emby.Page.onViewShow = function(...args) {
+            if (originalOnViewShow) {
+                try {
+                    originalOnViewShow.apply(this, args);
+                } catch (err) {
+                    console.warn('[KefinTweaks Installer] Error in original onViewShow:', err);
+                }
+            }
+
+            tryRenderPluginsPage();
+        };
+
+        console.log('[KefinTweaks Installer] Hooked into Emby.Page.onViewShow');
+
+        // Cover direct URL / reload when onViewShow already fired before the hook
+        tryRenderPluginsPage();
     }
 
-    // Initialize the installer
+    function injectPluginCardCss() {
+        if (document.getElementById('kefinTweaksPluginCardCss')) {
+            return;
+        }
+        const css = document.createElement('style');
+        css.id = 'kefinTweaksPluginCardCss';
+        css.textContent = `
+            [data-id="kefinTweaksPlugin"] .cardImageContainer::after,
+            [data-id="kefinTweaksPlugin"] .MuiButtonBase-root.MuiCardActionArea-root::after {
+                content: 'KefinTweaks';
+                position: absolute;
+                font-size: 2em;
+                top: 50%;
+                transform: translateY(-50%);
+            }
+        `;
+        document.head.appendChild(css);
+    }
+
+    function shouldInjectCustomPageStyles(config) {
+        if (!config) return false;
+        const scripts = config.scripts || {};
+        const links = config.customMenuLinks;
+        return scripts.watchlist === true
+            || scripts.games === true
+            || (Array.isArray(links) && links.length > 0);
+    }
+
+    function injectCustomPageStyles(config) {
+        if (!shouldInjectCustomPageStyles(config)) return;
+        if (document.getElementById('kefin-custom-page-styles')) return;
+
+        const style = document.createElement('style');
+        style.id = 'kefin-custom-page-styles';
+        style.textContent = `
+#reactRoot .skinBody:has(.customPage:not(.hide)) #fallbackPage {
+	display: none;
+}
+
+#reactRoot:not(:has(.skinBody .customPage:not(.hide))) .pageTitle {
+    display: none !important;
+}
+
+#reactRoot .skinBody:not(:has(.customPage:not(.hide))) #fallbackPage > * {
+    display: none;
+}
+
+#reactRoot:not(:has(.skinBody .customPage:not(.hide))) #fallbackPage::after {
+	content:'';
+	display: inline-block;
+	width: 20px;
+	height: 20px;
+	border: 3px solid #f3f3f3;
+	border-top: 3px solid #4ecdc4;
+	border-radius: 50%;
+	animation: spin 1s linear infinite;
+	position: relative;
+	left: 50%;
+	transform: translateX(-50%);
+	top: 1em;
+}
+
+#reactRoot:has(.MuiBox-root) .libraryPage:not(.noSecondaryNavPage).customPage {
+  padding-top: 0 !important;
+}
+`;
+        (document.head || document.documentElement).appendChild(style);
+    }
+
+    // Initialize the installer (no login/admin gate — admin is checked when rendering the card)
     function initialize() {
-        // Start checking for logged in admin user
-        checkUserAndSetup();
+        checkAndLoadInjector();
+        injectPluginCardCss();
+        setupOnViewShow();
     }
 
-    // Load injector.js from a specific root URL
+    // Resolve @latest, @main, or @experimental to actual version/commit hash (same as injector.js)
+    async function resolveRootVersion(root) {
+        const latestMatch = root.match(/@latest(\/|$)/);
+        const mainMatch = root.match(/@main(\/|$)/);
+        const experimentalMatch = root.match(/@experimental(\/|$)/);
+
+        if (latestMatch) {
+            try {
+                const response = await fetch('https://api.github.com/repos/ranaldsgift/KefinTweaks/releases/latest');
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data && data.tag_name) {
+                        const versionTag = data.tag_name.startsWith('v') ? data.tag_name : 'v' + data.tag_name;
+                        return root.replace('@latest', `@${versionTag}`);
+                    }
+                    console.warn('[KefinTweaks Installer] Could not fetch latest version, using @latest');
+                    return root;
+                }
+                console.warn('[KefinTweaks Installer] Failed to fetch latest version, using @latest');
+                return root;
+            } catch (error) {
+                console.warn('[KefinTweaks Installer] Error fetching latest version:', error);
+                return root;
+            }
+        }
+
+        if (mainMatch) {
+            try {
+                const response = await fetch('https://api.github.com/repos/ranaldsgift/KefinTweaks/commits/main');
+                if (response.ok) {
+                    const commit = await response.json();
+                    if (commit && commit.sha) {
+                        return root.replace('@main', `@${commit.sha}`);
+                    }
+                    console.warn('[KefinTweaks Installer] Could not fetch commit hash, using @main');
+                    return root;
+                }
+                console.warn('[KefinTweaks Installer] Failed to fetch commit hash, using @main');
+                return root;
+            } catch (error) {
+                console.warn('[KefinTweaks Installer] Error fetching commit hash:', error);
+                return root;
+            }
+        }
+
+        if (experimentalMatch) {
+            try {
+                const response = await fetch('https://api.github.com/repos/ranaldsgift/KefinTweaks/commits/experimental');
+                if (response.ok) {
+                    const commit = await response.json();
+                    if (commit && commit.sha) {
+                        return root.replace('@experimental', `@${commit.sha}`);
+                    }
+                    console.warn('[KefinTweaks Installer] Could not fetch experimental commit hash, using @experimental');
+                    return root;
+                }
+                console.warn('[KefinTweaks Installer] Failed to fetch experimental commit hash, using @experimental');
+                return root;
+            } catch (error) {
+                console.warn('[KefinTweaks Installer] Error fetching experimental commit hash:', error);
+                return root;
+            }
+        }
+
+        return root;
+    }
+
+    // Load injector.js from a specific root URL (resolves floating refs first)
     async function loadInjectorFromRoot(root) {
         if (!root || root === '') {
             console.warn('[KefinTweaks Installer] Cannot load injector: kefinTweaksRoot is empty');
@@ -1450,8 +1590,13 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
 
         // Ensure root ends with /
         const rootUrl = root.endsWith('/') ? root : root + '/';
-        const injectorUrl = `${rootUrl}injector.js`;
-        
+        const resolvedRoot = await resolveRootVersion(rootUrl);
+        const injectorUrl = `${resolvedRoot}injector.js`;
+
+        if (resolvedRoot !== rootUrl) {
+            console.log('[KefinTweaks Installer] Resolved root from', rootUrl, 'to', resolvedRoot);
+        }
+
         // Check if injector is already loaded from this URL
         const existingScript = document.querySelector(`script[src="${injectorUrl}"]`);
         if (existingScript) {
@@ -1460,22 +1605,22 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         }
 
         console.log('[KefinTweaks Installer] Loading injector.js from:', injectorUrl);
-        
+
         return new Promise((resolve, reject) => {
             const script = document.createElement('script');
             script.src = injectorUrl;
             script.async = true;
-            
+
             script.onload = () => {
                 console.log('[KefinTweaks Installer] Injector loaded successfully');
                 resolve(true);
             };
-            
+
             script.onerror = (error) => {
                 console.error('[KefinTweaks Installer] Failed to load injector:', error);
                 reject(new Error(`Failed to load injector.js from ${injectorUrl}`));
             };
-            
+
             document.head.appendChild(script);
         });
     }
@@ -1485,6 +1630,9 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         try {
             const config = await getKefinTweaksConfig();
             const root = config?.kefinTweaksRoot || '';
+
+            // Before injector/utils: hide fallback page chrome for custom routes
+            injectCustomPageStyles(config);
             
             if (root && root !== '') {
                 await loadInjectorFromRoot(root);
