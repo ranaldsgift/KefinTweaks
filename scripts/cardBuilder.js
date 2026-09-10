@@ -1464,7 +1464,7 @@
         if (viewMoreUrl) {
             // Create clickable title with chevron icon
             const titleLink = document.createElement('a');
-            titleLink.className = 'sectionTitle-link sectionTitleTextButton';
+            titleLink.className = 'sectionTitle-link emby-button sectionTitleTextButton';
             titleLink.style.cssText = 'text-decoration: none; cursor: pointer; display: flex; align-items: center;';
             
             // Handle both URL and function
