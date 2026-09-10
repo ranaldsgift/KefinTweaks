@@ -146,21 +146,27 @@
         return null;
     }
 
-    // Load default config from URL
+    // Load default config from URL (resolves floating refs first, same as injector load)
     async function loadDefaultConfig(rootUrl) {
+        const normalizedRoot = rootUrl.endsWith('/') ? rootUrl : rootUrl + '/';
+        const resolvedRoot = await resolveRootVersion(normalizedRoot);
+        if (resolvedRoot !== normalizedRoot) {
+            console.log('[KefinTweaks Installer] Resolved default-config root from', normalizedRoot, 'to', resolvedRoot);
+        }
+
         return new Promise((resolve, reject) => {
             try {
-                const defaultConfigUrl = `${rootUrl}kefinTweaks-default-config.js`;
-                
+                const defaultConfigUrl = `${resolvedRoot}kefinTweaks-default-config.js`;
+
                 if (window.KefinTweaksDefaultConfig) {
                     resolve(window.KefinTweaksDefaultConfig);
                     return;
                 }
-                
+
                 const script = document.createElement('script');
                 script.src = defaultConfigUrl;
                 script.async = true;
-                
+
                 script.onload = () => {
                     if (window.KefinTweaksDefaultConfig) {
                         resolve(window.KefinTweaksDefaultConfig);
@@ -168,11 +174,11 @@
                         reject(new Error('Default config file loaded but window.KefinTweaksDefaultConfig is not defined'));
                     }
                 };
-                
+
                 script.onerror = () => {
                     reject(new Error(`Failed to load default config file: ${defaultConfigUrl}`));
                 };
-                
+
                 document.head.appendChild(script);
             } catch (error) {
                 reject(error);
