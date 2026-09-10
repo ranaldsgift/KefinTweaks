@@ -255,10 +255,6 @@ span.listItemBodyText.secondary.seasonal-tag {
 	grid-column: 1 / -1;
 }
 
-[data-modal-id="kefin-homescreen-config-main"] #global-settings-content .hsc-settings-span-2 > .kefin-toggle-card {
-	width: 100%;
-}
-
 [data-modal-id="kefin-homescreen-config-main"] #global-settings-content .hsae-field-grid {
 	display: grid;
 	gap: 0.75em 1.25em;
@@ -340,4 +336,3 @@ span.listItemBodyText.secondary.seasonal-tag {
 		grid-template-columns: 1fr;
 	}
 }
-
