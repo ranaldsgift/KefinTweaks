@@ -7276,8 +7276,11 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 
 		let watchlistUrl = '#/watchlist';
 
+		// Major version of Jellyfin
+		const jellyfinVersion = window.KefinTweaks.getJellyfinMajorVersion() ?? null;
+
 		// If watchlist tab index is null or undefined, add to top navigation
-		if (watchlistTabIndex === null || watchlistTabIndex === undefined) {
+		if (watchlistTabIndex === null || watchlistTabIndex === undefined || jellyfinVersion >= 12) {
 			options.topNavigation = 'main';
 		} else {
 			watchlistUrl = `#/home?tab=${watchlistTabIndex}`;
