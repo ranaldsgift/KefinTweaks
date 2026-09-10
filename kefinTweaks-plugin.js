@@ -1508,7 +1508,74 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         setupOnViewShow();
     }
 
-    // Load injector.js from a specific root URL
+    // Resolve @latest, @main, or @experimental to actual version/commit hash (same as injector.js)
+    async function resolveRootVersion(root) {
+        const latestMatch = root.match(/@latest(\/|$)/);
+        const mainMatch = root.match(/@main(\/|$)/);
+        const experimentalMatch = root.match(/@experimental(\/|$)/);
+
+        if (latestMatch) {
+            try {
+                const response = await fetch('https://api.github.com/repos/ranaldsgift/KefinTweaks/releases/latest');
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data && data.tag_name) {
+                        const versionTag = data.tag_name.startsWith('v') ? data.tag_name : 'v' + data.tag_name;
+                        return root.replace('@latest', `@${versionTag}`);
+                    }
+                    console.warn('[KefinTweaks Installer] Could not fetch latest version, using @latest');
+                    return root;
+                }
+                console.warn('[KefinTweaks Installer] Failed to fetch latest version, using @latest');
+                return root;
+            } catch (error) {
+                console.warn('[KefinTweaks Installer] Error fetching latest version:', error);
+                return root;
+            }
+        }
+
+        if (mainMatch) {
+            try {
+                const response = await fetch('https://api.github.com/repos/ranaldsgift/KefinTweaks/commits/main');
+                if (response.ok) {
+                    const commit = await response.json();
+                    if (commit && commit.sha) {
+                        return root.replace('@main', `@${commit.sha}`);
+                    }
+                    console.warn('[KefinTweaks Installer] Could not fetch commit hash, using @main');
+                    return root;
+                }
+                console.warn('[KefinTweaks Installer] Failed to fetch commit hash, using @main');
+                return root;
+            } catch (error) {
+                console.warn('[KefinTweaks Installer] Error fetching commit hash:', error);
+                return root;
+            }
+        }
+
+        if (experimentalMatch) {
+            try {
+                const response = await fetch('https://api.github.com/repos/ranaldsgift/KefinTweaks/commits/experimental');
+                if (response.ok) {
+                    const commit = await response.json();
+                    if (commit && commit.sha) {
+                        return root.replace('@experimental', `@${commit.sha}`);
+                    }
+                    console.warn('[KefinTweaks Installer] Could not fetch experimental commit hash, using @experimental');
+                    return root;
+                }
+                console.warn('[KefinTweaks Installer] Failed to fetch experimental commit hash, using @experimental');
+                return root;
+            } catch (error) {
+                console.warn('[KefinTweaks Installer] Error fetching experimental commit hash:', error);
+                return root;
+            }
+        }
+
+        return root;
+    }
+
+    // Load injector.js from a specific root URL (resolves floating refs first)
     async function loadInjectorFromRoot(root) {
         if (!root || root === '') {
             console.warn('[KefinTweaks Installer] Cannot load injector: kefinTweaksRoot is empty');
@@ -1517,8 +1584,13 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
 
         // Ensure root ends with /
         const rootUrl = root.endsWith('/') ? root : root + '/';
-        const injectorUrl = `${rootUrl}injector.js`;
-        
+        const resolvedRoot = await resolveRootVersion(rootUrl);
+        const injectorUrl = `${resolvedRoot}injector.js`;
+
+        if (resolvedRoot !== rootUrl) {
+            console.log('[KefinTweaks Installer] Resolved root from', rootUrl, 'to', resolvedRoot);
+        }
+
         // Check if injector is already loaded from this URL
         const existingScript = document.querySelector(`script[src="${injectorUrl}"]`);
         if (existingScript) {
@@ -1527,22 +1599,22 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         }
 
         console.log('[KefinTweaks Installer] Loading injector.js from:', injectorUrl);
-        
+
         return new Promise((resolve, reject) => {
             const script = document.createElement('script');
             script.src = injectorUrl;
             script.async = true;
-            
+
             script.onload = () => {
                 console.log('[KefinTweaks Installer] Injector loaded successfully');
                 resolve(true);
             };
-            
+
             script.onerror = (error) => {
                 console.error('[KefinTweaks Installer] Failed to load injector:', error);
                 reject(new Error(`Failed to load injector.js from ${injectorUrl}`));
             };
-            
+
             document.head.appendChild(script);
         });
     }
