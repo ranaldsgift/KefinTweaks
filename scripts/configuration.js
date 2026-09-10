@@ -218,7 +218,6 @@
                     kefinTweaksRoot: '',
                     scripts: {},
                     homeScreen: {},
-                    exclusiveElsewhere: {},
                     search: {},
                     skins: [],
                     defaultSkin: null,
@@ -663,7 +662,7 @@
         const style = document.createElement('style');
         style.id = styleId;
         style.textContent = `
-            #${MODAL_ID} .modal-content-wrapper {
+            :not(.layout-mobile) #${MODAL_ID} .modal-content-wrapper {
                 max-width: 90vw;
                 width: 1400px;
                 max-height: 90vh;
@@ -1178,7 +1177,7 @@
     // Build script toggle switches
     function buildScriptToggles(scripts) {
         // Features that have configuration options (not just toggles)
-        const featuresWithConfig = new Set(['homeScreen', 'search', 'flattenSingleSeasonShows', 'skinManager', 'customMenuLinks', 'seriesInfo', 'thumbnailScrubber']);
+        const featuresWithConfig = new Set(['homeScreen', 'search', 'flattenSingleSeasonShows', 'skinManager', 'customMenuLinks', 'seriesInfo', 'versionPreferences', 'thumbnailScrubber', 'watchTogether', 'userManager']);
         
         const scriptNames = [
             { key: 'watchlist', label: 'Watchlist', desc: 'Allows your users to add items to their Watchlist. The Watchlist page shows an overview of all items on a user\'s Watchlist, as well as their Series Progress and Movie History. It also includes a Statistics page with an overview of your user watched stats.' },
@@ -1189,21 +1188,44 @@
             { key: 'skinManager', label: 'Skin Manager', desc: 'Skin selection and management - adds skin dropdown to header and display preferences' },
             { key: 'headerTabs', label: 'Header Tabs', desc: 'Allows direct navigation to specific Tab sections of a given library page. Full support for default Jellyfin landing pages.' },
             { key: 'customMenuLinks', label: 'Custom Menu Links', desc: 'Add custom menu links to the left side navigation menu' },
+            { key: 'hamburgerMenu', label: 'Desktop Hamburger Menu', desc: 'Shows an Open Menu button on desktop (900px+) that opens a left navigation drawer like the mobile layout, including libraries and custom menu links.' },
+            { key: 'games', label: 'Games', desc: 'Add a Games link to the side menu for Movie LUT and other library games' },
             { key: 'breadcrumbs', label: 'Breadcrumbs', desc: 'Breadcrumb navigation for Movies, TV and Music. Allows quick navigation between Seasons/Episodes and Albums/Songs.' },
             { key: 'playlist', label: 'Playlist UX', desc: 'Improved Playlist page navigation: Items only play when the Play button is pressed. Clicking an item navigates to the item\'s page.' },
             { key: 'itemDetailsCollections', label: 'Collections on Details Page', desc: 'Displays collections on item details pages (Included In section)' },
             { key: 'flattenSingleSeasonShows', label: 'Episodes On Series Page', desc: 'Displays episodes directly on series page. For single-season shows, shows all episodes. For multi-season shows, shows episodes from the season with Next Up episode (or Season 1 if no Next Up).' },
             { key: 'seriesInfo', label: 'Series Info+', desc: 'Adds Season and Episode counts to the Series and Season pages. Also adds an "Ends at" time similar to the Episode page.' },
+            { key: 'versionPreferences', label: 'Item Version Preferences', desc: 'Manage how different versions and editions of your items are displayed. Reorders and sanitizes the media source dropdown on item details pages by prioritized version and edition terms.' },
             { key: 'collections', label: 'Collection Sorting', desc: 'Collection sorting functionality on the Collection page' },
             { key: 'subtitleSearch', label: 'Subtitle Search', desc: 'Search and download subtitles directly from the video OSD' },
-            { key: 'exclusiveElsewhere', label: 'Exclusive Elsewhere', desc: 'Custom branding when items aren\'t available on streaming services' },
             { key: 'backdropLeakFix', label: 'Backdrop Leak Fix', desc: 'Fixes memory leaks from backdrop images when tab isn\'t focused' },
             { key: 'dashboardButtonFix', label: 'Dashboard Button Fix', desc: 'Improved back button behavior on dashboard - prevents navigating back to the new tab browser page' },
-            { key: 'thumbnailScrubber', label: 'Thumbnail Scrubber', desc: 'Shows trickplay thumbnail preview when hovering in the bottom 20px of a video card similar to Youtube' }
+            { key: 'thumbnailScrubber', label: 'Thumbnail Scrubber', desc: 'Shows trickplay thumbnail preview when hovering in the bottom 20px of a video card similar to Youtube' },
+            { key: 'watchTogether', label: 'Watch Together', desc: 'Link additional Jellyfin accounts to a Watch Together group, then sync watched / in-progress playstate to selected accounts on this device.' },
+            { key: 'userManager', label: 'User Manager', desc: 'Create reusable user policy templates and apply them when adding users or bulk-editing existing accounts. Import/export comes later.' }
         ];
 
-        return scriptNames.map(script => {
-            const isEnabled = scripts[script.key] !== false; // Default to true if not set
+        const defsByName = new Map(
+            (window.KefinTweaks?.getScripts?.() || []).map((def) => [def.name, def])
+        );
+        const major = window.KefinTweaks?._jellyfinMajorVersion
+            ?? (typeof window.KefinTweaks?.getJellyfinMajorVersion === 'function'
+                ? window.KefinTweaks.getJellyfinMajorVersion()
+                : null);
+
+        const visibleScripts = scriptNames.filter((script) => {
+            const def = defsByName.get(script.key);
+            if (!def?.versions?.length) return true;
+            if (major == null) return false;
+            return def.versions.includes(major);
+        });
+
+        return visibleScripts.map(script => {
+            // Match injector defaults: most scripts on unless set false; opt-in scripts require true
+            const defaultDisabled = script.key === 'thumbnailScrubber' || script.key === 'watchTogether' || script.key === 'userManager';
+            const isEnabled = defaultDisabled
+                ? scripts[script.key] === true
+                : scripts[script.key] !== false;
             const hasConfig = featuresWithConfig.has(script.key);
             const configKey = script.key === 'flattenSingleSeasonShows' ? 'seriesEpisodes' : script.key;
             
@@ -2390,8 +2412,8 @@
         return `
             <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
                 <div class="listItemContent">
-                    <div class="listItemBodyText" style="margin-bottom: 0.5em;">Enable Jellyseerr</div>
-                    <div class="listItemBodyText secondary" style="margin-bottom: 0.75em; font-size: 0.9em;">Enable Jellyseerr integration for request functionality</div>
+                    <div class="listItemBodyText" style="margin-bottom: 0.5em;">Enable Seerr results from JellyfinEnhanced</div>
+                    <div class="listItemBodyText secondary" style="margin-bottom: 0.75em; font-size: 0.9em;">If you are using Seerr from Jellyfin Enhanced, you can enable this to add an additional search toggle for Requests</div>
                     ${buildJellyfinCheckbox('search_enableJellyseerr', search.enableJellyseerr === true, 'Enabled')}
                 </div>
             </div>
@@ -2455,6 +2477,16 @@
         currentLoadedConfig = config;
         window.KefinTweaksCurrentConfig = config;
 
+        // Ensure Jellyfin major is cached so version-gated feature cards filter correctly
+        try {
+            if (typeof window.KefinTweaks?.getCurrentMajorServerVersion === 'function') {
+                const major = await window.KefinTweaks.getCurrentMajorServerVersion();
+                window.KefinTweaks._jellyfinMajorVersion = major;
+            }
+        } catch (e) {
+            console.warn('[KefinTweaks Configuration] Could not resolve Jellyfin major version:', e);
+        }
+
         // Build the content (without title, as ModalSystem adds it)
         const content = document.createElement('div');
         content.className = 'modal-content-wrapper';
@@ -2494,8 +2526,11 @@
             closeOnBackdrop: true,
             closeOnEscape: true,
             onOpen: (modalInstance) => {
+                // Check if window is less than 900px
+                const layoutMobile = window.innerWidth < 900;
+
                 // Update modal dialog styling for large size
-                if (modalInstance && modalInstance.dialog) {
+                if (modalInstance && modalInstance.dialog && !layoutMobile) {
                     modalInstance.dialog.style.maxWidth = '90vw';
                     modalInstance.dialog.style.width = '1400px';
                     modalInstance.dialog.style.maxHeight = '90vh';
@@ -4080,7 +4115,7 @@
                 const token = window.ApiClient.accessToken();
                 
                 const response = await fetch(`${serverAddress}/Users/${userId}/Items?IncludeItemTypes=BoxSet,CollectionFolder&Recursive=true&Fields=ItemCounts`, {
-                    headers: { 'X-Emby-Token': token }
+                    headers: { 'Authorization': window.apiHelper.getAuthHeader() }
                 });
                 
                 if (!response.ok) {
@@ -4200,7 +4235,7 @@
                 const token = window.ApiClient.accessToken();
                 
                 const response = await fetch(`${serverAddress}/Users/${userId}/Items?IncludeItemTypes=Playlist&Recursive=true&Fields=ItemCounts`, {
-                    headers: { 'X-Emby-Token': token }
+                    headers: { 'Authorization': window.apiHelper.getAuthHeader() }
                 });
                 
                 if (!response.ok) {
@@ -4320,7 +4355,7 @@
                 const token = window.ApiClient.accessToken();
                 
                 const response = await fetch(`${serverAddress}/Users/${userId}/Items?IncludeItemTypes=BoxSet,CollectionFolder&Recursive=true&Fields=ItemCounts`, {
-                    headers: { 'X-Emby-Token': token }
+                    headers: { 'Authorization': window.apiHelper.getAuthHeader() }
                 });
                 
                 if (!response.ok) {
@@ -4458,7 +4493,7 @@
                 const token = window.ApiClient.accessToken();
                 
                 const response = await fetch(`${serverAddress}/Users/${userId}/Items?IncludeItemTypes=Playlist&Recursive=true&Fields=ItemCounts`, {
-                    headers: { 'X-Emby-Token': token }
+                    headers: { 'Authorization': window.apiHelper.getAuthHeader() }
                 });
                 
                 if (!response.ok) {
@@ -5096,57 +5131,36 @@
         }, 500);
     }
 
-    // Find JavaScript Injector plugin
+    const JS_INJECTOR_ALIASES = ['JavaScript Injector', 'JS Injector'];
+
+    // Find JavaScript Injector plugin (delegates to shared utils cache)
     async function findJavaScriptInjectorPlugin() {
         try {
-            if (!window.ApiClient || !window.ApiClient._serverAddress || !window.ApiClient.accessToken) {
-                throw new Error('ApiClient not available');
+            if (!window.KefinTweaksUtils?.resolvePluginId) {
+                throw new Error('KefinTweaksUtils.resolvePluginId is not available');
             }
 
-            const plugins = await aoiHelper.getPlugins();
-            console.log('[KefinTweaks Configuration] Active Plugins:', plugins);
-
-            // Handle both array and object with Items property
-            const pluginsList = Array.isArray(plugins) ? plugins : (plugins.Items || []);
-            
-            // Find JavaScript Injector plugin
-            const injectorPlugin = pluginsList.find(plugin => 
-                plugin.Name === 'JavaScript Injector' || plugin.Name === 'JS Injector'
-            );
-
-            if (!injectorPlugin) {
+            const pluginId = await window.KefinTweaksUtils.resolvePluginId(JS_INJECTOR_ALIASES);
+            if (!pluginId) {
                 throw new Error('JavaScript Injector plugin not found. Please ensure it is installed.');
             }
 
-            console.log('[KefinTweaks Configuration] Found JavaScript Injector plugin:', injectorPlugin);
-            return injectorPlugin.Id;
+            console.log('[KefinTweaks Configuration] Found JavaScript Injector plugin:', pluginId);
+            return pluginId;
         } catch (error) {
             console.error('[KefinTweaks Configuration] Error finding JavaScript Injector plugin:', error);
             throw error;
         }
     }
 
-    // Get current JavaScript Injector configuration
+    // Get current JavaScript Injector configuration (delegates to shared utils)
     async function getJavaScriptInjectorConfig(pluginId) {
         try {
-            if (!window.ApiClient || !window.ApiClient._serverAddress || !window.ApiClient.accessToken) {
-                throw new Error('ApiClient not available');
+            if (!window.KefinTweaksUtils?.getPluginConfiguration) {
+                throw new Error('KefinTweaksUtils.getPluginConfiguration is not available');
             }
 
-            const server = ApiClient._serverAddress;
-            const token = ApiClient.accessToken();
-
-            const response = await fetch(`${server}/Plugins/${pluginId}/Configuration`, {
-                headers: {
-                    'X-Emby-Token': token
-                }
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-
-            const config = await response.json();
+            const config = await window.KefinTweaksUtils.getPluginConfiguration(pluginId || JS_INJECTOR_ALIASES);
             console.log('[KefinTweaks Configuration] Current JS Injector config:', config);
             return config;
         } catch (error) {
@@ -5155,63 +5169,16 @@
         }
     }
 
-    // Save configuration to JavaScript Injector plugin
+    // Save configuration to JavaScript Injector plugin (delegates to shared utils)
     async function saveConfigToJavaScriptInjector(config) {
         try {
-            // Find the plugin
-            const pluginId = await findJavaScriptInjectorPlugin();
-
-            // Get fresh configuration data
-            const injectorConfig = await getJavaScriptInjectorConfig(pluginId);
-                
-            // Ensure CustomJavaScripts array exists
-            if (!injectorConfig.CustomJavaScripts) {
-                injectorConfig.CustomJavaScripts = [];
+            if (!window.KefinTweaksUtils?.saveConfigToJavaScriptInjector) {
+                throw new Error('KefinTweaksUtils.saveConfigToJavaScriptInjector is not available');
             }
 
-            // Create the script content
-            const scriptContent = `// KefinTweaks Configuration
-// This file is automatically generated by KefinTweaks Configuration UI
-// Do not edit manually unless you know what you're doing
-
-window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
-
-            // Check if KefinTweaks-Config already exists
-            const existingScriptIndex = injectorConfig.CustomJavaScripts.findIndex(
-                script => script.Name === 'KefinTweaks-Config'
-            );
-
-            if (existingScriptIndex !== -1) {
-                // Update existing script
-                console.log('[KefinTweaks Configuration] Updating existing KefinTweaks-Config script');
-                injectorConfig.CustomJavaScripts[existingScriptIndex].Script = scriptContent;
-                // Keep existing Enabled and RequiresAuthentication settings
-            } else {
-                // Add new script
-                console.log('[KefinTweaks Configuration] Adding new KefinTweaks-Config script');
-                injectorConfig.CustomJavaScripts.push({
-                    Name: 'KefinTweaks-Config',
-                    Script: scriptContent,
-                    Enabled: true,
-                    RequiresAuthentication: false
-                });
-            }
-
-            // POST the updated configuration back
-            const server = ApiClient._serverAddress;
-            const token = ApiClient.accessToken();
-
-            const response = await fetch(`${server}/Plugins/${pluginId}/Configuration`, {
-                method: 'POST',
-                headers: {
-                    'X-Emby-Token': token,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(injectorConfig)
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            const success = await window.KefinTweaksUtils.saveConfigToJavaScriptInjector(config);
+            if (!success) {
+                throw new Error('Failed to save configuration to JavaScript Injector');
             }
 
             console.log('[KefinTweaks Configuration] Configuration saved successfully');
@@ -5221,6 +5188,14 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             throw error;
         }
     }
+
+    // Expose injector helpers for feature-config fallbacks
+    window.KefinTweaksConfiguration = Object.assign(window.KefinTweaksConfiguration || {}, {
+        findJavaScriptInjectorPlugin,
+        getJavaScriptInjectorConfig,
+        saveConfigToJavaScriptInjector,
+        openConfigurationModal
+    });
 
     function getSectionConfigFromUI(rootElement, prefix, sectionIndex) {
         const scope = rootElement || document;
@@ -5552,8 +5527,158 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         }
     }
 
+    function getKefinTweaksRoot() {
+        const raw = window.KefinTweaksConfig?.kefinTweaksRoot || '';
+        return raw.endsWith('/') ? raw : `${raw}/`;
+    }
+
+    function getKefinTweaksLogoCssValue() {
+        const root = getKefinTweaksRoot();
+        if (!root) return 'none';
+        return `url('${root}logo.png')`;
+    }
+
+    function ensureKefinTweaksLogoVar() {
+        document.documentElement.style.setProperty(
+            '--kefinTweaksLogo',
+            getKefinTweaksLogoCssValue()
+        );
+    }
+
+    function closeAppUserMenu() {
+        const menu = document.getElementById('app-user-menu');
+        if (!menu) return;
+        const backdrop = menu.querySelector('.MuiBackdrop-root, .MuiModal-backdrop');
+        if (backdrop) {
+            backdrop.click();
+            return;
+        }
+        document.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Escape',
+            code: 'Escape',
+            keyCode: 27,
+            which: 27,
+            bubbles: true
+        }));
+    }
+
+    /**
+     * Create KefinTweaks menu item for Jellyfin v12 #app-user-menu
+     * @returns {HTMLAnchorElement}
+     */
+    function createAppUserMenuConfigButton() {
+        ensureKefinTweaksLogoVar();
+
+        const link = document.createElement('a');
+        link.className = 'MuiButtonBase-root MuiMenuItem-root MuiMenuItem-gutters MuiMenuItem-root MuiMenuItem-gutters css-mbeig7';
+        link.setAttribute('tabindex', '-1');
+        link.setAttribute('role', 'menuitem');
+        link.href = '#';
+        link.setAttribute('data-kefintweaks-user-menu-config-button', 'true');
+
+        const icon = document.createElement('div');
+        icon.className = 'MuiListItemIcon-root';
+        const iconSpan = document.createElement('span');
+        iconSpan.className = 'material-icons MuiSvgIcon-root MuiSvgIcon-fontSizeMedium';
+        iconSpan.setAttribute('aria-hidden', 'true');
+        icon.appendChild(iconSpan);
+
+        const text = document.createElement('div');
+        text.className = 'MuiListItemText-root';
+        const span = document.createElement('span');
+        span.className = 'MuiTypography-root MuiTypography-body1 MuiListItemText-primary';
+        span.textContent = 'KefinTweaks';
+        text.appendChild(span);
+
+        const ripple = document.createElement('span');
+        ripple.className = 'MuiTouchRipple-root';
+
+        link.appendChild(icon);
+        link.appendChild(text);
+        link.appendChild(ripple);
+
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            closeAppUserMenu();
+            openConfigurationModal();
+        });
+
+        return link;
+    }
+
+    /**
+     * Insert KefinTweaks into #app-user-menu before the first HR after Dashboard.
+     * @returns {boolean} true if button is present after this call
+     */
+    function addConfigButtonToAppUserMenu() {
+        if (document.querySelector('[data-kefintweaks-user-menu-config-button]')) {
+            return true;
+        }
+
+        const appUserMenu = document.getElementById('app-user-menu');
+        if (!appUserMenu) {
+            return false;
+        }
+
+        const menuList = appUserMenu.querySelector('ul[role="menu"]');
+        if (!menuList) {
+            return false;
+        }
+
+        const dashboardLink = menuList.querySelector('a[href="#/dashboard"]')
+            || menuList.querySelector('a[href*="#/dashboard"]');
+        if (!dashboardLink) {
+            console.log('[KefinTweaks Configuration] #app-user-menu Dashboard link not found');
+            return false;
+        }
+
+        let divider = dashboardLink.nextElementSibling;
+        while (divider && !(divider.matches('hr') || divider.classList.contains('MuiDivider-root'))) {
+            divider = divider.nextElementSibling;
+        }
+        if (!divider) {
+            console.log('[KefinTweaks Configuration] #app-user-menu divider after Dashboard not found');
+            return false;
+        }
+
+        const button = createAppUserMenuConfigButton();
+        divider.parentNode.insertBefore(button, divider);
+        console.log('[KefinTweaks Configuration] Configuration button added to #app-user-menu');
+        return true;
+    }
+
+    let appUserMenuConfigObserver = null;
+
+    /**
+     * Permanent observer: keep re-injecting if #app-user-menu remounts and our button is lost.
+     */
+    function setupAppUserMenuConfigButtonObserver() {
+        addConfigButtonToAppUserMenu();
+
+        if (appUserMenuConfigObserver) {
+            return;
+        }
+
+        if (typeof MutationObserver === 'undefined' || !document.body) {
+            console.log('[KefinTweaks Configuration] Cannot observe #app-user-menu (MutationObserver/body unavailable)');
+            return;
+        }
+
+        appUserMenuConfigObserver = new MutationObserver(() => {
+            addConfigButtonToAppUserMenu();
+        });
+
+        appUserMenuConfigObserver.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+    }
+
     // Create configuration button for Administration section
     function createConfigButton() {
+        ensureKefinTweaksLogoVar();
+
         const button = document.createElement('div');
         button.style.display = 'block';
         button.style.padding = '0';
@@ -5567,9 +5692,9 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
 
         button.innerHTML = `
             <div class="listItem">
-                <span class="material-icons listItemIcon listItemIcon-transparent build" aria-hidden="true"></span>
+                <span class="material-icons listItemIcon listItemIcon-transparent" aria-hidden="true"></span>
                 <div class="listItemBody">
-                    <div class="listItemBodyText">Configure KefinTweaks</div>
+                    <div class="listItemBodyText">KefinTweaks</div>
                 </div>
             </div>
         `;
@@ -5579,13 +5704,18 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
 
     // Create dashboard side menu button
     function createDashboardConfigButton() {
+        ensureKefinTweaksLogoVar();
+
         // Check if button already exists
         if (document.querySelector('[data-kefintweaks-dashboard-config-button]')) {
             return null;
         }
 
+        // Get an existing native button
+        const nativeButton = document.querySelector('.MuiButtonBase-root.MuiListItemButton-root.MuiListItemButton-gutters.MuiListItemButton-root.MuiListItemButton-gutters');
+
         const div = document.createElement('div');
-        div.className = 'MuiButtonBase-root MuiListItemButton-root MuiListItemButton-gutters MuiListItemButton-root MuiListItemButton-gutters kefin-config-button';
+        div.className = 'MuiButtonBase-root MuiListItemButton-root MuiListItemButton-gutters MuiListItemButton-root MuiListItemButton-gutters css-yknuxp';
         div.setAttribute('tabindex', '0');
         div.setAttribute('data-kefintweaks-dashboard-config-button', 'true');
         div.onclick = () => {
@@ -5594,24 +5724,24 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         
         // Create icon with Material icon
         const icon = document.createElement('div');
-        icon.className = 'MuiListItemIcon-root css-37qkju';
+        icon.className = 'MuiListItemIcon-root css-37qkju css-5pks8q';
         const iconSpan = document.createElement('span');
-        iconSpan.className = 'material-icons build MuiSvgIcon-root MuiSvgIcon-fontSizeMedium';
+        iconSpan.className = 'material-icons MuiSvgIcon-root MuiSvgIcon-fontSizeMedium';
         iconSpan.style.marginRight = '12px';
         iconSpan.setAttribute('aria-hidden', 'true');
         icon.appendChild(iconSpan);
 
         // Create text
         const text = document.createElement('div');
-        text.className = 'MuiListItemText-root css-f696uz';
+        text.className = 'MuiListItemText-root css-f696uz css-t3p1pa';
         const span = document.createElement('span');
-        span.className = 'MuiTypography-root MuiTypography-body1 MuiListItemText-primary css-hlxkyz';
+        span.className = 'MuiTypography-root MuiTypography-body1 MuiListItemText-primary css-hlxkyz css-pl8nxc';
         span.textContent = 'KefinTweaks';
         text.appendChild(span);
 
         // Create ripple effect span
         const ripple = document.createElement('span');
-        ripple.className = 'MuiTouchRipple-root css-w0pj6f';
+        ripple.className = 'MuiTouchRipple-root css-w0pj6f css-4mb1j7';
 
         div.appendChild(icon);
         div.appendChild(text);
@@ -5649,6 +5779,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
 
     // Add configuration button to Administration section
     function addConfigButtonToAdminSection() {
+        return;
         // Check if button already exists (check for admin section button specifically)
         if (document.querySelector('.adminSection [data-kefintweaks-config-button]')) {
             return;
@@ -5724,41 +5855,22 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             return;
         }
 
-        // Use a special URL that we can intercept
-        const configUrl = '#';
-        
-        // Add the menu link
+        // Admin-only: user menu admin section + default side menu; open via JS action
         const success = await window.KefinTweaksUtils.addCustomMenuLink(
-            'Configure',
+            'KefinTweaks',
             'build',
-            configUrl,
+            '',
             false,
-            '.adminMenuOptions'
+            {
+                userMenu: true,
+                isAdminLink: true,
+                action: 'KefinTweaksConfiguration.openConfigurationModal'
+            }
         );
 
         if (success) {
             console.log('[KefinTweaks Configuration] Configuration link added to custom menu');
-            
-            // Set up click handler to intercept navigation and open modal instead
-            setupConfigLinkClickHandler();
         }
-    }
-
-    // Set up click handler for configuration menu link
-    function setupConfigLinkClickHandler() {
-        // Find the config button
-        const configButton = document.querySelector('.navMenuOption[data-name="configure"]');
-        if (!configButton) {
-            console.log('[KefinTweaks Configuration] Configuration button not found, retrying...');
-            setTimeout(setupConfigLinkClickHandler, 1000);
-            return;
-        }
-
-        // Add click handler to the config button
-        configButton.addEventListener('click', (e) => {
-            e.preventDefault();
-            openConfigurationModal();
-        });
     }
 
     // Handle direct navigation to config URL
@@ -5817,6 +5929,8 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         const userIsAdmin = await isAdmin();
         
         if (userIsAdmin) {
+            // User-menu KefinTweaks entry is owned by addCustomMenuLink(userMenu + isAdminLink + action)
+
             if (hash && (hash.includes('mypreferencesmenu') || hash.includes('userpreferences') || hash.includes('preferences'))) {
                 setTimeout(() => {
                     addConfigButtonToAdminSection();

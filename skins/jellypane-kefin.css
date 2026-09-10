@@ -1,0 +1,8 @@
+.sectionTitleContainer.sectionTitleContainer-cards.padded-left > .sectionTitle.sectionTitle-cards {
+	display: inline-block;
+}
+
+.cardText-secondary {
+	border-bottom-right-radius: 0;
+	border-bottom-left-radius: 0;
+}

@@ -1,73 +1,91 @@
 .searchFields {
-    position: relative;
+	position: relative;
 }
 
 .padded-left.padded-right.searchFields {
-    display: flex;
-    flex-direction: column-reverse;
-    align-items: center;
+	display: flex;
+	flex-direction: column-reverse;
+	align-items: center;
 }
 
 .layout-desktop .searchFieldsInner {
-    width: 100%;
+	padding-left: calc(30px + 1em);
 }
 
 div#smart-search-wrapper:not([style*="display: none"]) ~ #jellyseerr-search-icon {
-    display: none;
+	transform: unset;
+	position: relative;
+	top: 0.4em;
+	right: unset;
+}
+
+.inputContainer.flex-grow:has(.smart-search-wrapper) {
+	display: grid;
+	grid-template-columns: 1fr 30px;
+	gap: 1em;
 }
 
 .smart-search-mode .searchFieldsInner {
-    position: relative;
+	position: relative;
 }
 
 div#searchPage {
-    padding-top: 3rem !important;
+	padding-top: 3rem !important;
 }
 
 @media (min-width: 600px) {
-div#searchPage {
-        padding-top: 5rem !important;
-    }
+	div#searchPage {
+		padding-top: 5rem !important;
+	}
 }
 
 div#searchPage {
-    display: flex;
-    flex-direction: column;
+	display: flex;
+	flex-direction: column;
 }
 
-div#searchPage>* {
-    order: 1;
+div#searchPage > * {
+	order: 1;
 }
 
-div#searchPage>.jellyseerr-section {
-    order: 2;
-    padding-left: max(env(safe-area-inset-left), 3.3%);
+div#searchPage > .jellyseerr-section {
+	order: 2;
+	padding-left: max(env(safe-area-inset-left), 3.3%);
 }
 
 div#smart-search-results {
-    padding-bottom: 0 !important;
-    padding-right: 0 !important;
+	padding-bottom: 0 !important;
+	padding-right: 0 !important;
 }
 
 label[for="searchTextInput"] {
-    display: none;
+	display: none;
 }
 
-.searchFieldsInner>.searchfields-icon {
-    display: none;
+.searchfields-icon {
+	-webkit-align-self: flex-end;
+	align-self: flex-end;
+	font-size: 2em;
+	margin-bottom: 0.1em;
+	margin-right: 0.25em;
+}
+
+.searchFieldsInner > .searchfields-icon {
+	display: none;
 }
 
 .input-wrapper {
-    position: relative;
+	position: relative;
 }
 
 span.searchfields-icon {
-    position: absolute;
-    right: 0;
-    top: 50%;
-    transform: translateY(-50%);
+	position: absolute;
+	right: 0;
+	top: 50%;
+	transform: translateY(-50%);
 }
 
-.searchResults\,:not(.smart-search-results), .searchResults:not(.smart-search-results) {
-    display: none;
+.searchResults\,:not(.smart-search-results),
+.searchResults:not(.smart-search-results) {
+	display: none;
 }

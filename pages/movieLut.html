@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Movie LUT Game</title>
+		<script>
+			(function () {
+				function getRoot() {
+					var raw =
+						(window.KefinTweaksConfig && window.KefinTweaksConfig.kefinTweaksRoot) ||
+						(window.parent &&
+							window.parent !== window &&
+							window.parent.KefinTweaksConfig &&
+							window.parent.KefinTweaksConfig.kefinTweaksRoot) ||
+						"";
+					if (!raw) {
+						try {
+							var href = window.location.href;
+							var idx = href.lastIndexOf("/pages/");
+							if (idx !== -1) return href.slice(0, idx + 1);
+						} catch (e) {
+							/* ignore */
+						}
+						return "";
+					}
+					return raw.endsWith("/") ? raw : raw + "/";
+				}
+
+				window.__mlutRoot = getRoot();
+
+				if (window.__mlutRoot) {
+					var link = document.createElement("link");
+					link.id = "mlut-css";
+					link.rel = "stylesheet";
+					link.href = window.__mlutRoot + "pages/movieLut.css";
+					document.head.appendChild(link);
+				}
+			})();
+		</script>
+	</head>
+	<body class="mlut-body">
+		<div class="mlut-app">
+			<header class="mlut-header">
+				<h1>Movie LUT Game</h1>
+			</header>
+
+			<div class="mlut-scorebar" aria-live="polite">
+				<span>Score: <strong id="mlut-score">0</strong></span>
+				<span>Streak: <strong id="mlut-streak">0</strong></span>
+			</div>
+
+			<p id="mlut-status" class="mlut-status" data-tone="muted">Loading…</p>
+
+			<div class="mlut-stage">
+				<button type="button" id="mlut-prev" class="mlut-nav-btn" hidden aria-label="Previous swatch">
+					<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+						<path fill="currentColor" d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
+					</svg>
+				</button>
+
+				<div id="mlut-card" class="mlut-card" aria-live="polite">
+					<div class="mlut-options" id="mlut-options" role="group" aria-label="Movie choices"></div>
+					<div class="mlut-swatch-wrap">
+						<canvas id="mlut-swatch" class="mlut-swatch" width="640" height="200" aria-label="Color barcode swatch"></canvas>
+						<div id="mlut-swatch-placeholder" class="mlut-swatch-placeholder">Preparing swatch…</div>
+					</div>
+				</div>
+
+				<button type="button" id="mlut-next" class="mlut-nav-btn" hidden aria-label="Next swatch">
+					<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+						<path fill="currentColor" d="M8.59 16.59 10 18l6-6-6-6-1.41 1.41L13.17 12z" />
+					</svg>
+				</button>
+
+				<div id="mlut-reveal" class="mlut-reveal" hidden>
+					<svg id="mlut-reveal-connectors" class="mlut-reveal-connectors" aria-hidden="true"></svg>
+					<div id="mlut-reveal-tiles" class="mlut-reveal-tiles"></div>
+				</div>
+			</div>
+			<footer class="mlut-footer">Inspired by the <a href="https://game.movieluts.com/">Movie LUT Card Game</a></footer>
+		</div>
+		<script>
+			(function () {
+				var root = window.__mlutRoot || "";
+				var statusEl = document.getElementById("mlut-status");
+				if (!root) {
+					if (statusEl) {
+						statusEl.textContent =
+							"kefinTweaksRoot is not available. Open this page from Jellyfin with KefinTweaks configured.";
+						statusEl.dataset.tone = "error";
+					}
+					return;
+				}
+				if (document.getElementById("kefin-movieLut-js")) return;
+				var s = document.createElement("script");
+				s.id = "kefin-movieLut-js";
+				s.src = root + "pages/movieLut.js";
+				s.onerror = function () {
+					if (statusEl) {
+						statusEl.textContent = "Failed to load movieLut.js from " + root;
+						statusEl.dataset.tone = "error";
+					}
+				};
+				document.body.appendChild(s);
+			})();
+		</script>
+	</body>
+</html>

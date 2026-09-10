@@ -84,9 +84,9 @@
             LOG('Migration completed successfully');
         } catch (error) {
             ERR('Migration failed:', error);
-        } finally {
-            return newHomeScreenConfig;
-        }
+            return false;
+        } 
+        return true;
     }
 
     /**
@@ -404,6 +404,7 @@
                     enabled: libConfig.enabled !== false,
                     order: libConfig.order || 61,
                     cardFormat: libConfig.cardFormat || 'Poster',
+                    jellyfinId: 'latestmedia',
                     queries: [{
                         path: '/Items/Latest',
                         queryOptions: {

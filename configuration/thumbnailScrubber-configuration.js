@@ -59,6 +59,13 @@
      */
     function buildConfigHTML(config) {
         const previewOnHover = config.PreviewOnHover === true;
+        const useVideoStream = config.UseVideoStream !== false;
+        let fallbackAfterMs = 500;
+        if (Number.isFinite(config.FallbackAfterMs * 1) && config.FallbackAfterMs >= 0) {
+            fallbackAfterMs = config.FallbackAfterMs * 1;
+        } else if (Number.isFinite(config.FallbackAfterSeconds * 1) && config.FallbackAfterSeconds >= 0) {
+            fallbackAfterMs = config.FallbackAfterSeconds * 1000;
+        }
         const hoverDelay = Number.isFinite(config.HOVER_PREVIEW_TIMEOUT_MS * 1)
             ? config.HOVER_PREVIEW_TIMEOUT_MS * 1
             : (Number.isFinite(config.HOVER_TIMEOUT * 1) ? config.HOVER_TIMEOUT * 1 : 800);
@@ -82,6 +89,38 @@
                             <input type="checkbox" id="thumbnailScrubber_PreviewOnHover" ${previewOnHover ? 'checked' : ''}>
                             <span class="listItemBodyText">Enabled</span>
                         </label>
+                    </div>
+                </div>
+
+                <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
+                    <div class="listItemContent">
+                        <div class="listItemBodyText" style="margin-bottom: 0.5em;">Use Video Stream Preview</div>
+                        <div class="listItemBodyText secondary" style="margin-bottom: 0.75em; font-size: 0.9em;">
+                            When enabled, hover preview plays a muted video stream (<code>/Videos/{id}/stream</code>)
+                            instead of cycling trickplay images as the card background.
+                        </div>
+                        <label class="checkboxContainer" style="display: flex; align-items: center; gap: 0.5em;">
+                            <input type="checkbox" id="thumbnailScrubber_UseVideoStream" ${useVideoStream ? 'checked' : ''}>
+                            <span class="listItemBodyText">Enabled</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
+                    <div class="listItemContent">
+                        <div class="listItemBodyText" style="margin-bottom: 0.5em;">Fallback After (ms)</div>
+                        <div class="listItemBodyText secondary" style="margin-bottom: 0.75em; font-size: 0.9em;">
+                            When Use Video Stream is on, how long to wait for the direct stream to start playing
+                            before falling back to trickplay images.
+                            Set to 0 to disable the timeout (play errors still fall back to trickplay).
+                        </div>
+                        <input type="number"
+                               id="thumbnailScrubber_FallbackAfterMs"
+                               class="fld emby-input"
+                               min="0"
+                               step="50"
+                               value="${fallbackAfterMs}"
+                               style="width: 120px;">
                     </div>
                 </div>
 
@@ -144,9 +183,11 @@
      */
     function collectConfig() {
         const previewOnHover = document.getElementById('thumbnailScrubber_PreviewOnHover')?.checked === true;
+        const useVideoStream = document.getElementById('thumbnailScrubber_UseVideoStream')?.checked === true;
         const hoverDelayInput = document.getElementById('thumbnailScrubber_HOVER_PREVIEW_TIMEOUT_MS');
         const scrubDelayInput = document.getElementById('thumbnailScrubber_SCRUB_ACTIVATION_DELAY_MS');
         const hoverSpeedInput = document.getElementById('thumbnailScrubber_HOVER_PREVIEW_FRAME_MS');
+        const fallbackAfterInput = document.getElementById('thumbnailScrubber_FallbackAfterMs');
 
         let hoverDelay = hoverDelayInput ? parseInt(hoverDelayInput.value, 10) : 800;
         if (!Number.isFinite(hoverDelay) || hoverDelay < 0) {
@@ -163,8 +204,15 @@
             hoverSpeed = 0;
         }
 
+        let fallbackAfterMs = fallbackAfterInput ? parseInt(fallbackAfterInput.value, 10) : 500;
+        if (!Number.isFinite(fallbackAfterMs) || fallbackAfterMs < 0) {
+            fallbackAfterMs = 500;
+        }
+
         return {
             PreviewOnHover: previewOnHover,
+            UseVideoStream: useVideoStream,
+            FallbackAfterMs: fallbackAfterMs,
             // Delay before previewing on hover
             HOVER_PREVIEW_TIMEOUT_MS: hoverDelay,
             HOVER_TIMEOUT: hoverDelay, // legacy key
@@ -226,9 +274,11 @@
                 }
             });
 
-            modalInstance.dialog.style.maxWidth = '90vw';
-            modalInstance.dialog.style.width = '800px';
-            modalInstance.dialog.style.height = 'auto';
+            if (window.innerWidth >= 900) {
+                modalInstance.dialog.style.maxWidth = '90vw';
+                modalInstance.dialog.style.width = '800px';
+                modalInstance.dialog.style.height = 'auto';
+            }
 
             LOG('Thumbnail Scrubber configuration modal opened');
         } catch (error) {

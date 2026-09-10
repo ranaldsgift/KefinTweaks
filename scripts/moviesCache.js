@@ -16,6 +16,12 @@
     let imdbTop250Movies = null;
     let isInitializing = false;
 
+    /**
+     * Fetches and caches all movies across all libraries.
+     * You should not use this for anything related to UserData
+     * The cache for this is long, and this is intended to simply be an "archive" of all movies across all libraries.
+     * @returns {Promise<Array>} - Array of movie objects
+     */
     async function fetchAndCacheMovies() {
         // IndexedDBCache
         const cacheName = 'movies_library';
@@ -29,8 +35,14 @@
         }
         
         try {
-            LOG('Fetching Movies...');          
+            LOG('Fetching Movies...');
             
+            // We need to refactor this to pull the data in chunks of 100 items at a time in order to backfill the cache
+            // We will populate 100 items at a time into the library cache.
+            // Each group will contain the index of the last item in the group so we can resume from there
+            // When resuming, we should first verify if the previous item based on the same sorting and startindex/limit is still the same
+            // We just check the last item in the indexed db cache and make the same query starting at that index
+            // If it's the same then we can resume from there, if not then we need to start from the beginning
             const allMoviesQuery = `${ApiClient.serverAddress()}/Items?IncludeItemTypes=Movie&Recursive=true&Fields=ProviderIds`;
 
             const movieResult = await apiHelper.getQuery(allMoviesQuery);

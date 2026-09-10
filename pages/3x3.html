@@ -1,0 +1,1069 @@
+<!doctype html>
+<html>
+	<head>
+		<style>
+			body {
+				background-color: #1d1d1d;
+				margin: 0;
+				font-family: "Helvetica", Arial, sans-serif;
+			}
+			#header {
+				text-align: center;
+				background: linear-gradient(135deg, #4ecdc4, #45b7b8);
+				padding: 25px 0;
+				margin: 0;
+				box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+				border-bottom: 3px solid #3a9b9a;
+			}
+
+			#header span {
+				color: #1d1d1d;
+				font-family: "Helvetica", Arial, sans-serif;
+				font-size: 28px;
+				font-weight: bold;
+				text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+				letter-spacing: 1px;
+			}
+			div#quizOuterContainer {
+				max-width: 1800px;
+				margin: 10px auto;
+				height: 100%;
+			}
+			input[type="button"],
+			button {
+				cursor: pointer;
+				transition: all 0.3s ease;
+			}
+			input[type="button"]:hover,
+			button:hover {
+				transform: translateY(-2px);
+				box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+			}
+
+			span#quizTimer {
+				font-family: "Courier New", "Monaco", monospace;
+				font-size: 350%;
+				font-weight: 900;
+				color: #00ff00;
+				text-shadow:
+					0 0 5px #00ff00,
+					0 0 10px #00ff00,
+					2px 2px 4px rgba(0, 0, 0, 0.8);
+				background: #1a1a1a;
+				border: 3px solid #333;
+				border-radius: 8px;
+				padding: 12px 20px;
+				box-shadow:
+					inset 0 2px 4px rgba(0, 0, 0, 0.8),
+					inset 0 -2px 4px rgba(255, 255, 255, 0.1),
+					0 4px 8px rgba(0, 0, 0, 0.6);
+				transition: all 0.3s ease;
+				letter-spacing: 6px;
+				min-width: 240px;
+				text-align: center;
+				display: inline-block;
+				position: relative;
+				overflow: hidden;
+			}
+
+			/* 24-style embossed digital display */
+			span#quizTimer::before {
+				content: "";
+				position: absolute;
+				top: 8px;
+				left: 8px;
+				right: 8px;
+				bottom: 8px;
+				background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 50%, #0a0a0a 100%);
+				border-radius: 4px;
+				z-index: -1;
+				box-shadow:
+					inset 0 1px 2px rgba(255, 255, 255, 0.1),
+					inset 0 -1px 2px rgba(0, 0, 0, 0.8);
+			}
+
+			/* Individual digit embossed areas */
+			span#quizTimer::after {
+				content: "";
+				position: absolute;
+				top: 12px;
+				left: 12px;
+				right: 12px;
+				bottom: 12px;
+				background: linear-gradient(135deg, #333 0%, #222 50%, #111 100%);
+				border-radius: 2px;
+				z-index: -1;
+				box-shadow:
+					inset 0 2px 4px rgba(0, 0, 0, 0.9),
+					inset 0 -1px 2px rgba(255, 255, 255, 0.05);
+			}
+
+			div#quizControlsContainer {
+				text-align: center;
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				gap: 20px;
+			}
+
+			/* Control Buttons Row */
+			#quizControlButtons {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				width: 100%;
+				max-width: 1000px;
+				gap: 20px;
+				padding: 0 20px;
+				margin-bottom: 20px;
+			}
+
+			#quizControlButtons.hide {
+				display: none !important;
+			}
+
+			/* Ensure child elements are visible when parent is shown */
+			#quizControlButtons:not(.hide) #quizInitializeButton,
+			#quizControlButtons:not(.hide) #quizRerollButton,
+			#quizControlButtons:not(.hide) #quizInputContainer {
+				display: block !important;
+			}
+
+			#quizControlButtons:not(.hide) .control-button {
+				display: inline-block !important;
+			}
+
+			#quizControlButtons:not(.hide) #quizInputContainer {
+				display: flex !important;
+			}
+
+			/* Control Button Styling */
+			.control-button {
+				background: linear-gradient(135deg, #4ecdc4, #45b7b8);
+				color: #1d1d1d;
+				border: none;
+				padding: 12px 24px;
+				font-size: 16px;
+				font-weight: bold;
+				border-radius: 8px;
+				cursor: pointer;
+				transition: all 0.3s ease;
+				min-width: 140px;
+				box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+				display: inline-block;
+			}
+
+			.control-button:hover {
+				background: linear-gradient(135deg, #45b7b8, #3a9b9a);
+				transform: translateY(-2px);
+				box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+			}
+
+			.control-button:disabled {
+				background: #666;
+				cursor: not-allowed;
+				opacity: 0.6;
+				transform: none;
+				box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+			}
+
+			/* Start Button Styling */
+			.start-button {
+				background: linear-gradient(135deg, #ff6b6b, #ff5252);
+				color: white;
+				border: none;
+				padding: 16px 32px;
+				font-size: 20px;
+				font-weight: bold;
+				border-radius: 12px;
+				cursor: pointer;
+				transition: all 0.3s ease;
+				box-shadow: 0 6px 12px rgba(255, 107, 107, 0.4);
+			}
+
+			.start-button:hover {
+				background: linear-gradient(135deg, #ff5252, #ff4444);
+				transform: translateY(-3px);
+				box-shadow: 0 8px 16px rgba(255, 107, 107, 0.6);
+			}
+
+			/* Input Container Styling */
+			#quizInputContainer {
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				gap: 8px;
+				flex: 1;
+				max-width: 400px;
+			}
+
+			.input-label {
+				color: #e8e8e8;
+				font-size: 16px;
+				font-weight: 500;
+			}
+
+			#quizGuess {
+				width: 100%;
+				padding: 12px 16px;
+				font-size: 16px;
+				border: 2px solid #4ecdc4;
+				border-radius: 8px;
+				background-color: #2a2a2a;
+				color: #e8e8e8;
+				transition: all 0.3s ease;
+				text-align: center;
+			}
+
+			#quizGuess:focus {
+				outline: none;
+				border-color: #45b7b8;
+				box-shadow: 0 0 15px rgba(78, 205, 196, 0.5);
+				transform: scale(1.02);
+			}
+
+			#quizGuess::placeholder {
+				color: #888;
+				text-align: center;
+			}
+
+			div#quizHeaderContainer {
+				max-width: 800px;
+				margin: 0 auto;
+			}
+			div#quizContentContainer {
+				display: flex;
+				flex-wrap: wrap;
+				width: 63%;
+				margin: 0 auto;
+				height: 58%;
+			}
+			div#quizContentContainer .quizItem {
+				width: 33%;
+				height: 33%;
+				position: relative;
+			}
+
+			.quizItemImage {
+				height: 100%;
+				margin: 5px;
+				background-size: contain;
+				background-position: center center;
+				background-repeat: no-repeat;
+			}
+
+			div#quizHeaderContainer {
+				max-width: 800px;
+				margin: 0 auto;
+				text-align: center;
+			}
+
+			.quiz-rules {
+				margin-top: 20px;
+				text-align: left;
+				background-color: #2a2a2a;
+				padding: 20px;
+				border-radius: 8px;
+				border: 1px solid #444;
+			}
+
+			.quiz-rules h3 {
+				color: #4ecdc4;
+				margin: 0 0 15px 0;
+				font-size: 18px;
+				font-weight: bold;
+			}
+
+			.quiz-rules ul {
+				margin: 0;
+				padding-left: 20px;
+				list-style: none;
+			}
+
+			.quiz-rules li {
+				color: #e8e8e8;
+				margin-bottom: 8px;
+				position: relative;
+				font-size: 14px;
+				line-height: 1.4;
+			}
+
+			.quiz-rules li::before {
+				content: "•";
+				color: #4ecdc4;
+				font-weight: bold;
+				position: absolute;
+				left: -15px;
+			}
+
+			div#quizResultsContainer {
+				max-width: 200px;
+				margin: 15px auto;
+				text-align: center;
+			}
+			div#quizResultsContainer input {
+				margin-bottom: 10px;
+			}
+			.quizItemName {
+				position: absolute;
+				bottom: -1px;
+				left: 0;
+				background: rgba(0, 0, 0, 0.5);
+				padding: 10px;
+				font-size: 120%;
+			}
+			div#quizHiscoresContainer {
+				max-width: 800px;
+				margin: 20px auto;
+				background-color: #2a2a2a;
+				border-radius: 12px;
+				overflow: hidden;
+				box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+			}
+			.hiscoreItem {
+				display: flex;
+				justify-content: center;
+			}
+			.hiscoreItem * {
+				margin: 5px 10px 5px 10px;
+			}
+			.hiscoreUsername {
+				width: 20%;
+			}
+			.hiscoreCorrentCount {
+				width: 5%;
+			}
+			.hiscoreScore {
+				width: 15%;
+			}
+			.hiscoreRank {
+				width: 5%;
+				text-align: right;
+			}
+			.hiscoreHeader {
+				text-align: center;
+				margin: 15px 0 10px 0;
+				font-size: 120%;
+			}
+			.hiscoreItemHeader .hiscoreDate {
+				width: 66px;
+			}
+			.hiscoreItem.hiscoreItemHeader {
+				font-weight: bold;
+			}
+
+			div#quizContainer {
+				display: grid;
+				width: 100%;
+				grid-template-columns: 33% 33% 33%;
+				max-width: 1000px;
+				margin: 0 auto;
+				opacity: 0;
+				transform: translateY(20px);
+				transition: all 0.5s ease;
+			}
+
+			div#quizContainer.active {
+				opacity: 1;
+				transform: translateY(0);
+			}
+
+			.quiz-image-container {
+				position: relative;
+				overflow: hidden;
+				border-radius: 8px;
+				width: 100%;
+				aspect-ratio: 16/9;
+				background-color: #2a2a2a;
+			}
+
+			.quiz-image-container img {
+				width: 100%;
+				height: 100%;
+				object-fit: cover;
+				transition: all 0.3s ease;
+				cursor: pointer;
+			}
+
+			.quiz-image-container:hover img {
+				transform: scale(1.05);
+			}
+
+			.quiz-image-container:hover {
+				box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+			}
+
+			div#quizControlsContainer {
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				margin-top: 20px;
+				gap: 10px;
+			}
+
+			/* Timer container */
+			#quizTimerContainer {
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				gap: 10px;
+				margin: 20px 0;
+			}
+
+			/* Score display */
+			#quizScoreDisplay {
+				font-size: 24px;
+				font-weight: bold;
+				color: #4ecdc4;
+				text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+				opacity: 0;
+				transform: translateY(-10px);
+				transition: all 0.3s ease;
+			}
+
+			#quizScoreDisplay.show {
+				opacity: 1;
+				transform: translateY(0);
+			}
+
+			/* Re-roll display */
+			#quizRerollDisplay {
+				font-size: 16px;
+				font-weight: bold;
+				color: #ff6b6b;
+				text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+				opacity: 0;
+				transform: translateY(-10px);
+				transition: all 0.3s ease;
+			}
+
+			#quizRerollDisplay.show {
+				opacity: 1;
+				transform: translateY(0);
+			}
+
+			/* Points animation */
+			.points-animation {
+				position: absolute;
+				font-size: 32px;
+				font-weight: bold;
+				color: #4ecdc4;
+				text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+				pointer-events: none;
+				z-index: 1000;
+				animation: pointsFloat 2s ease-out forwards;
+			}
+
+			@keyframes pointsFloat {
+				0% {
+					opacity: 1;
+					transform: translateY(0) scale(1);
+				}
+				50% {
+					opacity: 1;
+					transform: translateY(-30px) scale(1.2);
+				}
+				100% {
+					opacity: 0;
+					transform: translateY(-60px) scale(0.8);
+				}
+			}
+
+			/* Reroll animation */
+			.reroll-animation {
+				position: absolute;
+				font-size: 18px;
+				font-weight: bold;
+				color: #ff6b6b;
+				text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+				pointer-events: none;
+				z-index: 1000;
+				animation: rerollFloat 2.5s ease-out forwards;
+				transform: translateX(-50%);
+			}
+
+			@keyframes rerollFloat {
+				0% {
+					opacity: 1;
+					transform: translateX(-50%) translateY(0) scale(1);
+				}
+				30% {
+					opacity: 1;
+					transform: translateX(-50%) translateY(-20px) scale(1.1);
+				}
+				100% {
+					opacity: 0;
+					transform: translateX(-50%) translateY(-40px) scale(0.9);
+				}
+			}
+
+			/* Image replacement animation */
+			.quiz-image-container {
+				position: relative;
+				overflow: hidden;
+				border-radius: 8px;
+			}
+
+			.quiz-image-container img {
+				transition: all 0.5s ease;
+			}
+
+			.quiz-image-container img.fade-out {
+				opacity: 0;
+				transform: scale(0.8);
+			}
+
+			.quiz-image-container img.fade-in {
+				opacity: 1;
+				transform: scale(1);
+			}
+
+			/* Preload images (hidden) */
+			#imagePreloader {
+				position: absolute;
+				top: -9999px;
+				left: -9999px;
+				visibility: hidden;
+			}
+
+			/* Loading animation */
+			#quizLoading {
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				gap: 10px;
+				font-size: 16px;
+				color: #e8e8e8;
+				font-weight: 500;
+			}
+
+			.loading-spinner {
+				display: inline-block;
+				width: 20px;
+				height: 20px;
+				border: 3px solid #f3f3f3;
+				border-top: 3px solid #4ecdc4;
+				border-radius: 50%;
+				animation: spin 1s linear infinite;
+			}
+
+			@keyframes spin {
+				0% {
+					transform: rotate(0deg);
+				}
+				100% {
+					transform: rotate(360deg);
+				}
+			}
+
+			/* Hide class */
+			.hide {
+				display: none !important;
+			}
+
+			/* Timer warning animation */
+			#quizTimer.warning {
+				color: #ff0000 !important;
+				border-color: #ff3333 !important;
+				text-shadow:
+					0 0 8px #ff0000,
+					0 0 16px #ff0000,
+					2px 2px 4px rgba(0, 0, 0, 0.8) !important;
+				box-shadow:
+					inset 0 2px 4px rgba(0, 0, 0, 0.8),
+					inset 0 -2px 4px rgba(255, 0, 0, 0.2),
+					0 4px 8px rgba(0, 0, 0, 0.6),
+					0 0 20px rgba(255, 0, 0, 0.5) !important;
+				animation: digitalPulse 0.5s infinite;
+			}
+
+			#quizTimer.warning::before {
+				background: linear-gradient(135deg, #3a1a1a 0%, #2a0a0a 50%, #1a0000 100%) !important;
+				box-shadow:
+					inset 0 1px 2px rgba(255, 0, 0, 0.2),
+					inset 0 -1px 2px rgba(0, 0, 0, 0.8) !important;
+			}
+
+			#quizTimer.warning::after {
+				background: linear-gradient(135deg, #4a2222 0%, #3a1111 50%, #2a0000 100%) !important;
+				box-shadow:
+					inset 0 2px 4px rgba(0, 0, 0, 0.9),
+					inset 0 -1px 2px rgba(255, 0, 0, 0.1) !important;
+			}
+
+			@keyframes digitalPulse {
+				0% {
+					opacity: 1;
+					transform: scale(1);
+				}
+				50% {
+					opacity: 0.8;
+					transform: scale(1.02);
+				}
+				100% {
+					opacity: 1;
+					transform: scale(1);
+				}
+			}
+
+			/* Modal Styles */
+			.modal {
+				display: none;
+				position: fixed;
+				z-index: 2000;
+				left: 0;
+				top: 0;
+				width: 100%;
+				height: 100%;
+				background-color: rgba(0, 0, 0, 0.8);
+				backdrop-filter: blur(5px);
+			}
+
+			.modal.show {
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				animation: modalFadeIn 0.3s ease;
+			}
+
+			@keyframes modalFadeIn {
+				from {
+					opacity: 0;
+				}
+				to {
+					opacity: 1;
+				}
+			}
+
+			.modal-content {
+				background-color: #2a2a2a;
+				border-radius: 12px;
+				padding: 0;
+				width: 90%;
+				max-width: 500px;
+				box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+				animation: modalSlideIn 0.3s ease;
+			}
+
+			@keyframes modalSlideIn {
+				from {
+					opacity: 0;
+					transform: translateY(-50px) scale(0.9);
+				}
+				to {
+					opacity: 1;
+					transform: translateY(0) scale(1);
+				}
+			}
+
+			.modal-header {
+				background-color: #4ecdc4;
+				color: #1d1d1d;
+				padding: 20px;
+				border-radius: 12px 12px 0 0;
+				text-align: center;
+			}
+
+			.modal-header h2 {
+				margin: 0;
+				font-size: 28px;
+				font-weight: bold;
+			}
+
+			.modal-body {
+				padding: 30px;
+			}
+
+			.score-stats {
+				display: flex;
+				flex-direction: column;
+				gap: 15px;
+				margin-bottom: 20px;
+			}
+
+			.stat-item {
+				display: flex;
+				justify-content: space-between;
+				align-items: center;
+				padding: 10px 0;
+				border-bottom: 1px solid #444;
+			}
+
+			.stat-label {
+				font-size: 18px;
+				color: #e8e8e8;
+			}
+
+			.stat-value {
+				font-size: 24px;
+				font-weight: bold;
+				color: #4ecdc4;
+			}
+
+			.modal-message {
+				text-align: center;
+				color: #e8e8e8;
+				font-size: 16px;
+				line-height: 1.5;
+			}
+
+			/* Guesses list */
+			.guesses-list {
+				margin: 20px 0;
+				max-height: 300px;
+				overflow-y: auto;
+				border: 1px solid #444;
+				border-radius: 8px;
+				background-color: #1a1a1a;
+			}
+
+			.guess-item {
+				display: flex;
+				align-items: center;
+				padding: 8px 12px;
+				border-bottom: 1px solid #333;
+				font-size: 14px;
+			}
+
+			.guess-item:last-child {
+				border-bottom: none;
+			}
+
+			.guess-number {
+				width: 30px;
+				color: #4ecdc4;
+				font-weight: bold;
+			}
+
+			.guess-movie {
+				flex: 1;
+				color: #e8e8e8;
+				margin: 0 10px;
+			}
+
+			.guess-time {
+				width: 60px;
+				color: #ff6b6b;
+				font-weight: bold;
+				text-align: right;
+				margin-right: 10px;
+			}
+
+			.guess-points {
+				width: 50px;
+				color: #4ecdc4;
+				font-weight: bold;
+				text-align: right;
+			}
+
+			.modal-footer {
+				padding: 20px;
+				text-align: center;
+				border-top: 1px solid #444;
+			}
+
+			.modal-button {
+				background-color: #4ecdc4;
+				color: #1d1d1d;
+				border: none;
+				padding: 12px 30px;
+				font-size: 16px;
+				font-weight: bold;
+				border-radius: 6px;
+				cursor: pointer;
+				transition: all 0.3s ease;
+			}
+
+			.modal-button:hover {
+				background-color: #45b7b8;
+				transform: translateY(-2px);
+				box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+			}
+
+			/* Hiscores Table Styles */
+			.hiscores-header {
+				background: linear-gradient(135deg, #4ecdc4, #45b7b8);
+				color: #1d1d1d;
+				padding: 20px;
+				text-align: center;
+			}
+
+			.hiscores-header h3 {
+				margin: 0;
+				font-size: 24px;
+				font-weight: bold;
+			}
+
+			.hiscores-table-container {
+				overflow-x: auto;
+			}
+
+			.hiscores-table {
+				width: 100%;
+				border-collapse: collapse;
+				background-color: #2a2a2a;
+			}
+
+			.hiscores-table thead {
+				background-color: #1a1a1a;
+			}
+
+			.hiscores-table th {
+				padding: 15px 12px;
+				text-align: left;
+				font-weight: bold;
+				color: #e8e8e8;
+				border-bottom: 2px solid #4ecdc4;
+				font-size: 14px;
+				text-transform: uppercase;
+				letter-spacing: 0.5px;
+			}
+
+			.hiscores-table td {
+				padding: 12px;
+				border-bottom: 1px solid #444;
+				color: #e8e8e8;
+				font-size: 14px;
+			}
+
+			.hiscores-table tbody tr:hover {
+				background-color: #333;
+			}
+
+			.hiscores-table tbody tr:last-child td {
+				border-bottom: none;
+			}
+
+			/* Column widths */
+			.rank-col {
+				width: 60px;
+				text-align: center;
+			}
+			.name-col {
+				width: 200px;
+			}
+			.score-col {
+				width: 120px;
+				text-align: right;
+			}
+			.guesses-col {
+				width: 80px;
+				text-align: center;
+			}
+			.date-col {
+				width: 100px;
+				text-align: center;
+			}
+
+			/* Rank styling */
+			.rank-gold {
+				background: linear-gradient(135deg, rgba(255, 215, 0, 0.1), rgba(255, 215, 0, 0.05));
+			}
+
+			.rank-silver {
+				background: linear-gradient(135deg, rgba(192, 192, 192, 0.1), rgba(192, 192, 192, 0.05));
+			}
+
+			.rank-bronze {
+				background: linear-gradient(135deg, rgba(205, 127, 50, 0.1), rgba(205, 127, 50, 0.05));
+			}
+
+			.rank-gold .rank-cell {
+				color: #ffd700;
+				font-weight: bold;
+				font-size: 16px;
+			}
+
+			.rank-silver .rank-cell {
+				color: #c0c0c0;
+				font-weight: bold;
+				font-size: 16px;
+			}
+
+			.rank-bronze .rank-cell {
+				color: #cd7f32;
+				font-weight: bold;
+				font-size: 16px;
+			}
+
+			.name-cell {
+				font-weight: 500;
+			}
+
+			.score-cell {
+				color: #4ecdc4;
+				font-weight: bold;
+				font-size: 16px;
+			}
+
+			.guesses-cell {
+				color: #ff6b6b;
+				font-weight: bold;
+			}
+
+			.date-cell {
+				color: #888;
+				font-size: 12px;
+			}
+		</style>
+		<script>
+			(function () {
+				function getRoot() {
+					var raw =
+						(window.KefinTweaksConfig && window.KefinTweaksConfig.kefinTweaksRoot) ||
+						(window.parent &&
+							window.parent !== window &&
+							window.parent.KefinTweaksConfig &&
+							window.parent.KefinTweaksConfig.kefinTweaksRoot) ||
+						"";
+					if (!raw) {
+						try {
+							var href = window.location.href;
+							var idx = href.lastIndexOf("/pages/");
+							if (idx !== -1) return href.slice(0, idx + 1);
+						} catch (e) {
+							/* ignore */
+						}
+						return "";
+					}
+					return raw.endsWith("/") ? raw : raw + "/";
+				}
+
+				window.__quizRoot = getRoot();
+			})();
+		</script>
+	</head>
+	<body>
+		<div id="header">
+			<span>Quiz Game</span>
+		</div>
+		<div id="quizOuterContainer">
+			<div id="quizHeaderContainer">
+				<div class="quiz-rules">
+					<h3>Rules:</h3>
+					<ul>
+						<li>60 seconds to guess as many movies as possible</li>
+						<li>9 possible movies to guess at any one time</li>
+						<li>3 re-rolls total to roll 9 new images (careful!)</li>
+						<li>Unlimited guesses</li>
+					</ul>
+				</div>
+			</div>
+			<div id="quizControlsContainer">
+				<span class="hide" id="quizLoading"> <span class="loading-spinner"></span> Loading... </span>
+
+				<!-- Timer Display -->
+				<div id="quizTimerContainer" class="hide">
+					<span id="quizTimer">01:00</span>
+					<div id="quizScoreDisplay">Score: 0</div>
+					<div id="quizRerollDisplay" class="hide">Re-rolls: 3/3</div>
+				</div>
+
+				<!-- Control Buttons Row -->
+				<div id="quizControlButtons" class="hide">
+					<button
+						id="quizInitializeButton"
+						type="button"
+						name="initializeQuizButton"
+						class="emby-button control-button"
+						value="Reset Quiz"
+					>
+						Reset Quiz
+					</button>
+					<div id="quizInputContainer">
+						<span class="input-label">Enter your guess:</span>
+						<input id="quizGuess" type="text" name="txtQuizGuessInput" placeholder="Type movie name..." />
+					</div>
+					<button
+						id="quizRerollButton"
+						type="button"
+						name="rerollQuizButton"
+						class="emby-button control-button"
+						value="Re-roll (-200 pts)"
+					>
+						Re-roll (-200 pts)
+					</button>
+				</div>
+
+				<!-- Start Button (shown initially) -->
+				<button
+					id="quizStartButton"
+					type="button"
+					name="startQuizButton"
+					class="emby-button start-button"
+					style="display: none"
+					value="Start Quiz"
+				>
+					Start Quiz
+				</button>
+			</div>
+			<div id="quizContainer" class="hide"></div>
+			<div id="quizResultsContainer" class="hide">
+				<span>Enter a name to submit your score</span><br /><br />
+				<span>Name:</span>
+				<input type="text" name="quizName" />
+				<span>Score:</span>
+				<input type="number" name="quizScore" disabled />
+				<input type="hidden" name="quizScoreValue" />
+				<input type="button" name="submitQuizScore" value="Submit Score" />
+			</div>
+		</div>
+		<!-- Hidden image preloader -->
+		<div id="imagePreloader"></div>
+
+		<!-- Score Modal -->
+		<div id="scoreModal" class="modal">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h2>Quiz Complete!</h2>
+				</div>
+				<div class="modal-body">
+					<div class="score-stats">
+						<div class="stat-item">
+							<span class="stat-label">Final Score:</span>
+							<span class="stat-value" id="modalFinalScore">0</span>
+						</div>
+						<div class="stat-item">
+							<span class="stat-label">Correct Guesses:</span>
+							<span class="stat-value" id="modalCorrectGuesses">0</span>
+						</div>
+					</div>
+					<div class="guesses-list" id="modalGuessesList">
+						<!-- Correct guesses will be populated here -->
+					</div>
+					<div class="modal-message" id="modalMessage">Great job! Your score has been submitted to the leaderboard.</div>
+				</div>
+				<div class="modal-footer">
+					<button id="modalCloseButton" class="modal-button">Close</button>
+				</div>
+			</div>
+		</div>
+		<script>
+			(function () {
+				var root = window.__quizRoot || "";
+				var loadingEl = document.getElementById("quizLoading");
+				if (!root) {
+					console.error("[Quiz] kefinTweaksRoot is not available. Open this page from Jellyfin with KefinTweaks configured.");
+					if (loadingEl) {
+						loadingEl.classList.remove("hide");
+						loadingEl.textContent =
+							"kefinTweaksRoot is not available. Open this page from Jellyfin with KefinTweaks configured.";
+					}
+					return;
+				}
+				if (document.getElementById("kefin-3x3-js")) return;
+				var s = document.createElement("script");
+				s.id = "kefin-3x3-js";
+				s.src = root + "pages/quiz.js";
+				s.onerror = function () {
+					console.error("[Quiz] Failed to load quiz.js from " + root);
+					if (loadingEl) {
+						loadingEl.classList.remove("hide");
+						loadingEl.textContent = "Failed to load quiz.js from " + root;
+					}
+				};
+				document.body.appendChild(s);
+			})();
+		</script>
+	</body>
+</html>

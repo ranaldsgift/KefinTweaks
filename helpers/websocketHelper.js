@@ -10,30 +10,28 @@
     
     // Track initialization state
     let isInitialized = false;
-    let retries = 0;
-    const maxRetries = 10;
+    let pollingIntervalId = null;
+    
+    const POLL_INTERVAL_MS = 1500;
     
     /**
-     * Initialize WebSocket monitoring by hooking into ApiClient's WebSocket
+     * Returns the ApiClient WebSocket if available (e.g. after user has logged in).
+     */
+    function getSocket() {
+        if (!window.ApiClient) return null;
+        return window.ApiClient.webSocket || window.ApiClient._webSocket || null;
+    }
+    
+    /**
+     * Initialize WebSocket monitoring by hooking into ApiClient's WebSocket.
+     * Attempts once; returns true if hooked, false if socket not yet available.
      */
     function initialize() {
+        if (isInitialized) return true;
+        
         try {
-            // Grab the actual socket
-            const socket = (window.ApiClient && (window.ApiClient.webSocket || window.ApiClient._webSocket)) || null;
-            
-            if (!socket) {
-                if (retries >= maxRetries) {
-                    ERR('Max retries reached, giving up on WebSocket initialization');
-                    return false;
-                }
-                retries++;
-                setTimeout(() => {
-                    if (!isInitialized) {
-                        initialize();
-                    }
-                }, 1000);
-                return;
-            }
+            const socket = getSocket();
+            if (!socket) return false;
             
             // Store original handler if it exists
             const originalHandler = socket.onmessage;
@@ -79,6 +77,28 @@
     }
     
     /**
+     * Poll until ApiClient WebSocket is available, then initialize once and stop.
+     * Safe to call multiple times; only one polling loop runs.
+     */
+    function startPolling() {
+        if (isInitialized) return;
+        if (pollingIntervalId != null) return; // already polling
+        if (initialize()) return;
+        
+        pollingIntervalId = setInterval(() => {
+            if (isInitialized) {
+                clearInterval(pollingIntervalId);
+                pollingIntervalId = null;
+                return;
+            }
+            if (initialize()) {
+                clearInterval(pollingIntervalId);
+                pollingIntervalId = null;
+            }
+        }, POLL_INTERVAL_MS);
+    }
+    
+    /**
      * Register a callback to listen for a specific WebSocket message type
      * @param {string} messageType - The MessageType to listen for (e.g., 'UserDataChanged', 'PlaybackStopped')
      * @param {Function} callback - Function to call when the message type is received. Receives the parsed message data.
@@ -98,31 +118,44 @@
         if (!listeners[messageType]) {
             listeners[messageType] = [];
         }
+
+        // Avoid duplicate registrations of the same callback
+        if (listeners[messageType].includes(callback)) {
+            LOG(`Listener already registered for message type: ${messageType}`);
+            if (!isInitialized) {
+                startPolling();
+            }
+            return;
+        }
         
         // Add the callback
         listeners[messageType].push(callback);
         LOG(`Registered listener for message type: ${messageType} (${listeners[messageType].length} total listeners)`);
         
-        // Ensure WebSocket is initialized
+        // Ensure we're polling for WebSocket if not yet initialized
         if (!isInitialized) {
-            initialize();
+            startPolling();
         }
+    }
+    
+    /**
+     * Remove a callback registered with listen().
+     * @param {string} messageType
+     * @param {Function} callback
+     */
+    function unlisten(messageType, callback) {
+        if (!listeners[messageType]) return;
+        listeners[messageType] = listeners[messageType].filter((cb) => cb !== callback);
+        LOG(`Unregistered listener for message type: ${messageType} (${listeners[messageType].length} remaining)`);
     }
     
     // Expose the API globally
     window.websocketHelper = {
-        listen: listen
+        listen: listen,
+        unlisten: unlisten
     };
     
-    // Try to initialize immediately
-    if (!initialize()) {
-        // If WebSocket isn't available yet, retry after a short delay
-        // This can happen if the page loads before the WebSocket connection is established
-        setTimeout(() => {
-            if (!isInitialized) {
-                initialize();
-            }
-        }, 1000);
-    }
+    // Start polling until ApiClient WebSocket is available (e.g. after user logs in)
+    startPolling();
 })();
 

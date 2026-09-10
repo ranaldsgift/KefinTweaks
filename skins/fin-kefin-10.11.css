@@ -1,13 +1,16 @@
 .series-episodes-section {
-    order: 2;
+	order: 2;
 }
 .homeSectionsContainer .card[data-type="Folder"] a.cardImageContainer::after {
-    font-size: 2rem;
-    line-height: 2.4rem;
+	font-size: 2rem;
+	line-height: 2.4rem;
 }
 .layout-mobile .homeSectionsContainer .card[data-type="Folder"] a.cardImageContainer::after {
-    top: 0.5rem;
-    left: 0.5rem;
-    font-size: 1.1rem !important;
-    line-height: 1.3rem !important;
+	top: 0.5rem;
+	left: 0.5rem;
+	font-size: 1.1rem !important;
+	line-height: 1.3rem !important;
+}
+.innerCardFooter {
+	--cardFooterGradient: linear-gradient(1deg, rgba(0, 0, 0, 0.8), 40%, transparent) !important;
 }

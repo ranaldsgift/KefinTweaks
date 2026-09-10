@@ -132,7 +132,7 @@
                 method: 'DELETE',
                 headers: {
                     'Accept': 'application/json',
-                    'Authorization': `MediaBrowser Token="${token}"`
+                    'Authorization': window.apiHelper.getAuthHeader()
                 }
             });
             
@@ -266,7 +266,7 @@
             return;
         }
         
-        const activeSessions = activeDevicesContainer.querySelectorAll('.activeSession');
+        const activeSessions = activeDevicesContainer.querySelectorAll('.activeSession, .MuiStack-root > .MuiPaper-root.MuiPaper-elevation.MuiPaper-rounded.MuiPaper-elevation1.MuiCard-root');
         LOG(`Found ${activeSessions.length} active session containers`);
         
         if (activeSessions.length === 0) {

@@ -1,4 +1,8 @@
 /* Hide the title if a logo is present. Use visibility in case skins rely on it for spacing */
-.libraryPage:not(.hide):has(.mainDetailButtons .btnPlaystate[data-type="Movie"], .mainDetailButtons .btnPlaystate[data-type="Series"]):has(.detailLogo:not(.hide)) .nameContainer {
-    visibility: hidden;
+.libraryPage:not(.hide):has(.mainDetailButtons .btnPlaystate[data-type="Movie"], .mainDetailButtons .btnPlaystate[data-type="Series"]):has(
+		.detailLogo:not(.hide)
+	)
+	.nameContainer,
+.libraryPage:not(.hide):has(.mainDetailButtons .btnPlaystate[data-type="Season"]):has(.detailLogo:not(.hide)) .parentName {
+	visibility: hidden;
 }

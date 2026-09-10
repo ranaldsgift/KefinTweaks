@@ -1,25 +1,36 @@
 // Custom Menu Links Script
-// Loads custom menu links from configuration and adds them to the custom menu
-// Uses utils.addCustomMenuLink to add each configured link
+// Loads custom menu links from configuration and adds them via utils.addCustomMenuLink
 // Requires: utils.js module to be loaded before this script
 
 (function() {
     'use strict';
     
-    // Common logging function
     const LOG = (...args) => console.log('[KefinTweaks CustomMenuLinks]', ...args);
     const WARN = (...args) => console.warn('[KefinTweaks CustomMenuLinks]', ...args);
     const ERR = (...args) => console.error('[KefinTweaks CustomMenuLinks]', ...args);
     
     LOG('Script loaded - JS Injector mode');
     
-    // Get custom menu links configuration
     function getCustomMenuLinksConfig() {
         return window.KefinTweaksConfig?.customMenuLinks || [];
     }
+
+    function normalizeTopNavigation(value) {
+        const v = String(value || 'none').toLowerCase().trim();
+        if (v === 'main' || v === 'right') return v;
+        return 'none';
+    }
     
-    // Initialize custom menu links
     async function initializeCustomMenuLinks() {
+        if (!window.KefinTweaksUtils || !window.KefinTweaksUtils.addCustomMenuLink) {
+            ERR('KefinTweaksUtils.addCustomMenuLink not available');
+            return;
+        }
+
+        if (typeof window.KefinTweaksUtils.ensureCustomMenuLinkStyles === 'function') {
+            window.KefinTweaksUtils.ensureCustomMenuLinkStyles();
+        }
+
         const customMenuLinks = getCustomMenuLinksConfig();
         
         if (!Array.isArray(customMenuLinks) || customMenuLinks.length === 0) {
@@ -29,27 +40,32 @@
         
         LOG(`Loading ${customMenuLinks.length} custom menu links`);
         
-        // Check if utils is available
-        if (!window.KefinTweaksUtils || !window.KefinTweaksUtils.addCustomMenuLink) {
-            ERR('KefinTweaksUtils.addCustomMenuLink not available');
-            return;
-        }
-        
-        // Add each custom menu link
-        const addPromises = customMenuLinks.map(async (linkConfig, index) => {
+        // Sequential so drawer insert order matches config order
+        let successCount = 0;
+        for (let index = 0; index < customMenuLinks.length; index++) {
+            const linkConfig = customMenuLinks[index];
             try {
-                // Validate link configuration
-                if (!linkConfig.name || !linkConfig.url) {
-                    WARN(`Custom menu link at index ${index} is missing required properties (name, url)`);
-                    return false;
+                const name = linkConfig?.name;
+                const url = linkConfig?.url != null ? String(linkConfig.url).trim() : '';
+                const action = linkConfig?.action != null ? String(linkConfig.action).trim() : '';
+
+                if (!name || (!url && !action)) {
+                    WARN(`Custom menu link at index ${index} is missing required properties (name, and url or action)`);
+                    continue;
                 }
                 
                 const {
-                    name,
-                    icon = 'link', // Default icon
-                    url,
-                    openInNewTab = false
+                    icon = 'link',
+                    openInNewTab = false,
+                    collapsed = false,
+                    sideMenu = true,
+                    userMenu = false,
+                    isAdminLink = false
                 } = linkConfig;
+
+                const topNavigation = normalizeTopNavigation(linkConfig.topNavigation);
+                const orderNum = Number(linkConfig.order);
+                const order = Number.isFinite(orderNum) ? orderNum : undefined;
                 
                 LOG(`Adding custom menu link: ${name}`);
                 
@@ -57,30 +73,32 @@
                     name,
                     icon,
                     url,
-                    openInNewTab
+                    openInNewTab,
+                    {
+                        collapsed: !!collapsed,
+                        sideMenu: sideMenu !== false,
+                        topNavigation,
+                        userMenu: !!userMenu,
+                        isAdminLink: !!isAdminLink,
+                        action,
+                        order
+                    }
                 );
                 
                 if (success) {
+                    successCount += 1;
                     LOG(`Successfully added custom menu link: ${name}`);
                 } else {
                     WARN(`Failed to add custom menu link: ${name}`);
                 }
-                
-                return success;
             } catch (error) {
                 ERR(`Error adding custom menu link at index ${index}:`, error);
-                return false;
             }
-        });
-        
-        // Wait for all links to be processed
-        const results = await Promise.all(addPromises);
-        const successCount = results.filter(Boolean).length;
+        }
         
         LOG(`Custom menu links initialization complete: ${successCount}/${customMenuLinks.length} links added successfully`);
     }
     
-    // Wait for utils to be available and then initialize
     function waitForUtilsAndInitialize() {
         if (window.KefinTweaksUtils && window.KefinTweaksUtils.addCustomMenuLink) {
             LOG('Utils available, initializing custom menu links');
@@ -90,7 +108,6 @@
         
         LOG('Waiting for KefinTweaksUtils to be available');
         
-        // Poll for utils availability
         const checkInterval = setInterval(() => {
             if (window.KefinTweaksUtils && window.KefinTweaksUtils.addCustomMenuLink) {
                 clearInterval(checkInterval);
@@ -99,14 +116,12 @@
             }
         }, 100);
         
-        // Fallback timeout after 10 seconds
         setTimeout(() => {
             clearInterval(checkInterval);
             WARN('KefinTweaksUtils not available after 10 seconds');
         }, 10000);
     }
     
-    // Start initialization
     waitForUtilsAndInitialize();
     
     LOG('Custom menu links functionality initialized');

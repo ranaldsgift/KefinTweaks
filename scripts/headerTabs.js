@@ -93,7 +93,7 @@
                     `${serverAddress}/DisplayPreferences/usersettings?userId=${userId}&client=emby`,
                     {
                         headers: {
-                            'X-Emby-Token': accessToken
+                            'Authorization': window.apiHelper.getAuthHeader()
                         }
                     }
                 );
@@ -397,17 +397,27 @@
 
             const view = window.KefinTweaksUtils.getCurrentView();
             if (view === 'home' || view === 'home.html') {
-                // Check for custom tabs
-                
-                const response = await fetch(`${ApiClient._serverAddress}/CustomTabs/Config`, {
-                    method: "GET",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "X-Emby-Token": ApiClient._serverInfo.AccessToken || ApiClient.accessToken(),
-                    },
-                });
-                const customTabs = await response.json();
-                const customTabsCount = customTabs?.length || 0;
+                // Check for custom tabs (plugin may be missing / return empty body)
+                let customTabs = [];
+                try {
+                    const response = await fetch(`${ApiClient._serverAddress}/CustomTabs/Config`, {
+                        method: "GET",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Authorization": window.apiHelper.getAuthHeader(),
+                        },
+                    });
+                    if (response.ok) {
+                        const text = await response.text();
+                        if (text && text.trim()) {
+                            const parsed = JSON.parse(text);
+                            customTabs = Array.isArray(parsed) ? parsed : [];
+                        }
+                    }
+                } catch (e) {
+                    WARN('CustomTabs/Config unavailable, skipping custom tab listeners:', e?.message || e);
+                }
+                const customTabsCount = customTabs.length;
                 totalButtons += customTabsCount;
 
                 if (totalButtons > buttons.length && customTabsCount > 0) {

@@ -25,6 +25,12 @@
 
     function getMajorServerVersion(version) {
         const versionParts = version.split('.');
+
+        if (versionParts[0] !== '10') {
+            const majorVersion = parseInt(versionParts[0], 10);
+            return majorVersion;
+        }
+
         if (versionParts.length >= 2) {
             const majorVersion = parseInt(versionParts[1], 10);
             if (!isNaN(majorVersion)) {
@@ -90,12 +96,15 @@
         
         // New structure: array of objects with majorServerVersions and urls
         if (Array.isArray(skin.url) && skin.url.length > 0 && typeof skin.url[0] === 'object' && skin.url[0].majorServerVersions) {
-            // Find all URL objects that match the current server version
+            // Find all URL objects that match the current server version.
+            // majorServerVersions including 12 means any major version >= 12.
             const matchingUrlObjects = skin.url.filter(urlObj => {
                 if (!urlObj.majorServerVersions || !Array.isArray(urlObj.majorServerVersions)) {
                     return false;
                 }
-                return currentMajorVersion !== null && urlObj.majorServerVersions.includes(currentMajorVersion);
+                if (currentMajorVersion === null) return false;
+                if (urlObj.majorServerVersions.includes(currentMajorVersion)) return true;
+                return urlObj.majorServerVersions.includes(12) && currentMajorVersion >= 12;
             });
             
             if (matchingUrlObjects.length === 0) {
@@ -145,11 +154,18 @@
         }
         
         return skins.filter(skin => {
+            const matchesMajorVersions = (versions) => {
+                if (!versions || !Array.isArray(versions)) return false;
+                if (versions.includes(currentMajorVersion)) return true;
+                // 12 is a floor: configs that include 12 apply to any major >= 12
+                return versions.includes(12) && currentMajorVersion >= 12;
+            };
+
             // Check if skin has URL configuration
             if (!skin.url) {
                 // Skin with no URL (like Default) - check old majorServerVersions field for backward compatibility
                 if (skin.majorServerVersions && Array.isArray(skin.majorServerVersions)) {
-                    const isSupported = skin.majorServerVersions.includes(currentMajorVersion);
+                    const isSupported = matchesMajorVersions(skin.majorServerVersions);
                     if (!isSupported) {
                         LOG(`Skin '${skin.name}' is not supported for server version ${currentMajorVersion} (supports: ${skin.majorServerVersions.join(', ')})`);
                     }
@@ -162,12 +178,9 @@
             // New structure: check majorServerVersions in URL objects
             if (Array.isArray(skin.url) && skin.url.length > 0 && typeof skin.url[0] === 'object' && skin.url[0].majorServerVersions) {
                 // Check if any URL object supports the current version
-                const hasMatchingVersion = skin.url.some(urlObj => {
-                    if (!urlObj.majorServerVersions || !Array.isArray(urlObj.majorServerVersions)) {
-                        return false;
-                    }
-                    return urlObj.majorServerVersions.includes(currentMajorVersion);
-                });
+                const hasMatchingVersion = skin.url.some(urlObj =>
+                    matchesMajorVersions(urlObj.majorServerVersions)
+                );
                 
                 if (!hasMatchingVersion) {
                     LOG(`Skin '${skin.name}' is not supported for server version ${currentMajorVersion}`);
@@ -177,7 +190,7 @@
             
             // Old structure: check top-level majorServerVersions field (backward compatibility)
             if (skin.majorServerVersions && Array.isArray(skin.majorServerVersions)) {
-                const isSupported = skin.majorServerVersions.includes(currentMajorVersion);
+                const isSupported = matchesMajorVersions(skin.majorServerVersions);
                 if (!isSupported) {
                     LOG(`Skin '${skin.name}' is not supported for server version ${currentMajorVersion} (supports: ${skin.majorServerVersions.join(', ')})`);
                 }
@@ -353,43 +366,23 @@
                 WARN('ApiClient not available, cannot create backup');
                 return false;
             }
-            
-            const server = window.ApiClient._serverAddress;
-            const token = window.ApiClient.accessToken();
-            
-            // Find JavaScript Injector plugin
-            const pluginsResponse = await fetch(`${server}/Plugins`, {
-                headers: { 'X-Emby-Token': token }
-            });
-            
-            if (!pluginsResponse.ok) {
-                WARN(`Failed to get plugins for backup: ${pluginsResponse.statusText}`);
+
+            if (!window.KefinTweaksUtils?.resolvePluginId || !window.KefinTweaksUtils?.getPluginConfiguration) {
+                WARN('KefinTweaksUtils plugin helpers not available, cannot create backup');
                 return false;
             }
             
-            const pluginsData = await pluginsResponse.json();
-            const pluginsList = Array.isArray(pluginsData) ? pluginsData : (pluginsData.Items || []);
-            const plugin = pluginsList.find(p => p.Name === 'JavaScript Injector' || p.Name === 'JS Injector');
-            
-            if (!plugin) {
+            const server = window.ApiClient._serverAddress;
+            const injectorAliases = ['JavaScript Injector', 'JS Injector'];
+
+            const pluginId = await window.KefinTweaksUtils.resolvePluginId(injectorAliases);
+            if (!pluginId) {
                 WARN('JavaScript Injector plugin not found, cannot create backup');
                 return false;
             }
-            
-            const pluginId = plugin.Id;
-            
-            // Get current injector config
+
+            const injectorConfig = await window.KefinTweaksUtils.getPluginConfiguration(injectorAliases);
             const configUrl = `${server}/Plugins/${pluginId}/Configuration`;
-            const configResponse = await fetch(configUrl, {
-                headers: { 'X-Emby-Token': token }
-            });
-            
-            if (!configResponse.ok) {
-                WARN(`Failed to get plugin config for backup: ${configResponse.statusText}`);
-                return false;
-            }
-            
-            const injectorConfig = await configResponse.json();
             
             // Ensure CustomJavaScripts array exists
             if (!injectorConfig.CustomJavaScripts) {
@@ -420,7 +413,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             const saveResponse = await fetch(configUrl, {
                 method: 'POST',
                 headers: {
-                    'X-Emby-Token': token,
+                    'Authorization': window.apiHelper.getAuthHeader(),
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify(injectorConfig)
@@ -618,6 +611,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
     window.KefinTweaksSkinManager = window.KefinTweaksSkinManager || {};
     window.KefinTweaksSkinManager.getSkinSourceInfo = getSkinSourceInfo;
     window.KefinTweaksSkinManager.getAllSkinSources = getAllSkinSources;
+    window.KefinTweaksSkinManager.toggleAppearancePopover = toggleAppearancePopover;
     
     // Load and merge theme configurations
     async function loadThemeConfig() {
@@ -1043,7 +1037,6 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
     
     // Store unregister functions for handlers
     let unregisterDisplayPreferencesHandler = null;
-    let unregisterAnyPageHandler = null;
     
     /**
      * Create and show a tooltip
@@ -1198,15 +1191,35 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
     }
     
     /**
+     * Inject one-off skin manager UI styles.
+     */
+    function ensureSkinManagerStyles() {
+        if (document.getElementById('kefin-skin-manager-styles')) return;
+        const style = document.createElement('style');
+        style.id = 'kefin-skin-manager-styles';
+        style.textContent = `
+#displayPreferencesPage:has(.MuiStack-root) .fldSkin {
+	margin-top: 2em;
+	margin-bottom: -1.8em;
+}
+`;
+        (document.head || document.documentElement).appendChild(style);
+    }
+
+    /**
      * Initialize the skin manager with verification and retry logic
      */
-    function initialize(retryCount = 0) {
+    async function initialize(retryCount = 0) {
         const MAX_RETRIES = 10;
         
         if (!window.KefinTweaksUtils) {
             ERR('KefinTweaksUtils not available - skin manager cannot initialize');
             return;
         }
+
+        ensureSkinManagerStyles();
+
+        await window.KefinTweaksUtils.waitForApiClient();
         
         // Load and merge skin configurations
         loadSkinConfig();
@@ -1242,7 +1255,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
     }
     
     /**
-     * Register the onViewPage handlers
+     * Register the onViewPage handlers and Appearance header control
      */
     function registerHandlers() {
         // Only register if not already registered
@@ -1255,11 +1268,8 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         unregisterDisplayPreferencesHandler = window.KefinTweaksUtils.onViewPage(handleDisplayPreferencesPage, {
             pages: ['mypreferencesdisplay']
         });
-        
-        // Register for all pages to add the appearance button
-        unregisterAnyPageHandler = window.KefinTweaksUtils.onViewPage(handleAnyPage, {
-            pages: []
-        });
+
+        registerAppearanceMenuLink();
         
         LOG('SkinManager handlers registered');
     }
@@ -1282,72 +1292,36 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             loadSelectedTheme();
         }, 100);
     }
-    
+
     /**
-     * Handle any page to add the appearance button
-     * @param {string} view - The view name
-     * @param {Element} element - The view element
+     * Register Appearance in header-right via custom menu links
      */
-    function handleAnyPage(view, element) {
-        // Skip the display preferences page as it's handled separately
-        if (view === 'mypreferencesdisplay') {
+    async function registerAppearanceMenuLink() {
+        if (!window.KefinTweaksUtils?.addCustomMenuLink) {
+            WARN('addCustomMenuLink not available; Appearance button not registered');
             return;
         }
-        
-        // Wait for the page to be fully loaded
-        setTimeout(() => {
-            addAppearanceButton();
-        }, 100);
-    }
-    
-    /**
-     * Add the appearance button to the header
-     */
-    function addAppearanceButton() {
-        const headerRight = document.querySelector('.headerRight');
-        if (!headerRight) {
-            WARN('Header right section not found');
-            return;
-        }
-        
-        // Check if appearance button already exists
-        if (headerRight.querySelector('.headerAppearanceButton')) {
-            LOG('Appearance button already exists');
-            return;
-        }
-        
-        // Create the appearance button
-        const appearanceButton = document.createElement('button');
-        appearanceButton.type = 'button';
-        appearanceButton.setAttribute('is', 'paper-icon-button-light');
-        appearanceButton.className = 'headerButton headerButtonRight headerAppearanceButton paper-icon-button-light';
-        appearanceButton.title = 'Appearance';
-        
-        // Create the icon span
-        const iconSpan = document.createElement('span');
-        iconSpan.className = 'material-icons palette';
-        iconSpan.setAttribute('aria-hidden', 'true');
-        
-        appearanceButton.appendChild(iconSpan);
-        
-        // Add click event listener
-        appearanceButton.addEventListener('click', toggleAppearancePopover);
-        
-        // Insert before the search button (or at the end if no search button)
-        const searchButton = headerRight.querySelector('.headerSearchButton');
-        if (searchButton) {
-            headerRight.insertBefore(appearanceButton, searchButton);
-        } else {
-            headerRight.appendChild(appearanceButton);
-        }
-        
-        LOG('Appearance button added successfully');
-        
-        // Unregister the handleAnyPage handler since button is now added and persistent
-        if (unregisterAnyPageHandler) {
-            unregisterAnyPageHandler();
-            unregisterAnyPageHandler = null;
-            LOG('Unregistered handleAnyPage handler - button is now persistent');
+
+        window.KefinTweaksSkinManager = window.KefinTweaksSkinManager || {};
+        window.KefinTweaksSkinManager.toggleAppearancePopover = toggleAppearancePopover;
+
+        try {
+            await window.KefinTweaksUtils.addCustomMenuLink(
+                'Appearance',
+                'palette',
+                '',
+                false,
+                {
+                    sideMenu: false,
+                    topNavigation: 'right',
+                    userMenu: false,
+                    action: 'KefinTweaksSkinManager.toggleAppearancePopover',
+                    order: 1
+                }
+            );
+            LOG('Appearance menu link registered (topNavigation: right)');
+        } catch (err) {
+            ERR('Failed to register Appearance menu link:', err);
         }
     }
     
@@ -1355,8 +1329,10 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
      * Toggle the appearance popover
      */
     function toggleAppearancePopover(event) {
-        event.preventDefault();
-        event.stopPropagation();
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
         
         // Remove existing popover if it exists
         const existingPopover = document.querySelector('.kefin-appearance-popover');
@@ -1364,9 +1340,15 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             existingPopover.remove();
             return;
         }
+
+        const anchor = (event && (
+            event.currentTarget
+            || event.target?.closest?.('[data-kefin-custom-menu-top-right], .headerAppearanceButton')
+            || event.target
+        )) || document.querySelector('[data-kefin-custom-menu-top-right], .headerAppearanceButton');
         
         // Create the popover
-        createAppearancePopover(event.target);
+        createAppearancePopover(anchor);
     }
     
     /**
@@ -2186,7 +2168,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         
         if (backdrop && dialogContainer && 
             !dialogContainer.contains(event.target) && 
-            !event.target.closest('.headerAppearanceButton')) {
+            !event.target.closest('.headerAppearanceButton, [data-kefin-custom-menu-top-right]')) {
             
             // Remove backdrop and dialog container
             if (backdrop.parentNode) {
@@ -2216,7 +2198,8 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             return;
         }
         
-        const displayModeField = form.querySelector('.fldDisplayMode');
+        // .fldDisplayMode or #display-settings-layout-description
+        const displayModeField = form.querySelector('.fldDisplayMode') || form.querySelector('#display-settings-layout-description');
         if (!displayModeField) {
             WARN('Display mode field not found');
             return;
@@ -2846,20 +2829,13 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             return;
         }
         
-        // Use requestAnimationFrame to avoid blocking
-        requestAnimationFrame(() => {
+        requestAnimationFrame(async () => {
             removeAllSkinCSS();
             // Unload skin-specific optional includes for the current skin (if switching)
             if (currentSkinName) {
                 unloadOptionalIncludesForSkin(currentSkinName);
             }
-        });
-        
-        // Performance optimization: Load new CSS first, then remove old CSS
-        // This prevents the double-reflow/recalc that causes UI freezing
-        
-        // Step 1: Load the new CSS first (gets cached and starts loading)
-        requestAnimationFrame(async () => {
+
             const cssUrls = await getSkinUrlsForCurrentVersion(skin);
             
             if (cssUrls && cssUrls.length > 0) {
@@ -2873,6 +2849,9 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
 
             // Load optional includes for this skin
             loadOptionalIncludes(skin);
+
+            window.cardBuilder?.invalidateCardRadiusCache?.();
+            requestAnimationFrame(() => window.cardBuilder?.ensureCardRadiusCssVar?.());
         });
     }
     

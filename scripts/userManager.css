@@ -1,0 +1,120 @@
+/* User Manager — template UI on dashboard user pages */
+
+#newUserPage:not([data-user-template="None"]) .folderAccessContainer {
+	display: none !important;
+}
+
+#newUserPage[data-user-template="None"] .um-kefin-save,
+#newUserPage:not([data-user-template]) .um-kefin-save {
+	display: none !important;
+}
+
+#newUserPage:not([data-user-template="None"]) .newUserProfileForm .emby-button.button-submit:not(.um-kefin-save) {
+	display: none !important;
+}
+
+.um-template-field {
+	margin: 1em 0;
+}
+
+.um-template-field-row {
+	display: flex;
+	align-items: flex-end;
+	gap: 0.75em;
+	flex-wrap: wrap;
+}
+
+.um-template-field-row .selectContainer {
+	flex: 1 1 220px;
+	margin: 0;
+}
+
+.um-bulk-root {
+	display: flex;
+	flex-direction: column;
+	gap: 1em;
+	padding: 0.25em 0;
+}
+
+.um-bulk-user-list {
+	max-height: 50vh;
+	overflow: auto;
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 4px;
+	padding: 0.5em;
+}
+
+.um-bulk-user-item {
+	display: flex;
+	align-items: center;
+	gap: 0.75em;
+	padding: 0.45em 0.35em;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.um-bulk-user-item:last-child {
+	border-bottom: none;
+}
+
+.um-bulk-toolbar {
+	display: grid;
+	gap: 0.5em;
+	grid-template-columns: 1fr 1fr;
+	align-items: center;
+}
+
+.um-bulk-status {
+	font-size: 0.9em;
+	opacity: 0.85;
+	min-height: 1.2em;
+}
+
+.um-bulk-fab {
+	margin-left: 0.25em;
+}
+
+.um-config-root .um-template-list {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5em;
+	margin-top: 1em;
+}
+
+.um-config-root .um-template-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.75em;
+	padding: 0.75em 1em;
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 4px;
+	background: rgba(255, 255, 255, 0.02);
+	cursor: pointer;
+}
+
+.um-config-root .um-template-row:hover {
+	background: rgba(255, 255, 255, 0.05);
+}
+
+.um-editor-root .um-section {
+	margin: 1.25em 0;
+	padding-bottom: 1em;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.um-editor-root .um-section-title {
+	margin: 0 0 0.75em;
+	font-size: 1.1em;
+	font-weight: 500;
+}
+
+.um-editor-root .checkboxList {
+	display: flex;
+	flex-direction: column;
+	gap: 0.35em;
+}
+
+.um-bulk-root .selectContainer,
+.um-bulk-toolbar button {
+	margin: 0;
+}

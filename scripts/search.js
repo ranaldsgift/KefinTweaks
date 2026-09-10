@@ -51,28 +51,26 @@
     const MUSIC_TYPES = ['MusicAlbum', 'Audio', 'MusicArtist', 'MusicVideo'];
     const BOOKS_TYPES = ['Book', 'AudioBook'];
     const OTHER_TYPES = ['Playlist', 'Photo', 'PhotoAlbum', 'LiveTvChannel', 'LiveTvProgram', 'TvChannel', 'TvProgram', 'BoxSet'];
+    const SEARCH_CACHE_TTL = 60000;
+    const SEARCH_ITEM_FIELDS = 'PrimaryImageAspectRatio,DateCreated,ProductionYear,RecursiveItemCount,ChildCount,ProviderIds,MediaSourceCount';
 
-    // Cache for search results by search term and type
-    const searchCache = new Map();
+    // Live UI search type for stale-paint guards (`videos` maps to internal `core`)
+    let activeSearchType = 'videos';
 
-    // Function to generate cache key
-    function getCacheKey(searchTerm, searchType) {
-        return `${searchTerm.toLowerCase().trim()}_${searchType}`;
+    function toInternalSearchType(uiOrInternalType) {
+        if (!uiOrInternalType || uiOrInternalType === 'videos') return 'core';
+        return uiOrInternalType;
     }
 
-    // Function to check cache and return cached results if available
-    function getCachedResults(searchTerm, searchType) {
-        const cacheKey = getCacheKey(searchTerm, searchType);
-        const cached = searchCache.get(cacheKey);
-        LOG('Cache check:', { searchTerm, searchType, cacheKey, cached: !!cached });
-        return cached;
+    function getLiveSearchTerm() {
+        return (document.getElementById('searchTextInput')?.value || '').trim();
     }
 
-    // Function to cache results
-    function cacheResults(searchTerm, searchType, results) {
-        const cacheKey = getCacheKey(searchTerm, searchType);
-        searchCache.set(cacheKey, results);
-        LOG('Cached results:', { searchTerm, searchType, cacheKey, resultCount: results.total });
+    /** True when this run's term+type still match what the user has selected. */
+    function isSearchStillWanted(term, searchType) {
+        const liveTerm = getLiveSearchTerm();
+        if (!term || !liveTerm || term !== liveTerm) return false;
+        return toInternalSearchType(searchType) === toInternalSearchType(activeSearchType);
     }
 
     // Function to clear search results except jellyseerr-section
@@ -86,6 +84,136 @@
         }
     }
 
+    function getTypeGroups(searchType) {
+        if (searchType === 'music') return MUSIC_TYPES;
+        if (searchType === 'books') return BOOKS_TYPES;
+        if (searchType === 'all') return [...CORE_TYPES, ...MUSIC_TYPES, ...BOOKS_TYPES, ...OTHER_TYPES];
+        return CORE_TYPES;
+    }
+
+    function postProcessSearchItems(itemType, data) {
+        const items = Array.isArray(data)
+            ? data.slice()
+            : (Array.isArray(data?.Items) ? data.Items.slice() : []);
+        if (!items.length) return items;
+
+        if (itemType === 'MusicArtist') {
+            return items.sort((a, b) => {
+                const aIsFolder = a.IsFolder ? 1 : 0;
+                const bIsFolder = b.IsFolder ? 1 : 0;
+                return bIsFolder - aIsFolder;
+            });
+        }
+
+        return items.sort((a, b) => {
+            const aHasImage = a.ImageTags?.Primary ? 1 : 0;
+            const bHasImage = b.ImageTags?.Primary ? 1 : 0;
+            return bHasImage - aHasImage;
+        });
+    }
+
+    function buildSearchQueryDef(itemType, searchTerm) {
+        const term = searchTerm.trim();
+        if (itemType === 'MusicArtist') {
+            return {
+                path: '/Artists',
+                queryOptions: {
+                    Limit: 100,
+                    SearchTerm: term,
+                    Fields: 'PrimaryImageAspectRatio',
+                    ImageTypeLimit: 1,
+                    EnableTotalRecordCount: false
+                }
+            };
+        }
+        if (itemType === 'Person') {
+            return {
+                path: '/Persons',
+                queryOptions: {
+                    Limit: 100,
+                    SearchTerm: term,
+                    Fields: 'PrimaryImageAspectRatio',
+                    ImageTypeLimit: 1,
+                    EnableTotalRecordCount: false
+                }
+            };
+        }
+        return {
+            queryOptions: {
+                SearchTerm: term,
+                IncludeItemTypes: itemType,
+                Recursive: true,
+                Limit: 100,
+                Fields: SEARCH_ITEM_FIELDS,
+                ImageTypeLimit: 1,
+                EnableTotalRecordCount: false
+            }
+        };
+    }
+
+    async function buildSearchSection(itemType, searchTerm, order) {
+        const apiHelper = window.apiHelper;
+        if (!apiHelper?.getQuery || !apiHelper?.buildQueryFromSection) {
+            throw new Error('apiHelper.getQuery / buildQueryFromSection unavailable');
+        }
+
+        const userId = ApiClient.getCurrentUserId();
+        const serverUrl = ApiClient.serverAddress();
+        const query = buildSearchQueryDef(itemType, searchTerm);
+        const url = apiHelper.buildQueryFromSection(query, userId, serverUrl);
+        if (typeof url !== 'string') {
+            throw new Error(`Invalid search query URL for ${itemType}`);
+        }
+
+        const queryResult = await apiHelper.getQuery(url, {
+            useCache: true,
+            ttl: SEARCH_CACHE_TTL
+        });
+
+        const termKey = searchTerm.toLowerCase().trim().replace(/[^a-z0-9]+/gi, '-').slice(0, 48);
+        const sectionConfig = {
+            id: `search-${itemType}-${termKey}`,
+            name: getTypeDisplayName(itemType),
+            enabled: true,
+            order,
+            queries: [query],
+            ttl: SEARCH_CACHE_TTL,
+            userConfigurable: false
+        };
+
+        let mappedDataPromise = null;
+        const ensureData = () => {
+            if (!mappedDataPromise) {
+                const raw = typeof queryResult.ensureData === 'function'
+                    ? queryResult.ensureData()
+                    : queryResult.dataPromise;
+                mappedDataPromise = Promise.resolve(raw)
+                    .then((data) => postProcessSearchItems(itemType, data))
+                    .catch((err) => {
+                        WARN('search ensureData failed for', itemType, err);
+                        return [];
+                    });
+            }
+            return mappedDataPromise;
+        };
+
+        const result = {
+            data: postProcessSearchItems(itemType, queryResult.data),
+            isStale: queryResult.isStale === true,
+            isStalePromise: queryResult.isStalePromise,
+            ensureData
+        };
+        Object.defineProperty(result, 'dataPromise', {
+            configurable: true,
+            enumerable: true,
+            get() {
+                return ensureData();
+            }
+        });
+
+        return { config: sectionConfig, result };
+    }
+
     // styles (dedupe by id)
     function addCustomStyles() {
         if (document.getElementById('smart-search-styles')) return;
@@ -93,7 +221,6 @@
         const style = document.createElement('style');
         style.id = 'smart-search-styles';
         style.textContent = `
-            .smart-search-wrapper { margin: 20px 0; }
             .smart-search-input { width:100%; padding:8px; border-radius:4px; box-sizing:border-box; }
             .smart-search-buttons { display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; justify-content: center; }
             .smart-search-btn { padding:8px 12px; border:none; border-radius:4px; cursor:pointer; background:#444; color:#fff; }
@@ -107,6 +234,7 @@
                 z-index: 1;
                 right: 0;
                 cursor: pointer;
+                font-size: 2em;
             }
         `;
         document.head.appendChild(style);
@@ -133,147 +261,6 @@
         }
     }
 
-    // build URL helper
-    function buildSearchUrl(searchTerm, itemTypes, additionalParams = {}) {
-        try {
-            const userId = ApiClient.getCurrentUserId();
-            const baseUrl = ApiClient.serverAddress();
-            const params = new URLSearchParams({
-                userId,
-                limit: '100',
-                recursive: 'true',
-                searchTerm: searchTerm.trim(),
-                fields: 'PrimaryImageAspectRatio,CanDelete',
-                imageTypeLimit: '1',
-                enableTotalRecordCount: 'false',
-                ...additionalParams
-            });
-            itemTypes.forEach(t => params.append('includeItemTypes', t));
-            const url = `${baseUrl}/Items?${params.toString()}`;
-            LOG('buildSearchUrl ->', url);
-            return url;
-        } catch (e) {
-            ERR('buildSearchUrl error', e);
-            throw e;
-        }
-    }
-
-    // perform smart search
-    async function performSmartSearch(searchTerm, searchType = 'core') {
-        LOG('performSmartSearch()', { searchTerm, searchType });
-        let results = { groupedItems: {}, total: 0 };
-
-        const searchPage = document.getElementById('searchPage');
-        if (!searchPage) {
-            ERR('searchPage not found');
-            return results;
-        }
-        
-        // Hide search suggestions
-        const searchSuggestions = searchPage.querySelector('.searchSuggestions');
-        if (searchSuggestions) {
-            searchSuggestions.style.display = 'none';
-        }
-
-        const noItemsMessage = searchPage.querySelector('.noItemsMessage.dummy-section');
-        if (!noItemsMessage) {
-            const noItemsMessage = document.createElement('div');
-            noItemsMessage.className = 'noItemsMessage dummy-section';
-            noItemsMessage.style.display = 'none';
-            searchPage.appendChild(noItemsMessage);
-        }
-            
-        // Update URL with search query and type
-        const urlType = searchType === 'core' ? 'videos' : searchType;
-        updateSearchUrl(searchTerm, urlType);
-        
-        // Handle Jellyseerr-only search
-        if (searchType === 'request') {
-            return results;
-        }
-        
-        // Show loading spinner
-        Dashboard.showLoadingMsg();
-        
-        try {
-            const typeGroups = searchType === 'music'
-                ? MUSIC_TYPES
-                : (searchType === 'books' 
-                    ? BOOKS_TYPES 
-                    : (searchType === 'all' ? [...CORE_TYPES, ...MUSIC_TYPES, ...BOOKS_TYPES, ...OTHER_TYPES] : CORE_TYPES));
-
-            const promises = typeGroups.map(type => {
-                let url;
-                const userId = ApiClient.getCurrentUserId();
-                const baseUrl = ApiClient.serverAddress();
-                if (type === 'MusicArtist') {
-                    // Use dedicated Artists endpoint for better results
-                    url = `${baseUrl}/Artists?limit=100&searchTerm=${encodeURIComponent(searchTerm)}&fields=PrimaryImageAspectRatio&fields=CanDelete&imageTypeLimit=1&userId=${userId}&enableTotalRecordCount=false`;
-                } else if (type === 'Person') {
-                    url = `${baseUrl}/Persons?limit=100&searchTerm=${encodeURIComponent(searchTerm)}&fields=PrimaryImageAspectRatio&fields=CanDelete&&imageTypeLimit=1&userId=${userId}&enableTotalRecordCount=false`;
-                } else {
-                    url = buildSearchUrl(searchTerm, [type]);
-                }
-                
-                return ApiClient.fetch({ url, method: 'GET' })
-                    .then(resp => resp.json())
-                    .catch(err => {
-                        WARN('fetch failed for', type, err);
-                        return { Items: [] };
-                    });
-            });
-
-            const start = performance.now();
-            const responses = await Promise.all(promises);
-            const end = performance.now();
-
-            // Group results by type
-            responses.forEach(async (r, idx) => {
-                if (idx < typeGroups.length) {
-                    // Regular Jellyfin results
-                    const type = typeGroups[idx];
-                    if (r && r.Items && r.Items.length > 0) {
-                        // For Artists, use all items (they often don't have primary images)
-                        // For other types, filter to show only those with images
-                        let filteredItems;
-                        if (type === 'MusicArtist') {
-                            // Artists: show all items, they often don't have primary images
-                            // Instead, sort the artists by IsFolder
-                            filteredItems = r.Items.sort((a, b) => {
-                                const aIsFolder = a.IsFolder ? 1 : 0;
-                                const bIsFolder = b.IsFolder ? 1 : 0;
-                                return bIsFolder - aIsFolder;
-                            });
-                        } else {
-                            // Other types: sort so items with images appear first
-                            filteredItems = r.Items.sort((a, b) => {
-                                const aHasImage = a.ImageTags?.Primary ? 1 : 0;
-                                const bHasImage = b.ImageTags?.Primary ? 1 : 0;
-                                return bHasImage - aHasImage; // Items with images first
-                            });
-                        }
-                        
-                        results.groupedItems[type] = filteredItems;
-                        results.total += filteredItems.length;
-                    }
-                }
-            });
-
-            displaySmartResults(results, Math.round(end - start));
-            
-            // Cache the results
-            cacheResults(searchTerm, searchType, results);
-            
-            return results;
-        } catch (e) {
-            ERR('performSmartSearch error', e);
-            return results;
-        } finally {            
-            // Hide loading spinner
-            Dashboard.hideLoadingMsg()
-        }
-    }
-
     function getTypeDisplayName(itemType) {
         const typeMap = {
             'Movie': 'Movies',
@@ -283,12 +270,15 @@
             'MusicAlbum': 'Albums',
             'Audio': 'Songs',
             'MusicArtist': 'Artists',
+            'MusicVideo': 'Music Videos',
             'Playlist': 'Playlists',
             'Book': 'Books',
             'AudioBook': 'Audiobooks',
             'Photo': 'Photos',
             'PhotoAlbum': 'Photo Albums',
             'TvChannel': 'TV Channels',
+            'TvProgram': 'TV Programs',
+            'LiveTvChannel': 'Live TV Channels',
             'LiveTvProgram': 'Live TV',
             'BoxSet': 'Collections'
         };
@@ -314,53 +304,98 @@
         return smartResults;
     }
 
-    function displaySmartResults(results, ms) {
-        const resultsContainer = ensureSmartResultsContainer();
-        const stats = document.getElementById('smart-search-stats');
+    // perform smart search via progressive sections (Request/Jellyseerr stays separate)
+    async function performSmartSearch(searchTerm, searchType = 'core') {
+        LOG('performSmartSearch()', { searchTerm, searchType });
 
-        if (!stats) return;
-
-        resultsContainer.innerHTML = '';
-        
-        // Check if we have any grouped results
-        if (!results.groupedItems || Object.keys(results.groupedItems).length === 0) {
-            resultsContainer.innerHTML = '<p style="color:#999;text-align:center;">No results found</p>';
-            stats.textContent = `Search completed in ${ms}ms - 0 results`;
+        const searchPage = document.getElementById('searchPage');
+        if (!searchPage) {
+            ERR('searchPage not found');
             return;
         }
 
-        // Create sections for each item type that has results
-        const frag = document.createDocumentFragment();
-        let totalShown = 0;
-        
-        // Add hidden dummy section for testing/placeholder
-        const dummySection = document.createElement('div');
-        dummySection.className = 'verticalSection emby-scroller-container';
-        dummySection.style.display = 'none'; // Hidden dummy section
-        dummySection.setAttribute('data-dummy', 'true');
-        
-        const dummyTitle = document.createElement('h2');
-        dummyTitle.className = 'sectionTitle sectionTitle-cards focuscontainer-x padded-left padded-right';
-        dummyTitle.textContent = 'Hidden Dummy Section';
-        dummySection.appendChild(dummyTitle);
-        
-        frag.appendChild(dummySection);
-        
-        // Define the order to display sections
-        const sectionOrder = ['Movie', 'Series', 'Episode', 'Person', 'MusicArtist', 'MusicAlbum', 'Audio', 'Book', 'AudioBook', 'Photo', 'PhotoAlbum', 'BoxSet', 'Playlist', 'TvChannel', 'TvProgram', 'LiveTvChannel', 'LiveTvProgram'];
-        
-        sectionOrder.forEach((itemType) => {
-            if (results.groupedItems[itemType] && results.groupedItems[itemType].length > 0) {
-                const items = results.groupedItems[itemType];
-                const title = getTypeDisplayName(itemType);
-                const section = window.cardBuilder.renderCards(items, title, null);
-                frag.appendChild(section);
-                totalShown += items.length;
-            }
-        });
+        const trimmed = (searchTerm || '').trim();
+        const internalType = toInternalSearchType(searchType);
+        const resultsContainer = ensureSmartResultsContainer();
 
-        resultsContainer.appendChild(frag);
-        stats.textContent = `Search completed in ${ms}ms - ${results.total} results found`;
+        // Hide search suggestions while searching
+        const searchSuggestions = searchPage.querySelector('.searchSuggestions');
+        if (searchSuggestions) {
+            searchSuggestions.style.display = trimmed ? 'none' : 'block';
+        }
+
+        let noItemsMessage = searchPage.querySelector('.noItemsMessage.dummy-section');
+        if (!noItemsMessage) {
+            noItemsMessage = document.createElement('div');
+            noItemsMessage.className = 'noItemsMessage dummy-section';
+            noItemsMessage.style.display = 'none';
+            searchPage.appendChild(noItemsMessage);
+        }
+
+        // Update URL with search query and type
+        const urlType = internalType === 'core' ? 'videos' : internalType;
+        updateSearchUrl(trimmed, urlType);
+
+        // Handle Jellyseerr-only search
+        if (internalType === 'request' || searchType === 'request') {
+            return;
+        }
+
+        if (!trimmed) {
+            resultsContainer.innerHTML = '';
+            return;
+        }
+
+        // Drop previous results as soon as a new search is committed
+        resultsContainer.innerHTML = '';
+
+        if (!window.cardBuilder?.renderProgressiveSections) {
+            ERR('cardBuilder.renderProgressiveSections unavailable');
+            return;
+        }
+
+        if (!isSearchStillWanted(trimmed, internalType)) {
+            LOG('Skipping search; UI already changed', { trimmed, internalType });
+            return;
+        }
+
+        try {
+            const typeGroups = getTypeGroups(internalType);
+            const sectionPromises = typeGroups.map((itemType, index) =>
+                buildSearchSection(itemType, trimmed, index).catch((err) => {
+                    WARN('Failed to build search section for', itemType, err);
+                    return null;
+                })
+            );
+
+            // Resolve section setup (cache lookup / getQuery shell) before paint
+            const sections = await Promise.all(sectionPromises);
+            if (!isSearchStillWanted(trimmed, internalType)) {
+                LOG('Skipping stale search render after fetch', { trimmed, internalType });
+                return;
+            }
+
+            const validSections = sections.filter(Boolean).map((section) => Promise.resolve(section));
+            if (!isSearchStillWanted(trimmed, internalType)) {
+                LOG('Skipping stale search paint', { trimmed, internalType });
+                return;
+            }
+
+            resultsContainer.innerHTML = '';
+            await window.cardBuilder.renderProgressiveSections(resultsContainer, validSections, {
+                showStaleDataBeforeRefresh: true
+            });
+
+            if (!isSearchStillWanted(trimmed, internalType)) {
+                LOG('Search superseded after paint; leaving newer owner in charge', { trimmed, internalType });
+                // Empty clear owns the DOM — remove anything this run may have painted
+                if (!getLiveSearchTerm()) {
+                    resultsContainer.innerHTML = '';
+                }
+            }
+        } catch (e) {
+            ERR('performSmartSearch error', e);
+        }
     }
 
     // main init
@@ -416,7 +451,7 @@
             const btnRow = document.createElement('div');
             btnRow.className = 'smart-search-buttons';
 
-            const smartSearchButtonClass = 'smart-search-btn emby-button raised';
+            const smartSearchButtonClass = 'smart-search-btn emby-button flat';
             const btnAll = document.createElement('button');
             btnAll.id = 'smart-search-all';
             btnAll.className = smartSearchButtonClass;
@@ -525,52 +560,37 @@
         function setSearchType(type) {
             LOG('setSearchType called:', { type, currentSearchType });
             currentSearchType = type;
+            activeSearchType = type;
             updateButtonStates(type);
-            
-            // If there's a search term, check cache first
+
             const searchTerm = smartInput.value.trim();
             LOG('Search term from input:', searchTerm);
-            if (searchTerm) {
-                // Map URL type to internal type
-                const internalType = type === 'videos' ? 'core' : type;
-                LOG('Internal type mapping:', { type, internalType });
-                
-                // For request type, don't use cache and always perform fresh search
-                if (type === 'request') {
-                    LOG('Request type - clearing results and performing fresh Jellyseerr search');
-                    // Clear existing search results except jellyseerr-section
-                    clearSearchResultsExceptJellyseerr();
-                    performSmartSearch(searchTerm, 'request');
-                    return;
-                }
-                
-                // Check if we have cached results for this search term and type
-                const cachedResults = getCachedResults(searchTerm, internalType);
-                if (cachedResults) {
-                    LOG('Using cached results for', searchTerm, internalType);
-                    displaySmartResults(cachedResults, 0); // 0ms since it's cached
-                    
-                    // Update URL with search query and type even for cached results
-                    const urlType = type === 'videos' ? 'videos' : type;
-                    updateSearchUrl(searchTerm, urlType);
-                    return;
-                }
-                
-                // No cache hit, perform new search
-                LOG('No cache hit, performing new search');
-                performSmartSearch(searchTerm, internalType);
+            if (!searchTerm) return;
+
+            const internalType = toInternalSearchType(type);
+            LOG('Internal type mapping:', { type, internalType });
+
+            if (type === 'request') {
+                LOG('Request type - clearing results and performing fresh Jellyseerr search');
+                clearSearchResultsExceptJellyseerr();
+                performSmartSearch(searchTerm, 'request');
+                return;
             }
+
+            performSmartSearch(searchTerm, internalType);
         }
 
         if (!wrapper.dataset.initialized) {
             wrapper.dataset.initialized = 'true';
             let timer = null;
             const doSmartSearchDebounced = () => {
+                if (timer) clearTimeout(timer);
                 const term = (smartInput.value || '').trim();
-                if (!term) { 
+                if (!term) {
+                    timer = null;
                     const resultsContainer = ensureSmartResultsContainer();
-                    resultsContainer.innerHTML='';
-                    Dashboard.hideLoadingMsg();
+                    resultsContainer.innerHTML = '';
+                    updateSearchUrl('', currentSearchType);
 
                     // Show search suggestions
                     const searchSuggestions = document.querySelector('.searchSuggestions');
@@ -578,10 +598,9 @@
                         searchSuggestions.style.display = 'block';
                     }
 
-                    return; 
+                    return;
                 }
-                if (timer) clearTimeout(timer);
-                const internalType = currentSearchType === 'videos' ? 'core' : currentSearchType;
+                const internalType = toInternalSearchType(currentSearchType);
                 timer = setTimeout(() => performSmartSearch(term, internalType), 300);
             };
 
@@ -589,7 +608,8 @@
             smartInput.addEventListener('keydown', (e)=>{ 
                 if(e.key==='Enter'){ 
                     e.preventDefault(); 
-                    const internalType = currentSearchType === 'videos' ? 'core' : currentSearchType;
+                    if (timer) clearTimeout(timer);
+                    const internalType = toInternalSearchType(currentSearchType);
                     performSmartSearch((smartInput.value||'').trim(), internalType); 
                 }
             });
@@ -612,13 +632,14 @@
             
             // Set initial search type and update UI
             currentSearchType = typeFromUrl;
+            activeSearchType = typeFromUrl;
             updateButtonStates(typeFromUrl);
             
             // Handle URL query parameter - populate smart search and trigger search
             if (queryFromUrl) {
                 smartInput.value = queryFromUrl;
                 // Trigger immediate search with the URL query
-                const internalType = typeFromUrl === 'videos' ? 'core' : typeFromUrl;
+                const internalType = toInternalSearchType(typeFromUrl);
                 performSmartSearch(queryFromUrl, internalType);
             }
         }

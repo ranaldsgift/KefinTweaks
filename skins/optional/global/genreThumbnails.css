@@ -1,37 +1,58 @@
 .card[data-type="Genre"] a.cardImageContainer::after {
-  content: attr(aria-label);
-  font-size: 3em;
-  max-width: calc(100% - 1em);
-  white-space: pre-wrap;
-  text-align: center;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-transform: capitalize;
+	content: attr(aria-label);
+	font-size: 3em;
+	max-width: calc(100% - 1em);
+	white-space: pre-wrap;
+	text-align: center;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	text-transform: capitalize;
 }
 
 .layout-mobile .card[data-type="Genre"] a.cardImageContainer::after {
-  font-size: 2em;
+	font-size: 2em;
 }
 
 .card[data-type="Genre"] {
-  --genre-color: hsl(210 20% 25%);
+	--card-hue-step: 0deg;
+	--genre-color: hsl(calc(var(--row-hue) + var(--card-hue-step)) 55% 35%);
 }
 
-.card[data-type="Genre"]:nth-child(10n + 1) { --genre-color: hsl(0   55% 35%); }   /* red */
-.card[data-type="Genre"]:nth-child(10n + 2) { --genre-color: hsl(36  60% 35%); }   /* orange */
-.card[data-type="Genre"]:nth-child(10n + 3) { --genre-color: hsl(72  55% 35%); }   /* yellow-green */
-.card[data-type="Genre"]:nth-child(10n + 4) { --genre-color: hsl(108 50% 35%); }   /* green */
-.card[data-type="Genre"]:nth-child(10n + 5) { --genre-color: hsl(144 45% 35%); }   /* teal */
-.card[data-type="Genre"]:nth-child(10n + 6) { --genre-color: hsl(180 50% 35%); }   /* cyan */
-.card[data-type="Genre"]:nth-child(10n + 7) { --genre-color: hsl(216 55% 35%); }   /* blue */
-.card[data-type="Genre"]:nth-child(10n + 8) { --genre-color: hsl(252 50% 38%); }   /* indigo */
-.card[data-type="Genre"]:nth-child(10n + 9) { --genre-color: hsl(288 55% 38%); }   /* purple */
-.card[data-type="Genre"]:nth-child(10n + 10){ --genre-color: hsl(324 55% 38%); }   /* magenta */
+.card[data-type="Genre"]:nth-child(10n + 1) {
+	--card-hue-step: 0deg;
+}
+.card[data-type="Genre"]:nth-child(10n + 2) {
+	--card-hue-step: 36deg;
+}
+.card[data-type="Genre"]:nth-child(10n + 3) {
+	--card-hue-step: 72deg;
+}
+.card[data-type="Genre"]:nth-child(10n + 4) {
+	--card-hue-step: 108deg;
+}
+.card[data-type="Genre"]:nth-child(10n + 5) {
+	--card-hue-step: 144deg;
+}
+.card[data-type="Genre"]:nth-child(10n + 6) {
+	--card-hue-step: 180deg;
+}
+.card[data-type="Genre"]:nth-child(10n + 7) {
+	--card-hue-step: 216deg;
+}
+.card[data-type="Genre"]:nth-child(10n + 8) {
+	--card-hue-step: 252deg;
+}
+.card[data-type="Genre"]:nth-child(10n + 9) {
+	--card-hue-step: 288deg;
+}
+.card[data-type="Genre"]:nth-child(10n + 10) {
+	--card-hue-step: 324deg;
+}
 
 .card[data-type="Genre"] a.cardImageContainer {
-  background: var(--genre-color) !important;
+	background: var(--genre-color) !important;
 }
 
 .homeSectionsContainer .card[data-type="Genre"] .cardText {
-  visibility: hidden;
+	visibility: hidden;
 }

@@ -12,9 +12,11 @@
 
     // State
     let moviesTopPeople = null;
-    let isInitializing = false;
     let isComplete = false;
-    let isFetchingTopPeople = false;
+    /** @type {Promise<*>|null} Shared so concurrent callers await the same paginated fetch */
+    let fetchPromise = null;
+    /** @type {Promise<void>|null} Shared so concurrent callers await the same build */
+    let initPromise = null;
 
     /**
      * Extracts necessary item data for caching (similar to watchlist format)
@@ -149,121 +151,144 @@
      * Fetches and processes top people data from all movies using pagination
      */
     async function fetchTopPeople() {
-        if (isFetchingTopPeople) return;
-        isFetchingTopPeople = true;
-        
-        try {
-            LOG('Starting paginated fetch of movies for people data processing...');
-            const apiClient = window.ApiClient;
-            const serverUrl = apiClient.serverAddress();
-            const token = apiClient.accessToken();
-            const userId = apiClient.getCurrentUserId();
-            const indexedDBCache = window.IndexedDBCache;
-            
-            let startIndex = 0;
-            const limit = 500;
-            let hasMoreData = true;
-            let peopleMap = null;
-            
-            // Load existing raw people data if available (for resuming)
-            const existingRawData = await indexedDBCache.get('movies_top_people_raw', userId);
-            if (existingRawData && !existingRawData.isComplete) {
-                const moviesProcessed = existingRawData.moviesProcessedCount;
-                if (moviesProcessed > 0) {
-                    startIndex = moviesProcessed;
-                    peopleMap = new Map(existingRawData.peopleData || []);
-                    LOG(`Resuming from existing data: ${moviesProcessed} movies already processed`);
-                }
-            }
-            
-            while (hasMoreData) {
-                const url = `${serverUrl}/Items?IncludeItemTypes=Movie&Recursive=true&Fields=People,UserData&Limit=${limit}&StartIndex=${startIndex}`;
-                
-                LOG(`Fetching movies ${startIndex} to ${startIndex + limit - 1}...`);
-                
-                const data = await window.apiHelper.getQuery(url);
-                const movies = data.Items || [];
-                
-                if (movies.length === 0) {
-                    hasMoreData = false;
-                } else {
-                    peopleMap = processPeopleDataRaw(movies, peopleMap);
-                    startIndex += movies.length;
-                    
-                    // Update global state with partial results for immediate use
-                    const filteredData = filterPeopleData(peopleMap);
-                    if (filteredData) {
-                        moviesTopPeople = filteredData;
+        if (fetchPromise) {
+            return fetchPromise;
+        }
+
+        fetchPromise = (async () => {
+            try {
+                LOG('Starting paginated fetch of movies for people data processing...');
+                const apiClient = window.ApiClient;
+                const serverUrl = apiClient.serverAddress();
+                const userId = apiClient.getCurrentUserId();
+                const indexedDBCache = window.IndexedDBCache;
+
+                let startIndex = 0;
+                const limit = 500;
+                let hasMoreData = true;
+                let peopleMap = null;
+
+                // Load existing raw people data if available (for resuming)
+                const existingRawData = await indexedDBCache.get('movies_top_people_raw', userId);
+                if (existingRawData && !existingRawData.isComplete) {
+                    const moviesProcessed = existingRawData.moviesProcessedCount;
+                    if (moviesProcessed > 0) {
+                        startIndex = moviesProcessed;
+                        peopleMap = new Map(existingRawData.peopleData || []);
+                        LOG(`Resuming from existing data: ${moviesProcessed} movies already processed`);
                     }
-                    
-                    // Checkpoint raw data
-                    const rawDataToCache = {
-                        isComplete: movies.length < limit,
-                        moviesProcessedCount: startIndex,
-                        peopleData: Array.from(peopleMap.entries())
-                    };
-                    await indexedDBCache.set('movies_top_people_raw', rawDataToCache, userId, 7 * 24 * 60 * 60 * 1000);
-                    
-                    if (movies.length < limit) {
+                }
+
+                while (hasMoreData) {
+                    const url = `${serverUrl}/Items?IncludeItemTypes=Movie&Recursive=true&Fields=People,UserData&Limit=${limit}&StartIndex=${startIndex}`;
+
+                    LOG(`Fetching movies ${startIndex} to ${startIndex + limit - 1}...`);
+
+                    const data = await window.apiHelper.getQuery(url);
+                    const movies = (data && data.Items) || [];
+
+                    if (movies.length === 0) {
                         hasMoreData = false;
                         isComplete = true;
+                    } else {
+                        peopleMap = processPeopleDataRaw(movies, peopleMap);
+                        if (!peopleMap) {
+                            throw new Error('processPeopleDataRaw failed');
+                        }
+                        startIndex += movies.length;
+
+                        // Update global state with partial results for immediate use
+                        const filteredData = filterPeopleData(peopleMap);
+                        if (filteredData) {
+                            moviesTopPeople = filteredData;
+                        }
+
+                        // Checkpoint raw data (non-fatal if IndexedDB rejects large payloads)
+                        const rawDataToCache = {
+                            isComplete: movies.length < limit,
+                            moviesProcessedCount: startIndex,
+                            peopleData: Array.from(peopleMap.entries())
+                        };
+                        try {
+                            await indexedDBCache.set('movies_top_people_raw', rawDataToCache, userId, 7 * 24 * 60 * 60 * 1000);
+                        } catch (checkpointErr) {
+                            WARN('Failed to checkpoint raw people data (continuing):', checkpointErr);
+                        }
+
+                        if (movies.length < limit) {
+                            hasMoreData = false;
+                            isComplete = true;
+                        }
                     }
                 }
-            }
-            
-            const finalPeopleData = filterPeopleData(peopleMap);
-            if (finalPeopleData) {
+
+                const finalPeopleData = filterPeopleData(peopleMap) || {
+                    actors: [],
+                    directors: [],
+                    writers: []
+                };
                 finalPeopleData.isComplete = true;
                 moviesTopPeople = finalPeopleData;
-                
-                await indexedDBCache.set('movies_top_people', finalPeopleData, userId, 7 * 24 * 60 * 60 * 1000);
-                await indexedDBCache.clear('movies_top_people_raw', userId);
-                
-                LOG('People cache complete and saved');
+                isComplete = true;
+
+                try {
+                    await indexedDBCache.set('movies_top_people', finalPeopleData, userId, 7 * 24 * 60 * 60 * 1000);
+                    await indexedDBCache.clear('movies_top_people_raw', userId);
+                } catch (saveErr) {
+                    WARN('Failed to persist complete people cache (in-memory still available):', saveErr);
+                }
+
+                LOG(peopleMap ? 'People cache complete and saved' : 'People cache complete (empty library)');
+                return finalPeopleData;
+            } catch (err) {
+                ERR('Failed to fetch top people data:', err);
+                return null;
+            } finally {
+                fetchPromise = null;
             }
-            
-            return finalPeopleData;
-            
-        } catch (err) {
-            ERR('Failed to fetch top people data:', err);
-            return null;
-        } finally {
-            isFetchingTopPeople = false;
-        }
+        })();
+
+        return fetchPromise;
     }
 
     /**
-     * Initializes the people cache in the background
+     * Initializes the people cache (awaits build; concurrent callers share one promise)
      */
     async function initialize() {
-        if (isInitializing) return;
-        
-        // Initialize background fetch
-        isInitializing = true;
-        try {
-        
-            if (moviesTopPeople !== null && isComplete) {
-                return;
-            }
-            
-            const indexedDBCache = window.IndexedDBCache;
-            const userId = window.ApiClient.getCurrentUserId();
-            
-            // Check for valid complete filtered data
-            const validComplete = await indexedDBCache.isCacheValid('movies_top_people', userId);
-            if (validComplete) {
-                const cachedData = await indexedDBCache.get('movies_top_people', userId);
-                if (cachedData && cachedData.isComplete) {
-                    moviesTopPeople = cachedData;
-                    isComplete = true;
-                    LOG('Loaded complete top people data from IndexedDB');
+        if (moviesTopPeople !== null && isComplete) {
+            return;
+        }
+        if (initPromise) {
+            return initPromise;
+        }
+
+        initPromise = (async () => {
+            try {
+                if (moviesTopPeople !== null && isComplete) {
                     return;
                 }
+
+                const indexedDBCache = window.IndexedDBCache;
+                const userId = window.ApiClient.getCurrentUserId();
+
+                // Check for valid complete filtered data
+                const validComplete = await indexedDBCache.isCacheValid('movies_top_people', userId);
+                if (validComplete) {
+                    const cachedData = await indexedDBCache.get('movies_top_people', userId);
+                    if (cachedData && cachedData.isComplete) {
+                        moviesTopPeople = cachedData;
+                        isComplete = true;
+                        LOG('Loaded complete top people data from IndexedDB');
+                        return;
+                    }
+                }
+                await fetchTopPeople();
+            } finally {
+                initPromise = null;
             }
-            fetchTopPeople();
-        } finally {
-            isInitializing = false;
-        }
+        })();
+
+        return initPromise;
     }
 
     async function getTopPeople() {
@@ -283,21 +308,21 @@
         if (!moviesTopPeople) {
             await initialize();
         }
-        return moviesTopPeople.actors;
+        return moviesTopPeople?.actors ?? [];
     }
 
     async function getTopDirectors() {
         if (!moviesTopPeople) {
             await initialize();
         }
-        return moviesTopPeople.directors;
+        return moviesTopPeople?.directors ?? [];
     }
 
     async function getTopWriters() {
         if (!moviesTopPeople) {
             await initialize();
         }
-        return moviesTopPeople.writers;
+        return moviesTopPeople?.writers ?? [];
     }
 
     function isCacheComplete() {

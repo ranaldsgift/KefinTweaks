@@ -21,6 +21,7 @@ window.ModalSystem = (function() {
      * @param {boolean} options.closeOnBackdrop - Whether to close when clicking backdrop (default: true)
      * @param {boolean} options.closeOnEscape - Whether to close on Escape key (default: true)
      * @param {boolean} options.showCloseButton - Whether to show close button in header (default: true if title exists)
+     * @param {boolean} [options.fixedSize] - Use dialog-fixedSize. If undefined, enable when window width < 900.
      * @returns {Object} Modal instance
      */
     function createModal(options = {}) {
@@ -33,7 +34,8 @@ window.ModalSystem = (function() {
             onOpen,
             closeOnBackdrop = true,
             closeOnEscape = true,
-            showCloseButton = true
+            showCloseButton = true,
+            fixedSize
         } = options;
 
         if (!id) {
@@ -42,6 +44,9 @@ window.ModalSystem = (function() {
 
         // Remove existing modal if it exists
         removeModal(id);
+
+        const useFixedSize = fixedSize === true
+            || (fixedSize !== false && typeof window !== 'undefined' && window.innerWidth < 900);
 
         // Create modal elements
         const backdrop = document.createElement('div');
@@ -53,7 +58,7 @@ window.ModalSystem = (function() {
         dialogContainer.setAttribute('data-modal-id', id);
 
         const dialog = document.createElement('div');
-        dialog.className = 'focuscontainer dialog smoothScrollY ui-body-a background-theme-a formDialog centeredDialog opened';
+        dialog.className = `focuscontainer dialog smoothScrollY ui-body-a background-theme-a formDialog ${useFixedSize ? 'dialog-fixedSize' : 'centeredDialog'} opened`;
         dialog.setAttribute('data-history', 'true');
         dialog.setAttribute('data-autofocus', 'true');
         dialog.setAttribute('data-removeonclose', 'true');
@@ -61,7 +66,9 @@ window.ModalSystem = (function() {
         dialog.style.animation = '160ms ease-out 0s 1 normal both running scaleup';
         dialog.style.display = 'flex';
         dialog.style.flexDirection = 'column';
-        dialog.style.maxHeight = '90vh';
+        if (!useFixedSize) {
+            dialog.style.maxHeight = '90vh';
+        }
 
         // Create header if title is provided
         let dialogHeader = null;
@@ -103,7 +110,7 @@ window.ModalSystem = (function() {
 
         // Create scrollable content area
         const dialogContent = document.createElement('div');
-        dialogContent.style.padding = title || footer ? '1.25em 1.5em 0' : '1.25em 1.5em 1.5em';
+        dialogContent.style.padding = '1.25em 1.5em';
         dialogContent.style.overflowY = 'auto';
         dialogContent.style.flex = '1';
         dialogContent.style.minHeight = '0';
@@ -227,7 +234,10 @@ window.ModalSystem = (function() {
         dialogContainer.appendChild(dialog);
 
         // Add to DOM
-        document.body.appendChild(backdrop);
+        // Check if the modal backdrop is already in the DOM
+        if (!document.body.querySelector('.dialogBackdrop')) {
+            document.body.appendChild(backdrop);
+        }
         document.body.appendChild(dialogContainer);
 
         // Create modal instance

@@ -62,8 +62,8 @@
             <div style="max-width: 800px;">
                 <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
                     <div class="listItemContent">
-                        <div class="listItemBodyText" style="margin-bottom: 0.5em;">Enable Jellyseerr</div>
-                        <div class="listItemBodyText secondary" style="margin-bottom: 0.75em; font-size: 0.9em;">Enable Jellyseerr integration for request functionality</div>
+                        <div class="listItemBodyText" style="margin-bottom: 0.5em;">Enable Seerr results from JellyfinEnhanced</div>
+                        <div class="listItemBodyText secondary" style="margin-bottom: 0.75em; font-size: 0.9em;">If you are using Seerr from Jellyfin Enhanced, you can enable this to add an additional search toggle for Requests</div>
                         <label class="checkboxContainer" style="display: flex; align-items: center; gap: 0.5em;">
                             <input type="checkbox" id="search_enableJellyseerr" ${config.enableJellyseerr === true ? 'checked' : ''}>
                             <span class="listItemBodyText">Enabled</span>
@@ -135,9 +135,11 @@
                 }
             });
 
-            modalInstance.dialog.style.maxWidth = '90vw';
-            modalInstance.dialog.style.width = '1400px';
-            modalInstance.dialog.style.height = '90vh';
+            if (window.innerWidth >= 900) {
+                modalInstance.dialog.style.maxWidth = '90vw';
+                modalInstance.dialog.style.width = '1400px';
+                modalInstance.dialog.style.height = '90vh';
+            }
 
             LOG('Search configuration modal opened');
         } catch (error) {

@@ -79,10 +79,102 @@
                 OfficialRatings: filters?.OfficialRatings || [],
                 Years: filters?.Years || []
             };
+        },
+
+        /**
+         * Get watched or in progress movies from Jellyfin API
+         * @returns {Promise<Array>} - Array of movies
+         */
+        getWatchedOrInProgressMovies: async function(options = {}) {
+
+            const { watchedMoviesResult, inProgressMoviesResult } = await Promise.all([this.getWatchedMovies(options), this.getInProgressMovies(options)]);
+
+            if (options.useCache) {
+                const watchedMovies = watchedMoviesResult.data.Items;
+                const inProgressMovies = inProgressMoviesResult.data.Items;
+                let isStale = Promise.all([watchedMoviesResult.isStalePromise, inProgressMoviesResult.isStalePromise]).then(([isWatchedStale, isInProgressStale]) => {
+                    return isStale = isWatchedStale || isInProgressStale ? true : false;
+                });
+
+                let dataPromise = Promise.all([watchedMoviesResult.dataPromise, inProgressMoviesResult.dataPromise]).then(([watchedMoviesData, inProgressMoviesData]) => {
+                    return {
+                        data: {
+                            Items: [...watchedMoviesData.Items, ...inProgressMoviesData.Items]
+                        }
+                    };
+                });
+
+                return {
+                    data: {
+                        Items: [...watchedMovies, ...inProgressMovies]
+                    },
+                    isStalePromise: isStalePromise,
+                    dataPromise: dataPromise
+                };
+            }
+
+            // Otherwise, use the fetched data arrays directly
+            return {
+                Items: [...watchedMovies.Items, ...inProgressMovies.Items]
+            };
+        },
+
+        /**
+         * Get watched movies from Jellyfin API
+         * @param {Object} options - Options
+         * @param {boolean} options.useCache - Whether to use cache (default: false)
+         * @returns {Promise<Array>|Array} - Array of movies
+         */
+        getWatchedMovies: async function(options = {}) {
+            // default TTL is 1 day
+            const { useCache = false, ttl = 24 * 60 * 60 * 1000 } = options;
+
+            const serverUrl = ApiClient.serverAddress();
+            const url = `${serverUrl}/Items?IncludeItemTypes=Movie&Recursive=true&Filters=IsPlayed&Fields=UserData,People,ProviderIds&ImageTypeLimit=1&SortBy=DatePlayed&SortOrder=Descending`;
+            
+            // Use apiHelper.getQuery to get the data
+            if (!window.apiHelper) {
+                ERR('apiHelper is not available');
+                return [];
+            }
+
+            return window.apiHelper.getQuery(url, { useCache: useCache, ttl: ttl });
+        },
+
+        getInProgressMovies: async function(options = {}) {
+            // default TTL is 1 day
+            const { useCache = false, ttl = 24 * 60 * 60 * 1000 } = options;
+
+            const serverUrl = ApiClient.serverAddress();
+            const url = `${serverUrl}/Items?IncludeItemTypes=Movie&Recursive=true&Filters=IsResumable&Fields=UserData,People,ProviderIds&ImageTypeLimit=1&SortBy=DatePlayed&SortOrder=Descending`;
+
+            if (!window.apiHelper) {
+                ERR('apiHelper is not available');
+                return [];
+            }
+
+            return window.apiHelper.getQuery(url, { useCache: useCache, ttl: ttl });
+        },
+
+        getCachedLibraries: function() {
+            return __libraries?.Items ? __libraries.Items : null;
         }
     };
 
+    async function initialize() {
+        ensureApiClient();
+        
+        if (__libraries) {
+            return;
+        }
+        
+        const libraries = await ApiClient.getItems();
+        __libraries = libraries;
+    }
+
     let __libraries = null;
+
+    initialize();
     
     // Expose dataHelper to global window object
     window.dataHelper = dataHelper;

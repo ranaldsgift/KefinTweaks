@@ -19,6 +19,12 @@
 
     const VIDEO_TYPES = ['Movie', 'Episode'];
 
+    /** When true (default), hover preview uses video stream instead of trickplay images. */
+    const USE_VIDEO_STREAM_DEFAULT = true;
+
+    /** Ms to wait for static stream start before fallback (0 = timeout disabled). */
+    const FALLBACK_AFTER_MS_DEFAULT = 500;
+
     /** Ticks are 100-nanosecond units; 10_000 ticks = 1 ms */
     const TICKS_PER_MS = 10_000;
 
@@ -115,7 +121,7 @@
                 box-shadow: 0 2px 12px rgba(0,0,0,0.5);
                 background: #000;
                 background-repeat: no-repeat;
-                border: 1px solid rgba(255, 255, 255, 0.85);
+                border: 3px solid rgba(255, 255, 255, 0.85);
             }
             .kefin-scrubber-timestamp {
                 margin-top: 4px; padding: 2px 8px;
@@ -161,10 +167,61 @@
                 pointer-events: none;
                 z-index: 18;
             }
+            /* Video stream preview: sibling before cardImageContainer, overlays image area */
+            .kefin-hover-preview-sibling {
+                position: absolute;
+                overflow: hidden;
+                pointer-events: none;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            .kefin-hover-preview-sibling .kefin-hover-preview-box {
+                position: relative;
+                left: auto;
+                right: auto;
+                top: auto;
+                transform: none;
+                margin: 0;
+            }
+            .kefin-hover-preview-sibling video.kefin-hover-preview-video {
+                width: 100%;
+                height: 100%;
+                object-fit: contain;
+                pointer-events: none;
+                display: block;
+            }
             .cardImageContainer .kefin-hover-preview-frame {
                 width: 100%;
                 height: 100%;
                 background-repeat: no-repeat;
+            }
+            .cardImageContainer .kefin-hover-preview-box video.kefin-hover-preview-video {
+                width: 100%;
+                height: 100%;
+                object-fit: contain;
+                pointer-events: none;
+                display: block;
+            }
+
+            .cardScalable:has(.kefin-hover-preview-sibling) .cardOverlayContainer,
+            .cardScalable:has(.kefin-hover-preview-frame[style]:not([style=""])) .cardOverlayContainer {
+                background: none !important;
+                pointer-events: none;
+                transition: background 0.3s ease-in-out !important;
+            }
+
+            .cardScalable:has(.kefin-hover-preview-sibling) .cardOverlayButton[data-action="resume"],
+            .cardScalable:has(.kefin-hover-preview-frame[style]:not([style=""])) .cardOverlayButton[data-action="resume"] {
+                display: none !important;
+            }
+
+            .cardScalable:has(.kefin-hover-preview-sibling) .cardOverlayButton[data-action="resume"],
+            .cardScalable:has(.kefin-hover-preview-frame[style]:not([style=""])) .cardOverlayButton[data-action="resume"] {
+                opacity: 0;
+                visibility: hidden;
+                pointer-events: none;
+                transition: opacity 0.3s ease-in-out, visibility 0.3s ease-in-out;
             }
         `;
         document.head.appendChild(style);
@@ -172,7 +229,7 @@
 
     /**
      * Read thumbnail scrubber configuration from global config.
-     * Returns { previewOnHover: boolean, hoverTimeoutMs: number, scrubActivationDelayMs: number, hoverPreviewFrameMs?: number }.
+     * Returns { previewOnHover, hoverTimeoutMs, scrubActivationDelayMs, hoverPreviewFrameMs?, useVideoStream, fallbackAfterMs }.
      */
     function getThumbnailScrubberConfig() {
         const root = (window.KefinTweaksConfig && window.KefinTweaksConfig.thumbnailScrubber) || {};
@@ -195,11 +252,24 @@
             ? root.HOVER_PREVIEW_FRAME_MS * 1
             : null;
 
+        // UseVideoStream defaults to true when unset.
+        const useVideoStream = root.UseVideoStream !== false;
+
+        // Prefer FallbackAfterMs; migrate legacy FallbackAfterSeconds if present.
+        let fallbackAfterMs = FALLBACK_AFTER_MS_DEFAULT;
+        if (Number.isFinite(root.FallbackAfterMs * 1) && root.FallbackAfterMs >= 0) {
+            fallbackAfterMs = root.FallbackAfterMs * 1;
+        } else if (Number.isFinite(root.FallbackAfterSeconds * 1) && root.FallbackAfterSeconds >= 0) {
+            fallbackAfterMs = root.FallbackAfterSeconds * 1000;
+        }
+
         return {
             previewOnHover: previewOnHover ?? HOVER_PREVIEW_DEFAULT_ENABLED,
             hoverTimeoutMs,
             scrubActivationDelayMs,
-            hoverPreviewFrameMs
+            hoverPreviewFrameMs,
+            useVideoStream: useVideoStream ?? USE_VIDEO_STREAM_DEFAULT,
+            fallbackAfterMs
         };
     }
 
@@ -209,6 +279,26 @@
         } catch (e) {
             WARN('Error reading hover preview config', e);
             return HOVER_PREVIEW_DEFAULT_ENABLED;
+        }
+    }
+
+    function isUseVideoStreamEnabled() {
+        try {
+            return !!getThumbnailScrubberConfig().useVideoStream;
+        } catch (e) {
+            WARN('Error reading use video stream config', e);
+            return USE_VIDEO_STREAM_DEFAULT;
+        }
+    }
+
+    function getFallbackAfterMs() {
+        try {
+            const ms = getThumbnailScrubberConfig().fallbackAfterMs;
+            if (!Number.isFinite(ms) || ms <= 0) return 0;
+            return Math.round(ms);
+        } catch (e) {
+            WARN('Error reading fallback after config', e);
+            return FALLBACK_AFTER_MS_DEFAULT;
         }
     }
 
@@ -241,7 +331,73 @@
     }
 
     /**
-     * Format positionTicks as running time (MM:SS or HH:MM:SS).
+     * Get Jellyfin API token for stream URLs. Uses ApiClient when available, else localStorage credentials.
+     */
+    function getJellyfinToken() {
+        if (typeof ApiClient !== 'undefined' && ApiClient.accessToken) {
+            return ApiClient.accessToken() || null;
+        }
+        try {
+            const creds = localStorage.getItem('jellyfin_credentials');
+            if (!creds) return null;
+            const parsed = JSON.parse(creds);
+            const server = parsed.Servers && parsed.Servers[0];
+            return server ? server.AccessToken || null : null;
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * Resolve playable video id for Series/Season (first episode). Returns itemId for Movie/Episode.
+     */
+    async function getFirstEpisodeId(itemId, itemType) {
+        if (itemType !== 'Series' && itemType !== 'Season') return itemId;
+        const token = getJellyfinToken();
+        if (!token) return null;
+        const baseUrl = typeof ApiClient !== 'undefined' && ApiClient.serverAddress
+            ? ApiClient.serverAddress()
+            : window.location.origin;
+        try {
+            let seriesId = itemId;
+            let seasonId = itemId;
+            if (itemType === 'Series') {
+                const seasonsResp = await fetch(`${baseUrl}/Shows/${itemId}/Seasons`, {
+                    headers: {
+                        'Authorization': window.apiHelper.getAuthHeader()
+                    }
+                });
+                if (!seasonsResp.ok) return null;
+                const seasons = await seasonsResp.json();
+                const firstSeason = (seasons.Items || []).find(s => s.IndexNumber === 1) || (seasons.Items || [])[0];
+                if (!firstSeason) return null;
+                seasonId = firstSeason.Id;
+            } else {
+                const itemResp = await fetch(`${baseUrl}/Items/${itemId}`, {
+                    headers: {
+                        'Authorization': window.apiHelper.getAuthHeader()
+                    }
+                });
+                if (!itemResp.ok) return null;
+                const item = await itemResp.json();
+                seriesId = item.SeriesId || item.ParentId || itemId;
+            }
+            const episodesResp = await fetch(`${baseUrl}/Shows/${seriesId}/Episodes?seasonId=${seasonId}`, {
+                headers: {
+                    'Authorization': window.apiHelper.getAuthHeader()
+                }
+            });
+            if (!episodesResp.ok) return null;
+            const episodes = await episodesResp.json();
+            const firstEpisode = (episodes.Items || []).find(e => e.IndexNumber === 1) || (episodes.Items || [])[0];
+            return firstEpisode ? firstEpisode.Id : null;
+        } catch (e) {
+            WARN('getFirstEpisodeId failed', itemId, e);
+            return null;
+        }
+    }
+
+    /**
      * Uses Jellyfin's datetime.getDisplayRunningTime if available.
      */
     function formatRunningTime(positionTicks) {
@@ -692,9 +848,58 @@
         }
     }
 
+    function clearPreviewFallbackTimer(state) {
+        if (!state) return;
+        if (state._previewFallbackTimer) {
+            clearTimeout(state._previewFallbackTimer);
+            state._previewFallbackTimer = null;
+        }
+    }
+
+    async function fallbackVideoPreviewToTrickplay(state, startTimeTicks) {
+        if (!state || !currentCardState || currentCardState !== state) return;
+
+        clearPreviewFallbackTimer(state);
+
+        try {
+            if (state._videoPreviewEl) {
+                try {
+                    state._videoPreviewEl.pause();
+                    state._videoPreviewEl.removeAttribute('src');
+                    state._videoPreviewEl.load();
+                } catch (e) { /* ignore */ }
+                if (state._videoPreviewEl.parentNode) {
+                    state._videoPreviewEl.parentNode.removeChild(state._videoPreviewEl);
+                }
+            }
+        } catch (e) { /* ignore */ }
+        state._videoPreviewEl = null;
+
+        if (state._videoPreviewWrapper && state._videoPreviewWrapper.parentNode) {
+            try {
+                state._videoPreviewWrapper.parentNode.removeChild(state._videoPreviewWrapper);
+            } catch (e) { /* ignore */ }
+        }
+        state._videoPreviewWrapper = null;
+
+        await ensureScrubberDataForHover(state);
+        if (!currentCardState || currentCardState !== state) return;
+        if (!state.scrubberData) {
+            // No trickplay: scrub stays disabled via data-no-trickplay, but video hover can retry next time.
+            state.hoverPreviewRunning = false;
+            return;
+        }
+
+        state.hoverPreviewPositionTicks = startTimeTicks || 0;
+        state.hoverPreviewFrameAccumMs = 0;
+        // hoverPreviewRunning was set before calling startVideoStreamPreview
+        startHoverPreviewLoop();
+    }
+
     function stopHoverPreview() {
         if (!currentCardState) return;
         const state = currentCardState;
+        clearPreviewFallbackTimer(state);
         if (state.hoverPreviewTimer) {
             clearTimeout(state.hoverPreviewTimer);
             state.hoverPreviewTimer = null;
@@ -707,6 +912,22 @@
         if (hoverPreviewIntervalId != null) {
             clearInterval(hoverPreviewIntervalId);
             hoverPreviewIntervalId = null;
+        }
+        if (state._videoPreviewEl) {
+            try {
+                state._videoPreviewEl.pause();
+                state._videoPreviewEl.removeAttribute('src');
+                state._videoPreviewEl.load();
+            } catch (e) { /* ignore */ }
+            state._videoPreviewEl = null;
+        }
+        if (state._videoPreviewWrapper) {
+            try {
+                if (state._videoPreviewWrapper.parentNode) {
+                    state._videoPreviewWrapper.parentNode.removeChild(state._videoPreviewWrapper);
+                }
+            } catch (e) { /* ignore */ }
+            state._videoPreviewWrapper = null;
         }
         if (state.cardImageContainer) {
             const box = state.cardImageContainer.querySelector('.kefin-hover-preview-box');
@@ -725,10 +946,15 @@
 
     function teardown() {
         if (!currentCardState) return;
+        const state = currentCardState;
+        if (state._cardMouseLeaveHandler && state.card) {
+            state.card.removeEventListener('mouseleave', state._cardMouseLeaveHandler);
+            state._cardMouseLeaveHandler = null;
+        }
         clearActivationTimer();
         stopHoverPreview();
-        if (currentCardState.overlay) {
-            const overlay = currentCardState.overlay;
+        if (state.overlay) {
+            const overlay = state.overlay;
             overlay.classList.remove('is-visible', 'is-zone-active', 'is-popover-open');
             if (overlay._progressFill) overlay._progressFill.style.width = '0%';
             overlay._popoverOpen = false;
@@ -739,6 +965,111 @@
             cancelAnimationFrame(rafId);
             rafId = null;
         }
+    }
+
+    /**
+     * When video stream preview is enabled: show live video stream in a sibling div immediately before cardImageContainer.
+     * Starts with static=true; on timeout or play() failure, falls back to trickplay.
+     */
+    async function startVideoStreamPreview(state, videoId, startTimeTicks) {
+        if (!state || !state.cardImageContainer || currentCardState !== state) return;
+        clearPreviewFallbackTimer(state);
+        const token = getJellyfinToken();
+        if (!token) {
+            WARN('startVideoStreamPreview: no API token');
+            return;
+        }
+        const baseUrl = typeof ApiClient !== 'undefined' && ApiClient.serverAddress
+            ? ApiClient.serverAddress()
+            : window.location.origin;
+        const container = state.cardImageContainer;
+        const parent = container.parentNode;
+        if (!parent) return;
+        const rect = container.getBoundingClientRect();
+        const cw = rect.width || 0;
+        const ch = rect.height || 0;
+        if (cw <= 0 || ch <= 0) return;
+        // Fit 16:9 box inside container so video never overflows the card
+        let boxWidth = cw;
+        let boxHeight = Math.round(cw * 9 / 16);
+        if (boxHeight > ch) {
+            boxHeight = ch;
+            boxWidth = Math.round(ch * 16 / 9);
+        }
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'kefin-hover-preview-sibling';
+        const parentRect = parent.getBoundingClientRect();
+        const style = wrapper.style;
+        style.position = 'absolute';
+        style.left = (rect.left - parentRect.left) + 'px';
+        style.top = (rect.top - parentRect.top) + 'px';
+        style.width = rect.width + 'px';
+        style.height = rect.height + 'px';
+        if (getComputedStyle(parent).position === 'static') {
+            parent.style.position = 'relative';
+        }
+
+        const box = document.createElement('div');
+        box.className = 'kefin-hover-preview-box';
+        box.style.width = boxWidth + 'px';
+        box.style.height = boxHeight + 'px';
+        const frame = document.createElement('div');
+        frame.className = 'kefin-hover-preview-frame';
+        box.appendChild(frame);
+        box._frame = frame;
+        wrapper.appendChild(box);
+
+        container.after(wrapper);
+        state._videoPreviewWrapper = wrapper;
+
+        const videoUrl = `${baseUrl}/Videos/${videoId}/stream?static=true&startTimeTicks=${startTimeTicks}&ApiKey=${token}`;
+        const video = document.createElement('video');
+        video.className = 'kefin-hover-preview-video';
+        video.muted = true;
+        video.playsInline = true;
+        video.setAttribute('playsinline', '');
+        video.controls = false;
+        video.src = videoUrl;
+        box.appendChild(video);
+        state._videoPreviewEl = video;
+
+        let fallbackStarted = false;
+        const clearStartupWatch = () => {
+            clearPreviewFallbackTimer(state);
+            video.removeEventListener('playing', onPlaybackStarted);
+            video.removeEventListener('loadeddata', onPlaybackStarted);
+        };
+
+        const onPlaybackStarted = () => {
+            clearStartupWatch();
+        };
+
+        const switchToTrickplay = async (reason) => {
+            if (fallbackStarted) return;
+            if (!currentCardState || currentCardState !== state) return;
+            if (state._videoPreviewEl !== video) return;
+            fallbackStarted = true;
+            clearStartupWatch();
+
+            WARN('Video stream preview ' + reason + ', falling back to trickplay', videoId);
+            await fallbackVideoPreviewToTrickplay(state, startTimeTicks);
+        };
+
+        video.addEventListener('playing', onPlaybackStarted);
+        video.addEventListener('loadeddata', onPlaybackStarted);
+
+        const fallbackAfterMs = getFallbackAfterMs();
+        if (fallbackAfterMs > 0) {
+            state._previewFallbackTimer = setTimeout(() => {
+                state._previewFallbackTimer = null;
+                switchToTrickplay('timed out');
+            }, fallbackAfterMs);
+        }
+
+        video.play().catch(() => {
+            switchToTrickplay('play() failed');
+        });
     }
 
     function startHoverPreviewLoop() {
@@ -860,14 +1191,40 @@
         const state = currentCardState;
         if (state.hoverPreviewRunning || state.hoverPreviewTimer) return;
 
+        // Without trickplay, only video-stream hover is possible.
+        if (!isUseVideoStreamEnabled() && state.overlay && state.overlay.hasAttribute('data-no-trickplay')) {
+            return;
+        }
+
         const timeoutMs = getHoverPreviewTimeoutMs();
         const timeout = timeoutMs < 0 ? 0 : timeoutMs;
 
         state.hoverPreviewTimer = setTimeout(async () => {
             state.hoverPreviewTimer = null;
             if (!currentCardState || currentCardState.card !== state.card) return;
+
+            if (isUseVideoStreamEnabled()) {
+                const token = getJellyfinToken();
+                if (!token) return;
+                let videoId = state.itemId;
+                
+                // Start from card's resume position (data-positionticks) when present
+                let startTimeTicks = 0;
+                const posAttr = state.card && state.card.getAttribute ? state.card.getAttribute('data-positionticks') : null;
+                if (posAttr != null && posAttr !== '' && !Number.isNaN(Number(posAttr))) {
+                    startTimeTicks = Math.floor(Number(posAttr) / 10000);
+                }
+                state.hoverPreviewRunning = true;
+                await startVideoStreamPreview(state, videoId, startTimeTicks);
+                return;
+            }
+
             await ensureScrubberDataForHover(state);
             if (!currentCardState || currentCardState.card !== state.card) return;
+            if (!state.scrubberData) {
+                state.hoverPreviewRunning = false;
+                return;
+            }
             state.hoverPreviewRunning = true;
             state.hoverPreviewLastTs = performance.now();
             // Start from card's data-positionticks when available, otherwise from 0.
@@ -886,9 +1243,14 @@
     function attachCard(ctx) {
         if (!ctx) return;
         const overlay = getOrCreateScrubberOverlay(ctx.cardImageContainer);
-        if (overlay.hasAttribute('data-no-trickplay')) return;
+        const noTrickplay = overlay.hasAttribute('data-no-trickplay');
+        const card = ctx.card;
+        function handleCardMouseLeave() {
+            teardown();
+        }
+        card.addEventListener('mouseleave', handleCardMouseLeave);
         currentCardState = {
-            card: ctx.card,
+            card: card,
             cardImageContainer: ctx.cardImageContainer,
             itemId: ctx.itemId,
             overlay: overlay,
@@ -900,9 +1262,13 @@
             hoverPreviewRunning: false,
             hoverPreviewLastTs: 0,
             hoverPreviewPositionTicks: 0,
-            hoverPreviewFrameAccumMs: 0
+            hoverPreviewFrameAccumMs: 0,
+            _cardMouseLeaveHandler: handleCardMouseLeave
         };
-        overlay.classList.add('is-visible');
+        // Scrub overlay stays hidden when there is no trickplay; video hover still attaches.
+        if (!noTrickplay) {
+            overlay.classList.add('is-visible');
+        }
         if (isHoverPreviewEnabled()) {
             maybeStartHoverPreview();
         }
@@ -986,10 +1352,7 @@
         const overlay = state.overlay;
 
         if (inZone) {
-            // When user actively scrubs, stop passive hover preview
-            if (isHoverPreviewEnabled()) {
-                stopHoverPreview();
-            }
+            // Keep hover preview running while scrubbing; it stops only when the cursor leaves the card
             if (overlay.hasAttribute('data-no-trickplay')) return;
             if (!state.activationTimer) {
                 const delayMs = getScrubActivationDelayMs();
@@ -1075,7 +1438,7 @@
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-Emby-Token': ApiClient.accessToken()
+                        'Authorization': window.apiHelper.getAuthHeader()
                     },
                     body: JSON.stringify({ PlaybackPositionTicks: pop._positionTicks })
                 }).then(r => {

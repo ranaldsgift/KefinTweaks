@@ -32,23 +32,6 @@
     };
 
     /**
-     * Check if current date is within a seasonal period (MM-DD format).
-     * @param {string} start - Start date MM-DD
-     * @param {string} end - End date MM-DD
-     * @returns {boolean}
-     */
-    function isInSeasonalPeriod(start, end) {
-        if (!start || !end) return true;
-        const now = new Date();
-        const currentYear = now.getFullYear();
-        const startDate = new Date(`${start}-${currentYear}`);
-        let endDate = new Date(`${end}-${currentYear}`);
-        if (endDate < startDate) endDate.setFullYear(currentYear + 1);
-        else if (endDate > startDate) endDate.setFullYear(currentYear);
-        return now >= startDate && now <= endDate;
-    }
-
-    /**
      * Flatten section groups into a flat array
      */
     function flattenSectionGroups(groups) {
@@ -60,6 +43,1189 @@
             }
         });
         return flattened;
+    }
+
+    const SECTION_PREF_FIELD_COUNT = 20;
+    const DEFAULT_PINNED_LIST_NAME = 'Pinned';
+    const PINNED_LIST_ID_PREFIX = 'pinned-list-';
+    const PINNED_PARENT_ID_PREFIX = 'pinned-parent-';
+    /** Flex order slot for newly created pinned sections (admins can tune later). */
+    const PINNED_DEFAULT_ORDER = 5;
+
+    function createEmptyHomeScreen() {
+        return {
+            sections: [],
+            pinnedLists: [],
+            pinnedParents: []
+        };
+    }
+
+    function slugifyPinnedName(name) {
+        return String(name || '')
+            .trim()
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '') || 'list';
+    }
+
+    function getPinnedListSectionId(listName) {
+        return `${PINNED_LIST_ID_PREFIX}${slugifyPinnedName(listName)}`;
+    }
+
+    function getPinnedParentSectionId(parentId) {
+        return `${PINNED_PARENT_ID_PREFIX}${parentId}`;
+    }
+
+    function parseSectionPrefString(str) {
+        if (!str || typeof str !== 'string') return null;
+        const parts = str.split(';');
+        while (parts.length < SECTION_PREF_FIELD_COUNT) parts.push('');
+        const id = parts[0];
+        if (!id) return null;
+        const enabledRaw = parts[1];
+        const enabled = enabledRaw === '' ? true : enabledRaw === 'true';
+        const result = { id, enabled };
+        if (parts[2] !== '') {
+            const order = parseInt(parts[2], 10);
+            if (!Number.isNaN(order)) result.order = order;
+        }
+        if (parts[3] !== '') {
+            const ttl = parseInt(parts[3], 10);
+            if (!Number.isNaN(ttl)) result.ttl = ttl;
+        }
+        if (parts[4] !== '') result.cardFormat = parts[4];
+        if (parts[5] !== '') {
+            if (parts[5] === 'true') result.animationEnabled = true;
+            else if (parts[5] === 'false') result.animationEnabled = false;
+        }
+        if (parts[6] === 'true') result.hideName = true;
+        else if (parts[6] === 'false') result.hideName = false;
+        if (parts[7] === 'true') result.hideCardTitles = true;
+        else if (parts[7] === 'false') result.hideCardTitles = false;
+        if (parts[8] !== '') result.cardTitlePosition = parts[8];
+        if (parts[9] !== '') result.borderStyle = parts[9];
+        if (parts[10] !== '') result.spotlightLayout = parts[10];
+        if (parts[11] !== '') result.spotlightSize = parts[11];
+        if (parts[12] !== '') {
+            const tileCount = parseInt(parts[12], 10);
+            if (!Number.isNaN(tileCount)) result.spotlightTileCount = tileCount;
+        }
+        // Field 13: itemsLayout row|grid (legacy true→grid, false/empty→row)
+        if (parts[13] === 'true' || parts[13] === 'grid') result.itemsLayout = 'grid';
+        else if (parts[13] === 'row' || parts[13] === 'false') result.itemsLayout = 'row';
+        if (parts[14] !== '') result.cardTitleCapitalization = parts[14];
+        if (parts[15] !== '') result.cardTitleFontFamily = parts[15];
+        if (parts[16] !== '') result.cardTitleFontSize = parts[16];
+        // Field 17: borderColor CSS color string
+        if (parts[17] !== '') result.borderColor = parts[17];
+        // Field 18: cardTitleColor CSS color string
+        if (parts[18] !== '') result.cardTitleColor = parts[18];
+        // Field 19: useGaplessCards
+        if (parts[19] === 'true') result.useGaplessCards = true;
+        else if (parts[19] === 'false') result.useGaplessCards = false;
+        return result;
+    }
+
+    function normalizeItemsLayout(value) {
+        if (value === true || value === 'true' || value === 'grid') return 'grid';
+        return 'row';
+    }
+
+    function appendBoolPrefField(fields, value, serverValue) {
+        const normalized = value === true;
+        const serverNormalized = serverValue === true;
+        fields.push(normalized === serverNormalized ? '' : (normalized ? 'true' : 'false'));
+    }
+
+    function appendPrefField(fields, value, serverValue) {
+        const normalized = value == null ? '' : String(value);
+        const serverNormalized = serverValue == null ? '' : String(serverValue);
+        fields.push(normalized !== '' && normalized !== serverNormalized ? normalized : '');
+    }
+
+    function isCustomSectionForPref(section) {
+        if (!section) return false;
+        if (section.isCustom === true) return true;
+        if (section.dataset?.customSection === 'true') return true;
+        const type = String(section.type || '').toLowerCase();
+        if (type === 'custom' || type === 'custom-discovery') return true;
+        return String(section.id || section.sectionId || '').startsWith('custom');
+    }
+
+    function isDiscoverySectionForPref(section) {
+        if (!section) return false;
+        if (section.dataset?.discoverySection === 'true') return true;
+        if (section.discoveryEnabled === true || section.discoverySection === true) return true;
+        if (section.discoveryType) return true;
+        const type = String(section.type || '').toLowerCase();
+        return type === 'discovery' || type === 'custom-discovery';
+    }
+
+    /** Home-surface sections persist layout in kefinTweaks.homeScreen; everything else uses sectionState. */
+    function isHomeScreenSection(sectionOrType) {
+        const t = typeof sectionOrType === 'string'
+            ? sectionOrType
+            : (sectionOrType?.type || '');
+        const normalized = String(t).toLowerCase();
+        // Unspecified type defaults to home surface (legacy sections / missing attrs)
+        if (!normalized) return true;
+        return ['home', 'seasonal', 'discovery'].includes(normalized);
+    }
+
+    function createEmptySectionState() {
+        return { sections: [] };
+    }
+
+    function parseKefinTweaksSectionState(customPrefs) {
+        if (!customPrefs) return createEmptySectionState();
+        try {
+            const parsed = typeof window.userHelper?.parseKefinTweaks === 'function'
+                ? window.userHelper.parseKefinTweaks(customPrefs)
+                : (() => {
+                    const raw = customPrefs.kefinTweaks;
+                    if (!raw) return null;
+                    try {
+                        return typeof raw === 'string' ? JSON.parse(raw) : raw;
+                    } catch (e) {
+                        return null;
+                    }
+                })();
+            const ss = parsed?.sectionState;
+            if (!ss || typeof ss !== 'object') return createEmptySectionState();
+            return {
+                sections: Array.isArray(ss.sections) ? ss.sections.filter((s) => typeof s === 'string') : []
+            };
+        } catch (e) {
+            WARN('Failed to parse kefinTweaks sectionState:', e);
+            return createEmptySectionState();
+        }
+    }
+
+    async function saveKefinTweaksSectionState(sectionState, displayPrefs) {
+        try {
+            if (!window.userHelper?.setKefinTweaksFeature) {
+                ERR('userHelper.setKefinTweaksFeature not available');
+                return false;
+            }
+            const ok = await window.userHelper.setKefinTweaksFeature('sectionState', sectionState || createEmptySectionState());
+            if (ok) LOG('kefinTweaks sectionState saved');
+            return ok;
+        } catch (e) {
+            ERR('Error saving kefinTweaks sectionState:', e);
+            return false;
+        }
+    }
+
+    function findPrefStringInSections(sections, sectionId) {
+        const storedId = getStoredSectionPrefId({ id: sectionId });
+        if (!storedId) return null;
+        return (sections || []).find((s) => {
+            const pref = parseSectionPrefString(s);
+            return pref?.id && getPrefDedupeKey(pref) === storedId;
+        }) || null;
+    }
+
+    /**
+     * Pref storage key for a section.
+     * Non-custom discovery sections share one bucket keyed by the ID prefix
+     * before the first hyphen (e.g. genreMovies-123-abc → genreMovies).
+     * Custom discovery and all other sections keep the full ID.
+     */
+    function getStoredSectionPrefId(section) {
+        const id = section?.id || section?.sectionId || '';
+        if (!id) return id;
+        if (isDiscoverySectionForPref(section) && !isCustomSectionForPref(section)) {
+            const hyphen = id.indexOf('-');
+            return hyphen === -1 ? id : id.slice(0, hyphen);
+        }
+        return id;
+    }
+
+    const DISCOVERY_INSTANCE_PREF_PATTERN = /^(.+)-(\d{10,})-([a-zA-Z0-9]+)$/;
+
+    function isDiscoveryInstancePrefId(id) {
+        if (!id || isCustomSectionForPref({ id })) return false;
+        if (String(id).startsWith('pinned-')) return false;
+        if (String(id).startsWith('recently-added-')) return false;
+        if (String(id).startsWith('popular-genres-')) return false;
+        return DISCOVERY_INSTANCE_PREF_PATTERN.test(String(id));
+    }
+
+    function getPrefDedupeKey(prefOrId) {
+        const id = typeof prefOrId === 'string' ? prefOrId : prefOrId?.id;
+        if (!id) return '';
+        if (isDiscoveryInstancePrefId(id)) {
+            return id.slice(0, id.indexOf('-'));
+        }
+        return id;
+    }
+
+    function prefStringRichness(prefString) {
+        if (!prefString) return 0;
+        const parts = String(prefString).split(';');
+        let score = 0;
+        for (let i = 2; i < parts.length; i++) {
+            if (parts[i] !== '') score += 1;
+        }
+        return score;
+    }
+
+    function normalizePrefStringToDedupeKey(prefString) {
+        const pref = parseSectionPrefString(prefString);
+        if (!pref?.id) return prefString;
+        const key = getPrefDedupeKey(pref);
+        if (!key || pref.id === key) return prefString;
+        const parts = prefString.split(';');
+        parts[0] = key;
+        return parts.join(';');
+    }
+
+    function sanitizeHomeScreenSections(homeScreen) {
+        const home = homeScreen || createEmptyHomeScreen();
+        const input = Array.isArray(home.sections) ? home.sections : [];
+        const bestByKey = new Map();
+
+        input.forEach((prefString, index) => {
+            const pref = parseSectionPrefString(prefString);
+            if (!pref?.id) return;
+            const key = getPrefDedupeKey(pref);
+            if (!key) return;
+            const score = prefStringRichness(prefString);
+            const isInstance = isDiscoveryInstancePrefId(pref.id);
+            const existing = bestByKey.get(key);
+            if (!existing) {
+                bestByKey.set(key, { prefString, score, index, isInstance });
+                return;
+            }
+            const better = score > existing.score
+                || (score === existing.score && index > existing.index)
+                || (!isInstance && existing.isInstance);
+            if (better) {
+                bestByKey.set(key, { prefString, score, index, isInstance });
+            }
+        });
+
+        const ordered = [...bestByKey.entries()]
+            .sort((a, b) => a[1].index - b[1].index)
+            .map(([key, entry]) => normalizePrefStringToDedupeKey(entry.prefString));
+
+        const removedCount = input.length - ordered.length;
+        return {
+            homeScreen: {
+                ...home,
+                sections: ordered
+            },
+            removedCount,
+            changed: removedCount > 0
+        };
+    }
+
+    function sectionConfigRichness(section) {
+        if (!section) return 0;
+        let score = 0;
+        if (section.name) score += 1;
+        if (section.queries?.length || section.items?.length) score += 2;
+        if (section.jellyfinId || section.renderMode) score += 1;
+        return score;
+    }
+
+    function deduplicateHomeScreenSections(sections) {
+        if (!Array.isArray(sections)) return [];
+        const result = [];
+        const byId = new Map();
+        sections.forEach((section) => {
+            const id = section?.id;
+            if (!id) return;
+            const existing = byId.get(id);
+            if (!existing) {
+                byId.set(id, section);
+                result.push(section);
+                return;
+            }
+            if (sectionConfigRichness(section) > sectionConfigRichness(existing)) {
+                const idx = result.indexOf(existing);
+                if (idx >= 0) result[idx] = section;
+                byId.set(id, section);
+            }
+        });
+        return result;
+    }
+
+    let sanitizePersistInFlight = false;
+
+    function serializeSectionPref(sectionId, enabled, overrides = {}, serverDefaults = {}) {
+        const fields = [sectionId, enabled === false ? 'false' : 'true'];
+        appendPrefField(fields, overrides.order, serverDefaults.order);
+        appendPrefField(fields, overrides.ttl, serverDefaults.ttl);
+        appendPrefField(fields, overrides.cardFormat, serverDefaults.cardFormat);
+        let anim = overrides.animationEnabled;
+        if (anim === undefined && overrides.panAnimation !== undefined) anim = overrides.panAnimation;
+        const serverAnim = serverDefaults.animationEnabled ?? serverDefaults.panAnimation;
+        appendBoolPrefField(fields, anim, serverAnim);
+        appendBoolPrefField(fields, overrides.hideName, serverDefaults.hideName);
+        appendBoolPrefField(fields, overrides.hideCardTitles, serverDefaults.hideCardTitles);
+        appendPrefField(fields, overrides.cardTitlePosition, serverDefaults.cardTitlePosition);
+        appendPrefField(fields, overrides.borderStyle, serverDefaults.borderStyle);
+        appendPrefField(fields, overrides.spotlightLayout, serverDefaults.spotlightLayout);
+        appendPrefField(fields, overrides.spotlightSize, serverDefaults.spotlightSize);
+        appendPrefField(fields, overrides.spotlightTileCount, serverDefaults.spotlightTileCount);
+        {
+            const layout = normalizeItemsLayout(
+                overrides.itemsLayout ?? (overrides.gridExpanded === true ? 'grid' : 'row')
+            );
+            const serverLayout = normalizeItemsLayout(
+                serverDefaults.itemsLayout ?? (serverDefaults.gridExpanded === true ? 'grid' : 'row')
+            );
+            // Empty = default row; persist 'grid' as 'true' for legacy readers
+            if (layout === serverLayout || layout === 'row') fields.push('');
+            else if (layout === 'grid') fields.push('true');
+            else fields.push('');
+        }
+        appendPrefField(fields, overrides.cardTitleCapitalization, serverDefaults.cardTitleCapitalization);
+        appendPrefField(fields, overrides.cardTitleFontFamily, serverDefaults.cardTitleFontFamily);
+        appendPrefField(fields, overrides.cardTitleFontSize, serverDefaults.cardTitleFontSize);
+        appendPrefField(fields, overrides.borderColor, serverDefaults.borderColor);
+        appendPrefField(fields, overrides.cardTitleColor, serverDefaults.cardTitleColor);
+        appendBoolPrefField(fields, overrides.useGaplessCards, serverDefaults.useGaplessCards);
+        return fields.join(';');
+    }
+
+    function parsePinnedListString(str) {
+        if (!str || typeof str !== 'string') return null;
+        const parts = str.split(';');
+        const name = parts[0];
+        if (!name) return null;
+        return { name, ids: parts.slice(1).filter(Boolean) };
+    }
+
+    function serializePinnedList(name, ids) {
+        const uniqueIds = [...new Set((ids || []).filter(Boolean))];
+        return [name, ...uniqueIds].join(';');
+    }
+
+    function parsePinnedParentString(str) {
+        if (!str || typeof str !== 'string') return null;
+        const parts = str.split(';');
+        const name = parts[0];
+        const parentId = parts[1];
+        const parentType = parts[2] || null;
+        if (!name || !parentId) return null;
+        return { name, parentId, parentType };
+    }
+
+    function serializePinnedParent(name, parentId, parentType) {
+        if (parentType) return `${name};${parentId};${parentType}`;
+        return `${name};${parentId}`;
+    }
+
+    function buildPinnedParentQueryOptions(parent) {
+        const parentId = parent?.parentId;
+        const parentType = parent?.parentType;
+        const base = {
+            Limit: 16,
+            SortBy: 'Random'
+        };
+        if (!parentId) return base;
+
+        if (parentType === 'Genre' || parentType === 'MusicGenre') {
+            const opts = { ...base, GenreIds: [parentId], Recursive: true };
+            if (parentType === 'Genre') {
+                opts.IncludeItemTypes = ['Movie', 'Series'];
+            }
+            return opts;
+        }
+        if (parentType === 'Studio') {
+            return {
+                ...base,
+                StudioIds: [parentId],
+                Recursive: true,
+                IncludeItemTypes: ['Movie', 'Series']
+            };
+        }
+        if (parentType === 'Person') {
+            return {
+                ...base,
+                PersonIds: [parentId],
+                Recursive: true,
+                IncludeItemTypes: ['Movie', 'Series']
+            };
+        }
+        if (parentType === 'Tag') {
+            return {
+                ...base,
+                Tags: [parent.name].filter(Boolean),
+                Recursive: true,
+                IncludeItemTypes: ['Movie', 'Series']
+            };
+        }
+        if (parentType === 'Series') {
+            return { ...base, ParentId: parentId, ExcludeItemTypes: ['Season'] };
+        }
+        if (parentType === 'MusicArtist') {
+            return { ...base, ParentId: parentId, ExcludeItemTypes: ['Audio'] };
+        }
+        return { ...base, ParentId: parentId };
+    }
+
+    function buildPinnedParentViewMoreUrl(parent, serverId) {
+        const id = parent?.parentId;
+        if (!id) return null;
+        const sid = serverId != null ? String(serverId) : '';
+        const type = parent?.parentType;
+        if (type === 'Genre' || type === 'MusicGenre') {
+            return `#/list.html?genreId=${encodeURIComponent(id)}&serverId=${encodeURIComponent(sid)}`;
+        }
+        if (type === 'Studio') {
+            return `#/list.html?studioId=${encodeURIComponent(id)}&serverId=${encodeURIComponent(sid)}`;
+        }
+        return `#/details?id=${encodeURIComponent(id)}&serverId=${encodeURIComponent(sid)}`;
+    }
+
+    function migrateLegacyKefinHomeScreen(customPrefs) {
+        const homeScreen = createEmptyHomeScreen();
+        let legacy = [];
+        if (customPrefs.kefinHomeScreen) {
+            try {
+                legacy = typeof customPrefs.kefinHomeScreen === 'string'
+                    ? JSON.parse(customPrefs.kefinHomeScreen)
+                    : (Array.isArray(customPrefs.kefinHomeScreen) ? customPrefs.kefinHomeScreen : []);
+            } catch (e) {
+                legacy = [];
+            }
+        }
+        if (Array.isArray(legacy)) {
+            legacy.forEach(entry => {
+                if (!entry?.id) return;
+                homeScreen.sections.push(serializeSectionPref(
+                    entry.id,
+                    entry.enabled !== false,
+                    { order: entry.order },
+                    {}
+                ));
+            });
+        }
+        return homeScreen;
+    }
+
+    function parseKefinTweaksHomeScreenRaw(customPrefs) {
+        if (!customPrefs) return createEmptyHomeScreen();
+        const parsed = typeof window.userHelper?.parseKefinTweaks === 'function'
+            ? window.userHelper.parseKefinTweaks(customPrefs)
+            : (() => {
+                const raw = customPrefs.kefinTweaks;
+                if (!raw) return null;
+                try {
+                    return typeof raw === 'string' ? JSON.parse(raw) : raw;
+                } catch (e) {
+                    WARN('Failed to parse kefinTweaks homeScreen:', e);
+                    return null;
+                }
+            })();
+        if (parsed) {
+            const hs = parsed?.homeScreen || (Array.isArray(parsed?.sections) ? parsed : null);
+            if (hs) {
+                return {
+                    sections: Array.isArray(hs.sections) ? [...hs.sections] : [],
+                    pinnedLists: Array.isArray(hs.pinnedLists) ? [...hs.pinnedLists] : [],
+                    pinnedParents: Array.isArray(hs.pinnedParents) ? [...hs.pinnedParents] : []
+                };
+            }
+        }
+        return migrateLegacyKefinHomeScreen(customPrefs);
+    }
+
+    function parseAndSanitizeKefinTweaksHomeScreen(customPrefs) {
+        return sanitizeHomeScreenSections(parseKefinTweaksHomeScreenRaw(customPrefs));
+    }
+
+    function parseKefinTweaksHomeScreen(customPrefs) {
+        return parseAndSanitizeKefinTweaksHomeScreen(customPrefs).homeScreen;
+    }
+
+    function getSectionPrefMap(homeScreen) {
+        const map = new Map();
+        (homeScreen?.sections || []).forEach(str => {
+            const pref = parseSectionPrefString(str);
+            if (!pref?.id) return;
+            map.set(getPrefDedupeKey(pref), pref);
+        });
+        return map;
+    }
+
+    function upsertSectionPref(homeScreen, prefInput) {
+        const home = homeScreen || createEmptyHomeScreen();
+        const pref = typeof prefInput === 'string' ? parseSectionPrefString(prefInput) : prefInput;
+        if (!pref?.id) return home;
+        const storedKey = getPrefDedupeKey(pref);
+        let serialized = typeof prefInput === 'string'
+            ? prefInput
+            : serializeSectionPref(storedKey, pref.enabled !== false, pref, pref.serverDefaults || {});
+        serialized = normalizePrefStringToDedupeKey(serialized);
+        const idx = home.sections.findIndex(s => {
+            const existing = parseSectionPrefString(s);
+            return existing?.id && getPrefDedupeKey(existing) === storedKey;
+        });
+        if (idx >= 0) home.sections[idx] = serialized;
+        else home.sections.push(serialized);
+        return home;
+    }
+
+    function removeSectionPref(homeScreen, sectionId) {
+        const home = homeScreen || createEmptyHomeScreen();
+        if (!sectionId) return home;
+        const targetKey = getPrefDedupeKey(sectionId);
+        home.sections = (home.sections || []).filter(s => {
+            const pref = parseSectionPrefString(s);
+            return !pref?.id || getPrefDedupeKey(pref) !== targetKey;
+        });
+        return home;
+    }
+
+    function setToastMessage(handle, message) {
+        if (!handle?.element) return;
+        const richMessage = handle.element.querySelector('.kefin-toast-message');
+        if (richMessage) {
+            richMessage.textContent = message;
+        } else {
+            handle.element.textContent = message;
+        }
+    }
+
+    function createProgressToast(total) {
+        const initialMessage = `Updating... (0/${total})`;
+        if (!window.KefinTweaksToaster?.toast) {
+            LOG(initialMessage);
+            return {
+                update(done) {
+                    LOG(`Updating... (${done}/${total})`);
+                },
+                finish(done, failed) {
+                    LOG(failed
+                        ? `Updated ${done - failed}/${total} users (${failed} failed)`
+                        : `Updated ${total} users`);
+                }
+            };
+        }
+
+        const handle = window.KefinTweaksToaster.toast(initialMessage, null, false);
+        return {
+            update(done) {
+                setToastMessage(handle, `Updating... (${done}/${total})`);
+            },
+            finish(done, failed) {
+                setToastMessage(
+                    handle,
+                    failed
+                        ? `Updated ${done - failed}/${total} users (${failed} failed)`
+                        : `Updated ${total} users`
+                );
+                setTimeout(() => handle?.dismiss?.(), 2500);
+            }
+        };
+    }
+
+    async function listServerUsers() {
+        if (typeof ApiClient?.getUsers === 'function') {
+            return ApiClient.getUsers();
+        }
+        const response = await fetch(`${ApiClient.serverAddress()}/Users`, {
+            headers: { 'Authorization': window.apiHelper.getAuthHeader() }
+        });
+        if (!response.ok) throw new Error(`Failed to list users: ${response.status}`);
+        return response.json();
+    }
+
+    async function saveHomeScreenForUser(userId, homeScreen, displayPrefs) {
+        if (!displayPrefs) {
+            displayPrefs = await window.userHelper.getUserDisplayPreferencesForUser(userId);
+        }
+        if (!displayPrefs.CustomPrefs) displayPrefs.CustomPrefs = {};
+        const kefin = window.userHelper.parseKefinTweaks(displayPrefs);
+        kefin.homeScreen = homeScreen;
+        displayPrefs.CustomPrefs.kefinTweaks = JSON.stringify(kefin);
+        const updateCache = userId === ApiClient.getCurrentUserId();
+        return window.userHelper.updateDisplayPreferencesForUser(userId, displayPrefs, { updateCache });
+    }
+
+    /**
+     * Remove one section override row from every user's homeScreen.sections.
+     * @param {string} sectionId - Pref storage id (use getStoredSectionPrefId for discovery templates)
+     * @param {{ onProgress?: Function }} [options]
+     */
+    async function updateUserHomeScreenSectionConfiguration(sectionId, options = {}) {
+        if (!sectionId) return { done: 0, total: 0, failed: 0 };
+        const users = await listServerUsers();
+        const total = users.length;
+        let done = 0;
+        let failed = 0;
+        const progressToast = createProgressToast(total);
+        for (const user of users) {
+            const userId = user.Id || user.id;
+            const userName = user.Name || user.name || userId;
+            try {
+                const prefs = await window.userHelper.getUserDisplayPreferencesForUser(userId);
+                let homeScreen = parseKefinTweaksHomeScreen(prefs?.CustomPrefs);
+                const before = homeScreen.sections.length;
+                homeScreen = removeSectionPref(homeScreen, sectionId);
+                if (homeScreen.sections.length !== before) {
+                    await saveHomeScreenForUser(userId, homeScreen, prefs);
+                }
+            } catch (e) {
+                failed += 1;
+                WARN(`Failed updating homeScreen section for ${userName}:`, e);
+            }
+            done += 1;
+            options.onProgress?.({ done, total, failed, userName });
+            progressToast.update(done);
+        }
+        progressToast.finish(done, failed);
+        return { done, total, failed };
+    }
+
+    /**
+     * Clear all section overrides for every user (pins preserved).
+     * @param {{ onProgress?: Function }} [options]
+     */
+    async function updateUserHomeScreenConfiguration(options = {}) {
+        const users = await listServerUsers();
+        const total = users.length;
+        let done = 0;
+        let failed = 0;
+        const progressToast = createProgressToast(total);
+        for (const user of users) {
+            const userId = user.Id || user.id;
+            const userName = user.Name || user.name || userId;
+            try {
+                const prefs = await window.userHelper.getUserDisplayPreferencesForUser(userId);
+                const homeScreen = parseKefinTweaksHomeScreen(prefs?.CustomPrefs);
+                if ((homeScreen.sections || []).length > 0) {
+                    homeScreen.sections = [];
+                    await saveHomeScreenForUser(userId, homeScreen, prefs);
+                }
+            } catch (e) {
+                failed += 1;
+                WARN(`Failed clearing homeScreen sections for ${userName}:`, e);
+            }
+            done += 1;
+            options.onProgress?.({ done, total, failed, userName });
+            progressToast.update(done);
+        }
+        progressToast.finish(done, failed);
+        return { done, total, failed };
+    }
+
+    /**
+     * Resolve Jellyfin pairing id for a catalog section.
+     * Prefer section.jellyfinId; fall back to map / recently-added-* pattern.
+     */
+    function resolveSectionJellyfinId(section) {
+        if (!section) return null;
+        if (section.jellyfinId) return String(section.jellyfinId).toLowerCase();
+        const id = section.id || '';
+        if (id.startsWith('recently-added-')) return 'latestmedia';
+        for (const [jellyfinId, kefinId] of Object.entries(JELLYFIN_HOME_SECTIONS_MAP)) {
+            if (jellyfinId === 'latestmedia' && id.startsWith('recently-added-')) return 'latestmedia';
+            if (kefinId === id) return String(jellyfinId).toLowerCase();
+        }
+        return null;
+    }
+
+    /**
+     * Pack enabled Kefin sections into 10 homesection slots via jellyfinId mapping.
+     * kefinTweaks.homeScreen is the sole enable/order authority.
+     * @returns {string[]} length 10, unused slots are 'none'
+     */
+    function buildHomesectionSlotsFromKefin(sections) {
+        const collected = [];
+        (sections || []).forEach((section) => {
+            if (section.enabled !== true) return;
+            const jellyfinId = resolveSectionJellyfinId(section);
+            if (!jellyfinId || jellyfinId === 'none') return;
+
+            const order = section.order || 0;
+            collected.push({ jellyfinId, order });
+
+            if (section.id === 'continueWatchingAndNextUp') {
+                collected.push({ jellyfinId: 'nextup', order });
+            }
+        });
+
+        collected.sort((a, b) => (a.order || 0) - (b.order || 0));
+        const unique = collected.filter((entry, index, self) =>
+            index === self.findIndex(s => s.jellyfinId === entry.jellyfinId)
+        );
+
+        const slots = [];
+        for (let i = 0; i <= 9; i++) {
+            slots.push(i < unique.length ? unique[i].jellyfinId : 'none');
+        }
+        return slots;
+    }
+
+    /**
+     * Write homesection0–9 from enabled Kefin sections. Never enables/disables Kefin prefs.
+     * @returns {{ slots: string[], changed: boolean }}
+     */
+    function enableJellyfinSectionsFromKefin(sections, customPrefs, { syncUi = false } = {}) {
+        const prefs = customPrefs || {};
+        const slots = buildHomesectionSlotsFromKefin(sections);
+        let changed = false;
+
+        for (let i = 0; i <= 9; i++) {
+            const key = `homesection${i}`;
+            const next = slots[i] || 'none';
+            const prev = prefs[key];
+            const prevNorm = (!prev || prev === '') ? 'none' : String(prev).toLowerCase();
+            if (prevNorm !== next || prefs[key] !== next) {
+                prefs[key] = next;
+                if (prevNorm !== next || prev !== next) changed = true;
+            }
+        }
+
+        if (syncUi) {
+            for (let i = 0; i <= 9; i++) {
+                setNativeHomeSectionSelect(findNativeHomeSectionSelect(i + 1), slots[i]);
+            }
+        }
+
+        if (changed) {
+            LOG('Synced Jellyfin homesectionN from Kefin homeScreen:', slots.filter(s => s !== 'none'));
+        }
+        return { slots, changed };
+    }
+
+    /**
+     * Full home screen config for the current user (server sections + pins + overrides).
+     * kefinTweaks.homeScreen is sole enable source; Jellyfin homesectionN is rewritten to match.
+     * @returns {Promise<{ sections: Array, homeScreen: Object, serverSections: Array, pinnedSections: Array }>}
+     */
+    async function getConfig() {
+        const sectionsApi = window.KefinHomeScreen?.getSections;
+        if (!sectionsApi) {
+            throw new Error('KefinHomeScreen.getSections is not available');
+        }
+        const { enabledHomeSections = [], enabledDiscoverySections = [] } = await Promise.resolve(sectionsApi());
+        const serverSections = [...enabledHomeSections];
+
+        let customPrefs = {};
+        let displayPrefs = null;
+        if (window.userHelper?.getUserDisplayPreferences) {
+            const { promise } = await window.userHelper.getUserDisplayPreferences();
+            displayPrefs = await promise;
+            customPrefs = displayPrefs?.CustomPrefs || {};
+        }
+
+        const sanitizeResult = parseAndSanitizeKefinTweaksHomeScreen(customPrefs);
+        const homeScreen = sanitizeResult.homeScreen;
+
+        if (sanitizeResult.changed && displayPrefs && !sanitizePersistInFlight) {
+            sanitizePersistInFlight = true;
+            try {
+                await saveKefinTweaksHomeScreen(homeScreen, displayPrefs);
+                LOG(`Sanitized homeScreen prefs: removed ${sanitizeResult.removedCount} duplicate/stale rows`);
+            } finally {
+                sanitizePersistInFlight = false;
+            }
+        }
+
+        const pinnedSections = buildPinnedSectionConfigs(homeScreen);
+        const serverSectionsById = new Map();
+        serverSections.forEach((section) => {
+            if (section?.id) serverSectionsById.set(section.id, section);
+        });
+
+        let sections = deduplicateHomeScreenSections([...serverSections, ...pinnedSections]);
+        sections = applyUserSectionOverrides(sections, homeScreen, { serverSectionsById });
+        sections = sections.filter((section) => section.enabled || section.userConfigurable === true || section.userConfigurable === undefined);
+        sections = deduplicateHomeScreenSections(sections);
+
+        const jellyfinSync = enableJellyfinSectionsFromKefin(sections, customPrefs, { syncUi: true });
+        if (jellyfinSync.changed && displayPrefs && !sanitizePersistInFlight) {
+            sanitizePersistInFlight = true;
+            try {
+                if (!displayPrefs.CustomPrefs) displayPrefs.CustomPrefs = customPrefs;
+                const ok = await window.userHelper?.updateDisplayPreferences?.(displayPrefs);
+                if (ok) {
+                    LOG('Persisted Jellyfin homesectionN from Kefin homeScreen');
+                } else {
+                    WARN('Failed to persist Jellyfin homesectionN sync');
+                }
+            } finally {
+                sanitizePersistInFlight = false;
+            }
+        }
+
+        return {
+            sections,
+            homeScreen,
+            serverSections,
+            pinnedSections,
+            enabledDiscoverySections
+        };
+    }
+
+    function getServerSectionDefaults(section) {
+        if (!section) return {};
+        const isSpotlight = section.renderMode === 'Spotlight' || section.spotlight === true;
+        const spotlight = section.spotlightConfig || {};
+        return {
+            order: section.order ?? 0,
+            ttl: section.ttl,
+            cardFormat: section.cardFormat,
+            animationEnabled: spotlight.panAnimation !== false,
+            panAnimation: spotlight.panAnimation !== false,
+            hideName: section.hideName === true,
+            hideCardTitles: section.cardTitleVisibility === 'hidden' || section.hideCardTitles === true,
+            cardTitlePosition: section.cardTitlePosition || '',
+            borderStyle: section.borderStyle || '',
+            borderColor: section.borderColor || '',
+            spotlightLayout: spotlight.spotlightLayout ?? 'Border',
+            spotlightSize: spotlight.spotlightSize ?? 'normal',
+            spotlightTileCount: parseInt(spotlight.tileCount, 10) || 1,
+            itemsLayout: 'row',
+            useGaplessCards: false,
+            cardTitleCapitalization: section.cardTitleCapitalization || 'normal',
+            cardTitleFontFamily: section.cardTitleFontFamily || 'default',
+            cardTitleFontSize: section.cardTitleFontSize || 'normal',
+            cardTitleColor: section.cardTitleColor || ''
+        };
+    }
+
+    function applyUserSectionOverrides(sections, homeScreen, options = {}) {
+        const prefMap = getSectionPrefMap(homeScreen);
+        const serverById = options.serverSectionsById || new Map();
+
+        return sections.map(section => {
+            const storedId = getStoredSectionPrefId(section);
+            const pref = prefMap.get(getPrefDedupeKey({ id: section.id }))
+                || prefMap.get(storedId);
+            let next = { ...section };
+
+            // UI pref: apply for all sections (not gated by userConfigurable)
+            if (pref?.itemsLayout && pref.itemsLayout !== 'row') next.itemsLayout = pref.itemsLayout;
+            else if (pref?.gridExpanded === true) next.itemsLayout = 'grid';
+            else delete next.itemsLayout;
+            delete next.gridExpanded;
+            if (pref?.useGaplessCards === true) next.useGaplessCards = true;
+            else delete next.useGaplessCards;
+
+            if (section.userConfigurable === false) return next;
+            if (!pref) return next;
+            const serverDefaults = getServerSectionDefaults(
+                serverById.get(section.id) || serverById.get(storedId) || section
+            );
+            if (pref.enabled !== undefined) next.enabled = pref.enabled;
+            if (pref.order !== undefined) next.order = pref.order;
+            if (pref.ttl !== undefined) next.ttl = pref.ttl;
+            if (pref.cardFormat !== undefined) next.cardFormat = pref.cardFormat;
+            if (pref.animationEnabled !== undefined) {
+                next.spotlightConfig = {
+                    ...(next.spotlightConfig || {}),
+                    panAnimation: pref.animationEnabled
+                };
+            }
+            if (pref.hideName !== undefined) {
+                if (pref.hideName) next.hideName = true;
+                else delete next.hideName;
+            }
+            if (pref.hideCardTitles !== undefined) {
+                if (pref.hideCardTitles) {
+                    next.cardTitleVisibility = 'hidden';
+                    delete next.hideCardTitles;
+                } else {
+                    delete next.cardTitleVisibility;
+                    delete next.hideCardTitles;
+                }
+            }
+            if (pref.cardTitlePosition !== undefined) {
+                if (pref.cardTitlePosition && pref.cardTitlePosition !== 'default') {
+                    next.cardTitlePosition = pref.cardTitlePosition;
+                } else {
+                    delete next.cardTitlePosition;
+                }
+            }
+            if (pref.cardTitleCapitalization !== undefined) {
+                if (pref.cardTitleCapitalization && pref.cardTitleCapitalization !== 'normal') {
+                    next.cardTitleCapitalization = pref.cardTitleCapitalization;
+                } else {
+                    delete next.cardTitleCapitalization;
+                }
+            }
+            if (pref.cardTitleFontFamily !== undefined) {
+                if (pref.cardTitleFontFamily && pref.cardTitleFontFamily !== 'default') {
+                    next.cardTitleFontFamily = pref.cardTitleFontFamily;
+                } else {
+                    delete next.cardTitleFontFamily;
+                }
+            }
+            if (pref.cardTitleFontSize !== undefined) {
+                if (pref.cardTitleFontSize && pref.cardTitleFontSize !== 'normal') {
+                    next.cardTitleFontSize = pref.cardTitleFontSize;
+                } else {
+                    delete next.cardTitleFontSize;
+                }
+            }
+            if (pref.borderStyle !== undefined) {
+                if (pref.borderStyle) next.borderStyle = pref.borderStyle;
+                else delete next.borderStyle;
+            }
+            if (pref.borderColor !== undefined) {
+                if (pref.borderColor) next.borderColor = pref.borderColor;
+                else delete next.borderColor;
+            }
+            if (pref.cardTitleColor !== undefined) {
+                if (pref.cardTitleColor) next.cardTitleColor = pref.cardTitleColor;
+                else delete next.cardTitleColor;
+            }
+            if (pref.spotlightLayout !== undefined || pref.spotlightSize !== undefined || pref.spotlightTileCount !== undefined) {
+                next.spotlightConfig = { ...(next.spotlightConfig || {}) };
+                if (pref.spotlightLayout !== undefined) {
+                    next.spotlightConfig.spotlightLayout = pref.spotlightLayout;
+                }
+                if (pref.spotlightSize !== undefined) {
+                    next.spotlightConfig.spotlightSize = pref.spotlightSize;
+                }
+                if (pref.spotlightTileCount !== undefined) {
+                    next.spotlightConfig.tileCount = pref.spotlightTileCount;
+                }
+            }
+            next._userPrefDefaults = serverDefaults;
+            return next;
+        });
+    }
+
+    function buildPinnedSectionConfigs(homeScreen) {
+        const configs = [];
+
+        (homeScreen?.pinnedLists || []).forEach(listStr => {
+            const list = parsePinnedListString(listStr);
+            if (!list || !list.ids.length) return;
+            const sectionId = getPinnedListSectionId(list.name);
+            configs.push({
+                id: sectionId,
+                name: list.name,
+                enabled: true,
+                order: PINNED_DEFAULT_ORDER,
+                userConfigurable: true,
+                renderMode: 'Normal',
+                cardFormat: 'Poster',
+                queries: [{
+                    _sourceType: 'static',
+                    queryOptions: { Ids: [...list.ids] }
+                }]
+            });
+        });
+
+        (homeScreen?.pinnedParents || []).forEach(parentStr => {
+            const parent = parsePinnedParentString(parentStr);
+            if (!parent) return;
+            const sectionId = getPinnedParentSectionId(parent.parentId);
+            configs.push({
+                id: sectionId,
+                name: parent.name,
+                enabled: true,
+                order: PINNED_DEFAULT_ORDER,
+                userConfigurable: true,
+                renderMode: 'Normal',
+                cardFormat: 'Poster',
+                queries: [{
+                    queryOptions: buildPinnedParentQueryOptions(parent)
+                }]
+            });
+        });
+
+        return configs;
+    }
+
+    async function loadKefinTweaksHomeScreenFromDisplayPrefs(customPrefs) {
+        return parseKefinTweaksHomeScreen(customPrefs);
+    }
+
+    async function saveKefinTweaksHomeScreen(homeScreen, displayPrefs = null) {
+        if (!window.userHelper?.setKefinTweaksFeature) {
+            ERR('userHelper.setKefinTweaksFeature not available');
+            return false;
+        }
+        try {
+            // If caller passed displayPrefs, still use merge-safe set so siblings are preserved.
+            // Refresh cache first when prefs were already loaded to avoid stale overwrites.
+            if (displayPrefs?.CustomPrefs) {
+                const sanitized = sanitizeHomeScreenSections(homeScreen).homeScreen;
+                const kefin = window.userHelper.parseKefinTweaks(displayPrefs);
+                kefin.homeScreen = sanitized;
+                displayPrefs.CustomPrefs.kefinTweaks = JSON.stringify(kefin);
+                displayPrefs.CustomPrefs.kefinHomeScreen = JSON.stringify(homeScreenToLegacyArray(sanitized));
+                const ok = await window.userHelper.updateDisplayPreferences(displayPrefs);
+                if (ok) LOG('kefinTweaks homeScreen saved');
+                return ok;
+            }
+            const ok = await window.userHelper.setKefinTweaksFeature('homeScreen', homeScreen);
+            if (ok) LOG('kefinTweaks homeScreen saved');
+            return ok;
+        } catch (e) {
+            ERR('Error saving kefinTweaks homeScreen:', e);
+            return false;
+        }
+    }
+
+    /**
+     * Persist items layout UI preference for a section (row|grid).
+     * Home / seasonal / discovery → kefinTweaks.homeScreen; otherwise → kefinTweaks.sectionState.
+     * Patches field 13 of the existing pref string so other overrides are preserved.
+     * @param {string} sectionId
+     * @param {string|boolean} layout - 'row'|'grid', or legacy true→grid
+     * @param {{ type?: string }} [options]
+     * @returns {Promise<boolean>}
+     */
+    async function saveSectionItemsLayout(sectionId, layout, options = {}) {
+        if (!sectionId) return false;
+        try {
+            if (!window.userHelper?.getUserDisplayPreferences) {
+                ERR('userHelper not available');
+                return false;
+            }
+            const sectionEl = typeof document !== 'undefined'
+                ? [...document.querySelectorAll('[data-section-id]')].find((el) => el.dataset.sectionId === String(sectionId))
+                : null;
+            const typeHint = options.type
+                || sectionEl?.getAttribute?.('data-section-type')
+                || sectionEl?.dataset?.sectionType
+                || '';
+            // series-episodes (and other non-home) must not fall through empty type → homeScreen
+            const resolvedType = typeHint
+                || (String(sectionId).startsWith('series-episodes-') ? 'series-episodes' : 'home');
+            const storedId = getStoredSectionPrefId(sectionEl
+                ? { id: sectionId, dataset: sectionEl.dataset, type: resolvedType }
+                : { id: sectionId, type: resolvedType });
+            const { promise } = await window.userHelper.getUserDisplayPreferences();
+            const displayPrefs = await promise;
+            const useHomeScreen = isHomeScreenSection(resolvedType);
+            let bucket = useHomeScreen
+                ? parseKefinTweaksHomeScreen(displayPrefs?.CustomPrefs)
+                : parseKefinTweaksSectionState(displayPrefs?.CustomPrefs);
+            const raw = findPrefStringInSections(bucket.sections, storedId)
+                || findPrefStringInSections(bucket.sections, sectionId);
+            const parts = (raw || `${storedId};true`).split(';');
+            while (parts.length < SECTION_PREF_FIELD_COUNT) parts.push('');
+            parts[0] = storedId;
+            if (parts[1] === '') parts[1] = 'true';
+            const normalized = normalizeItemsLayout(layout);
+            // Empty = row; 'true' for grid (legacy)
+            parts[13] = normalized === 'grid' ? 'true' : '';
+            if (useHomeScreen) {
+                bucket = upsertSectionPref(bucket, parts.join(';'));
+                return await saveKefinTweaksHomeScreen(bucket, displayPrefs);
+            }
+            bucket = upsertSectionPref(bucket, parts.join(';'));
+            return await saveKefinTweaksSectionState({ sections: bucket.sections || [] }, displayPrefs);
+        } catch (e) {
+            ERR('Error saving itemsLayout preference:', e);
+            return false;
+        }
+    }
+
+    /**
+     * Persist useGaplessCards UI preference for a section (field 19).
+     * @param {string} sectionId
+     * @param {boolean} useGaplessCards
+     * @param {{ type?: string }} [options]
+     * @returns {Promise<boolean>}
+     */
+    async function saveSectionUseGaplessCards(sectionId, useGaplessCards, options = {}) {
+        if (!sectionId) return false;
+        try {
+            if (!window.userHelper?.getUserDisplayPreferences) {
+                ERR('userHelper not available');
+                return false;
+            }
+            const sectionEl = typeof document !== 'undefined'
+                ? [...document.querySelectorAll('[data-section-id]')].find((el) => el.dataset.sectionId === String(sectionId))
+                : null;
+            const typeHint = options.type
+                || sectionEl?.getAttribute?.('data-section-type')
+                || sectionEl?.dataset?.sectionType
+                || '';
+            const resolvedType = typeHint
+                || (String(sectionId).startsWith('series-episodes-') ? 'series-episodes' : 'home');
+            const storedId = getStoredSectionPrefId(sectionEl
+                ? { id: sectionId, dataset: sectionEl.dataset, type: resolvedType }
+                : { id: sectionId, type: resolvedType });
+            const { promise } = await window.userHelper.getUserDisplayPreferences();
+            const displayPrefs = await promise;
+            const useHomeScreen = isHomeScreenSection(resolvedType);
+            let bucket = useHomeScreen
+                ? parseKefinTweaksHomeScreen(displayPrefs?.CustomPrefs)
+                : parseKefinTweaksSectionState(displayPrefs?.CustomPrefs);
+            const raw = findPrefStringInSections(bucket.sections, storedId)
+                || findPrefStringInSections(bucket.sections, sectionId);
+            const parts = (raw || `${storedId};true`).split(';');
+            while (parts.length < SECTION_PREF_FIELD_COUNT) parts.push('');
+            parts[0] = storedId;
+            if (parts[1] === '') parts[1] = 'true';
+            parts[19] = useGaplessCards === true ? 'true' : (useGaplessCards === false ? 'false' : '');
+            if (useHomeScreen) {
+                bucket = upsertSectionPref(bucket, parts.join(';'));
+                return await saveKefinTweaksHomeScreen(bucket, displayPrefs);
+            }
+            bucket = upsertSectionPref(bucket, parts.join(';'));
+            return await saveKefinTweaksSectionState({ sections: bucket.sections || [] }, displayPrefs);
+        } catch (e) {
+            ERR('Error saving useGaplessCards preference:', e);
+            return false;
+        }
+    }
+
+    /**
+     * Read itemsLayout from homeScreen or sectionState for a section id.
+     * @param {string} sectionId
+     * @param {{ type?: string }} [options]
+     * @returns {Promise<'row'|'grid'|null>}
+     */
+    async function loadSectionItemsLayout(sectionId, options = {}) {
+        if (!sectionId) return null;
+        try {
+            if (!window.userHelper?.getUserDisplayPreferences) return null;
+            const { promise } = await window.userHelper.getUserDisplayPreferences();
+            const displayPrefs = await promise;
+            const typeHint = options.type
+                || (String(sectionId).startsWith('series-episodes-') ? 'series-episodes' : 'home');
+            const bucket = isHomeScreenSection(typeHint)
+                ? parseKefinTweaksHomeScreen(displayPrefs?.CustomPrefs)
+                : parseKefinTweaksSectionState(displayPrefs?.CustomPrefs);
+            const storedId = getStoredSectionPrefId({ id: sectionId, type: typeHint });
+            const raw = findPrefStringInSections(bucket.sections, storedId)
+                || findPrefStringInSections(bucket.sections, sectionId);
+            if (!raw) return null;
+            const pref = parseSectionPrefString(raw);
+            return pref?.itemsLayout || null;
+        } catch (e) {
+            WARN('Error loading itemsLayout preference:', e);
+            return null;
+        }
+    }
+
+    /** @deprecated Use saveSectionItemsLayout */
+    async function saveSectionGridExpanded(sectionId, gridExpanded) {
+        if (gridExpanded === 'row' || gridExpanded === 'grid') {
+            return saveSectionItemsLayout(sectionId, gridExpanded);
+        }
+        return saveSectionItemsLayout(sectionId, gridExpanded === true ? 'grid' : 'row');
+    }
+
+    function homeScreenToLegacyArray(homeScreen) {
+        const seen = new Set();
+        return (homeScreen?.sections || []).map(str => {
+            const pref = parseSectionPrefString(str);
+            if (!pref) return null;
+            const key = getPrefDedupeKey(pref);
+            if (!key || seen.has(key)) return null;
+            seen.add(key);
+            return {
+                id: key,
+                enabled: pref.enabled !== false,
+                order: pref.order ?? 0
+            };
+        }).filter(Boolean);
     }
 
     /**
@@ -78,19 +1244,9 @@
             }
         }
         
-        // Parse kefinHomeScreen if it's a string (Jellyfin stores CustomPrefs as strings)
-        let kefinHomeScreen = [];
-        if (customPrefs.kefinHomeScreen) {
-            if (typeof customPrefs.kefinHomeScreen === 'string') {
-                try {
-                    kefinHomeScreen = JSON.parse(customPrefs.kefinHomeScreen);
-                } catch (e) {
-                    // Ignore parse errors, use empty array
-                }
-            } else if (Array.isArray(customPrefs.kefinHomeScreen)) {
-                kefinHomeScreen = customPrefs.kefinHomeScreen;
-            }
-        }
+        // Parse user home screen section preferences
+        const homeScreen = parseKefinTweaksHomeScreen(customPrefs);
+        const kefinHomeScreen = homeScreenToLegacyArray(homeScreen);
         
         // Process each Jellyfin section
         JELLYFIN_HOME_SECTIONS.forEach((baseId, index) => {
@@ -140,15 +1296,80 @@
         const names = {
             'smalllibrarytiles': 'My Media',
             'librarybuttons': 'My Media (small)',
-            'resume': 'Resume',
-            'resumeaudio': 'Resume Audio',
-            'resumebook': 'Resume Book',
+            'resume': 'Continue Watching',
+            'resumeaudio': 'Continue Listening',
+            'resumebook': 'Continue Reading',
             'nextup': 'Next Up',
-            'latestmedia': 'Latest Media',
+            'latestmedia': 'Recently Added Media',
             'livetv': 'Live TV',
-            'activerecordings': 'Active Recordings'
+            'activerecordings': 'Active Recordings',
+            'none': 'None'
         };
         return names[baseId] || baseId;
+    }
+
+    /** Label aliases for matching native select options across Jellyfin versions. */
+    function getJellyfinSectionLabelAliases(baseId) {
+        const primary = getJellyfinSectionName(baseId);
+        const aliases = {
+            resume: ['Continue Watching', 'Resume'],
+            resumeaudio: ['Continue Listening', 'Resume Audio'],
+            resumebook: ['Continue Reading', 'Resume Book'],
+            latestmedia: ['Recently Added Media', 'Latest Media'],
+            none: ['None']
+        };
+        const list = aliases[baseId] || (primary ? [primary] : []);
+        if (primary && !list.includes(primary)) list.unshift(primary);
+        return list;
+    }
+
+    function findNativeHomeSectionSelect(index1Based) {
+        const id = `selectHomeSection${index1Based}`;
+        const scoped = document.querySelector(`.homeScreenSettingsContainer #${id}`);
+        if (scoped) return scoped;
+        const page = document.querySelector('.libraryPage:not(.hide)');
+        if (page) {
+            const inPage = page.querySelector(`#${id}`);
+            if (inPage) return inPage;
+        }
+        return document.getElementById(id);
+    }
+
+    /**
+     * Resolve the option value to set on a native home-section select.
+     * v12 often uses empty value="" for the default/selected option; match by label when needed.
+     */
+    function resolveNativeHomeSectionOptionValue(select, jellyfinId) {
+        if (!select) return null;
+        const target = (!jellyfinId || jellyfinId === 'none') ? 'none' : String(jellyfinId).toLowerCase();
+        const options = Array.from(select.options || []);
+
+        if (target !== 'none') {
+            const byValue = options.find(o => o.value === target);
+            if (byValue) return byValue.value;
+        } else {
+            const noneByValue = options.find(o => o.value === 'none');
+            if (noneByValue) return noneByValue.value;
+        }
+
+        const labels = getJellyfinSectionLabelAliases(target).map(l => l.toLowerCase());
+        const byLabel = options.find(o => labels.includes(String(o.textContent || '').trim().toLowerCase()));
+        if (byLabel) return byLabel.value;
+
+        if (target === 'none') return 'none';
+        return null;
+    }
+
+    function setNativeHomeSectionSelect(select, jellyfinId) {
+        if (!select) return;
+        const value = resolveNativeHomeSectionOptionValue(select, jellyfinId);
+        if (value === null) return;
+        try {
+            select.value = value;
+            select.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+        } catch (e) {
+            WARN('Failed to sync native home section select UI:', e);
+        }
     }
 
     /**
@@ -172,23 +1393,9 @@
             }
 
             const customPrefs = displayPrefs.CustomPrefs;
-            let kefinHomeScreen = [];
-            
-            // kefinHomeScreen is stored as a JSON string in CustomPrefs
-            if (customPrefs.kefinHomeScreen) {
-                if (typeof customPrefs.kefinHomeScreen === 'string') {
-                    try {
-                        kefinHomeScreen = JSON.parse(customPrefs.kefinHomeScreen);
-                    } catch (e) {
-                        WARN('Failed to parse kefinHomeScreen:', e);
-                        kefinHomeScreen = [];
-                    }
-                } else if (Array.isArray(customPrefs.kefinHomeScreen)) {
-                    // Handle legacy format (direct array)
-                    kefinHomeScreen = customPrefs.kefinHomeScreen;
-                }
-            }
-            
+            const homeScreen = parseKefinTweaksHomeScreen(customPrefs);
+            const kefinHomeScreen = homeScreenToLegacyArray(homeScreen);
+
             // Extract homesectionN values
             const homesections = {};
             for (let i = 0; i <= 8; i++) {
@@ -197,39 +1404,75 @@
             }
 
             return {
+                homeScreen,
                 kefinHomeScreen: Array.isArray(kefinHomeScreen) ? kefinHomeScreen : [],
                 homesections: homesections
             };
         } catch (error) {
             ERR('Error loading user preferences:', error);
-            return { kefinHomeScreen: [], homesections: {} };
+            return { homeScreen: createEmptyHomeScreen(), kefinHomeScreen: [], homesections: {} };
         }
     }
 
+    function mergeEditorSectionsIntoHomeScreen(homeScreen, editorSections, serverSectionsById) {
+        const home = homeScreen || createEmptyHomeScreen();
+        const editorIds = new Set(editorSections.map(s => getStoredSectionPrefId(s)));
+        const kept = (home.sections || []).filter(str => {
+            const pref = parseSectionPrefString(str);
+            if (!pref?.id) return false;
+            return !editorIds.has(getPrefDedupeKey(pref));
+        });
+        const updated = editorSections.map(section => {
+            const storedId = getStoredSectionPrefId(section);
+            const serverSection = serverSectionsById.get(section.id) || section;
+            const existingRaw = (home.sections || []).find(s => {
+                const pref = parseSectionPrefString(s);
+                return pref?.id && getPrefDedupeKey(pref) === storedId;
+            });
+            const existing = parseSectionPrefString(existingRaw) || {};
+            return serializeSectionPref(
+                storedId,
+                section.enabled !== false,
+                { ...existing, order: section.order },
+                getServerSectionDefaults(serverSection)
+            );
+        });
+        return sanitizeHomeScreenSections({
+            ...home,
+            sections: [...kept, ...updated]
+        }).homeScreen;
+    }
+
+    async function buildServerSectionsById() {
+        const map = new Map();
+        if (!window.KefinHomeScreen?.getConfig) return map;
+        try {
+            const mergedConfig = await window.KefinHomeScreen.getConfig();
+            const allGroups = [
+                ...(mergedConfig.HOME_SECTION_GROUPS || []),
+                ...(mergedConfig.SEASONAL_SECTION_GROUPS || []),
+                ...(mergedConfig.DISCOVERY_SECTION_GROUPS || []),
+                ...(mergedConfig.CUSTOM_SECTION_GROUPS || [])
+            ];
+            flattenSectionGroups(allGroups).forEach(section => {
+                if (section?.id) map.set(section.id, section);
+            });
+        } catch (e) {
+            WARN('Could not build server sections map:', e);
+        }
+        return map;
+    }
+
     /**
-     * Merge user preferences with sections
-     * @param {Array} sections - Sections from config
-     * @param {Object} userPrefs - User preferences object
-     * @param {Object} mergedConfig - Merged config from getConfig() for fallback defaults
-     * @param {Object} displayPrefs - Display preferences object to check homesectionN fields
+     * Merge user preferences with sections (editor helper for Jellyfin native rows).
+     * Kefin enable/disable comes from homeScreen prefs / catalog defaults only —
+     * Jellyfin enable/order for native rows comes from CustomPrefs.homesectionN;
+     * Kefin enable is owned by homeScreen prefs (see enableJellyfinSectionsFromKefin).
      */
     function mergeUserPreferences(sections, userPrefs, mergedConfig = null, displayPrefs = null) {
-        const kefinHomeScreen = userPrefs.kefinHomeScreen || [];
+        const homeScreen = userPrefs.homeScreen || parseKefinTweaksHomeScreen(displayPrefs?.CustomPrefs);
+        const prefMap = getSectionPrefMap(homeScreen);
         const customPrefs = displayPrefs?.CustomPrefs || {};
-        
-        // Create maps of section-id -> order and enabled status
-        const orderMap = new Map();
-        const enabledMap = new Map();
-        kefinHomeScreen.forEach(pref => {
-            if (pref.id) {
-                if (pref.order !== undefined) {
-                    orderMap.set(pref.id, pref.order);
-                }
-                if (pref.enabled !== undefined) {
-                    enabledMap.set(pref.id, pref.enabled);
-                }
-            }
-        });
 
         // Build set of base IDs that appear in ANY homesectionN field (0-8) for Jellyfin sections
         const enabledJellyfinBaseIds = new Set();
@@ -269,20 +1512,6 @@
             return JELLYFIN_HOME_SECTIONS.includes(sectionId);
         };
 
-        // Helper to get the Jellyfin base ID for a KefinTweaks section that maps to Jellyfin
-        const getMappedJellyfinId = (sectionId) => {
-            // Check if this KefinTweaks section maps to a Jellyfin section
-            for (const [jellyfinId, kefinId] of Object.entries(JELLYFIN_HOME_SECTIONS_MAP)) {
-                if (jellyfinId === 'latestmedia' && sectionId.startsWith('recently-added-')) {
-                    return jellyfinId;
-                }
-                if (kefinId === sectionId) {
-                    return jellyfinId;
-                }
-            }
-            return null;
-        };
-
         // Update sections with user preferences
         return sections.map(section => {
             const sectionId = section.id;
@@ -293,21 +1522,17 @@
                 const baseId = section.jellyfinBaseId || sectionId;
                 isEnabled = enabledJellyfinBaseIds.has(baseId);
             } else {
-                // For KefinTweaks sections, check if user has explicit enabled/disabled preference, otherwise use default from config
-                // But also check homesectionN if this section maps to a Jellyfin section
-                const mappedJellyfinId = getMappedJellyfinId(sectionId);
-                if (mappedJellyfinId && enabledJellyfinBaseIds.has(mappedJellyfinId)) {
-                    // If mapped Jellyfin section is enabled in homesectionN, use that
-                    isEnabled = true;
-                } else {
-                    const hasUserEnabledPref = enabledMap.has(sectionId);
-                    isEnabled = hasUserEnabledPref 
-                        ? enabledMap.get(sectionId)
-                        : getDefaultEnabled(sectionId);
-                }
+                const pref = prefMap.get(getPrefDedupeKey({ id: sectionId }))
+                    || prefMap.get(sectionId);
+                const hasUserEnabledPref = pref && pref.enabled !== undefined;
+                isEnabled = hasUserEnabledPref
+                    ? pref.enabled
+                    : getDefaultEnabled(sectionId);
             }
             
-            const userOrder = orderMap.get(sectionId);
+            const pref = prefMap.get(getPrefDedupeKey({ id: sectionId }))
+                || prefMap.get(sectionId);
+            const userOrder = pref?.order;
             
             return {
                 ...section,
@@ -342,101 +1567,22 @@
 
             const customPrefs = displayPrefs.CustomPrefs;
 
-            // Helper to check if a section ID is a Jellyfin section
-            const isJellyfinSection = (sectionId) => {
-                if (JELLYFIN_HOME_SECTIONS.includes(sectionId)) {
-                    return true;
-                }
-                return getMappedJellyfinId(sectionId) !== null;
-            };
+            // Build kefinTweaks.homeScreen with sparse section strings
+            const existingHomeScreen = parseKefinTweaksHomeScreen(customPrefs);
+            const serverSectionsById = await buildServerSectionsById();
+            const homeScreen = sanitizeHomeScreenSections(
+                mergeEditorSectionsIntoHomeScreen(existingHomeScreen, sections, serverSectionsById)
+            ).homeScreen;
 
-            // Helper to get the Jellyfin base ID for a KefinTweaks section that maps to Jellyfin
-            const getMappedJellyfinId = (sectionId) => {
-                for (const [jellyfinId, kefinId] of Object.entries(JELLYFIN_HOME_SECTIONS_MAP)) {
-                    if (jellyfinId === 'latestmedia' && sectionId.startsWith('recently-added-')) {
-                        return jellyfinId;
-                    }
-                    if (kefinId === sectionId) {
-                        return jellyfinId;
-                    }
-                }
-                return null;
-            };
+            const kefin = typeof window.userHelper?.parseKefinTweaks === 'function'
+                ? window.userHelper.parseKefinTweaks(customPrefs)
+                : {};
+            kefin.homeScreen = homeScreen;
+            customPrefs.kefinTweaks = JSON.stringify(kefin);
+            customPrefs.kefinHomeScreen = JSON.stringify(homeScreenToLegacyArray(homeScreen));
 
-            // Build kefinHomeScreen array with all sections (including enabled status)
-            // Use section IDs directly, no homesectionKey
-            const kefinHomeScreen = sections.map(section => ({
-                id: section.id,
-                order: section.order || 0,
-                enabled: section.enabled !== false
-            }));
-
-            // Jellyfin expects CustomPrefs values to be JSON strings
-            customPrefs.kefinHomeScreen = JSON.stringify(kefinHomeScreen);
-
-            // Update homesectionN properties for Jellyfin sections
-            // First, clear all homesectionN (0-9)
-            for (let i = 0; i <= 9; i++) {
-                customPrefs[`homesection${i}`] = 'none';
-            }
-
-            // Collect sections that should be saved to homesectionN fields
-            const sectionsForHomesectionN = [];
-
-            // Add non-mapped Jellyfin sections
-            sections.forEach(section => {
-                if (section.enabled === true && (section.isJellyfin || isJellyfinSection(section.id) || section.mapsToJellyfin)) {
-                    const baseId = section.mapsToJellyfin || section.jellyfinBaseId || section.id;
-                    sectionsForHomesectionN.push({
-                        jellyfinBaseId: baseId,
-                        order: section.order || 0
-                    });
-                }
-                if (section.enabled === true && section.id === 'continueWatchingAndNextUp') {
-                    sectionsForHomesectionN.push({
-                        jellyfinBaseId: 'resume',
-                        order: section.order || 0
-                    });
-                    sectionsForHomesectionN.push({
-                        jellyfinBaseId: 'nextup',
-                        order: section.order || 0
-                    });
-                }
-            });
-
-            // Ensure each section has a unique jellyfinBaseId
-            const uniqueHomeSections = sectionsForHomesectionN.filter((section, index, self) =>
-                index === self.findIndex(s => s.jellyfinBaseId === section.jellyfinBaseId)
-            );
-
-            // Sort all sections by order
-            uniqueHomeSections.sort((a, b) => (a.order || 0) - (b.order || 0));
-
-            // Assign each section to homesectionN sequentially
-            for (let i = 0; i <= 9; i++) {
-                const selectHomeSection = document.querySelector(`.homeScreenSettingsContainer #selectHomeSection${i+1}`);
-                if (i <= uniqueHomeSections.length - 1) {
-                    const selectedSection = uniqueHomeSections[i].jellyfinBaseId;
-                    customPrefs[`homesection${i}`] = selectedSection;
-
-                    const selectedOption = selectHomeSection.querySelector(`option[value="${selectedSection}"]`);
-                    if (selectedOption) {
-                        selectHomeSection.value = selectedOption.value;
-                    } else {
-                        selectHomeSection.value = '';
-                    }
-                } else {
-                    customPrefs[`homesection${i}`] = 'none';
-
-                    // Find the value of the "None" option label, some have value="none" and some have no value at all
-                    const noneOption = selectHomeSection.querySelector('option[value="none"]');
-                    if (noneOption) {
-                        selectHomeSection.value = noneOption.value;
-                    } else {
-                        selectHomeSection.value = '';
-                    }
-                }
-            }
+            // Rewrite Jellyfin homesectionN (+ native selects) from enabled Kefin sections
+            enableJellyfinSectionsFromKefin(sections, customPrefs, { syncUi: true });
 
             // Save
             const success = await window.userHelper.updateDisplayPreferences(displayPrefs);
@@ -463,8 +1609,8 @@
 
         try {
             // Check dependencies
-            if (!window.KefinHomeScreen || !window.KefinHomeScreen.getConfig) {
-                ERR('KefinHomeScreen.getConfig not available');
+            if (!window.KefinHomeScreen || !window.KefinHomeScreen.getSections) {
+                ERR('KefinHomeScreen.getSections not available');
                 return;
             }
 
@@ -473,112 +1619,15 @@
                 return;
             }
 
-            // Get merged config
-            const mergedConfig = await window.KefinHomeScreen.getConfig();
-            
-            // Flatten all section groups
-            const allGroups = [
-                ...(mergedConfig.HOME_SECTION_GROUPS || []),
-                ...(mergedConfig.SEASONAL_SECTION_GROUPS || []),
-                /* ...(mergedConfig.DISCOVERY_SECTION_GROUPS || []), */
-                ...(mergedConfig.CUSTOM_SECTION_GROUPS || [])
-            ];
-            
-            let kefinSections = flattenSectionGroups(allGroups);
-            
-            // Filter out hidden sections
-            kefinSections = kefinSections.filter(s => !s.hidden);
-
-            // Hide seasonal sections that are not currently in their active period
-            kefinSections = kefinSections.filter(s => {
-                if (s.startDate && s.endDate) {
-                    return isInSeasonalPeriod(s.startDate, s.endDate);
-                }
+            // Resolved Kefin sections only (no Jellyfin-native duplicate rows)
+            const userConfig = await getConfig();
+            let allSections = (userConfig.sections || []).filter((s) => {
+                if (s.userConfigurable === false) return false;
+                if (s.type === 'discovery' || s.discoveryEnabled === true) return false;
+                // Keep hidden sections only when currently enabled (e.g. merge CW+Next Up)
+                if (s.hidden === true && s.enabled === false) return false;
                 return true;
             });
-
-            // Filter out disabled sections
-            kefinSections = kefinSections.filter(s => s.enabled !== false);
-
-            // Filter out discovery sections
-            kefinSections = kefinSections.filter(s => s.type !== 'discovery');
-
-            // Filter out discovery sections
-            kefinSections = kefinSections.filter(s => s.discoveryEnabled !== true);
-
-            // Get display preferences once
-            if (!window.userHelper || !window.userHelper.getUserDisplayPreferences) {
-                ERR('userHelper not available');
-                container.innerHTML = '<div class="listItemBodyText secondary">User helper not available.</div>';
-                return;
-            }
-
-            const { promise } = await window.userHelper.getUserDisplayPreferences();
-            const displayPrefs = await promise;
-            
-            // Load user preferences using the fetched displayPrefs
-            const userPrefs = await loadUserPreferences(displayPrefs);
-            
-            // Get Jellyfin sections from display preferences
-            let jellyfinSections = getJellyfinSectionsFromPrefs(displayPrefs);
-
-            // Mark KefinTweaks sections that map to Jellyfin sections
-            kefinSections = kefinSections.map(section => {
-                const mappedJellyfinId = Object.entries(JELLYFIN_HOME_SECTIONS_MAP).find(([jellyfinId, kefinId]) => {
-                    if (jellyfinId === 'latestmedia' && section.id && section.id.startsWith('recently-added-')) {
-                        return true;
-                    }
-                    return kefinId === section.id;
-                });
-                
-                if (mappedJellyfinId) {
-                    return {
-                        ...section,
-                        mapsToJellyfin: mappedJellyfinId[0] // Store the Jellyfin base ID
-                    };
-                }
-                return section;
-            });
-
-            // Filter out mapped Jellyfin sections if their KefinTweaks equivalent exists
-            const kefinSectionIds = new Set(kefinSections.map(s => s.id));
-
-            const adminKefinSections = window.KefinHomeScreen.getSections().enabledHomeSections;
-            const isKefinNextUpEnabled = adminKefinSections.some(s => s.id && s.id === 'nextUp' && s.enabled === true);
-            const isKefinContinueWatchingEnabled = adminKefinSections.some(s => s.id && s.id === 'continueWatching' && s.enabled === true);
-            const isKefinMergeNextUpEnabled = adminKefinSections.some(s => s.id && s.id === 'continueWatchingAndNextUp' && s.enabled === true);
-            const isKefinRecentlyAddedEnabled = adminKefinSections.some(s => s.id && s.id.startsWith('recently-added-') && s.enabled === true);
-
-            jellyfinSections = jellyfinSections.filter(jellyfinSection => {
-                const baseId = jellyfinSection.jellyfinBaseId || jellyfinSection.id;
-                const mappedKefinId = JELLYFIN_HOME_SECTIONS_MAP[baseId];
-                
-                // For latestmedia, check if any recently-added-* section exists
-                if (baseId === 'latestmedia') {
-                    return !isKefinRecentlyAddedEnabled; // Remove if any recently-added exists
-                }
-
-                if (baseId === 'nextup') {
-                    return !isKefinNextUpEnabled && !isKefinMergeNextUpEnabled;
-                }
-
-                if (baseId === 'resume') {
-                    return !isKefinContinueWatchingEnabled && !isKefinMergeNextUpEnabled;
-                }
-                
-                // For other mapped sections, check if the mapped KefinTweaks section exists
-                if (mappedKefinId) {
-                    return !kefinSectionIds.has(mappedKefinId); // Remove if mapped Kefin section exists
-                }
-                
-                return true; // Keep non-mapped sections
-            });
-
-            // Combine all sections
-            let allSections = [...kefinSections, ...jellyfinSections];
-
-            // Merge user preferences (pass mergedConfig for fallback defaults and displayPrefs for homesectionN checks)
-            allSections = mergeUserPreferences(allSections, userPrefs, mergedConfig, displayPrefs);
 
             // Sort by order
             allSections.sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -643,6 +1692,13 @@
                                         if (!displayPrefs.CustomPrefs) {
                                             displayPrefs.CustomPrefs = {};
                                         }
+                                        const existing = parseKefinTweaksHomeScreen(displayPrefs.CustomPrefs);
+                                        existing.sections = [];
+                                        const kefin = typeof window.userHelper?.parseKefinTweaks === 'function'
+                                            ? window.userHelper.parseKefinTweaks(displayPrefs)
+                                            : {};
+                                        kefin.homeScreen = existing;
+                                        displayPrefs.CustomPrefs.kefinTweaks = JSON.stringify(kefin);
                                         displayPrefs.CustomPrefs.kefinHomeScreen = '[]';
                                         const ok = await window.userHelper.updateDisplayPreferences(displayPrefs);
                                         if (ok) {
@@ -778,7 +1834,45 @@
 
     // Expose render function globally
     window.KefinUserHomeScreenConfig = {
-        renderUserHomeSectionsEditor
+        renderUserHomeSectionsEditor,
+        parseKefinTweaksHomeScreen,
+        parseSectionPrefString,
+        serializeSectionPref,
+        getStoredSectionPrefId,
+        upsertSectionPref,
+        removeSectionPref,
+        applyUserSectionOverrides,
+        buildPinnedSectionConfigs,
+        saveKefinTweaksHomeScreen,
+        loadKefinTweaksHomeScreenFromDisplayPrefs,
+        createEmptyHomeScreen,
+        parsePinnedListString,
+        serializePinnedList,
+        parsePinnedParentString,
+        serializePinnedParent,
+        buildPinnedParentQueryOptions,
+        buildPinnedParentViewMoreUrl,
+        getPinnedListSectionId,
+        getPinnedParentSectionId,
+        getServerSectionDefaults,
+        saveSectionItemsLayout,
+        saveSectionUseGaplessCards,
+        loadSectionItemsLayout,
+        saveSectionGridExpanded,
+        isHomeScreenSection,
+        parseKefinTweaksSectionState,
+        saveKefinTweaksSectionState,
+        createEmptySectionState,
+        normalizeItemsLayout,
+        DEFAULT_PINNED_LIST_NAME,
+        PINNED_DEFAULT_ORDER,
+        homeScreenToLegacyArray,
+        getConfig,
+        enableJellyfinSectionsFromKefin,
+        buildHomesectionSlotsFromKefin,
+        resolveSectionJellyfinId,
+        updateUserHomeScreenConfiguration,
+        updateUserHomeScreenSectionConfiguration
     };
 
     LOG('User Home Screen Configuration loaded');

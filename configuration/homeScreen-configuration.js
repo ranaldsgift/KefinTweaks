@@ -11,116 +11,121 @@
 
     // Modal IDs
     const MAIN_MODAL_ID = 'kefin-homescreen-config-main';
-    const SECTION_EDITOR_MODAL_ID = 'kefin-homescreen-section-editor';
-    const DISCOVERY_EDITOR_MODAL_ID = 'kefin-homescreen-discovery-editor';
+    const PREVIEW_DEFAULT_LIMIT = window.KefinHomeScreenEditorConstants?.DEFAULT_SECTION_QUERY_LIMIT ?? 16;
 
-    // Supported additional query options (matching configuration.js)
-    const SUPPORTED_QUERY_OPTIONS = {
-        Ids: { label: 'Item IDs', type: 'array', hint: 'Comma-separated GUIDs' },
-        ParentId: { label: 'Parent ID', type: 'string', hint: 'GUID of parent item' },
-        ExcludeItemIds: { label: 'Exclude Item IDs', type: 'array', hint: 'Comma-separated GUIDs' },
-        GenreIds: { label: 'Genre IDs', type: 'array', hint: 'Comma-separated GUIDs' },
-        PersonIds: { label: 'Person IDs', type: 'array', hint: 'Comma-separated GUIDs' },
-        PersonTypes: { label: 'Person Types', type: 'array', hint: 'Actor, Director, Writer, etc.' },
-        ExcludePersonTypes: { label: 'Exclude Person Types', type: 'array', hint: 'Actor, Director, Writer, etc.' },
-        StudioIds: { label: 'Studio IDs', type: 'array', hint: 'Comma-separated GUIDs' },
-        Fields: { label: 'Fields', type: 'array', hint: 'Comma-separated field names' },
-        MinPremiereDate: { label: 'Min Premiere Date', type: 'date', hint: 'YYYY-MM-DD' },
-        MaxPremiereDate: { label: 'Max Premiere Date', type: 'date', hint: 'YYYY-MM-DD' },
-        MinDateLastSaved: { label: 'Min Date Last Saved', type: 'date', hint: 'YYYY-MM-DD' },
-        MinDateLastSavedForUser: { label: 'Min Date Last Saved For User', type: 'date', hint: 'YYYY-MM-DD' },
-        IndexNumber: { label: 'Index Number', type: 'number', hint: 'Episode/Season index' },
-        ParentIndexNumber: { label: 'Parent Index Number', type: 'number', hint: 'Season index' },
-        MinCommunityRating: { label: 'Min Community Rating', type: 'number', hint: '0-10' },
-        MinCriticRating: { label: 'Min Critic Rating', type: 'number', hint: '0-10' },
-        IsFavorite: { label: 'Is Favorite', type: 'boolean' },
-        IsPlayed: { label: 'Is Played', type: 'boolean' },
-        IsUnplayed: { label: 'Is Unplayed', type: 'boolean' },
-        IsMissing: { label: 'Is Missing', type: 'boolean' },
-        IsUnaired: { label: 'Is Unaired', type: 'boolean' },
-        HasThemeSong: { label: 'Has Theme Song', type: 'boolean' },
-        HasThemeVideo: { label: 'Has Theme Video', type: 'boolean' },
-        HasSubtitles: { label: 'Has Subtitles', type: 'boolean' },
-        HasSpecialFeature: { label: 'Has Special Feature', type: 'boolean' },
-        HasTrailer: { label: 'Has Trailer', type: 'boolean' },
-        HasParentalRating: { label: 'Has Parental Rating', type: 'boolean' },
-        IsHd: { label: 'Is HD', type: 'boolean' },
-        Is4K: { label: 'Is 4K', type: 'boolean' },
-        HasOverview: { label: 'Has Overview', type: 'boolean' },
-        HasOfficialRating: { label: 'Has Official Rating', type: 'boolean' },
-        Recursive: { label: 'Recursive', type: 'boolean', default: true },
-        MaxOfficialRating: { label: 'Max Official Rating', type: 'string', hint: 'e.g., PG-13, TV-MA' },
-        MinOfficialRating: { label: 'Min Official Rating', type: 'string', hint: 'e.g., PG, TV-14' },
-        NameStartsWith: { label: 'Name Starts With', type: 'string' },
-        NameStartsWithOrGreater: { label: 'Name Starts With Or Greater', type: 'string' },
-        NameLessThan: { label: 'Name Less Than', type: 'string' },
-        LocationTypes: { label: 'Location Types', type: 'array', hint: 'FileSystem, Remote, Virtual, Offline' },
-        ExcludeLocationTypes: { label: 'Exclude Location Types', type: 'array', hint: 'FileSystem, Remote, Virtual, Offline' },
-        ExcludeItemTypes: { label: 'Exclude Item Types', type: 'array', hint: 'Movie, Series, Episode, etc.' },
-        ImageTypes: { label: 'Image Types', type: 'array', hint: 'Primary, Backdrop, Thumb, Logo, etc.' },
-        OfficialRatings: { label: 'Official Ratings', type: 'array', hint: 'PG, PG-13, R, etc.' },
-        Studios: { label: 'Studios', type: 'array', hint: 'Pipe-delimited names' },
-        Artists: { label: 'Artists', type: 'array', hint: 'Pipe-delimited names' },
-        Albums: { label: 'Albums', type: 'array', hint: 'Pipe-delimited names' },
-        SeriesStatus: { label: 'Series Status', type: 'array', hint: 'Continuing, Ended, Unreleased' },
-        Years: { label: 'Years', type: 'array', hint: 'Comma-separated years' },
-        EnableResumable: { label: 'Enable Resumable', type: 'boolean' },
-        EnableUserData: { label: 'Enable User Data', type: 'boolean' }
+    function withPreviewQueryOptions(query) {
+        const queryOptions = { ...(query?.queryOptions || {}) };
+        if (queryOptions.Limit == null || queryOptions.Limit === '') {
+            queryOptions.Limit = PREVIEW_DEFAULT_LIMIT;
+        }
+        return { ...query, queryOptions };
+    }
+
+    function se() { return window.KefinHomeScreenSectionEditor || {}; }
+    function buildCheckbox(id, checked, label) { return se().buildCheckbox?.(id, checked, label) || ''; }
+    function buildSelect(id, options, selectedValue, label) { return se().buildSelect?.(id, options, selectedValue, label) || ''; }
+    function buildTextInput(id, value, label, type, placeholder) { return se().buildTextInput?.(id, value, label, type, placeholder) || ''; }
+    function buildToggleSlider(id, checked, label, options) { return se().buildToggleSlider?.(id, checked, label, options) || ''; }
+    function buildToggleCard(id, checked, label, description, options) {
+        return se().buildToggleCard?.(id, checked, label, description, options) || '';
+    }
+    function updateToggleSliderUI(btn, checked) { return se().updateToggleSliderUI?.(btn, checked); }
+    function updateToggleSwitchUI(btn, checked) { return se().updateToggleSwitchUI?.(btn, checked); }
+    const SORT_ORDERS = (window.KefinHomeScreenEditorConstants?.SORT_ORDERS) || ['Default', 'Random', 'Name'];
+    const CARD_FORMATS = (window.KefinHomeScreenEditorConstants?.CARD_FORMATS) || ['Poster'];
+
+    const GENERAL_TOGGLE_DESCRIPTIONS = {
+        'userHome-inlineConfigure': {
+            on: 'Allows Home Screen sections to be configured directly from the Home Screen.',
+            off: 'Sections can only be configured from the User > Home preferences page.'
+        },
+        'userHome-pinning': {
+            on: 'Allows users to create pinned sections on their Home Screen from library items by adding a "Pin To Home" button in the item context menu.',
+            off: 'Users cannot pin items to their Home Screen.'
+        },
+        'home-fadeInSections': {
+            on: 'Sections will be hidden when they are rendered and will fade up and in as they enter the window when you scroll.',
+            off: 'Sections will be rendered normally without any fade in animation.'
+        },
+        'home-showStaleDataBeforeRefresh': {
+            on: 'Sections will show stale items before being refreshed and existing items will be updated in place when new data is ready.',
+            off: 'Sections will show loading skeleton cards whenever section data is stale.'
+        },
+        'seasonal-enableSeasonalAnimations': {
+            on: 'Animated seasonal overlays will appear in the UI based on the seasonal sections that are enabled.',
+            off: 'No animated seasonal overlays will appear in the UI regardless of which seasonal sections are enabled.'
+        },
+        'seasonal-enableSeasonalBackground': {
+            on: 'The Home Screen background will be replaced by an appropriate Seasonal Background during the corresponding season.',
+            off: 'Seasonal Backgrounds will not appear at all.'
+        },
+        'home-ensureThumbsForPopularTVNetworks': {
+            on: 'Only Studios with a valid image will be rendered in Popular Studios sections.',
+            off: 'Studios without any image may be rendered in Popular Studios sections. You can enable the Optional CSS Module "Studio Thumbnails" to overlay a background with the Studio Name on items without an image.'
+        }
     };
 
-    const CARD_FORMATS = ['Poster', 'Thumb', 'Backdrop', 'Square', 'Random', 'Button', 'Banner', 'Logo', 'Clear Art', 'Disc'];
-    const SORT_ORDERS = ['Default', 'Random', 'Name', 'SortName', 'DateCreated', 'PremiereDate', 'CommunityRating', 'CriticRating', 'DatePlayed', 'SortName', 'PlayCount', 'PlayedPercentage', 'StartDate', 'Runtime', 'ProductionYear', 'IsPlayed', 'IsUnplayed', 'ParentIndexNumber', 'IndexNumber', 'IsFolder', 'SimilarityScore', 'SearchScore', 'DateLastContentAdded', 'SeriesDatePlayed', 'ChildCount'];
-    const SORT_ORDER_DIRECTIONS = ['Ascending', 'Descending'];
-    const RENDER_MODE_OPTIONS = [{ value: 'Normal', label: 'Normal' }, { value: 'Spotlight', label: 'Spotlight' }, { value: 'Random', label: 'Random' }];
-    const SLIDE_STATE_OPTIONS = [
-        { value: 'none', label: 'None' },
-        { value: 'dots', label: 'Dots' },
-        { value: 'numeric', label: 'Numeric' }
-    ];
+    const DISCOVERY_TOGGLE_DESCRIPTIONS = {
+        'discovery-enabled': {
+            on: 'Discovery Sections will be generated per-user and rendered dynamically as the user scrolls down the Home Screen.',
+            off: 'No Discovery Sections will be generated.'
+        },
+        'discovery-infiniteScroll': {
+            on: 'Discovery Sections will render automatically when the user scrolls near the bottom of the page.',
+            off: 'Discovery Sections will only be rendered when the user presses the "Load More" button.'
+        },
+        'discovery-renderSpotlightAboveMatching': {
+            on: 'Top Rated Genre/Studio and regular Genre/Studio sections will appear next to each other',
+            off: 'Top Rated Genre/Studio and regular Genre/Studio sections will not necessarily appear next to each other'
+        },
+        'discovery-randomizeOrder': {
+            on: 'Discovery Sections will be rendered in a random order.',
+            off: 'Discovery Sections will always appear in the same order.'
+        },
+        'discovery-fadeInSections': {
+            on: 'Sections will be hidden when they are rendered and will fade up and in as they enter the window when you scroll.',
+            off: 'Sections will be rendered normally without any fade in animation.'
+        }
+    };
 
-    const SPOTLIGHT_LAYOUT_OPTIONS = [
-        { value: 'Border', label: 'Border' },
-        { value: 'Borderless', label: 'Borderless' }
-    ];
-    const SPOTLIGHT_SIZE_OPTIONS = [
-        { value: 'normal', label: 'Normal' },
-        { value: 'large', label: 'Large' },
-        { value: 'full', label: 'Full' }
-    ];
-    const SPOTLIGHT_TILE_COUNT_OPTIONS = [
-        { value: '1', label: '1' },
-        { value: '2', label: '2' },
-        { value: '3', label: '3' }
-    ];
-    const SPOTLIGHT_ENTRANCE_OPTIONS = [
-        { value: 'fadeIn', label: 'Fade in' },
-        { value: 'fadeInUp', label: 'Fade in up' },
-        { value: 'fadeInDown', label: 'Fade in down' }
-    ];
-    const SPOTLIGHT_SLIDE_OPTIONS = [
-        { value: 'kenBurnsZoomIn', label: 'Ken Burns zoom in' },
-        { value: 'kenBurnsZoomOut', label: 'Ken Burns zoom out' },
-        { value: 'kenBurnsZoomInFullscreen', label: 'Ken Burns zoom in (fullscreen)' },
-        { value: 'kenBurnsZoomOutFullscreen', label: 'Ken Burns zoom out (fullscreen)' },
-        { value: 'kenBurnsPanRight', label: 'Ken Burns pan right' },
-        { value: 'kenBurnsPanLeft', label: 'Ken Burns pan left' },
-        { value: 'kenBurnsPanUp', label: 'Ken Burns pan up' },
-        { value: 'kenBurnsDiagonal', label: 'Ken Burns diagonal' },
-        { value: 'fadeInScale', label: 'Fade in scale' },
-        { value: 'parallaxFloat', label: 'Parallax float' },
-        { value: 'depthPulse', label: 'Depth pulse' },
-        { value: 'slowRotate', label: 'Slow rotate' },
-        { value: 'breathe', label: 'Breathe' },
-        { value: 'heatHaze', label: 'Heat haze' },
-        { value: 'colorWash', label: 'Color wash' },
-        { value: 'vignetteIn', label: 'Vignette in' }
-    ];
+    function toggleDesc(map, id, checked) {
+        const entry = map[id];
+        if (!entry) return '';
+        return checked ? entry.on : entry.off;
+    }
 
-    // Current config state
+    function hscToggleCard(id, checked, label, descMap) {
+        return buildToggleCard(id, checked, label, toggleDesc(descMap, id, checked), { hintKey: id });
+    }
+
+    function updateHscToggleCardHints(root, descMap) {
+        if (!root || !descMap) return;
+        Object.keys(descMap).forEach((id) => {
+            const checkbox = root.querySelector('#' + id);
+            const descEl = checkbox?.closest('.kefin-toggle-card')?.querySelector('.kefin-toggle-card-desc');
+            if (!descEl || !checkbox) return;
+            descEl.textContent = toggleDesc(descMap, id, checkbox.checked);
+        });
+    }    // Current config state
     let currentConfig = null;
     let mainModalInstance = null;
     let currentActiveTab = 'settings'; // Track the currently active tab
     let currentGlobalSettingsSubTab = 'general'; // Track active sub-tab in Global Settings (general, spotlight, discovery, cache)
+    let globalSettingsSaveTimer = null;
+    const UPDATE_ALL_CONFIRM_MODAL_ID = 'kefin-homescreen-config-update-all-confirm';
+    const COMMUNITY_IMPORT_MODAL_ID = 'kefin-homescreen-community-import';
+    const TTL_UNIT_OPTIONS = [
+        { value: 'seconds', ms: 1000 },
+        { value: 'minutes', ms: 60000 },
+        { value: 'hours', ms: 3600000 },
+        { value: 'days', ms: 86400000 }
+    ];
+
+    function normalizeActiveTab(tab) {
+        if (tab === 'community') return 'import-export';
+        if (tab === 'benchmark') return 'troubleshoot';
+        return tab || 'settings';
+    }
 
     /**
      * Show toast notification
@@ -148,6 +153,28 @@
             }
         });
         return flattened;
+    }
+
+    /**
+     * Collect discovery-enabled sections from custom groups, stamping pageNumber
+     * per group (1..N among discovery sections only, in group order).
+     * @param {Array} groups - CUSTOM_SECTION_GROUPS
+     * @param {{ isSectionActive: Function, isInSeasonalPeriod: Function }} options
+     * @returns {Array}
+     */
+    function collectCustomDiscoverySections(groups, { isSectionActive, isInSeasonalPeriod }) {
+        const out = [];
+        (groups || []).forEach((group) => {
+            let pageNumber = 0;
+            (group.sections || []).forEach((section) => {
+                if (!isSectionActive(section)) return;
+                if (section.discoveryEnabled !== true) return;
+                if (section.startDate && section.endDate && !isInSeasonalPeriod(section.startDate, section.endDate)) return;
+                pageNumber += 1;
+                out.push({ ...section, pageNumber, isCustom: true });
+            });
+        });
+        return out;
     }
 
     /**
@@ -307,6 +334,149 @@
     }
 
     /**
+     * True when a section property should be omitted from JS Injector persistence
+     * (same meaning as a blank CustomPrefs segment).
+     * @param {*} value
+     * @returns {boolean}
+     */
+    function isEmptySectionValue(value) {
+        return value === '' || value === null || value === undefined;
+    }
+
+    /**
+     * Remove empty properties from a section (and nested plain objects) before injector save.
+     * Empty = '' / null / undefined. Does not strip false, 0, or [].
+     * @param {Object} section
+     * @returns {Object}
+     */
+    function omitEmptySectionProps(section) {
+        if (!section || typeof section !== 'object' || Array.isArray(section)) return section;
+        Object.keys(section).forEach((key) => {
+            const value = section[key];
+            if (isEmptySectionValue(value)) {
+                delete section[key];
+                return;
+            }
+            if (value && typeof value === 'object' && !Array.isArray(value)) {
+                omitEmptySectionProps(value);
+                if (Object.keys(value).length === 0) delete section[key];
+            }
+        });
+        return section;
+    }
+
+    /**
+     * Strip empty props from every section in group arrays (mutates in place).
+     * @param {Array} groups
+     */
+    function omitEmptyPropsFromGroups(groups) {
+        if (!Array.isArray(groups)) return;
+        groups.forEach((group) => {
+            if (!group || !Array.isArray(group.sections)) return;
+            group.sections.forEach((section) => omitEmptySectionProps(section));
+        });
+    }
+
+    /**
+     * Apply user-editable presentation fields onto a server section (no queries/paths/items).
+     * Cleared Default/Normal/left/empty values are written as '' so mergeSection overwrites
+     * stale injector values; omitEmptySectionProps then drops them on save.
+     * @param {Object} section
+     * @param {Object} presentation - buildPrefOverrides-shaped object
+     */
+    function applyPresentationDefaultsToSection(section, presentation) {
+        if (!section || !presentation) return section;
+        if (presentation.order != null && presentation.order !== '') {
+            const order = parseInt(presentation.order, 10);
+            if (!Number.isNaN(order)) section.order = order;
+        }
+        if (presentation.ttl != null && presentation.ttl !== '') {
+            const ttl = parseInt(presentation.ttl, 10);
+            if (!Number.isNaN(ttl)) section.ttl = ttl;
+        }
+        if (presentation.cardFormat) section.cardFormat = presentation.cardFormat;
+
+        if (presentation.hideName === true) section.hideName = true;
+        else if (presentation.hideName === false) section.hideName = '';
+
+        if (presentation.hideCardTitles === true) {
+            section.cardTitleVisibility = 'hidden';
+            section.hideCardTitles = true;
+        } else {
+            section.hideCardTitles = '';
+            if (section.cardTitleVisibility === 'hidden') section.cardTitleVisibility = '';
+        }
+
+        if (presentation.cardTitlePosition) {
+            section.cardTitlePosition = presentation.cardTitlePosition;
+        } else {
+            section.cardTitlePosition = '';
+        }
+
+        if (presentation.cardTitleCapitalization && presentation.cardTitleCapitalization !== 'normal') {
+            section.cardTitleCapitalization = presentation.cardTitleCapitalization;
+        } else {
+            section.cardTitleCapitalization = '';
+        }
+
+        if (presentation.cardTitleFontFamily && presentation.cardTitleFontFamily !== 'default') {
+            section.cardTitleFontFamily = presentation.cardTitleFontFamily;
+        } else {
+            section.cardTitleFontFamily = '';
+        }
+
+        if (presentation.cardTitleFontSize && presentation.cardTitleFontSize !== 'normal') {
+            section.cardTitleFontSize = presentation.cardTitleFontSize;
+        } else {
+            section.cardTitleFontSize = '';
+        }
+
+        if (presentation.cardTitleColor) section.cardTitleColor = presentation.cardTitleColor;
+        else section.cardTitleColor = '';
+
+        if (presentation.borderStyle) section.borderStyle = presentation.borderStyle;
+        else section.borderStyle = '';
+
+        if (presentation.borderColor) section.borderColor = presentation.borderColor;
+        else section.borderColor = '';
+
+        const isSpotlight = section.renderMode === 'Spotlight' || section.spotlight === true;
+        if (isSpotlight) {
+            section.spotlightConfig = section.spotlightConfig || {};
+            if (presentation.animationEnabled === false) section.spotlightConfig.panAnimation = false;
+            else if (presentation.animationEnabled === true) section.spotlightConfig.panAnimation = true;
+
+            if (presentation.spotlightLayout) section.spotlightConfig.spotlightLayout = presentation.spotlightLayout;
+            if (presentation.spotlightSize) section.spotlightConfig.spotlightSize = presentation.spotlightSize;
+            if (presentation.spotlightTileCount != null && presentation.spotlightTileCount !== '') {
+                const tileCount = parseInt(presentation.spotlightTileCount, 10);
+                if (!Number.isNaN(tileCount)) section.spotlightConfig.tileCount = tileCount;
+            }
+        }
+
+        return section;
+    }
+
+    /**
+     * Copy presentation defaults onto the server section and persist.
+     * @param {string} sectionId
+     * @param {Object} presentation
+     * @returns {Promise<boolean>}
+     */
+    async function publishSectionPresentationDefaults(sectionId, presentation) {
+        getConfig();
+        if (!currentConfig || !sectionId) return false;
+        const found = findSectionInAllGroups(currentConfig, sectionId);
+        if (!found?.section) {
+            WARN(`publishSectionPresentationDefaults: section not found: ${sectionId}`);
+            return false;
+        }
+        applyPresentationDefaultsToSection(found.section, presentation || {});
+        await saveConfig(currentConfig);
+        return true;
+    }
+
+    /**
      * Update a section in groups
      * @param {Array} groups - Array of HomeScreenSectionGroup objects
      * @param {string} sectionId - Section ID to update
@@ -396,18 +566,18 @@
         try {
             if (!window.ApiClient || !window.ApiClient._loggedIn) {
                 WARN('User not logged in, skipping library sections verification');
-                return config;
+                return { config, hasChanges: false };
             }
 
             if (!window.dataHelper || !window.dataHelper.getLibraries) {
                 WARN('dataHelper.getLibraries not available, skipping library sections verification');
-                return config;
+                return { config, hasChanges: false };
             }
 
             const libraries = await window.dataHelper.getLibraries();
             if (!libraries || libraries.length === 0) {
                 LOG('No libraries found, skipping library sections verification');
-                return config;
+                return { config, hasChanges: false };
             }
 
             // Filter out boxsets and playlists; all templates apply to this list
@@ -434,13 +604,16 @@
                                 id: `recently-added-${library.Id}`,
                                 name: `Recently Added ${library.Name}`,
                                 viewMoreUrl: viewMoreUrl,
+                                jellyfinId: 'latestmedia',
+                                userConfigurable: true,
                                 queries: [{
                                     path: '/Items/Latest',
                                     queryOptions: {
                                         ParentId: library.Id,
-                                        SortBy: 'DateCreated',
-                                        SortOrder: 'Descending',
-                                        Limit: 16
+                                        Fields: 'PrimaryImageAspectRatio,Path',
+                                        Limit: 16,
+                                        ImageTypeLimit: 1,
+                                        EnableImageTypes: 'Primary,Backdrop,Thumb',
                                     }
                                 }]
                             };
@@ -467,6 +640,7 @@
                             return {
                                 id: `popular-genres-${library.Id}`,
                                 name: `Popular ${library.Name} Genres`,
+                                userConfigurable: true,
                                 queries: [{
                                     path: '/Genres',
                                     ParentId: library.Id,
@@ -489,7 +663,7 @@
             let hasChanges = false;
 
             for (const template of libraryTemplates) {
-                let group = updatedGroups.find(g => g.id === template.groupId);
+                let group = updatedGroups.find(g => g.id === template.groupId || g.name === template.groupName);
                 if (!group) {
                     group = {
                         id: template.groupId,
@@ -497,6 +671,9 @@
                         sections: []
                     };
                     updatedGroups.push(group);
+                    hasChanges = true;
+                } else if (!group.id) {
+                    group.id = template.groupId;
                     hasChanges = true;
                 }
 
@@ -530,17 +707,182 @@
                 });
             }
 
+            // Remove stale library sections from any HOME group (e.g. misplaced sections)
+            for (const group of updatedGroups) {
+                const beforeCount = (group.sections || []).length;
+                group.sections = (group.sections || []).filter(s => {
+                    if (!s?.id) return true;
+                    for (const template of libraryTemplates) {
+                        if (s.id.startsWith(template.idPrefix)) {
+                            const libId = s.id.replace(template.idPrefix, '');
+                            return currentLibraryIds.has(libId);
+                        }
+                    }
+                    return true;
+                });
+                if (group.sections.length !== beforeCount) {
+                    hasChanges = true;
+                }
+            }
+
             if (!hasChanges) {
                 LOG('Library-based sections are in sync with libraries');
-                return config;
+                return { config, hasChanges: false };
             }
 
             config.HOME_SECTION_GROUPS = updatedGroups;
             LOG('Library-based sections synced successfully');
-            return config;
+            return { config, hasChanges: true };
         } catch (error) {
             ERR('Error verifying library sections config:', error);
-            return config;
+            return { config, hasChanges: false };
+        }
+    }
+
+    const NATIVE_QUERY_SYNC_KEYS = {
+        queryLevel: ['path'],
+        queryOptions: ['Fields', 'Filters', 'IncludeItemTypes', 'MediaTypes', 'IsActive', 'IsScheduled', 'IsAiring', 'HasAired', 'IsInProgress'],
+    };
+
+    function buildCanonicalHomeSectionMap() {
+        const defaults = window.KefinHomeConfig2;
+        const map = new Map();
+        if (!defaults?.HOME_SECTION_GROUPS) return map;
+        flattenSectionGroups(defaults.HOME_SECTION_GROUPS).forEach(section => {
+            if (section?.id) map.set(section.id, section);
+        });
+        return map;
+    }
+
+    function getRecentlyAddedCanonicalQuery() {
+        return {
+            path: '/Items/Latest',
+            queryOptions: {
+                Fields: 'PrimaryImageAspectRatio,Path',
+                Limit: 16,
+                ImageTypeLimit: 1,
+                EnableImageTypes: 'Primary,Backdrop,Thumb',
+            },
+        };
+    }
+
+    function syncQueryFromCanonical(savedQuery, canonicalQuery) {
+        if (!savedQuery || !canonicalQuery) return false;
+        let changed = false;
+
+        for (const key of NATIVE_QUERY_SYNC_KEYS.queryLevel) {
+            if (canonicalQuery[key] !== undefined && savedQuery[key] !== canonicalQuery[key]) {
+                savedQuery[key] = canonicalQuery[key];
+                changed = true;
+            }
+        }
+
+        if (!savedQuery.queryOptions) savedQuery.queryOptions = {};
+        const savedOpts = savedQuery.queryOptions;
+        const canonicalOpts = canonicalQuery.queryOptions || {};
+
+        for (const key of NATIVE_QUERY_SYNC_KEYS.queryOptions) {
+            if (canonicalOpts[key] !== undefined) {
+                const canonicalVal = canonicalOpts[key];
+                const savedVal = savedOpts[key];
+                const arraysEqual = Array.isArray(canonicalVal) && Array.isArray(savedVal)
+                    && canonicalVal.length === savedVal.length
+                    && canonicalVal.every((v, i) => v === savedVal[i]);
+                if (canonicalVal !== savedVal && !arraysEqual) {
+                    savedOpts[key] = Array.isArray(canonicalVal) ? [...canonicalVal] : canonicalVal;
+                    changed = true;
+                }
+            }
+        }
+
+        if (canonicalOpts.Filters === undefined && savedOpts.Filters === 'IsResumable') {
+            delete savedOpts.Filters;
+            changed = true;
+        }
+
+        return changed;
+    }
+
+    function syncKefinTweaksDefaultSections(config) {
+        const canonicalMap = buildCanonicalHomeSectionMap();
+        const recentlyAddedTemplate = getRecentlyAddedCanonicalQuery();
+        let hasChanges = false;
+
+        const groups = config.HOME_SECTION_GROUPS || [];
+        for (const group of groups) {
+            for (const section of group.sections || []) {
+                if (!section?.id) continue;
+
+                let canonical = canonicalMap.get(section.id);
+                if (!canonical && section.id.startsWith('recently-added-')) {
+                    canonical = { queries: [recentlyAddedTemplate] };
+                }
+                if (!canonical?.queries?.length) continue;
+
+                if (!Array.isArray(section.queries)) section.queries = [];
+
+                for (let i = 0; i < canonical.queries.length; i++) {
+                    if (!section.queries[i]) {
+                        section.queries[i] = { queryOptions: {} };
+                    }
+                    if (syncQueryFromCanonical(section.queries[i], canonical.queries[i])) {
+                        hasChanges = true;
+                    }
+                }
+            }
+        }
+
+        return hasChanges;
+    }
+
+    async function ensureKefinTweaksDefaultSections() {
+        try {
+            if (!window.ApiClient || !window.ApiClient._loggedIn) {
+                return;
+            }
+
+            let admin = false;
+            try {
+                admin = await window.apiHelper?.isAdmin?.();
+            } catch {
+                return;
+            }
+            if (!admin) return;
+
+            const config = loadConfig();
+            const { hasChanges: libraryChanges } = await verifyLibrarySectionsConfig(config);
+            const queryChanges = syncKefinTweaksDefaultSections(config);
+
+            if (libraryChanges || queryChanges) {
+                await saveConfig(config);
+                LOG('KefinTweaks default home sections synced on startup');
+            }
+        } catch (error) {
+            ERR('Error ensuring KefinTweaks default sections:', error);
+        }
+    }
+
+    let startupSyncDone = false;
+
+    async function runStartupDefaultSectionSync() {
+        if (startupSyncDone) return;
+
+        if (window.userHelper?.waitForLogin) {
+            const loggedIn = await window.userHelper.waitForLogin();
+            if (!loggedIn) return;
+        } else if (!window.ApiClient?._loggedIn) {
+            return;
+        }
+
+        startupSyncDone = true;
+
+        try {
+            if (window.migrateHomeScreenConfig) {
+                await window.migrateHomeScreenConfig();
+            }
+            await ensureKefinTweaksDefaultSections();
+        } catch (error) {
+            ERR('Startup default section sync failed:', error);
         }
     }
 
@@ -585,6 +927,7 @@
                 CACHE: { ...defaults.CACHE, ...(existingConfig.CACHE || {}) },
                 SPOTLIGHT_SETTINGS: { ...defaults.SPOTLIGHT_SETTINGS, ...(existingConfig.SPOTLIGHT_SETTINGS || {}) },
                 HOME_SETTINGS: { ...defaults.HOME_SETTINGS, ...(existingConfig.HOME_SETTINGS || {}) },
+                USER_HOME_SCREEN_SETTINGS: { ...defaults.USER_HOME_SCREEN_SETTINGS, ...(existingConfig.USER_HOME_SCREEN_SETTINGS || {}) },
                 MERGE_NEXT_UP: existingConfig.MERGE_NEXT_UP ?? defaults.MERGE_NEXT_UP ?? false
             };
 
@@ -610,7 +953,10 @@
             const enabledSeasonalSections = flattenSectionGroups(mergedConfig.SEASONAL_SECTION_GROUPS).filter(s => s.enabled === true && s.discoveryEnabled !== true && isInSeasonalPeriod(s.startDate, s.endDate));
             const enabledCustomSections = flattenSectionGroups(mergedConfig.CUSTOM_SECTION_GROUPS).filter(s => s.enabled === true && s.discoveryEnabled !== true && (s.startDate && s.endDate ? isInSeasonalPeriod(s.startDate, s.endDate) : true));
             const enabledDiscoverySections = flattenSectionGroups(mergedConfig.DISCOVERY_SECTION_GROUPS).filter(s => s.enabled === true && (s.startDate && s.endDate ? isInSeasonalPeriod(s.startDate, s.endDate) : true));
-            const enabledCustomDiscoverySections = flattenSectionGroups(mergedConfig.CUSTOM_SECTION_GROUPS).filter(s => s.enabled === true && s.discoveryEnabled === true && (s.startDate && s.endDate ? isInSeasonalPeriod(s.startDate, s.endDate) : true));
+            const enabledCustomDiscoverySections = collectCustomDiscoverySections(mergedConfig.CUSTOM_SECTION_GROUPS, {
+                isSectionActive: (s) => s.enabled === true,
+                isInSeasonalPeriod
+            });
 
             mergedConfig.ENABLED_NORMAL_SECTIONS = [...enabledHomeSections, ...enabledSeasonalSections, ...enabledCustomSections];
             mergedConfig.ENABLED_DISCOVERY_SECTIONS = [...enabledDiscoverySections, ...enabledCustomDiscoverySections];
@@ -658,11 +1004,14 @@
             return currentDate >= start && currentDate <= end;
         };
 
-        const enabledHomeSections = flattenSectionGroups(config.HOME_SECTION_GROUPS).filter(s => s.enabled === true && s.discoveryEnabled !== true && (s.startDate && s.endDate ? isInSeasonalPeriod(s.startDate, s.endDate) : true));
-        const enabledSeasonalSections = flattenSectionGroups(config.SEASONAL_SECTION_GROUPS).filter(s => s.enabled === true && s.discoveryEnabled !== true && isInSeasonalPeriod(s.startDate, s.endDate));
-        const enabledCustomSections = flattenSectionGroups(config.CUSTOM_SECTION_GROUPS).filter(s => s.enabled === true && s.discoveryEnabled !== true && (s.startDate && s.endDate ? isInSeasonalPeriod(s.startDate, s.endDate) : true));
-        const enabledDiscoverySections = flattenSectionGroups(config.DISCOVERY_SECTION_GROUPS).filter(s => s.enabled === true && (s.startDate && s.endDate ? isInSeasonalPeriod(s.startDate, s.endDate) : true));
-        const enabledCustomDiscoverySections = flattenSectionGroups(config.CUSTOM_SECTION_GROUPS).filter(s => s.enabled === true && s.discoveryEnabled === true && (s.startDate && s.endDate ? isInSeasonalPeriod(s.startDate, s.endDate) : true));
+        const enabledHomeSections = flattenSectionGroups(config.HOME_SECTION_GROUPS).filter(s => (s.enabled || s.userConfigurable || s.userConfigurable === undefined) && s.discoveryEnabled !== true && (s.startDate && s.endDate ? isInSeasonalPeriod(s.startDate, s.endDate) : true));
+        const enabledSeasonalSections = flattenSectionGroups(config.SEASONAL_SECTION_GROUPS).filter(s => (s.enabled || s.userConfigurable || s.userConfigurable === undefined) && s.discoveryEnabled !== true && isInSeasonalPeriod(s.startDate, s.endDate));
+        const enabledCustomSections = flattenSectionGroups(config.CUSTOM_SECTION_GROUPS).filter(s => (s.enabled || s.userConfigurable || s.userConfigurable === undefined) && s.discoveryEnabled !== true && (s.startDate && s.endDate ? isInSeasonalPeriod(s.startDate, s.endDate) : true));
+        const enabledDiscoverySections = flattenSectionGroups(config.DISCOVERY_SECTION_GROUPS).filter(s => (s.enabled || s.userConfigurable || s.userConfigurable === undefined) && (s.startDate && s.endDate ? isInSeasonalPeriod(s.startDate, s.endDate) : true));
+        const enabledCustomDiscoverySections = collectCustomDiscoverySections(config.CUSTOM_SECTION_GROUPS, {
+            isSectionActive: (s) => s.enabled || s.userConfigurable || s.userConfigurable === undefined,
+            isInSeasonalPeriod
+        });
 
 
         return {
@@ -675,7 +1024,7 @@
      * Merge default groups with admin overrides
      * @param {Array} defaultGroups - Array of default HomeScreenSectionGroup objects
      * @param {Array} overrideGroups - Array of override HomeScreenSectionGroup objects
-     * @param {string} sectionType - Type of section to merge (home, seasonal, discovery, custom)
+     * @param {string} sectionType - Surface type to stamp: home | seasonal | discovery, or custom (derives surface + isCustom)
      * @returns {Array} Merged groups
      */
     function mergeGroupDefaults(defaultGroups, overrideGroups, sectionType = 'home') {
@@ -773,10 +1122,24 @@
             }
         });
 
-        // Add the type to each section in the merged sections
+        // Stamp surface type on each section (never type=custom; authorship is isCustom)
         merged.forEach(group => {
             group.sections.forEach(section => {
-                section.type = sectionType;
+                if (sectionType === 'custom') {
+                    section.isCustom = true;
+                    const existing = String(section.type || '').toLowerCase();
+                    if (['home', 'seasonal', 'discovery'].includes(existing)) {
+                        // keep configured surface type
+                    } else if (section.discoveryEnabled === true || section.discoveryType) {
+                        section.type = 'discovery';
+                    } else if (section.startDate && section.endDate) {
+                        section.type = 'seasonal';
+                    } else {
+                        section.type = 'home';
+                    }
+                } else {
+                    section.type = sectionType;
+                }
             });
         });
 
@@ -834,51 +1197,27 @@
                 return window.KefinTweaksConfig || {};
             }
 
-            const server = window.ApiClient._serverAddress;
-            const token = window.ApiClient.accessToken();
-
-            // Get plugins list
-            const pluginsResponse = await fetch(`${server}/Plugins`, {
-                headers: {
-                    'X-Emby-Token': token
+            let injectorConfig;
+            if (window.KefinTweaksUtils && typeof window.KefinTweaksUtils.getPluginConfiguration === 'function') {
+                try {
+                    injectorConfig = await window.KefinTweaksUtils.getPluginConfiguration([
+                        'JavaScript Injector',
+                        'JS Injector'
+                    ]);
+                } catch (pluginError) {
+                    WARN('JavaScript Injector plugin not found, using window.KefinTweaksConfig as fallback');
+                    return window.KefinTweaksConfig || {};
                 }
-            });
-
-            if (!pluginsResponse.ok) {
-                throw new Error(`Failed to get plugins: ${pluginsResponse.status} ${pluginsResponse.statusText}`);
-            }
-
-            const pluginsData = await pluginsResponse.json();
-            const pluginsList = Array.isArray(pluginsData) ? pluginsData : (pluginsData.Items || []);
-            
-            // Find JavaScript Injector plugin
-            const injectorPlugin = pluginsList.find(plugin => 
-                plugin.Name === 'JavaScript Injector' || plugin.Name === 'JS Injector'
-            );
-
-            if (!injectorPlugin) {
-                WARN('JavaScript Injector plugin not found, using window.KefinTweaksConfig as fallback');
+            } else {
+                WARN('KefinTweaksUtils.getPluginConfiguration not available, using window.KefinTweaksConfig as fallback');
                 return window.KefinTweaksConfig || {};
             }
 
-            // Get injector config
-            const configResponse = await fetch(`${server}/Plugins/${injectorPlugin.Id}/Configuration`, {
-                headers: {
-                    'X-Emby-Token': token
-                }
-            });
-
-            if (!configResponse.ok) {
-                throw new Error(`Failed to get plugin config: ${configResponse.status} ${configResponse.statusText}`);
-            }
-
-            const injectorConfig = await configResponse.json();
-            
             // Find KefinTweaks-Config script
             const kefinTweaksScript = injectorConfig.CustomJavaScripts?.find(
                 script => script.Name === 'KefinTweaks-Config'
             );
-            
+
             if (kefinTweaksScript && kefinTweaksScript.Script) {
                 // Extract config from script content
                 const scriptMatch = kefinTweaksScript.Script.match(/window\.KefinTweaksConfig\s*=\s*({[\s\S]*});/);
@@ -891,7 +1230,7 @@
                     }
                 }
             }
-            
+
             // Fallback: use window.KefinTweaksConfig if available
             return window.KefinTweaksConfig || {};
         } catch (error) {
@@ -1002,6 +1341,8 @@
         return merged;
     }
 
+    const LIBRARY_SYNC_GROUP_IDS = new Set(['home-recently-added', 'home-popular-genres']);
+
     /**
      * Merge group objects, matching sections by id
      * @param {Object} savedGroup - Group from saved config
@@ -1052,13 +1393,16 @@
                 mergedSections.push(JSON.parse(JSON.stringify(currentSection)));
             }
         });
-        
-        // Add any remaining saved sections that weren't in current (preserve them)
-        savedSectionMap.forEach(savedSection => {
-            if (!savedSection.deleted) {
-                mergedSections.push(JSON.parse(JSON.stringify(savedSection)));
-            }
-        });
+
+        // Library template groups: current list is authoritative (verify may have pruned sections)
+        const groupId = currentGroup.id || savedGroup.id;
+        if (!LIBRARY_SYNC_GROUP_IDS.has(groupId)) {
+            savedSectionMap.forEach(savedSection => {
+                if (!savedSection.deleted) {
+                    mergedSections.push(JSON.parse(JSON.stringify(savedSection)));
+                }
+            });
+        }
         
         merged.sections = mergedSections;
         return merged;
@@ -1124,12 +1468,17 @@
 
     /**
      * Save configuration to JS Injector
-     * Merges partial configs with saved config to preserve existing data
+     * Merges partial configs with in-memory window.KefinTweaksConfig to preserve existing data.
+     * Utils performs the single injector Configuration GET + POST.
      */
     async function saveConfig(config) {
         try {
-            // Load saved config from JS Injector
-            const savedConfig = await getSavedConfig();
+            // Ensure window.KefinTweaksConfig exists (modal already syncs this; cold path only)
+            if (!window.KefinTweaksConfig) {
+                window.KefinTweaksConfig = {};
+            }
+
+            const savedConfig = window.KefinTweaksConfig;
             const savedHomeScreenConfig = savedConfig.homeScreenConfig || {};
             
             // Create merged config
@@ -1170,24 +1519,22 @@
                     ...(savedHomeScreenConfig.HOME_SETTINGS || {}),
                     ...(config.HOME_SETTINGS || {})
                 },
+                USER_HOME_SCREEN_SETTINGS: {
+                    ...(savedHomeScreenConfig.USER_HOME_SCREEN_SETTINGS || {}),
+                    ...(config.USER_HOME_SCREEN_SETTINGS || {})
+                },
                 MERGE_NEXT_UP: config.MERGE_NEXT_UP !== undefined ? config.MERGE_NEXT_UP : (savedHomeScreenConfig.MERGE_NEXT_UP !== undefined ? savedHomeScreenConfig.MERGE_NEXT_UP : false)
             };
-            
-            // Ensure window.KefinTweaksConfig exists
-            if (!window.KefinTweaksConfig) {
-                window.KefinTweaksConfig = {};
-            }
 
-            // Update homeScreenConfig with merged result
+            // Empty values (= blank CustomPrefs segments) must not persist to JS Injector
+            omitEmptyPropsFromGroups(mergedHomeScreenConfig.HOME_SECTION_GROUPS);
+            omitEmptyPropsFromGroups(mergedHomeScreenConfig.SEASONAL_SECTION_GROUPS);
+            omitEmptyPropsFromGroups(mergedHomeScreenConfig.DISCOVERY_SECTION_GROUPS);
+            omitEmptyPropsFromGroups(mergedHomeScreenConfig.CUSTOM_SECTION_GROUPS);
+
+            // Update homeScreenConfig with merged result (other top-level keys already on window.KefinTweaksConfig)
             window.KefinTweaksConfig.homeScreenConfig = mergedHomeScreenConfig;
             currentConfig = mergedHomeScreenConfig;
-            
-            // Merge other top-level config properties (preserve existing)
-            Object.keys(savedConfig).forEach(key => {
-                if (key !== 'homeScreenConfig' && !window.KefinTweaksConfig.hasOwnProperty(key)) {
-                    window.KefinTweaksConfig[key] = savedConfig[key];
-                }
-            });
 
             // Save to JS Injector using utils
             if (window.KefinTweaksUtils && window.KefinTweaksUtils.saveConfigToJavaScriptInjector) {
@@ -1213,289 +1560,6 @@
     /**
      * Build Jellyfin checkbox HTML
      */
-    function buildCheckbox(id, checked, label) {
-        return `
-            <label class="checkboxContainer" style="display: flex; align-items: center; gap: 0.5em;">
-                <input type="checkbox" id="${id}" ${checked ? 'checked' : ''}>
-                <span class="listItemBodyText">${label}</span>
-            </label>
-        `;
-    }
-
-    /**
-     * Build Jellyfin select/dropdown HTML
-     */
-    function buildSelect(id, options, selectedValue, label) {
-        const optionsHTML = options.map(opt => {
-            const value = typeof opt === 'string' ? opt : opt.value;
-            const label = typeof opt === 'string' ? opt : opt.label;
-            const selected = value === selectedValue ? 'selected' : '';
-            return `<option value="${value}" ${selected}>${label}</option>`;
-        }).join('');
-
-        return `
-            <div style="margin-bottom: 1em;">
-                <label class="listItemBodyText" for="${id}" style="display: block; margin-bottom: 0.25em;">${label}</label>
-                <select id="${id}" class="fld emby-select emby-select-withcolor">
-                    ${optionsHTML}
-                </select>
-            </div>
-        `;
-    }
-
-    /**
-     * Build Jellyfin text input HTML
-     */
-    function buildTextInput(id, value, label, type = 'text', placeholder = '') {
-        return `
-            <div style="margin-bottom: 1em;">
-                <label class="listItemBodyText" for="${id}" style="display: block; margin-bottom: 0.25em;">${label}</label>
-                <input type="${type}" id="${id}" class="fld emby-input" value="${value || ''}" placeholder="${placeholder || ''}">
-            </div>
-        `;
-    }
-
-    /**
-     * Build enabled toggle buttons (ENABLED/DISABLED)
-     */
-    function buildEnabledToggleButtons(id, enabled) {
-        const isEnabled = enabled !== false;
-        return `
-            <div style="margin-bottom: 1.5em; display: flex; gap: 0.5em;">
-                <button type="button" class="enabled-toggle-btn ${isEnabled ? 'active' : ''}" data-enabled="true" style="
-                    flex: 1;
-                    padding: 0.75em 1.5em;
-                    border: 2px solid ${isEnabled ? 'rgba(0, 164, 220, 0.8)' : 'rgba(255,255,255,0.2)'};
-                    border-radius: 4px;
-                    background: ${isEnabled ? 'rgba(0, 164, 220, 0.2)' : 'transparent'};
-                    color: ${isEnabled ? 'var(--theme-primary-color, #00a4dc)' : 'rgba(255,255,255,0.7)'};
-                    font-weight: ${isEnabled ? '600' : '400'};
-                    cursor: pointer;
-                    transition: all 0.2s;
-                    text-transform: uppercase;
-                    letter-spacing: 0.5px;
-                ">
-                    Enabled
-                </button>
-                <button type="button" class="enabled-toggle-btn ${!isEnabled ? 'active' : ''}" data-enabled="false" style="
-                    flex: 1;
-                    padding: 0.75em 1.5em;
-                    border: 2px solid ${!isEnabled ? 'rgba(158, 158, 158, 0.8)' : 'rgba(255,255,255,0.2)'};
-                    border-radius: 4px;
-                    background: ${!isEnabled ? 'rgba(158, 158, 158, 0.2)' : 'transparent'};
-                    color: ${!isEnabled ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.7)'};
-                    font-weight: ${!isEnabled ? '600' : '400'};
-                    cursor: pointer;
-                    transition: all 0.2s;
-                    text-transform: uppercase;
-                    letter-spacing: 0.5px;
-                ">
-                    Disabled
-                </button>
-            </div>
-        `;
-    }
-
-    /**
-     * Build toggle slider (ON/OFF switch) - generic function for both settings and sections
-     * @param {string} id - ID for the toggle (used for hidden checkbox if includeHiddenCheckbox is true)
-     * @param {boolean} checked - Initial checked/enabled state
-     * @param {string} label - Label text (only used if wrapInLabel is true)
-     * @param {object} options - Configuration options
-     * @param {boolean} options.includeHiddenCheckbox - Whether to include hidden checkbox (for settings)
-     * @param {object} options.dataAttributes - Data attributes object (e.g., {sectionId: '...', sectionType: '...'})
-     * @param {string} options.cssClass - CSS class for toggle button (default: 'toggle-slider')
-     * @param {boolean} options.wrapInLabel - Whether to wrap in label container (default: true)
-     */
-    function buildToggleSlider(id, checked, label, options = {}) {
-        const {
-            includeHiddenCheckbox = false,
-            dataAttributes = {},
-            cssClass = 'toggle-slider',
-            wrapInLabel = true
-        } = options;
-
-        const isEnabled = checked !== false;
-        const dataAttrsString = Object.entries(dataAttributes)
-            .map(([key, value]) => `data-${key}="${value}"`)
-            .join(' ');
-
-        const toggleButton = `
-            <button type="button" class="${cssClass}" ${dataAttrsString} ${includeHiddenCheckbox ? `data-checkbox-id="${id}"` : ''} data-enabled="${isEnabled}" style="
-                position: relative;
-                width: 60px;
-                height: 28px;
-                border-radius: 14px;
-                border: none;
-                background: ${isEnabled ? 'rgba(0, 164, 220, 0.8)' : 'rgba(158, 158, 158, 0.5)'};
-                cursor: pointer;
-                transition: background-color 0.3s ease;
-                flex-shrink: 0;
-                padding: 0;
-                display: flex;
-                align-items: center;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-            ">
-                <span style="
-                    position: absolute;
-                    left: ${isEnabled ? '8px' : '6px'};
-                    font-size: 10px;
-                    font-weight: 600;
-                    color: white;
-                    text-transform: uppercase;
-                    letter-spacing: 0.5px;
-                    transition: opacity 0.2s ease;
-                    opacity: ${isEnabled ? '1' : '0'};
-                    z-index: 1;
-                    pointer-events: none;
-                ">ON</span>
-                <span style="
-                    position: absolute;
-                    right: ${isEnabled ? '6px' : '8px'};
-                    font-size: 10px;
-                    font-weight: 600;
-                    color: rgba(255,255,255,0.7);
-                    text-transform: uppercase;
-                    letter-spacing: 0.5px;
-                    transition: opacity 0.2s ease;
-                    opacity: ${isEnabled ? '0' : '1'};
-                    z-index: 1;
-                    pointer-events: none;
-                ">OFF</span>
-                <span style="
-                    position: absolute;
-                    width: 22px;
-                    height: 22px;
-                    border-radius: 50%;
-                    background: white;
-                    left: ${isEnabled ? 'calc(100% - 26px)' : '3px'};
-                    transition: left 0.3s ease;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-                    z-index: 2;
-                    pointer-events: none;
-                "></span>
-            </button>
-        `;
-
-        const hiddenCheckbox = includeHiddenCheckbox ? `
-            <input type="checkbox" id="${id}" ${isEnabled ? 'checked' : ''} style="display: none;">
-        ` : '';
-
-        if (wrapInLabel) {
-            return `
-                <label class="checkboxContainer" style="display: flex; align-items: center; gap: 0.5em;">
-                    ${hiddenCheckbox}
-                    ${toggleButton}
-                    <span class="listItemBodyText">${label}</span>
-                </label>
-            `;
-        } else {
-            return hiddenCheckbox + toggleButton;
-        }
-    }
-
-    /**
-     * Update toggle slider UI programmatically
-     * @param {HTMLElement} toggleButton - The toggle button element
-     * @param {boolean} isEnabled - New enabled state
-     */
-    function updateToggleSliderUI(toggleButton, isEnabled) {
-        if (!toggleButton) return;
-
-        toggleButton.dataset.enabled = isEnabled;
-        toggleButton.style.background = isEnabled ? 'rgba(0, 164, 220, 0.8)' : 'rgba(158, 158, 158, 0.5)';
-
-        // Update ON text
-        const onText = toggleButton.querySelector('span:first-of-type');
-        if (onText) {
-            onText.style.opacity = isEnabled ? '1' : '0';
-            onText.style.left = isEnabled ? '8px' : '6px';
-        }
-
-        // Update OFF text
-        const offText = toggleButton.querySelector('span:nth-of-type(2)');
-        if (offText) {
-            offText.style.opacity = isEnabled ? '0' : '1';
-            offText.style.right = isEnabled ? '6px' : '8px';
-        }
-
-        // Update knob position
-        const knob = toggleButton.querySelector('span:last-of-type');
-        if (knob) {
-            knob.style.left = isEnabled ? 'calc(100% - 26px)' : '3px';
-        }
-
-        // Update hidden checkbox if present
-        const checkboxId = toggleButton.dataset.checkboxId;
-        if (checkboxId) {
-            const checkbox = document.getElementById(checkboxId);
-            if (checkbox) {
-                checkbox.checked = isEnabled;
-            }
-        }
-    }
-
-    /**
-     * Build filter by played status toggle button
-     */
-    function buildFilterByPlayedStatusToggle(id, checked) {
-        const isChecked = checked === true;
-        return `
-            <div style="margin-bottom: 1em;">
-                <label class="listItemBodyText" style="display: block; margin-bottom: 0.5em;">Hide Watched Items</label>
-                <button type="button" class="filter-played-toggle" data-checked="${isChecked}" style="
-                    position: relative;
-                    width: 60px;
-                    height: 28px;
-                    border-radius: 14px;
-                    border: none;
-                    background: ${isChecked ? 'rgba(0, 164, 220, 0.8)' : 'rgba(158, 158, 158, 0.5)'};
-                    cursor: pointer;
-                    transition: background-color 0.3s ease;
-                    padding: 0;
-                    display: flex;
-                    align-items: center;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-                ">
-                    <span style="
-                        position: absolute;
-                        left: ${isChecked ? '8px' : '6px'};
-                        font-size: 10px;
-                        font-weight: 600;
-                        color: white;
-                        text-transform: uppercase;
-                        letter-spacing: 0.5px;
-                        transition: opacity 0.2s ease;
-                        opacity: ${isChecked ? '1' : '0'};
-                        z-index: 1;
-                    ">ON</span>
-                    <span style="
-                        position: absolute;
-                        right: ${isChecked ? '6px' : '8px'};
-                        font-size: 10px;
-                        font-weight: 600;
-                        color: rgba(255,255,255,0.7);
-                        text-transform: uppercase;
-                        letter-spacing: 0.5px;
-                        transition: opacity 0.2s ease;
-                        opacity: ${isChecked ? '0' : '1'};
-                        z-index: 1;
-                    ">OFF</span>
-                    <span style="
-                        position: absolute;
-                        width: 22px;
-                        height: 22px;
-                        border-radius: 50%;
-                        background: white;
-                        left: ${isChecked ? 'calc(100% - 26px)' : '3px'};
-                        transition: left 0.3s ease;
-                        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-                        z-index: 2;
-                    "></span>
-                </button>
-            </div>
-        `;
-    }
 
     /**
      * Build compact section row HTML
@@ -1603,8 +1667,7 @@
             { id: 'home', label: 'Home Sections' },
             { id: 'seasonal', label: 'Seasonal Sections' },
             { id: 'discovery', label: 'Discovery Sections' },
-            { id: 'custom', label: 'Custom Sections' },
-            { id: 'create', label: 'Create New Section' }
+            { id: 'custom', label: 'Custom Sections' }
         ];
 
         return `
@@ -1651,7 +1714,7 @@
     function buildGlobalSettingsPanelContent(subTab) {
         switch (subTab) {
             case 'general': return buildGeneralSettingsHTML();
-            case 'spotlight': return buildSpotlightSettingsHTML();
+            case 'spotlight': return se().buildGlobalSpotlightSettingsHTML?.(currentConfig) || '';
             case 'discovery': return buildDiscoverySettingsHTML();
             case 'cache': return buildCacheSettingsHTML();
             default: return buildGeneralSettingsHTML();
@@ -1664,8 +1727,6 @@
     function buildGroupHTML(group, sectionType) {
         let sections = group.sections || [];
         if (sections.length === 0) return '';
-
-        sections = sections.filter(s => s.hidden !== true);
         
         const allEnabled = sections.every(s => s.enabled !== false);
         const groupId = `group-${group.name || 'unnamed'}-${group.author || ''}`.replace(/[^a-zA-Z0-9-]/g, '-');
@@ -1770,7 +1831,7 @@
                 return `
                     <div>
                         <div class="listItemBodyText" style="font-weight: 500; margin-bottom: 1em;">Custom Sections</div>
-                        <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-bottom: 0.75em;">Customize your Custom Home Sections here. You can add, edit, and delete your own sections. You can also import sections from the community from the "Browse Community Sections" tab or import from a file you exported from the "Import / Export Sections" tab.</div>
+                        <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-bottom: 0.75em;">Customize your Custom Home Sections here. You can add, edit, and delete your own sections. You can also import community collections or a file you exported from the Import / Export tab.</div>
                         <div id="custom-sections-list">
                             ${customGroups.map(g => buildGroupHTML(g, 'custom')).join('')}
                         </div>
@@ -1793,32 +1854,50 @@
         if (!currentConfig) return '<div class="listItemBodyText secondary">No configuration loaded.</div>';
 
         // Use currentActiveTab to determine which tab/content should be displayed
-        const activeTab = currentActiveTab || 'settings';
+        const activeTab = normalizeActiveTab(currentActiveTab);
+        currentActiveTab = activeTab;
 
         return `
             <div style="max-width: 100%; width: calc(100vw - 4em); overflow: hidden;">
+                <!-- Toolbar -->
+                <div class="hsc-config-toolbar" style="display: flex; gap: 0.5em; flex-wrap: wrap; margin-bottom: 0.75em;">
+                    <button type="button" class="emby-button raised hsc-toolbar-new-section-btn" title="Create a new section">
+                        <span class="material-icons" style="margin-right: 0.35em; font-size: 1.1em; vertical-align: middle;">add</span>
+                        <span>New Section</span>
+                    </button>
+                    <button type="button" class="emby-button raised hsc-toolbar-update-btn" title="Save and apply these settings to all users.">
+                        <span class="material-icons" style="margin-right: 0.35em; font-size: 1.1em; vertical-align: middle;">sync</span>
+                        <span>Update</span>
+                    </button>
+                </div>
+
                 <!-- Tab Navigation -->
-                <div style="display: flex; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 1em; flex-wrap: wrap; gap: 0.5em;">
-                    <button class="config-tab-btn ${activeTab === 'settings' ? 'active' : ''}" data-tab="settings" style="padding: 0.75em 1.5em; background: none; border: none; border-bottom: 2px solid ${activeTab === 'settings' ? 'var(--theme-primary-color, #00a4dc)' : 'transparent'}; color: ${activeTab === 'settings' ? 'var(--theme-primary-color, #00a4dc)' : 'rgba(255,255,255,0.7)'}; cursor: pointer; font-weight: 500;">
-                        Global Settings
+                <div class="config-tab-nav">
+                    <button type="button" class="config-tab-btn ${activeTab === 'settings' ? 'active' : ''}" data-tab="settings" title="Global Settings">
+                        <span class="material-icons config-tab-icon" aria-hidden="true">settings</span>
+                        <span class="config-tab-label">Global Settings</span>
                     </button>
-                    <button class="config-tab-btn ${activeTab === 'sections' ? 'active' : ''}" data-tab="sections" style="padding: 0.75em 1.5em; background: none; border: none; border-bottom: 2px solid ${activeTab === 'sections' ? 'var(--theme-primary-color, #00a4dc)' : 'transparent'}; color: ${activeTab === 'sections' ? 'var(--theme-primary-color, #00a4dc)' : 'rgba(255,255,255,0.7)'}; cursor: pointer; font-weight: 500;">
-                        Edit Sections
+                    <button type="button" class="config-tab-btn ${activeTab === 'sections' ? 'active' : ''}" data-tab="sections" title="Edit Sections">
+                        <span class="material-icons config-tab-icon" aria-hidden="true">edit</span>
+                        <span class="config-tab-label">Edit Sections</span>
                     </button>
-                    <button class="config-tab-btn ${activeTab === 'order' ? 'active' : ''}" data-tab="order" style="padding: 0.75em 1.5em; background: none; border: none; border-bottom: 2px solid ${activeTab === 'order' ? 'var(--theme-primary-color, #00a4dc)' : 'transparent'}; color: ${activeTab === 'order' ? 'var(--theme-primary-color, #00a4dc)' : 'rgba(255,255,255,0.7)'}; cursor: pointer; font-weight: 500;">
-                        Order Sections
+                    <button type="button" class="config-tab-btn ${activeTab === 'order' ? 'active' : ''}" data-tab="order" title="Order Sections">
+                        <span class="material-icons config-tab-icon" aria-hidden="true">reorder</span>
+                        <span class="config-tab-label">Order Sections</span>
                     </button>
-                    <button class="config-tab-btn ${activeTab === 'community' ? 'active' : ''}" data-tab="community" style="padding: 0.75em 1.5em; background: none; border: none; border-bottom: 2px solid ${activeTab === 'community' ? 'var(--theme-primary-color, #00a4dc)' : 'transparent'}; color: ${activeTab === 'community' ? 'var(--theme-primary-color, #00a4dc)' : 'rgba(255,255,255,0.7)'}; cursor: pointer; font-weight: 500;">
-                        Browse Community Sections
+                    <button type="button" class="config-tab-btn ${activeTab === 'import-export' ? 'active' : ''}" data-tab="import-export" title="Import / Export">
+                        <span class="material-icons config-tab-icon" aria-hidden="true">swap_horiz</span>
+                        <span class="config-tab-label">Import / Export</span>
                     </button>
-                    <button class="config-tab-btn ${activeTab === 'import-export' ? 'active' : ''}" data-tab="import-export" style="padding: 0.75em 1.5em; background: none; border: none; border-bottom: 2px solid ${activeTab === 'import-export' ? 'var(--theme-primary-color, #00a4dc)' : 'transparent'}; color: ${activeTab === 'import-export' ? 'var(--theme-primary-color, #00a4dc)' : 'rgba(255,255,255,0.7)'}; cursor: pointer; font-weight: 500;">
-                        Import / Export Sections
+                    <button type="button" class="config-tab-btn ${activeTab === 'troubleshoot' ? 'active' : ''}" data-tab="troubleshoot" title="Troubleshoot">
+                        <span class="material-icons config-tab-icon" aria-hidden="true">troubleshoot</span>
+                        <span class="config-tab-label">Troubleshoot</span>
                     </button>
                 </div>
 
                 <!-- Global Settings Tab (left nav + right content, same layout as Edit Sections) -->
                 <div id="tab-settings" class="config-tab-content" style="display: ${activeTab === 'settings' ? 'block' : 'none'};">
-                    <div style="display: grid; grid-template-columns: 200px 1fr; gap: 1.5em;">
+                    <div class="hsc-split-pane">
                         <!-- Left Column: Sub-tab navigation -->
                         <div id="global-settings-navigation">
                             ${buildGlobalSettingsNavigationHTML(currentGlobalSettingsSubTab)}
@@ -1832,7 +1911,7 @@
 
                 <!-- Edit Sections Tab -->
                 <div id="tab-sections" class="config-tab-content" style="display: ${activeTab === 'sections' ? 'block' : 'none'};">
-                    <div style="display: grid; grid-template-columns: 200px 1fr; gap: 1.5em;">
+                    <div class="hsc-split-pane">
                         <!-- Left Column: Navigation -->
                         <div id="section-navigation">
                             ${buildSectionNavigationHTML('home')}
@@ -1850,40 +1929,10 @@
                     </div>
                 </div>
 
-                <!-- Browse Community Sections Tab -->
-                <div id="tab-community" class="config-tab-content" style="display: ${activeTab === 'community' ? 'block' : 'none'};">
-                    <div class="listItemBodyText" style="margin-bottom: 1em;">Browse and import curated home screen sections from the community.</div>
-                    <div class="listItemBodyText secondary" style="margin-bottom: 1.5em;">Submit your own Home Screen Sections <a href="https://github.com/ranaldsgift/KefinTweaks/discussions/64" target="_blank" class="button-link">here.</a></div>
-                    
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5em; min-height: 400px;">
-                        <!-- Left Column: Collection Cards Grid -->
-                        <div>
-                            <div class="listItemBodyText" style="font-weight: 500; margin-bottom: 0.75em;">Collections</div>
-                            <div id="communityCollectionsGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1em; max-height: 600px; overflow-y: auto; padding-right: 0.5em;">
-                                <!-- Collection cards will be populated here -->
-                            </div>
-                        </div>
-                        
-                        <!-- Right Column: Sections List -->
-                        <div>
-                            <div class="listItemBodyText" style="font-weight: 500; margin-bottom: 0.75em;">Sections</div>
-                            <div id="communitySectionsContainer" style="display: none;">
-                                <div id="communitySectionsList" style="max-height: 500px; overflow-y: auto; padding-right: 0.5em;">
-                                    <!-- Sections list will be populated here -->
-                                </div>
-                                <button type="button" class="emby-button raised block button-submit" id="confirmCommunityImportBtn" style="padding: 0.75em 2em; margin-top: 1em; display: none;">Import Selected</button>
-                            </div>
-                            <div id="communitySectionsEmpty" class="listItemBodyText secondary" style="padding: 2em; text-align: center; color: rgba(255,255,255,0.5);">
-                                Select a collection to view its sections
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Import / Export Sections Tab -->
+                <!-- Import / Export Sections Tab (includes community collections) -->
                 <div id="tab-import-export" class="config-tab-content" style="display: ${activeTab === 'import-export' ? 'block' : 'none'};">
                     <div class="listItemBodyText" style="margin-bottom: 1em;">Share your custom home screen sections or import configurations from others.</div>
-                    <div style="display: flex; gap: 1em; flex-wrap: wrap; margin-top: 1.5em;">
+                    <div style="display: flex; gap: 1em; flex-wrap: wrap; margin-top: 0.5em; margin-bottom: 1.5em;">
                         <button type="button" class="emby-button button-submit raised export-sections-btn" style="padding: 0.75em 1.5em;">
                             <span>Export Sections</span>
                         </button>
@@ -1891,6 +1940,17 @@
                             <span>Import Sections</span>
                         </button>
                     </div>
+                    <div class="listItemBodyText" style="margin-bottom: 0.5em; font-weight: 500;">Browse Community Sections</div>
+                    <div class="listItemBodyText" style="margin-bottom: 0.5em;">Browse and import curated home screen sections from the community.</div>
+                    <div class="listItemBodyText secondary" style="margin-bottom: 1em;">Submit your own Home Screen Sections <a href="https://github.com/ranaldsgift/KefinTweaks/discussions/64" target="_blank" class="button-link">here.</a></div>
+                    <div id="communityCollectionsHost">
+                        <div id="communityCollectionsGrid"></div>
+                    </div>
+                </div>
+
+                <!-- Troubleshoot Tab -->
+                <div id="tab-troubleshoot" class="config-tab-content" style="display: ${activeTab === 'troubleshoot' ? 'block' : 'none'};">
+                    <div id="home-screen-benchmark-root"></div>
                 </div>
             </div>
             <style>
@@ -1921,13 +1981,19 @@
         if (!currentConfig) return '';
         const seasonal = currentConfig.SEASONAL_THEME_SETTINGS || {};
         const homeSettings = currentConfig.HOME_SETTINGS || {};
+        const userHomeScreen = currentConfig.USER_HOME_SCREEN_SETTINGS || {};
+        const D = GENERAL_TOGGLE_DESCRIPTIONS;
         return `
-            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.75em 1.5em;">
-                ${buildToggleSlider('merge-next-up', currentConfig.MERGE_NEXT_UP === true, 'Merge Next Up with Continue Watching', { includeHiddenCheckbox: true })}
-                ${buildToggleSlider('seasonal-enableSeasonalAnimations', seasonal.enableSeasonalAnimations !== false, 'Enable Seasonal Animations', { includeHiddenCheckbox: true })}
-                ${buildToggleSlider('seasonal-enableSeasonalBackground', seasonal.enableSeasonalBackground !== false, 'Enable Seasonal Backgrounds', { includeHiddenCheckbox: true })}
-                ${buildToggleSlider('home-ensureThumbsForPopularTVNetworks', homeSettings.ensureThumbsForPopularTVNetworks === true, 'Ensure Thumbs for Popular TV Networks', { includeHiddenCheckbox: true })}
-                ${buildToggleSlider('home-fadeInSections', homeSettings.fadeInSections === true, 'Fade in sections sequentially', { includeHiddenCheckbox: true })}
+            <div class="hsc-settings-grid hsc-settings-grid-2">
+                ${hscToggleCard('userHome-inlineConfigure', userHomeScreen.inlineConfigure !== false, 'Inline Section Configuration', D)}
+                ${hscToggleCard('userHome-pinning', userHomeScreen.pinning !== false, 'Pin To Home', D)}
+                ${hscToggleCard('home-fadeInSections', homeSettings.fadeInSections === true, 'Fade In Sections', D)}
+                ${hscToggleCard('home-showStaleDataBeforeRefresh', homeSettings.SHOW_STALE_DATA_BEFORE_REFRESH === true, 'Show Stale Items', D)}
+                ${hscToggleCard('seasonal-enableSeasonalAnimations', seasonal.enableSeasonalAnimations !== false, 'Seasonal Animations', D)}
+                ${hscToggleCard('seasonal-enableSeasonalBackground', seasonal.enableSeasonalBackground !== false, 'Seasonal Backgrounds', D)}
+                <div class="hsc-settings-span-2">
+                    ${hscToggleCard('home-ensureThumbsForPopularTVNetworks', homeSettings.ensureThumbsForPopularTVNetworks === true, 'Require Studio Thumbs', D)}
+                </div>
             </div>
         `;
     }
@@ -1938,20 +2004,24 @@
     function buildDiscoverySettingsHTML() {
         if (!currentConfig) return '';
         const discovery = currentConfig.DISCOVERY_SETTINGS || {};
+        const D = DISCOVERY_TOGGLE_DESCRIPTIONS;
 
         return `
-            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.75em 1.5em;">
-                ${buildToggleSlider('discovery-enabled', discovery.enabled !== false, 'Enabled', { includeHiddenCheckbox: true })}
-                ${buildToggleSlider('discovery-infiniteScroll', discovery.infiniteScroll !== false, 'Infinite Scroll', { includeHiddenCheckbox: true })}
-                ${buildToggleSlider('discovery-renderSpotlightAboveMatching', discovery.renderSpotlightAboveMatching === true, 'Group Top Rated and Normal Sections', { includeHiddenCheckbox: true })}
-                ${buildToggleSlider('discovery-randomizeOrder', discovery.randomizeOrder === true, 'Randomize Order', { includeHiddenCheckbox: true })}
-                ${buildToggleSlider('discovery-fadeInSections', discovery.fadeInSections === true, 'Fade in sections sequentially', { includeHiddenCheckbox: true })}
-                ${buildTextInput('discovery-minPeopleAppearances', discovery.minPeopleAppearances || 10, 'Min People Appearances', 'number')}
-                ${buildTextInput('discovery-minGenreMovieCount', discovery.minGenreMovieCount || 50, 'Min Genre Movie Count', 'number')}
-                ${buildTextInput('discovery-defaultItemLimit', discovery.defaultItemLimit || 16, 'Default Item Limit', 'number')}
-                ${buildSelect('discovery-defaultSortOrder', SORT_ORDERS, discovery.defaultSortOrder || 'Random', 'Default Sort Order')}
-                ${buildSelect('discovery-defaultCardFormat', CARD_FORMATS, discovery.defaultCardFormat || 'Poster', 'Default Card Format')}
-                ${buildTextInput('discovery-spotlightDiscoveryChance', discovery.spotlightDiscoveryChance || 0.5, 'Spotlight Discovery Chance (0-1)', 'number')}
+            <div class="hsc-settings-panel">
+                <div class="hsc-settings-desc listItemBodyText secondary">
+                    <p>Discovery Sections are Home Screen sections that are dynamically created when a user scrolls down the Home Screen. When Discovery Sections are requested, KefinTweaks will dynamically build a Discovery Group from the list of enabled Discovery Sections. It will render the Discovery Group and then when the user reaches the bottom of the page again, a new Discovery Group will be generated and rendered.</p>
+                    <p>KefinTweaks provides many default Discovery Sections, but you may also create your own static Discovery Sections. If you create multiple Discovery Sections within the same Group, KefinTweaks will select the first unrendered section from that Group when it builds the next Discovery Group.</p>
+                </div>
+                <div class="hsc-settings-grid hsc-settings-grid-2">
+                    ${hscToggleCard('discovery-enabled', discovery.enabled !== false, 'Enabled', D)}
+                    ${hscToggleCard('discovery-infiniteScroll', discovery.infiniteScroll !== false, 'Infinite Scroll', D)}
+                    ${hscToggleCard('discovery-renderSpotlightAboveMatching', discovery.renderSpotlightAboveMatching === true, 'Group Related Sections', D)}
+                    ${hscToggleCard('discovery-randomizeOrder', discovery.randomizeOrder === true, 'Randomize Order', D)}
+                    ${hscToggleCard('discovery-fadeInSections', discovery.fadeInSections === true, 'Fade In Sections', D)}
+                    ${buildTextInput('discovery-spotlightDiscoveryChance', discovery.spotlightDiscoveryChance ?? 0.5, 'Spotlight Discovery Chance (0-1)', 'number')}
+                    ${buildTextInput('discovery-minPeopleAppearances', discovery.minPeopleAppearances || 10, 'Top Person Appearance Count', 'number')}
+                    ${buildTextInput('discovery-minGenreMovieCount', discovery.minGenreMovieCount || 50, 'Genre Movie Count', 'number')}
+                </div>
             </div>
         `;
     }
@@ -1977,1998 +2047,344 @@
         return minutes * 60000;
     }
 
+    function getDefaultTtlPresets() {
+        const presets = window.KefinHomeScreenAdvancedEditor?.getCachePresets?.();
+        if (Array.isArray(presets) && presets.length) {
+            return presets.filter((p) => p.key !== 'FORCE_REFRESH');
+        }
+        const cache = currentConfig?.CACHE || window.KefinHomeConfig2?.CACHE || {};
+        return [
+            { key: 'VERY_SHORT', label: 'Very Short (1 min)', ms: cache.VERY_SHORT_TTL ?? 60000 },
+            { key: 'SHORT', label: 'Short (5 min)', ms: cache.SHORT_TTL ?? 300000 },
+            { key: 'DEFAULT', label: 'Default (1 hour)', ms: cache.DEFAULT_TTL ?? 3600000 },
+            { key: 'LONG', label: 'Long (24 hours)', ms: cache.LONG_TTL ?? 86400000 },
+            { key: 'STATIC', label: 'Static (1 week)', ms: cache.STATIC_TTL ?? 604800000 },
+            { key: 'DISCOVERY', label: 'Discovery (6 hours)', ms: cache.DISCOVERY_TTL ?? 21600000 },
+            { key: 'CUSTOM', label: 'Custom', ms: null }
+        ];
+    }
+
+    function matchDefaultTtlPreset(ms) {
+        const value = Number(ms);
+        if (!Number.isFinite(value)) {
+            return { preset: 'DEFAULT', customValue: '', customUnit: 'minutes' };
+        }
+        const exact = getDefaultTtlPresets().find((p) => p.key !== 'CUSTOM' && p.ms === value);
+        if (exact) return { preset: exact.key, customValue: '', customUnit: 'minutes' };
+        const minutes = Math.round(value / 60000);
+        if (minutes > 0 && minutes * 60000 === value) {
+            return { preset: 'CUSTOM', customValue: String(minutes), customUnit: 'minutes' };
+        }
+        const seconds = Math.round(value / 1000);
+        return { preset: 'CUSTOM', customValue: String(seconds), customUnit: 'seconds' };
+    }
+
+    function resolveDefaultTtlMsFromForm(root) {
+        const presetEl = root.querySelector('#cache-DEFAULT_TTL-preset');
+        if (!presetEl) return null;
+        const presetKey = presetEl.value || 'DEFAULT';
+        if (presetKey === 'CUSTOM') {
+            const raw = parseFloat(root.querySelector('#cache-DEFAULT_TTL-custom-value')?.value || '');
+            const unit = root.querySelector('#cache-DEFAULT_TTL-custom-unit')?.value || 'minutes';
+            const unitMs = TTL_UNIT_OPTIONS.find((u) => u.value === unit)?.ms || 60000;
+            if (!Number.isFinite(raw) || raw < 0) return 0;
+            return Math.round(raw * unitMs);
+        }
+        const preset = getDefaultTtlPresets().find((p) => p.key === presetKey);
+        return preset?.ms ?? (currentConfig?.CACHE?.DEFAULT_TTL ?? 3600000);
+    }
+
     /**
      * Build cache settings HTML
      */
     function buildCacheSettingsHTML() {
         if (!currentConfig) return '';
         const cache = currentConfig.CACHE || {};
+        const defaultMatch = matchDefaultTtlPreset(cache.DEFAULT_TTL ?? 1800000);
+        const isCustomDefault = defaultMatch.preset === 'CUSTOM';
+        const presetOptions = getDefaultTtlPresets().map((p) => ({
+            value: p.key,
+            label: p.label
+        }));
 
         return `
-            <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-bottom: 0.5em;">TTL values in minutes</div>
-            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.75em 1.5em;">
-                ${buildTextInput('cache-DEFAULT_TTL', msToMinutes(cache.DEFAULT_TTL || 1800000), 'Default TTL (minutes)', 'number')}
-                ${buildTextInput('cache-VERY_SHORT_TTL', msToMinutes(cache.VERY_SHORT_TTL || 60000), 'Very Short TTL (minutes)', 'number')}
-                ${buildTextInput('cache-SHORT_TTL', msToMinutes(cache.SHORT_TTL || 300000), 'Short TTL (minutes)', 'number')}
-                ${buildTextInput('cache-LONG_TTL', msToMinutes(cache.LONG_TTL || 86400000), 'Long TTL (minutes)', 'number')}
-                ${buildTextInput('cache-STATIC_TTL', msToMinutes(cache.STATIC_TTL || 604800000), 'Static TTL (minutes)', 'number')}
-                ${buildTextInput('cache-DISCOVERY_TTL', msToMinutes(cache.DISCOVERY_TTL || 3600000), 'Discovery TTL (minutes)', 'number')}
-            </div>
-        `;
-    }
-
-    /**
-     * Build spotlight settings HTML (default behavior for spotlight sections)
-     */
-    function buildSpotlightSettingsHTML() {
-        if (!currentConfig) return '';
-        const spotlight = currentConfig.SPOTLIGHT_SETTINGS || {};
-        const defaults = window.KefinHomeConfig2?.SPOTLIGHT_SETTINGS || {};
-        const spotlightLayout = spotlight.spotlightLayout ?? (spotlight.fullScreen === true ? 'Borderless' : 'Border');
-        const spotlightSize = spotlight.spotlightSize ?? (spotlight.fullScreen === true ? 'full' : 'normal');
-        const tileCount = spotlight.tileCount ?? (spotlightSize === 'full' ? 1 : spotlightSize === 'large' ? 2 : 3);
-        const tileCountStr = String(Math.max(1, Math.min(3, parseInt(tileCount, 10) || 1)));
-        const tc = Math.max(1, Math.min(3, parseInt(tileCount, 10) || 1));
-        const cycleRowDisplay = tc > 1 ? 'none' : 'block';
-        function animRow(n) {
-            const ord = n === 1 ? 'First' : n === 2 ? 'Second' : 'Third';
-            return buildSelect('spotlight-entranceAnimation' + ord, SPOTLIGHT_ENTRANCE_OPTIONS, spotlight['entranceAnimation' + ord] ?? defaults['entranceAnimation' + ord] ?? 'fadeIn', 'Entrance animation ' + n) +
-                buildSelect('spotlight-slideAnimation' + ord, SPOTLIGHT_SLIDE_OPTIONS, spotlight['slideAnimation' + ord] ?? defaults['slideAnimation' + ord] ?? 'kenBurnsZoomIn', 'Slide animation ' + n);
-        }
-        return `
-            <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-bottom: 0.5em;">Default behavior for spotlight sections on the home screen. Per-section overrides can be set when editing a section.</div>
-            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.75em 1.5em;">
-                ${buildSelect('spotlight-spotlightLayout', SPOTLIGHT_LAYOUT_OPTIONS, spotlightLayout, 'Layout')}
-                ${buildSelect('spotlight-spotlightSize', SPOTLIGHT_SIZE_OPTIONS, spotlightSize, 'Size')}
-                ${buildSelect('spotlight-tileCount', SPOTLIGHT_TILE_COUNT_OPTIONS, tileCountStr, 'Tiled backdrop count')}
-                ${buildToggleSlider('spotlight-autoPlay', spotlight.autoPlay !== false, 'Auto-play', { includeHiddenCheckbox: true })}
-                ${buildSelect('spotlight-slideState', SLIDE_STATE_OPTIONS, (spotlight.showSlideState === false ? 'none' : (spotlight.showDots === false ? 'numeric' : 'dots')), 'Slide state')}
-                ${buildToggleSlider('spotlight-showNavButtons', spotlight.showNavButtons !== false, 'Show prev/next buttons', { includeHiddenCheckbox: true })}
-                ${buildToggleSlider('spotlight-showClearArt', spotlight.showClearArt === true, 'Show clear art', { includeHiddenCheckbox: true })}
-                ${buildToggleSlider('spotlight-panAnimation', spotlight.panAnimation !== false, 'Pan animation', { includeHiddenCheckbox: true })}
-                <div id="spotlight-animation-dropdowns" style="grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.75em 1.5em;">
-                    <div id="spotlight-anim-first">${animRow(1)}</div>
-                    <div id="spotlight-anim-second" style="display: ${tc >= 2 ? 'block' : 'none'};">${animRow(2)}</div>
-                    <div id="spotlight-anim-third" style="display: ${tc >= 3 ? 'block' : 'none'};">${animRow(3)}</div>
+            <div class="hsc-settings-panel">
+                <div class="hsc-settings-desc listItemBodyText secondary">
+                    <p>Every Home Screen Section has a cache expiration time associated to it. If the section has no explicitly defined cache value, it will use the Default setting below.</p>
+                    <p>When a Section is being loaded, if the cache has not expired, the cached items will be rendered instead of requesting new data. If a Section has "No Cache" set, it will always request new data from the server.</p>
+                    <p>The Cache settings listed below will appear as options when creating or editing a Home Screen Section in the "Advanced Options" at the bottom of the editor.</p>
                 </div>
-                <div id="spotlight-cycle-backdrops-row" style="display: ${cycleRowDisplay}; grid-column: 1 / -1;">
-                    ${buildToggleSlider('spotlight-cycleBackdrops', spotlight.cycleBackdrops === true, 'Cycle backdrops', { includeHiddenCheckbox: true })}
-                    ${buildTextInput('spotlight-cycleBackdropsTime', spotlight.cycleBackdropsTime ?? defaults.cycleBackdropsTime ?? 10000, 'Cycle backdrops time (ms)', 'number')}
-                </div>
-                ${buildTextInput('spotlight-interval', spotlight.interval ?? defaults.interval ?? 10000, 'Auto-play interval (ms)', 'number')}
-            </div>
-        `;
-    }
-
-    /**
-     * Build spotlight settings HTML for a section editor (custom or discovery).
-     * Shown only when Render Mode is Spotlight; call from buildSectionEditorHTML when the editor includes render mode.
-     * @param {Object} section - Section or discovery config (for spotlightConfig / defaults)
-     * @param {string} idPrefix - Input id prefix, e.g. 'section-' or 'discovery-'
-     * @param {boolean} isSpotlight - Initial visibility (true = show)
-     * @returns {string} HTML for the spotlight options container
-     */
-    function buildSectionEditorSpotlightHTML(section, idPrefix, isSpotlight) {
-        const globalSpotlight = currentConfig?.SPOTLIGHT_SETTINGS || {};
-        const spotlightDefaults = window.KefinHomeConfig2?.SPOTLIGHT_SETTINGS || {};
-        const sectionSpotlight = section.spotlightConfig || {};
-        const spotlightOpts = { ...spotlightDefaults, ...globalSpotlight, ...sectionSpotlight };
-        const spotlightLayout = spotlightOpts.spotlightLayout ?? (spotlightOpts.fullScreen === true ? 'Borderless' : 'Border');
-        const spotlightSize = spotlightOpts.spotlightSize ?? (spotlightOpts.fullScreen === true ? 'full' : 'normal');
-        const tileCount = spotlightOpts.tileCount ?? (spotlightSize === 'full' ? 1 : spotlightSize === 'large' ? 2 : 3);
-        const tc = Math.max(1, Math.min(3, parseInt(tileCount, 10) || 1));
-        const tileCountStr = String(tc);
-        const cycleRowDisplay = tc > 1 ? 'none' : 'block';
-        function animRow(n) {
-            const ord = n === 1 ? 'First' : n === 2 ? 'Second' : 'Third';
-            return buildSelect(idPrefix + 'spotlight-entranceAnimation' + ord, SPOTLIGHT_ENTRANCE_OPTIONS, spotlightOpts['entranceAnimation' + ord] ?? 'fadeIn', 'Entrance animation ' + n) +
-                buildSelect(idPrefix + 'spotlight-slideAnimation' + ord, SPOTLIGHT_SLIDE_OPTIONS, spotlightOpts['slideAnimation' + ord] ?? 'kenBurnsZoomIn', 'Slide animation ' + n);
-        }
-        const containerId = idPrefix + 'spotlight-options-container';
-        return `
-                <div id="${containerId}" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em; display: ${isSpotlight ? 'block' : 'none'};">
-                    <div class="listItemBodyText" style="font-weight: 500; margin-bottom: 0.75em;">Spotlight Options</div>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.75em 1.5em;">
-                        ${buildSelect(idPrefix + 'spotlight-spotlightLayout', SPOTLIGHT_LAYOUT_OPTIONS, spotlightLayout, 'Layout')}
-                        ${buildSelect(idPrefix + 'spotlight-spotlightSize', SPOTLIGHT_SIZE_OPTIONS, spotlightSize, 'Size')}
-                        ${buildSelect(idPrefix + 'spotlight-tileCount', SPOTLIGHT_TILE_COUNT_OPTIONS, tileCountStr, 'Tiled backdrop count')}
-                        ${buildToggleSlider(idPrefix + 'spotlight-autoPlay', spotlightOpts.autoPlay !== false, 'Auto-play', { includeHiddenCheckbox: true })}
-                        ${buildSelect(idPrefix + 'spotlight-slideState', SLIDE_STATE_OPTIONS, (spotlightOpts.showSlideState === false ? 'none' : (spotlightOpts.showDots === false ? 'numeric' : 'dots')), 'Slide state')}
-                        ${buildToggleSlider(idPrefix + 'spotlight-showNavButtons', spotlightOpts.showNavButtons !== false, 'Show prev/next buttons', { includeHiddenCheckbox: true })}
-                        ${buildToggleSlider(idPrefix + 'spotlight-showClearArt', spotlightOpts.showClearArt === true, 'Show clear art', { includeHiddenCheckbox: true })}
-                        ${buildToggleSlider(idPrefix + 'spotlight-panAnimation', spotlightOpts.panAnimation !== false, 'Pan animation', { includeHiddenCheckbox: true })}
-                        <div id="${idPrefix}spotlight-animation-dropdowns" style="grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.75em 1.5em;">
-                            <div id="${idPrefix}spotlight-anim-first">${animRow(1)}</div>
-                            <div id="${idPrefix}spotlight-anim-second" style="display: ${tc >= 2 ? 'block' : 'none'};">${animRow(2)}</div>
-                            <div id="${idPrefix}spotlight-anim-third" style="display: ${tc >= 3 ? 'block' : 'none'};">${animRow(3)}</div>
+                <div class="hsc-settings-grid hsc-settings-grid-3">
+                    <div class="hsc-default-ttl-field">
+                        ${buildSelect('cache-DEFAULT_TTL-preset', presetOptions, defaultMatch.preset, 'Default')}
+                        <div id="cache-DEFAULT_TTL-custom-row" class="hsc-default-ttl-custom" style="display:${isCustomDefault ? 'grid' : 'none'}; grid-template-columns: 1fr 1fr; gap: 0.75em; margin-top: 0.75em;">
+                            ${buildTextInput('cache-DEFAULT_TTL-custom-value', defaultMatch.customValue || '', 'Custom Duration', 'number')}
+                            ${buildSelect('cache-DEFAULT_TTL-custom-unit', TTL_UNIT_OPTIONS.map((u) => ({ value: u.value, label: u.value })), defaultMatch.customUnit || 'minutes', 'Unit')}
                         </div>
-                        <div id="${idPrefix}spotlight-cycle-backdrops-row" style="display: ${cycleRowDisplay}; grid-column: 1 / -1;">
-                            ${buildToggleSlider(idPrefix + 'spotlight-cycleBackdrops', spotlightOpts.cycleBackdrops === true, 'Cycle backdrops', { includeHiddenCheckbox: true })}
-                            ${buildTextInput(idPrefix + 'spotlight-cycleBackdropsTime', spotlightOpts.cycleBackdropsTime ?? 10000, 'Cycle backdrops time (ms)', 'number')}
-                        </div>
-                        ${buildTextInput(idPrefix + 'spotlight-interval', spotlightOpts.interval ?? 10000, 'Auto-play interval (ms)', 'number')}
                     </div>
-                </div>
-        `;
-    }
-
-    /**
-     * Attach event listeners for spotlight settings (Size -> tileCount, tileCount -> cycle row + animation dropdown visibility).
-     * @param {HTMLElement} container - Container that has the spotlight form (e.g. #global-settings-content or spotlight options div)
-     * @param {string} idPrefix - Prefix for input ids, e.g. 'spotlight-' or 'section-spotlight-' or 'discovery-spotlight-'
-     */
-    function attachSpotlightSettingsListeners(container, idPrefix) {
-        if (!container) return;
-        const sizeSelect = container.querySelector('#' + idPrefix + 'spotlightSize');
-        const tileCountSelect = container.querySelector('#' + idPrefix + 'tileCount');
-        const cycleRow = container.querySelector('#' + idPrefix + 'cycle-backdrops-row');
-        const cycleCheckbox = container.querySelector('#' + idPrefix + 'cycleBackdrops');
-        const animSecond = container.querySelector('#' + idPrefix + 'anim-second');
-        const animThird = container.querySelector('#' + idPrefix + 'anim-third');
-        function updateFromTileCount(tc) {
-            const t = parseInt(tc, 10) || 1;
-            if (cycleRow) cycleRow.style.display = t > 1 ? 'none' : 'block';
-            if (cycleCheckbox && t > 1) cycleCheckbox.checked = false;
-            if (animSecond) animSecond.style.display = t >= 2 ? 'block' : 'none';
-            if (animThird) animThird.style.display = t >= 3 ? 'block' : 'none';
-        }
-        if (sizeSelect) {
-            sizeSelect.addEventListener('change', () => {
-                if (!tileCountSelect) return;
-                const v = sizeSelect.value;
-                tileCountSelect.value = v === 'full' ? '1' : v === 'large' ? '2' : '3';
-                updateFromTileCount(tileCountSelect.value);
-            });
-        }
-        if (tileCountSelect) {
-            tileCountSelect.addEventListener('change', () => updateFromTileCount(tileCountSelect.value));
-            updateFromTileCount(tileCountSelect.value);
-        }
-    }
-
-    /**
-     * Get field configuration for default sections
-     */
-    function getDefaultSectionFields(sectionId) {
-        // Check all default groups (HOME, SEASONAL, DISCOVERY)
-        const defaultHome = flattenSectionGroups(window.KefinHomeConfig2?.HOME_SECTION_GROUPS || []);
-        const defaultSeasonal = flattenSectionGroups(window.KefinHomeConfig2?.SEASONAL_SECTION_GROUPS || []);
-        const defaultDiscovery = flattenSectionGroups(window.KefinHomeConfig2?.DISCOVERY_SECTION_GROUPS || []);
-        const allDefaultSections = [...defaultHome, ...defaultSeasonal, ...defaultDiscovery];
-        const defaultIds = new Set(allDefaultSections.map(s => s.id));
-        if (!defaultIds.has(sectionId) && !sectionId.startsWith('recently-added-')) {
-            return null; // Not a default section
-        }
-
-        if (sectionId.startsWith('recently-added-')) {
-            return {
-                includeName: true,
-                includeCardFormat: true,
-                includeOrder: true,
-                includeItemLimit: true,
-                includeSortOrder: false,
-                includeFilterByPlayedStatus: true,
-            };
-        }
-
-        // Simplified sections (Next Up, Continue Watching, Upcoming)
-        const simplifiedSections = ['nextUp', 'continueWatching', 'upcoming', 'continueWatchingAndNextUp'];
-        if (simplifiedSections.includes(sectionId)) {
-            return {
-                includeName: true,
-                includeCardFormat: true,
-                includeOrder: true,
-                includeItemLimit: true,
-                includeSortOrder: false,
-                includeFilterByPlayedStatus: sectionId === 'upcoming',
-                includePremiereDays: false,
-                includeMinimumShows: false
-            };
-        }
-
-        // Recently Released sections
-        if (sectionId.startsWith('recentlyReleased.')) {
-            return {
-                includeName: true,
-                includeCardFormat: true,
-                includeOrder: true,
-                includeItemLimit: true,
-                includeSortOrder: true,
-                includeFilterByPlayedStatus: true,
-                includePremiereDays: true,
-                includeMinimumShows: false
-            };
-        }
-
-        // Popular TV Networks
-        if (sectionId === 'popularTVNetworks') {
-            return {
-                includeName: true,
-                includeCardFormat: true,
-                includeOrder: true,
-                includeItemLimit: true,
-                includeSortOrder: true,
-                includeFilterByPlayedStatus: false,
-                includePremiereDays: false,
-                includeMinimumShows: true
-            };
-        }
-
-        // Other default sections
-        return {
-            includeName: true,
-            includeCardFormat: true,
-            includeOrder: true,
-            includeItemLimit: true,
-            includeSortOrder: true,
-            includeFilterByPlayedStatus: false,
-            includePremiereDays: false,
-            includeMinimumShows: false
-        };
-    }
-
-    /**
-     * Build section editor modal content
-     */
-    function buildSectionEditorHTML(section, isDiscovery = false) {
-        if (isDiscovery) {
-            return buildDiscoveryEditorHTML(section);
-        }
-
-        const queries = section.queries || [{}];
-        const hasMultipleQueries = queries.length > 1;
-        const defaultFields = getDefaultSectionFields(section.id);
-        const isDefaultSection = defaultFields !== null;
-
-        // Get current group name for this section (if editing existing)
-        let currentGroupName = '';
-        if (section.id) {
-            // Check all groups to find where this section exists
-            let found = findSectionInGroups(currentConfig.HOME_SECTION_GROUPS || [], section.id);
-            if (!found) found = findSectionInGroups(currentConfig.SEASONAL_SECTION_GROUPS || [], section.id);
-            if (!found) found = findSectionInGroups(currentConfig.DISCOVERY_SECTION_GROUPS || [], section.id);
-            if (!found) found = findSectionInGroups(currentConfig.CUSTOM_SECTION_GROUPS || [], section.id);
-            if (found) {
-                currentGroupName = found.group.name || '';
-            }
-        }
-        
-        // Get all existing group names for dropdown (only for custom sections)
-        let groupSelectHTML = '';
-        if (!isDefaultSection) {
-            // For custom sections, only show groups from CUSTOM_SECTION_GROUPS
-            const allGroups = currentConfig.CUSTOM_SECTION_GROUPS || [];
-            const existingGroupNames = [...new Set(allGroups.map(g => g.name).filter(Boolean))];
-            const groupOptions = ['New...', ...existingGroupNames];
-            const selectedGroupValue = currentGroupName || (existingGroupNames.length > 0 ? existingGroupNames[0] : 'New...');
-
-            groupSelectHTML = `
-                ${buildSelect('section-group', groupOptions, selectedGroupValue, 'Section Group')}
-                <div id="section-group-new-container" style="display: ${selectedGroupValue === 'New...' ? 'block' : 'none'}; margin-bottom: 1em;">
-                    ${buildTextInput('section-group-new', '', 'New Group Name')}
-                </div>
-            `;
-        }
-
-        // Build Basic Properties based on section type
-        let basicPropertiesHTML = `
-            <div class="listItemBodyText" style="font-weight: 500; margin-bottom: 0.75em;">Basic Properties</div>
-            ${groupSelectHTML}
-            ${buildTextInput('section-name', section.name || '', 'Section Name')}
-        `;
-
-        // For default sections, show simplified fields
-        if (isDefaultSection) {
-            if (defaultFields.includeCardFormat) {
-                basicPropertiesHTML += buildSelect('section-cardFormat', CARD_FORMATS, section.cardFormat || 'Poster', 'Card Format');
-            }
-            if (defaultFields.includeOrder) {
-                basicPropertiesHTML += buildTextInput('section-order', section.order || 0, 'Order', 'number');
-            }
-            if (defaultFields.includeItemLimit) {
-                const itemLimit = section.queries?.[0]?.queryOptions?.Limit || 20;
-                basicPropertiesHTML += buildTextInput('section-itemLimit', itemLimit, 'Item Limit', 'number');
-            }
-            if (defaultFields.includeFilterByPlayedStatus) {
-                basicPropertiesHTML += buildFilterByPlayedStatusToggle('section-filterByPlayedStatus', section.queries?.[0]?.queryOptions?.IsUnplayed === true);
-            }
-            basicPropertiesHTML += buildSelect('section-renderMode', [
-                { value: 'Normal', label: 'Normal' },
-                { value: 'Spotlight', label: 'Spotlight' },
-                { value: 'Random', label: 'Random' }
-            ], section.renderMode || (section.spotlight ? 'Spotlight' : 'Normal'), 'Render Mode');
-        } else {
-            // Custom sections - show full editor in flexbox layout
-            basicPropertiesHTML += `
-                <div style="display: flex; gap: 0.75em; flex-wrap: wrap; align-items: flex-end;">
-                    <div style="min-width: 150px; align-self: start;">
-                        ${buildSelect('section-renderMode', [
-                            { value: 'Normal', label: 'Normal' },
-                            { value: 'Spotlight', label: 'Spotlight' },
-                            { value: 'Random', label: 'Random' }
-                        ], section.renderMode || (section.spotlight ? 'Spotlight' : 'Normal'), 'Render Mode')}
-                    </div>
-                    <div style="min-width: 150px; align-self: start;">
-                        ${buildTextInput('section-order', section.order || 0, 'Order', 'number')}
-                    </div>
-                    <div id="section-cardFormat-container" style="min-width: 150px; display: ${(section.renderMode === 'Spotlight' || section.spotlight) ? 'none' : 'block'}; align-self: start;">
-                        ${buildSelect('section-cardFormat', CARD_FORMATS, section.cardFormat || 'Poster', 'Card Format')}
-                    </div>
-                    <div id="section-discoveryEnabled-container" style="min-width: 150px; display: block; align-self: start;">
-                        <div class="listItemBodyText" style="font-weight: 500; margin-bottom: 0.75em;">Discovery Enabled</div>
-                        ${buildToggleSlider('section-discoveryEnabled', section.discoveryEnabled === true, '', { 
-                            dataAttributes: { 'section-id': section.id, 'section-type': 'custom' }, 
-                            cssClass: 'toggle-slider section-toggle-switch section-discoveryEnabled-toggle', 
-                            wrapInLabel: false 
-                        })}
-                    </div>
-                    <div style="min-width: 150px; align-self: start;">
-                        ${buildFilterByPlayedStatusToggle('section-filterByPlayedStatus', section.queries?.[0]?.queryOptions?.IsUnplayed === true)}
-                    </div>
-                </div>
-            `;
-        }
-
-        // Additional fields for default sections
-        let additionalFieldsHTML = '';
-        if (isDefaultSection) {
-            // Check if this is a seasonal section based on the section id and add the Start Date and End Date fields
-            if (section.id.startsWith('seasonal.')) {
-                additionalFieldsHTML += `
-                    <div style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
-                        <div class="listItemBodyText" style="font-weight: 500; margin-bottom: 0.75em;">Seasonal</div>
-                        ${buildTextInput('section-startDate', section.startDate || '', 'Start Date (MM-DD)', 'text')}
-                        ${buildTextInput('section-endDate', section.endDate || '', 'End Date (MM-DD)', 'text')}
-                    </div>
-                `;
-            }
-
-            if (defaultFields.includeSortOrder) {
-                const sortBy = section.queries?.[0]?.queryOptions?.SortBy || 'Random';
-                const sortOrder = section.queries?.[0]?.queryOptions?.SortOrder || 'Ascending';
-                additionalFieldsHTML += `
-                    <div style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
-                        <div class="listItemBodyText" style="font-weight: 500; margin-bottom: 0.75em;">Sorting</div>
-                        ${buildSelect('section-sortBy', SORT_ORDERS, sortBy, 'Sort By')}
-                        ${buildSelect('section-sortOrder', SORT_ORDER_DIRECTIONS, sortOrder, 'Sort Order')}
-                    </div>
-                `;
-            }
-            if (defaultFields.includePremiereDays) {
-                // Extract min/max age from query object (not queryOptions)
-                const query = section.queries?.[0];
-                let minAgeInDays = query?.minAge !== undefined ? query.minAge : 0;
-                let maxAgeInDays = query?.maxAge !== undefined ? query.maxAge : 30;
-                
-                // Fallback: try to calculate from MinPremiereDate/MaxPremiereDate if minAge/maxAge not set
-                if (query?.minAge === undefined && query?.maxAge === undefined) {
-                    const minPremiereDate = query?.queryOptions?.MinPremiereDate;
-                    const maxPremiereDate = query?.queryOptions?.MaxPremiereDate;
-                    if (minPremiereDate || maxPremiereDate) {
-                        const now = Date.now();
-                        if (minPremiereDate) {
-                            const minDate = new Date(minPremiereDate);
-                            maxAgeInDays = Math.floor((now - minDate.getTime()) / (1000 * 60 * 60 * 24));
-                        }
-                        if (maxPremiereDate) {
-                            const maxDate = new Date(maxPremiereDate);
-                            minAgeInDays = Math.floor((now - maxDate.getTime()) / (1000 * 60 * 60 * 24));
-                        }
-                    }
-                }
-                additionalFieldsHTML += `
-                    <div style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
-                        <div class="listItemBodyText" style="font-weight: 500; margin-bottom: 0.75em;">Premiere Date Range</div>
-                        ${buildTextInput('section-minAgeInDays', minAgeInDays, 'Minimum Age (Days)', 'number')}
-                        ${buildTextInput('section-maxAgeInDays', maxAgeInDays, 'Maximum Age (Days)', 'number')}
-                    </div>
-                `;
-            }
-            if (defaultFields.includeMinimumShows) {
-                // For popularTVNetworks, we need to get this from somewhere - it's not in the section config directly
-                // We'll store it in a custom property or query option
-                const minimumShows = section.minimumShowsForNetwork || section.queries?.[0]?.queryOptions?.minimumShowsForNetwork || 5;
-                additionalFieldsHTML += `
-                    <div style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
-                        <div class="listItemBodyText" style="font-weight: 500; margin-bottom: 0.75em;">Network Settings</div>
-                        ${buildTextInput('section-minimumShowsForNetwork', minimumShows, 'Minimum Shows to Appear', 'number')}
-                    </div>
-                `;
-            }
-        }
-
-        // Spotlight options: only include when this editor has Render Mode (custom sections)
-        const isSpotlightMode = section.renderMode === 'Spotlight' || section.spotlight;
-        const spotlightOptionsHTML = buildSectionEditorSpotlightHTML(section, 'section-', isSpotlightMode);
-
-        return `
-            <div style="max-width: 1000px; margin: 0 auto;">
-                <!-- Enabled Toggle (at the very top) -->
-                <div>
-                    ${buildEnabledToggleButtons('section-enabled', section.enabled)}
-                </div>
-                
-                <!-- Basic Properties -->
-                <div style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
-                    ${basicPropertiesHTML}
-                </div>
-                ${additionalFieldsHTML}
-                <!-- Spotlight Options (visible only when Render Mode = Spotlight) -->
-                ${spotlightOptionsHTML}
-                ${!isDefaultSection ? `
-
-                <!-- Queries Array Editor -->
-                <div style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
-                    <div style="display: flex; align-items: center; margin-bottom: 0.75em; gap: 0.5em;">
-                        <div class="listItemBodyText" style="font-weight: 500;">Queries</div>
-                        <a href="https://api.jellyfin.org/" target="_blank" style="color: inherit;" title="Use the Jellyfin API documentation for additional details.">
-                            <span class="material-icons info"></span>
-                        </a>
-                    </div>
-                    <div id="queries-list">
-                        ${queries.map((query, index) => buildQueryEditor(query, index, queries.length > 1)).join('')}
-                    </div>
-                    <button type="button" class="emby-button add-query-btn raised" style="padding: 0.5em 1em; margin-top: 0.75em;">
-                        <span>Add Query</span>
-                    </button>
-                    <div data-merge-sorting style="margin-top: 1em; padding-top: 1em; border-top: 1px solid rgba(255,255,255,0.1); display: ${hasMultipleQueries ? 'block' : 'none'};">
-                        <div class="listItemBodyText" style="font-weight: 500; margin-bottom: 0.75em;">Merge Sorting (for multiple queries)</div>
-                        ${buildSelect('section-sortBy', SORT_ORDERS, section.sortBy, 'Sort By')}
-                        ${buildSelect('section-sortOrder', SORT_ORDER_DIRECTIONS, section.sortOrder || 'Descending', 'Sort Order')}
-                    </div>
-                </div>
-
-                <!-- Advanced Options -->
-                <details style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
-                    <summary class="listItemBodyText" style="font-weight: 500; cursor: pointer; margin-bottom: 0.5em;">Advanced Options</summary>
-                    <div style="padding: 0.75em 0 0 0;">
-                        ${buildTextInput('section-ttl', section.ttl !== undefined ? section.ttl : '', 'TTL (ms, leave empty for default)', 'number')}
-                        ${buildCheckbox('section-flattenSeries', section.flattenSeries === true, 'Flatten Series')}
-                        ${buildTextInput('section-minimumItems', section.minimumItems || '', 'Minimum Items', 'number')}
-                        ${buildTextInput('section-startDate', section.startDate || '', 'Start Date (MM-DD)', 'text')}
-                        ${buildTextInput('section-endDate', section.endDate || '', 'End Date (MM-DD)', 'text')}
-                    </div>
-                </details>
-                ` : ''}
-            </div>
-        `;
-    }
-
-    /**
-     * Build query editor HTML
-     */
-    function buildQueryEditor(query, index, canDelete) {
-        const queryType = query.path ? 'custom' : (query.dataSource ? 'datasource' : 'standard');
-        const pathDisplay = queryType === 'custom' ? 'block' : 'none';
-        const dataSourceDisplay = queryType === 'datasource' ? 'block' : 'none';
-        
-        return `
-            <div class="query-editor" data-query-index="${index}" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 0.75em;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75em;">
-                    <div class="listItemBodyText" style="font-weight: 500;">Query ${index + 1}</div>
-                    ${canDelete ? `
-                        <button type="button" class="emby-button delete-query-btn raised" data-query-index="${index}" style="padding: 0.5em 1em; background: rgba(244, 67, 54, 0.2);">
-                            <span>Delete</span>
-                        </button>
-                    ` : ''}
-                </div>
-                ${buildSelect(`query-${index}-type`, [
-                    { value: 'standard', label: 'Standard Items Query' },
-                    { value: 'custom', label: 'Custom Endpoint' },
-                    { value: 'datasource', label: 'Data Source' }
-                ], queryType, 'Query Type')}
-                <div id="query-${index}-path-container" style="display: ${pathDisplay};">
-                    ${buildTextInput(`query-${index}-path`, query.path || '', 'Endpoint Path', 'text', '/Genres, /Persons, /Shows/NextUp, /Items/Latest, etc')}
-                </div>
-                <div id="query-${index}-dataSource-container" style="display: ${dataSourceDisplay};">
-                    ${buildTextInput(`query-${index}-dataSource`, query.dataSource || '', 'Data Source (e.g., MoviesCache.getImdbTop250Movies)')}
-                </div>
-                <div style="margin-top: 0.75em;">
-                    <div class="listItemBodyText" style="font-weight: 500; margin-bottom: 0.5em;">Parent Options</div>
-                    ${buildParentOptionsEditor(query, index)}
-                </div>
-                <div style="margin-top: 0.75em;">
-                    <div class="listItemBodyText" style="font-weight: 500; margin-bottom: 0.5em;">Query Options</div>
-                    ${buildQueryOptionsEditor(query.queryOptions || {}, index)}
+                    ${buildTextInput('cache-VERY_SHORT_TTL', msToMinutes(cache.VERY_SHORT_TTL || 60000), 'Very Short (minutes)', 'number')}
+                    ${buildTextInput('cache-SHORT_TTL', msToMinutes(cache.SHORT_TTL || 300000), 'Short (minutes)', 'number')}
+                    ${buildTextInput('cache-LONG_TTL', msToMinutes(cache.LONG_TTL || 86400000), 'Long (minutes)', 'number')}
+                    ${buildTextInput('cache-STATIC_TTL', msToMinutes(cache.STATIC_TTL || 604800000), 'Static (minutes)', 'number')}
+                    ${buildTextInput('cache-DISCOVERY_TTL', msToMinutes(cache.DISCOVERY_TTL || 3600000), 'Discovery (minutes)', 'number')}
                 </div>
             </div>
         `;
     }
 
     /**
-     * Build parent options editor
+     * Collect settings present in the currently rendered Global Settings panel into currentConfig.
+     * Missing panels are left unchanged (avoids resetting values when switching sub-tabs).
      */
-    function buildParentOptionsEditor(query, queryIndex) {
-        const queryOptions = query.queryOptions || {};
-        // Determine parent item type from query level first, then fall back to queryOptions for backwards compatibility
-        let parentItemType = query._parentItemType || '';
-        
-        // Backwards compatibility: check queryOptions._parentItemType
-        if (!parentItemType && (queryOptions._parentItemType === 'Collection' || queryOptions._parentItemType === 'Playlist')) {
-            parentItemType = queryOptions._parentItemType;
-        } else if (!parentItemType && queryOptions.CollectionIds && (Array.isArray(queryOptions.CollectionIds) ? queryOptions.CollectionIds.length > 0 : queryOptions.CollectionIds)) {
-            // Backwards compatibility: check old CollectionIds field
-            parentItemType = 'Collection';
-        } else if (!parentItemType && queryOptions.PlaylistIds && (Array.isArray(queryOptions.PlaylistIds) ? queryOptions.PlaylistIds.length > 0 : queryOptions.PlaylistIds)) {
-            // Backwards compatibility: check old PlaylistIds field
-            parentItemType = 'Playlist';
-        } else if (!parentItemType && queryOptions.ParentId) {
-            parentItemType = 'Generic Parent';
-        }
-
-        return `
-            <div style="display: grid; gap: 0.75em;">
-                <!-- Parent Item Dropdown -->
-                ${buildSelect(`query-${queryIndex}-parentItemType`, [
-                    { value: '', label: 'Select a Parent... (optional)' },
-                    { value: 'Collection', label: 'Collection' },
-                    { value: 'Playlist', label: 'Playlist' },
-                    { value: 'Generic Parent', label: 'Generic Parent' }
-                ], parentItemType, 'Parent Item')}
-                
-                <!-- Conditional Parent Item Fields -->
-                <div id="query-${queryIndex}-Collections-container" data-query-index="${queryIndex}" data-type="Collections" style="display: ${parentItemType === 'Collection' ? 'block' : 'none'};"></div>
-                <div id="query-${queryIndex}-Playlists-container" data-query-index="${queryIndex}" data-type="Playlists" style="display: ${parentItemType === 'Playlist' ? 'block' : 'none'};"></div>
-                <div id="query-${queryIndex}-GenericParent-container" style="display: ${parentItemType === 'Generic Parent' ? 'block' : 'none'};">
-                    ${buildTextInput(`query-${queryIndex}-ParentId`, queryOptions.ParentId || '', 'Parent ID (GUID)', 'text')}
-                </div>
-                
-                <!-- Hidden field to store parent item type -->
-                <input type="hidden" id="query-${queryIndex}-ParentItemType" value="${parentItemType}">
-            </div>
-        `;
-    }
-
-    /**
-     * Build query options editor
-     */
-    function buildQueryOptionsEditor(queryOptions, queryIndex) {
-
-        // Regular text/number fields
-        const commonFields = [
-            { key: 'SortBy', label: 'Sort By', value: queryOptions.SortBy || '', options: SORT_ORDERS },
-            { key: 'SortOrder', label: 'Sort Order', value: queryOptions.SortOrder || '', options: SORT_ORDER_DIRECTIONS },
-            { key: 'Limit', label: 'Limit', value: queryOptions.Limit || '', type: 'number' },
-            { key: 'Filters', label: 'Filters', value: queryOptions.Filters || '', placeholder: 'IsUnplayed,IsResumable,IsNotFolder' },
-            { key: 'SearchTerm', label: 'Search Term', value: queryOptions.SearchTerm || '' }
-        ];
-
-        // Extract additional options (not in common fields or badge fields)
-        const additionalOptions = [];
-        const badgeFieldKeys = ['IncludeItemTypes', 'Genres', 'Tags', 'CollectionIds', 'PlaylistIds', 'ParentId'];
-        Object.entries(queryOptions || {}).forEach(([key, value]) => {
-            if (!commonFields.find(f => f.key === key) && !badgeFieldKeys.includes(key)) {
-                // If the key doesn't start with an underscore, add it to additionalOptions
-                if (!key.startsWith('_')) {
-                    additionalOptions.push({ key, value });
-                }
-            }
-        });
-
-        return `
-            <div style="display: grid; gap: 0.75em;">
-                <!-- Badge fields grouped in flexbox: IncludeItemTypes, Genres, Tags -->
-                <div style="display: flex; gap: 0.75em; flex-wrap: wrap;">
-                    <div id="query-${queryIndex}-IncludeItemTypes-container" data-query-index="${queryIndex}" data-type="IncludeItemTypes" style="flex: 1; min-width: 250px;"></div>
-                    <div id="query-${queryIndex}-Genres-container" data-query-index="${queryIndex}" data-type="Genres" style="flex: 1; min-width: 250px;"></div>
-                    <div id="query-${queryIndex}-Tags-container" data-query-index="${queryIndex}" data-type="Tags" style="flex: 1; min-width: 250px;"></div>
-                </div>
-                
-                <!-- Regular Fields in flexbox -->
-                <div style="display: flex; gap: 0.75em; flex-wrap: wrap;">
-                    ${commonFields.map(field => `
-                        <div style="flex: 1; min-width: 150px;">
-                        ${field.options ? buildSelect(`query-${queryIndex}-${field.key}`, field.options, field.value, field.label) : buildTextInput(`query-${queryIndex}-${field.key}`, field.value, field.label, field.type || 'text', field.placeholder || '')}
-                        </div>
-                    `).join('')}
-                </div>
-                <details style="margin-top: 0.5em;">
-                    <summary class="listItemBodyText" style="cursor: pointer; font-size: 0.9em;">Additional Options</summary>
-                    <div style="padding: 0.5em 0;">
-                        ${buildAdditionalOptionsControls(queryIndex)}
-                        ${buildAdditionalOptionsList(queryIndex, additionalOptions)}
-                    </div>
-                </details>
-            </div>
-        `;
-    }
-
-    /**
-     * Setup badge autocomplete for a query field
-     */
-    async function setupQueryBadgeAutocomplete(modalInstance, queryIndex, type, queryOptions = {}, includeItemTypes = null, parentItemType = null) {
-        if (!window.KefinTweaksUI || !window.KefinTweaksUI.createAutoCompleteInput) {
-            WARN('KefinTweaksUI.createAutoCompleteInput not available');
-            return;
-        }
-
-        const container = modalInstance.dialogContent.querySelector(`#query-${queryIndex}-${type}-container`);
-        if (!container) return;
-
-        // Calculate itemTypesForFilters early (used for Genres/Tags)
-        const rawItemTypes = includeItemTypes || queryOptions.IncludeItemTypes;
-        const itemTypesForFilters = (type === 'Genres' || type === 'Tags') 
-            ? (Array.isArray(rawItemTypes) ? rawItemTypes : [rawItemTypes])
-            : null;
-
-        // Extract current values from query options
-        let currentValues = [];
-        if (type === 'IncludeItemTypes') {
-            currentValues = Array.isArray(queryOptions.IncludeItemTypes) ? queryOptions.IncludeItemTypes : (queryOptions.IncludeItemTypes ? [queryOptions.IncludeItemTypes] : []);
-        } else if (type === 'Genres') {
-            // Get selected genre names from queryOptions
-            const selectedGenres = queryOptions.Genres || '';
-            const selectedGenreNames = selectedGenres ? (Array.isArray(selectedGenres) ? selectedGenres : selectedGenres.split(',').map(s => s.trim()).filter(s => s)) : [];
-            
-            // Fetch available genres from dataHelper.getFilters() to validate/match selected values
-            if (window.dataHelper && window.dataHelper.getFilters && itemTypesForFilters) {
-                try {
-                    const filters = await window.dataHelper.getFilters(itemTypesForFilters, true, false);
-                    const availableGenres = filters?.Genres || [];
-                    
-                    // Match selected genre names against available genres (case-insensitive)
-                    const genreMap = new Map(availableGenres.map(g => [g.toLowerCase(), g]));
-                    currentValues = selectedGenreNames
-                        .map(name => {
-                            // Try exact match first, then case-insensitive
-                            const exactMatch = availableGenres.find(g => g === name);
-                            if (exactMatch) return exactMatch;
-                            const caseInsensitiveMatch = genreMap.get(name.toLowerCase());
-                            return caseInsensitiveMatch || name; // Fallback to original name if not found
-                        })
-                        .filter(Boolean);
-                } catch (err) {
-                    WARN('Error fetching genres from dataHelper:', err);
-                    // Fallback to using selected values as-is
-                    currentValues = selectedGenreNames;
-                }
-            } else {
-                // Fallback to using selected values as-is
-                currentValues = selectedGenreNames;
-            }
-        } else if (type === 'Tags') {
-            // Get selected tag names from queryOptions
-            const selectedTags = queryOptions.Tags || '';
-            const selectedTagNames = selectedTags ? (Array.isArray(selectedTags) ? selectedTags : selectedTags.split(',').map(s => s.trim()).filter(s => s)) : [];
-            
-            // Fetch available tags from dataHelper.getFilters() to validate/match selected values
-            if (window.dataHelper && window.dataHelper.getFilters && itemTypesForFilters) {
-                try {
-                    const filters = await window.dataHelper.getFilters(itemTypesForFilters, true, false);
-                    const availableTags = filters?.Tags || [];
-                    
-                    // Match selected tag names against available tags (case-insensitive)
-                    const tagMap = new Map(availableTags.map(t => [t.toLowerCase(), t]));
-                    currentValues = selectedTagNames
-                        .map(name => {
-                            // Try exact match first, then case-insensitive
-                            const exactMatch = availableTags.find(t => t === name);
-                            if (exactMatch) return exactMatch;
-                            const caseInsensitiveMatch = tagMap.get(name.toLowerCase());
-                            return caseInsensitiveMatch || name; // Fallback to original name if not found
-                        })
-                        .filter(Boolean);
-                } catch (err) {
-                    WARN('Error fetching tags from dataHelper:', err);
-                    // Fallback to using selected values as-is
-                    currentValues = selectedTagNames;
-                }
-            } else {
-                // Fallback to using selected values as-is
-                currentValues = selectedTagNames;
-            }
-        } else if (type === 'Collections') {
-            // Check if ParentId contains a collection ID (when _parentItemType is 'Collection')
-            let collectionIds = [];
-            // Check query level first, then queryOptions for backwards compatibility
-            const effectiveParentItemType = parentItemType || queryOptions._parentItemType;
-            if (effectiveParentItemType === 'Collection' && queryOptions.ParentId) {
-                collectionIds = [queryOptions.ParentId];
-            } else {
-                // Backwards compatibility: check old CollectionIds field
-                collectionIds = Array.isArray(queryOptions.CollectionIds) ? queryOptions.CollectionIds : (queryOptions.CollectionIds ? [queryOptions.CollectionIds] : []);
-            }
-
-            if (collectionIds.length ===0) {
-                currentValues = [];
-            } else {                
-                // For Collections, we need to fetch names from IDs
-                if (window.apiHelper && window.ApiClient) {
-                    try {
-                        const userId = window.ApiClient.getCurrentUserId();
-                        const serverAddress = window.ApiClient.serverAddress();
-                        if (userId && serverAddress) {
-                            const data = await window.apiHelper.getItems(
-                                {
-                                    IncludeItemTypes: 'BoxSet,CollectionFolder',
-                                    Recursive: true,
-                                    Fields: 'ItemCounts',
-                                    Ids: collectionIds.join(',')
-                                },
-                                true,
-                                300000
-                            );
-                            // Convert to objects with id and name
-                            currentValues = (data?.Items || []).map(item => ({
-                                id: item.Id,
-                                name: item.Name
-                            }));
-                            // Add any IDs that weren't found (shouldn't happen, but just in case)
-                            const foundIds = new Set(currentValues.map(v => v.id));
-                            collectionIds.forEach(id => {
-                                if (!foundIds.has(id)) {
-                                    currentValues.push({ id: id, name: id }); // Fallback to ID if not found
-                                }
-                            });
-                        } else {
-                            // Fallback: convert IDs to objects
-                            currentValues = collectionIds.map(id => ({ id: id, name: id }));
-                        }
-                    } catch (err) {
-                        WARN('Error fetching collection names:', err);
-                        // Fallback: convert IDs to objects
-                        currentValues = collectionIds.map(id => ({ id: id, name: id }));
-                    }
-                } else {
-                    // Convert IDs to objects for consistency
-                    currentValues = collectionIds.map(id => ({ id: id, name: id }));
-                }
-            }
-        } else if (type === 'Playlists') {
-            // Check if ParentId contains a playlist ID (when _parentItemType is 'Playlist')
-            let playlistIds = [];
-            // Check query level first, then queryOptions for backwards compatibility
-            const effectiveParentItemType = parentItemType || queryOptions._parentItemType;
-            if (effectiveParentItemType === 'Playlist' && queryOptions.ParentId) {
-                playlistIds = [queryOptions.ParentId];
-            } else {
-                // Backwards compatibility: check old PlaylistIds field
-                playlistIds = Array.isArray(queryOptions.PlaylistIds) ? queryOptions.PlaylistIds : (queryOptions.PlaylistIds ? [queryOptions.PlaylistIds] : []);
-            }
-
-            if (playlistIds.length ===0) {
-                currentValues = [];
-            } else {
-                // For Playlists, we need to fetch names from IDs
-                if (window.apiHelper && window.ApiClient) {
-                    try {
-                        const userId = window.ApiClient.getCurrentUserId();
-                        const serverAddress = window.ApiClient.serverAddress();
-                        if (userId && serverAddress) {
-                            const data = await window.apiHelper.getItems(
-                                {
-                                    IncludeItemTypes: 'Playlist',
-                                    Recursive: true,
-                                    Fields: 'ItemCounts',
-                                    Ids: playlistIds.join(',')
-                                },
-                                true,
-                                300000
-                            );
-                            // Convert to objects with id and name
-                            currentValues = (data?.Items || []).map(item => ({
-                                id: item.Id,
-                                name: item.Name
-                            }));
-                            // Add any IDs that weren't found
-                            const foundIds = new Set(currentValues.map(v => v.id));
-                            playlistIds.forEach(id => {
-                                if (!foundIds.has(id)) {
-                                    currentValues.push({ id: id, name: id }); // Fallback to ID if not found
-                                }
-                            });
-                        } else {
-                            // Fallback: convert IDs to objects
-                            currentValues = playlistIds.map(id => ({ id: id, name: id }));
-                        }
-                    } catch (err) {
-                        WARN('Error fetching playlist names:', err);
-                        // Fallback: convert IDs to objects
-                        currentValues = playlistIds.map(id => ({ id: id, name: id }));
-                    }
-                } else {
-                    // Convert IDs to objects for consistency
-                    currentValues = playlistIds.map(id => ({ id: id, name: id }));
-                }                    
-            }
-        }
-
-        // Get available item types for IncludeItemTypes
-        const allAvailableItemTypes = [
-            'AggregateFolder', 'Audio', 'AudioBook', 'BasePluginFolder', 'Book', 'BoxSet', 'Channel', 
-            'ChannelFolderItem', 'CollectionFolder', 'Episode', 'Folder', 'Genre', 'ManualPlaylistsFolder', 
-            'Movie', 'LiveTvChannel', 'LiveTvProgram', 'MusicAlbum', 'MusicArtist', 'MusicGenre', 'MusicVideo', 
-            'Person', 'Photo', 'PhotoAlbum', 'Playlist', 'PlaylistsFolder', 'Program', 'Recording', 'Season', 
-            'Series', 'Studio', 'Trailer', 'TvChannel', 'TvProgram', 'UserRootFolder', 'UserView', 'Video', 'Year'
-        ];
-
-        // Normalize type: Collections->Collection, Playlists->Playlist, Genres->Genre, Tags->Tag
-        const normalizedType = type === 'IncludeItemTypes' ? 'IncludeItemTypes' 
-            : (type === 'Collections' ? 'Collection' 
-            : (type === 'Playlists' ? 'Playlist'
-            : (type === 'Genres' ? 'Genre'
-            : (type === 'Tags' ? 'Tag' : type))));
-        
-        const autocomplete = window.KefinTweaksUI.createAutoCompleteInput({
-            type: normalizedType,
-            prefix: 'query',
-            sectionIndex: queryIndex,
-            container: container,
-            label: type === 'IncludeItemTypes' ? 'Include Item Types' : (type === 'Collections' ? 'Collections' : (type === 'Playlists' ? 'Playlists' : type)),
-            currentValuesArray: currentValues, // Fixed: use currentValuesArray parameter name
-            availableTypes: type === 'IncludeItemTypes' ? allAvailableItemTypes : null,
-            includeItemTypes: itemTypesForFilters, // Pass for filter fetching (Genres/Tags only)
-            onChange: (values) => {
-                // Values are updated automatically via hidden inputs
-            }
-        });
-
-        if (autocomplete && autocomplete.element) {
-            container.innerHTML = '';
-            container.appendChild(autocomplete.element);
-            await autocomplete.setup();
-        }
-    }
-
-    /**
-     * Build additional options controls (dropdown + add button)
-     */
-    function buildAdditionalOptionsControls(queryIndex) {
-        const dropdownOptions = Object.entries(SUPPORTED_QUERY_OPTIONS)
-            .map(([key, meta]) => `<option value="${key}">${meta.label}</option>`)
-            .join('');
-
-        return `
-            <div class="query-${queryIndex}-additional-options-controls" data-query-index="${queryIndex}" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-top: 0.5em;">
-                <div class="listItemBodyText" style="margin-bottom: 0.5em;">Additional Options</div>
-                <div style="display: flex; gap: 0.5em; align-items: center;">
-                    <select class="fld emby-select emby-select-withcolor additional-option-select" data-query-index="${queryIndex}" style="flex: 1; margin: 0; min-width: 0;">
-                        <option value="">Select an option to add...</option>
-                        ${dropdownOptions}
-                    </select>
-                    <button type="button" class="raised emby-button add-additional-option" data-query-index="${queryIndex}" style="background: rgba(0, 164, 220, 0.2); min-width: auto; padding: 0.5em 1em;">
-                        <span>Add</span>
-                    </button>
-                </div>
-            </div>
-        `;
-    }
-
-    /**
-     * Build additional options list
-     */
-    function buildAdditionalOptionsList(queryIndex, currentOptions) {
-        const optionsHtml = (currentOptions || []).map((option, index) => {
-            const meta = SUPPORTED_QUERY_OPTIONS[option.key] || { label: option.key, type: 'string' };
-            const inputId = `query-${queryIndex}-additionalOption-${index}`;
-            
-            let inputField = '';
-            if (meta.type === 'boolean') {
-                const isChecked = option.value === true || option.value === 'true';
-                inputField = `
-                    <div style="flex: 1;">
-                        <label class="checkboxContainer" style="display: flex; align-items: center; gap: 0.5em;">
-                            <input type="checkbox" id="${inputId}" class="additional-option-value" data-key="${option.key}" data-type="boolean" ${isChecked ? 'checked' : ''}>
-                            <span class="listItemBodyText">${meta.label}</span>
-                        </label>
-                    </div>
-                `;
-            } else {
-                const displayValue = Array.isArray(option.value) ? option.value.join(',') : (option.value || '');
-                inputField = `
-                    <div style="flex: 1;">
-                        <div class="listItemBodyText" style="margin-bottom: 0.25em;">${meta.label}</div>
-                        <input type="${meta.type === 'number' ? 'number' : (meta.type === 'date' ? 'date' : 'text')}" 
-                               id="${inputId}" 
-                               class="fld emby-input additional-option-value" 
-                               value="${displayValue}" 
-                               data-key="${option.key}" 
-                               data-type="${meta.type}" 
-                               placeholder="${meta.hint || ''}" 
-                               style="width: 100%;">
-                    </div>
-                `;
-            }
-
-            return `
-                <div class="additional-option-row" style="display: flex; align-items: flex-end; gap: 0.5em; margin-top: 0.5em; padding: 0.5em; background: rgba(255,255,255,0.05); border-radius: 4px;">
-                    ${inputField}
-                    <button type="button" class="remove-additional-option" style="background: none; border: none; color: rgba(255,255,255,0.7); cursor: pointer; padding: 0.25em; display: flex; align-items: center;" title="Remove Option">
-                        <span class="material-icons">close</span>
-                    </button>
-                </div>
-            `;
-        }).join('');
-
-        return `
-            <div class="query-${queryIndex}-additional-options-list-container" data-query-index="${queryIndex}" style="margin-top: 0.75em;">
-                <div class="additional-options-list" data-query-index="${queryIndex}">
-                    ${optionsHtml}
-                </div>
-            </div>
-        `;
-    }
-
-    /**
-     * Build discovery section editor HTML (simplified)
-     */
-    function buildDiscoveryEditorHTML(section) {
-        const isDiscoverySpotlight = section.renderMode === 'Spotlight';
-        const discoverySpotlightHTML = buildSectionEditorSpotlightHTML(section, 'discovery-', isDiscoverySpotlight);
-        return `
-            <div style="max-width: 100%;">
-                <div class="listItemBodyText secondary" style="margin-bottom: 1em; padding: 0.75em; background: rgba(255,255,255,0.05); border-radius: 4px;">
-                    <strong>Note:</strong> Discovery sections use dynamic sources that are determined at runtime. You can only modify basic settings here.
-                </div>
-                ${buildTextInput('discovery-name', section.name || '', 'Name Template (use placeholders like {Genre}, {Person}, {Title})')}
-                ${buildCheckbox('discovery-enabled', section.enabled !== false, 'Enabled')}
-                ${buildTextInput('discovery-itemLimit', section.itemLimit || 20, 'Item Limit', 'number')}
-                ${buildSelect('discovery-sortOrder', SORT_ORDERS, section.sortOrder || 'Random', 'Sort Order')}
-                ${section.sortOrderDirection ? buildSelect('discovery-sortOrderDirection', SORT_ORDER_DIRECTIONS, section.sortOrderDirection || 'Ascending', 'Sort Order Direction') : ''}
-                ${buildSelect('discovery-cardFormat', CARD_FORMATS, section.cardFormat || 'Poster', 'Card Format')}
-                ${buildTextInput('discovery-ttl', section.ttl !== undefined ? section.ttl : '', 'TTL (ms)', 'number')}
-                ${buildSelect('discovery-renderMode', RENDER_MODE_OPTIONS, section.renderMode || 'Normal', 'Render Mode')}
-                <!-- Spotlight Options (visible only when Render Mode = Spotlight) -->
-                ${discoverySpotlightHTML}
-            </div>
-        `;
-    }
-
-    /**
-     * Collect form data from section editor
-     * @param {boolean} isDiscovery - Whether this is a discovery section
-     * @param {Object} originalSection - Original section data (for preserving hidden fields in default sections)
-     */
-    function collectSectionEditorData(isDiscovery = false, originalSection = null) {
-        const dialog = document.querySelector(`.dialogContainer[data-modal-id="${SECTION_EDITOR_MODAL_ID}"]`) || document.querySelector(`.dialogContainer[data-modal-id="${DISCOVERY_EDITOR_MODAL_ID}"]`);
-        if (!dialog) return null;
-
-        if (isDiscovery) {
-            const renderMode = dialog.querySelector('#discovery-renderMode')?.value || 'Normal';
-            const filterByPlayedStatus = dialog.querySelector('#discovery-filterByPlayedStatus')?.checked === true;
-            const isCollections = dialog.querySelector('#discovery-minimumItems') !== null;
-            
-            const discovery = {
-                name: dialog.querySelector('#discovery-name')?.value || '',
-                enabled: dialog.querySelector('#discovery-enabled')?.checked !== false,
-                renderMode: renderMode,
-                order: parseInt(dialog.querySelector('#discovery-order')?.value || '0', 10),
-                itemLimit: parseInt(dialog.querySelector('#discovery-itemLimit')?.value || '20', 10),
-                sortOrder: dialog.querySelector('#discovery-sortOrder')?.value || 'Random',
-                sortOrderDirection: dialog.querySelector('#discovery-sortOrderDirection')?.value || undefined,
-                ttl: dialog.querySelector('#discovery-ttl')?.value ? parseInt(dialog.querySelector('#discovery-ttl').value, 10) : undefined
-            };
-            
-            // Only set cardFormat if renderMode is not Spotlight
-            if (renderMode !== 'Spotlight') {
-                discovery.cardFormat = dialog.querySelector('#discovery-cardFormat')?.value || 'Poster';
-            }
-            
-            // Add IsUnplayed filter if enabled
-            if (filterByPlayedStatus) {
-                discovery.queryOptions = { IsUnplayed: true };
-            }
-            
-            // Add minimumItems for Collections
-            if (isCollections) {
-                const minimumItems = dialog.querySelector('#discovery-minimumItems')?.value;
-                if (minimumItems) {
-                    discovery.minimumItems = parseInt(minimumItems, 10);
-                }
-            }
-
-            // Spotlight options (saved when Render Mode = Spotlight)
-            if (renderMode === 'Spotlight') {
-                const p = 'discovery-spotlight-';
-                const slideStateVal = dialog.querySelector('#' + p + 'slideState')?.value || 'dots';
-                const tileCountVal = Math.max(1, Math.min(3, parseInt(dialog.querySelector('#' + p + 'tileCount')?.value || '1', 10)));
-                discovery.spotlightConfig = {
-                    spotlightLayout: dialog.querySelector('#' + p + 'spotlightLayout')?.value || 'Border',
-                    spotlightSize: dialog.querySelector('#' + p + 'spotlightSize')?.value || 'normal',
-                    tileCount: tileCountVal,
-                    autoPlay: dialog.querySelector('#' + p + 'autoPlay')?.checked !== false,
-                    interval: parseInt(dialog.querySelector('#' + p + 'interval')?.value || '10000', 10),
-                    showSlideState: slideStateVal !== 'none',
-                    showDots: slideStateVal === 'dots',
-                    showNavButtons: dialog.querySelector('#' + p + 'showNavButtons')?.checked !== false,
-                    showClearArt: dialog.querySelector('#' + p + 'showClearArt')?.checked === true,
-                    panAnimation: dialog.querySelector('#' + p + 'panAnimation')?.checked !== false,
-                    entranceAnimationFirst: dialog.querySelector('#' + p + 'entranceAnimationFirst')?.value || 'fadeIn',
-                    entranceAnimationSecond: dialog.querySelector('#' + p + 'entranceAnimationSecond')?.value || 'fadeIn',
-                    entranceAnimationThird: dialog.querySelector('#' + p + 'entranceAnimationThird')?.value || 'fadeIn',
-                    slideAnimationFirst: dialog.querySelector('#' + p + 'slideAnimationFirst')?.value || 'kenBurnsZoomIn',
-                    slideAnimationSecond: dialog.querySelector('#' + p + 'slideAnimationSecond')?.value || 'kenBurnsZoomIn',
-                    slideAnimationThird: dialog.querySelector('#' + p + 'slideAnimationThird')?.value || 'kenBurnsZoomIn',
-                    cycleBackdrops: dialog.querySelector('#' + p + 'cycleBackdrops')?.checked === true,
-                    cycleBackdropsTime: parseInt(dialog.querySelector('#' + p + 'cycleBackdropsTime')?.value || '10000', 10)
-                };
-            } else {
-                delete discovery.spotlightConfig;
-            }
-            
-            return discovery;
-        }
-
-        // Check if this is a default section
-        const sectionId = dialog.querySelector('.section-save-btn')?.dataset.sectionId;
-        const defaultFields = sectionId ? getDefaultSectionFields(sectionId) : null;
-        const isDefaultSection = defaultFields !== null;
-        
-        // For default sections, start with original data to preserve hidden fields
-        let section;
-        if (isDefaultSection && originalSection) {
-            // Start with a deep copy of the original section
-            section = JSON.parse(JSON.stringify(originalSection));
-            
-            // Now update only the editable fields from the UI
-            section.name = dialog.querySelector('#section-name')?.value || section.name || '';
-            // Get enabled state from toggle buttons
-            const enabledBtn = dialog.querySelector('.enabled-toggle-btn.active[data-enabled="true"]');
-            section.enabled = enabledBtn !== null;
-            section.order = parseInt(dialog.querySelector('#section-order')?.value || '0', 10);
-            
-            if (defaultFields.includeCardFormat) {
-                section.cardFormat = dialog.querySelector('#section-cardFormat')?.value || 'Poster';
-            }
-            
-            // Ensure queries array exists
-            if (!section.queries || section.queries.length === 0) {
-                section.queries = [{ queryOptions: {} }];
-            }
-            
-            // Update only the editable queryOptions fields
-            if (defaultFields.includeItemLimit) {
-                const itemLimit = parseInt(dialog.querySelector('#section-itemLimit')?.value || '20', 10);
-                if (!section.queries[0].queryOptions) section.queries[0].queryOptions = {};
-                section.queries[0].queryOptions.Limit = itemLimit;
-            }
-            
-            if (defaultFields.includeSortOrder) {
-                const sortBy = dialog.querySelector('#section-sortBy')?.value;
-                const sortOrder = dialog.querySelector('#section-sortOrder')?.value;
-                if (sortBy || sortOrder) {
-                    if (!section.queries[0].queryOptions) section.queries[0].queryOptions = {};
-                    if (sortBy) section.queries[0].queryOptions.SortBy = sortBy;
-                    if (sortOrder) section.queries[0].queryOptions.SortOrder = sortOrder;
-                }
-            }
-            
-            if (defaultFields.includePremiereDays) {
-                const minAgeInDays = parseInt(dialog.querySelector('#section-minAgeInDays')?.value || '0', 10);
-                const maxAgeInDays = parseInt(dialog.querySelector('#section-maxAgeInDays')?.value || '30', 10);
-                // Store minAge/maxAge at query level (not in queryOptions)
-                section.queries[0].minAge = minAgeInDays;
-                section.queries[0].maxAge = maxAgeInDays;
-            }
-            
-            if (defaultFields.includeMinimumShows) {
-                const minimumShows = parseInt(dialog.querySelector('#section-minimumShowsForNetwork')?.value || '5', 10);
-                section.minimumShowsForNetwork = minimumShows;
-            }
-            
-            // Handle IsUnplayed filter (from toggle button)
-            // Apply to all queries to ensure toggle is source of truth
-            const filterToggle = dialog.querySelector('.filter-played-toggle');
-            const filterByPlayedStatus = filterToggle?.dataset.checked === 'true';
-            if (defaultFields.includeFilterByPlayedStatus) {
-                section.queries.forEach(query => {
-                    if (!query.queryOptions) query.queryOptions = {};
-                    if (filterByPlayedStatus) {
-                        query.queryOptions.IsUnplayed = true;
-                    } else {
-                        // Remove IsUnplayed if unchecked (toggle is source of truth)
-                        delete query.queryOptions.IsUnplayed;
-                    }
-                });
-            }
-
-            const discoveryEnabledToggle = dialog.querySelector('.section-discoveryEnabled-toggle');
-            if (discoveryEnabledToggle) {
-                section.discoveryEnabled = discoveryEnabledToggle.dataset.enabled === 'true';
-            }
-
-            // Check if this is a seasonal section based on the section id and add the Start Date and End Date fields
-            if (section.id.startsWith('seasonal.')) {
-                section.startDate = dialog.querySelector('#section-startDate')?.value || section.startDate;
-                section.endDate = dialog.querySelector('#section-endDate')?.value || section.endDate;
-            }
-            
-            const renderMode = dialog.querySelector('#section-renderMode')?.value || 'Normal';
-            if (renderMode) {
-                section.renderMode = renderMode;
-
-                if (renderMode === 'Spotlight') {
-                    const p = 'section-spotlight-';
-                    const slideStateVal = dialog.querySelector('#' + p + 'slideState')?.value || 'dots';
-                    const tileCountVal = Math.max(1, Math.min(3, parseInt(dialog.querySelector('#' + p + 'tileCount')?.value || '1', 10)));
-                    section.spotlightConfig = {
-                        spotlightLayout: dialog.querySelector('#' + p + 'spotlightLayout')?.value || 'Border',
-                        spotlightSize: dialog.querySelector('#' + p + 'spotlightSize')?.value || 'normal',
-                        tileCount: tileCountVal,
-                        autoPlay: dialog.querySelector('#' + p + 'autoPlay')?.checked !== false,
-                        interval: parseInt(dialog.querySelector('#' + p + 'interval')?.value || '10000', 10),
-                        showSlideState: slideStateVal !== 'none',
-                        showDots: slideStateVal === 'dots',
-                        showNavButtons: dialog.querySelector('#' + p + 'showNavButtons')?.checked !== false,
-                        showClearArt: dialog.querySelector('#' + p + 'showClearArt')?.checked === true,
-                        panAnimation: dialog.querySelector('#' + p + 'panAnimation')?.checked !== false,
-                        entranceAnimationFirst: dialog.querySelector('#' + p + 'entranceAnimationFirst')?.value || 'fadeIn',
-                        entranceAnimationSecond: dialog.querySelector('#' + p + 'entranceAnimationSecond')?.value || 'fadeIn',
-                        entranceAnimationThird: dialog.querySelector('#' + p + 'entranceAnimationThird')?.value || 'fadeIn',
-                        slideAnimationFirst: dialog.querySelector('#' + p + 'slideAnimationFirst')?.value || 'kenBurnsZoomIn',
-                        slideAnimationSecond: dialog.querySelector('#' + p + 'slideAnimationSecond')?.value || 'kenBurnsZoomIn',
-                        slideAnimationThird: dialog.querySelector('#' + p + 'slideAnimationThird')?.value || 'kenBurnsZoomIn',
-                        cycleBackdrops: dialog.querySelector('#' + p + 'cycleBackdrops')?.checked === true,
-                        cycleBackdropsTime: parseInt(dialog.querySelector('#' + p + 'cycleBackdropsTime')?.value || '10000', 10)
-                    };
-                }
-            }
-            
-            return section;
-        }
-        
-        // For custom sections, build from scratch (existing logic)
-        // Get enabled state from toggle buttons
-        const enabledBtn = dialog.querySelector('.enabled-toggle-btn.active[data-enabled="true"]');
-        section = {
-            name: dialog.querySelector('#section-name')?.value || '',
-            enabled: enabledBtn !== null,
-            order: parseInt(dialog.querySelector('#section-order')?.value || '0', 10),
-        };
-        
-        // Custom sections - collect full editor data
-        const renderMode = dialog.querySelector('#section-renderMode')?.value || 'Normal';
-        // Get filter by played status from toggle button
-        const filterToggle = dialog.querySelector('.filter-played-toggle');
-        const filterByPlayedStatus = filterToggle?.dataset.checked === 'true';
-        const discoveryEnabledToggle = dialog.querySelector('.section-discoveryEnabled-toggle');
-        section.discoveryEnabled = discoveryEnabledToggle?.dataset.enabled === 'true';
-        section.renderMode = renderMode;
-        
-        // Only set cardFormat if renderMode is not Spotlight
-        if (renderMode !== 'Spotlight') {
-            section.cardFormat = dialog.querySelector('#section-cardFormat')?.value || 'Poster';
-        }
-
-        // Collect queries
-        const queryEditors = dialog.querySelectorAll('.query-editor');
-        section.queries = Array.from(queryEditors).map((editor) => {
-            const queryIndex = parseInt(editor.dataset.queryIndex, 10);
-            const queryType = editor.querySelector(`#query-${queryIndex}-type`)?.value || 'standard';
-            const query = {};
-
-            if (queryType === 'custom') {
-                const path = editor.querySelector(`#query-${queryIndex}-path`)?.value;
-                if (path) query.path = path;
-            } else if (queryType === 'datasource') {
-                const dataSource = editor.querySelector(`#query-${queryIndex}-dataSource`)?.value;
-                if (dataSource) query.dataSource = dataSource;
-            }
-
-            // Collect query options
-            query.queryOptions = {};
-            
-            // Add IsUnplayed filter if Filter by Played Status is enabled
-            if (filterByPlayedStatus) {
-                query.queryOptions.IsUnplayed = true;
-            }
-            
-            // Collect badge autocomplete values from hidden inputs
-            const includeItemTypesHidden = editor.querySelector(`.query_includeItemTypes_hidden[data-section-index="${queryIndex}"]`) ||
-                                           editor.closest('.query-editor')?.querySelector(`.query_includeItemTypes_hidden[data-section-index="${queryIndex}"]`);
-            if (includeItemTypesHidden && includeItemTypesHidden.value) {
-                query.queryOptions.IncludeItemTypes = includeItemTypesHidden.value.split(',').map(s => s.trim()).filter(s => s);
-            }
-            
-            const genresHidden = editor.querySelector(`.query_genres_hidden[data-section-index="${queryIndex}"]`) ||
-                                 editor.closest('.query-editor')?.querySelector(`.query_genres_hidden[data-section-index="${queryIndex}"]`);
-            if (genresHidden && genresHidden.value) {
-                query.queryOptions.Genres = genresHidden.value.split(',').map(s => s.trim()).filter(s => s).join(',');
-            }
-            
-            const tagsHidden = editor.querySelector(`.query_tags_hidden[data-section-index="${queryIndex}"]`) ||
-                               editor.closest('.query-editor')?.querySelector(`.query_tags_hidden[data-section-index="${queryIndex}"]`);
-            if (tagsHidden && tagsHidden.value) {
-                query.queryOptions.Tags = tagsHidden.value.split(',').map(s => s.trim()).filter(s => s).join(',');
-            }
-            
-            // Handle parent item type - only one can be set per query
-            const parentItemTypeSelect = editor.querySelector(`#query-${queryIndex}-parentItemType`);
-            const parentItemType = parentItemTypeSelect?.value || '';
-            
-            if (parentItemType === 'Collection') {
-                const collectionsHidden = editor.querySelector(`.query_collection_hidden[data-section-index="${queryIndex}"]`) ||
-                                          editor.closest('.query-editor')?.querySelector(`.query_collection_hidden[data-section-index="${queryIndex}"]`);
-                if (collectionsHidden && collectionsHidden.value) {
-                    // Extract collection IDs and use the first one for ParentId
-                    const collectionIds = collectionsHidden.value.split(',').map(s => s.trim()).filter(s => s);
-                    if (collectionIds.length > 0) {
-                        query.queryOptions.ParentId = collectionIds[0]; // Use first collection ID as ParentId
-                        // Store at query level (not in queryOptions)
-                        query._parentItemType = 'Collection';
-                    }
-                }
-                // Clear other parent types
-                delete query.queryOptions.PlaylistIds;
-                delete query.queryOptions.CollectionIds;
-                delete query.queryOptions._parentItemType; // Remove from queryOptions if it exists (backwards compatibility)
-            } else if (parentItemType === 'Playlist') {
-                const playlistsHidden = editor.querySelector(`.query_playlist_hidden[data-section-index="${queryIndex}"]`) ||
-                                        editor.closest('.query-editor')?.querySelector(`.query_playlist_hidden[data-section-index="${queryIndex}"]`);
-                if (playlistsHidden && playlistsHidden.value) {
-                    // Extract playlist IDs and use the first one for ParentId
-                    const playlistIds = playlistsHidden.value.split(',').map(s => s.trim()).filter(s => s);
-                    if (playlistIds.length > 0) {
-                        query.queryOptions.ParentId = playlistIds[0]; // Use first playlist ID as ParentId
-                        // Store at query level (not in queryOptions)
-                        query._parentItemType = 'Playlist';
-                    }
-                }
-                // Clear other parent types
-                delete query.queryOptions.CollectionIds;
-                delete query.queryOptions.PlaylistIds;
-                delete query.queryOptions._parentItemType; // Remove from queryOptions if it exists (backwards compatibility)
-            } else if (parentItemType === 'Generic Parent') {
-                const parentIdInput = editor.querySelector(`#query-${queryIndex}-ParentId`);
-                if (parentIdInput && parentIdInput.value) {
-                    query.queryOptions.ParentId = parentIdInput.value.trim();
-                }
-                // Clear other parent types and metadata
-                delete query.queryOptions.CollectionIds;
-                delete query.queryOptions.PlaylistIds;
-                delete query._parentItemType;
-                delete query.queryOptions._parentItemType; // Remove from queryOptions if it exists (backwards compatibility)
-            } else {
-                // No parent item selected - clear all parent types and metadata
-                delete query.queryOptions.CollectionIds;
-                delete query.queryOptions.PlaylistIds;
-                delete query.queryOptions.ParentId;
-                delete query._parentItemType;
-                delete query.queryOptions._parentItemType; // Remove from queryOptions if it exists (backwards compatibility)
-            }
-            
-            // Fallback: try to get from badge containers directly
-            if (!includeItemTypesHidden) {
-                const badgeContainer = editor.querySelector(`#query-${queryIndex}-IncludeItemTypes-container`);
-                if (badgeContainer) {
-                    const badges = badgeContainer.querySelectorAll('.tag-badge');
-                    if (badges.length > 0) {
-                        query.queryOptions.IncludeItemTypes = Array.from(badges).map(b => b.getAttribute('data-value')).filter(Boolean);
-                    }
-                }
-            }
-            if (!genresHidden) {
-                const badgeContainer = editor.querySelector(`#query-${queryIndex}-Genres-container`);
-                if (badgeContainer) {
-                    const badges = badgeContainer.querySelectorAll('.tag-badge');
-                    if (badges.length > 0) {
-                        query.queryOptions.Genres = Array.from(badges).map(b => b.getAttribute('data-value')).filter(Boolean);
-                    }
-                }
-            }
-            if (!tagsHidden) {
-                const badgeContainer = editor.querySelector(`#query-${queryIndex}-Tags-container`);
-                if (badgeContainer) {
-                    const badges = badgeContainer.querySelectorAll('.tag-badge');
-                    if (badges.length > 0) {
-                        query.queryOptions.Tags = Array.from(badges).map(b => b.getAttribute('data-value')).filter(Boolean);
-                    }
-                }
-            }
-/*             if (!collectionsHidden) {
-                const badgeContainer = editor.querySelector(`#query-${queryIndex}-Collections-container`);
-                if (badgeContainer) {
-                    const badges = badgeContainer.querySelectorAll('.tag-badge');
-                    if (badges.length > 0) {
-                        query.queryOptions.CollectionIds = Array.from(badges).map(b => b.getAttribute('data-value')).filter(Boolean);
-                    }
-                }
-            }
-            if (!playlistsHidden) {
-                const badgeContainer = editor.querySelector(`#query-${queryIndex}-Playlists-container`);
-                if (badgeContainer) {
-                    const badges = badgeContainer.querySelectorAll('.tag-badge');
-                    if (badges.length > 0) {
-                        query.queryOptions.PlaylistIds = Array.from(badges).map(b => b.getAttribute('data-value')).filter(Boolean);
-                    }
-                }
-            } */
-
-            ['SortBy', 'SortOrder', 'Filters', 'SearchTerm'].forEach(key => {
-                const value = editor.querySelector(`#query-${queryIndex}-${key}`)?.value;
-                if (value) query.queryOptions[key] = value;
-            });
-
-            const limit = editor.querySelector(`#query-${queryIndex}-Limit`)?.value;
-            if (limit) query.queryOptions.Limit = parseInt(limit, 10);
-
-            // Collect additional options from list
-            const additionalOptionsList = editor.querySelector(`.additional-options-list[data-query-index="${queryIndex}"]`);
-            if (additionalOptionsList) {
-                const optionRows = additionalOptionsList.querySelectorAll('.additional-option-row');
-                optionRows.forEach(row => {
-                    const keyInput = row.querySelector('.additional-option-key');
-                    const typeInput = row.querySelector('.additional-option-type');
-                    const valueInput = row.querySelector('.additional-option-value');
-                    
-                    if (valueInput) {
-                        const key = valueInput.dataset.key;
-                        const type = valueInput.dataset.type || 'string';
-                        
-                        if (key) {
-                            let value;
-                            if (type === 'boolean') {
-                                value = valueInput.checked === true;
-                            } else if (type === 'number') {
-                                value = valueInput.value ? parseFloat(valueInput.value) : undefined;
-                            } else if (type === 'array') {
-                                value = valueInput.value ? valueInput.value.split(',').map(s => s.trim()).filter(s => s) : [];
-                            } else {
-                                value = valueInput.value || undefined;
-                            }
-                            
-                            if (value !== undefined && value !== null && value !== '') {
-                                query.queryOptions[key] = value;
-                            }
-                        }
-                    }
-                });
-            }
-            
-            // Ensure IsUnplayed is removed if toggle is OFF (toggle is source of truth)
-            // This must happen after collecting all options to override any IsUnplayed from additional options
-            if (!filterByPlayedStatus) {
-                delete query.queryOptions.IsUnplayed;
-            }
-            
-            // Ensure queryOptions exists even if empty
-            if (Object.keys(query.queryOptions).length === 0 && !query.path && !query.dataSource) {
-                query.queryOptions = {};
-            }
-
-            return query;
-        });
-
-        // Collect advanced options
-        const ttl = dialog.querySelector('#section-ttl')?.value;
-        if (ttl) section.ttl = parseInt(ttl, 10);
-
-        section.flattenSeries = dialog.querySelector('#section-flattenSeries')?.checked === true;
-
-        const minimumItems = dialog.querySelector('#section-minimumItems')?.value;
-        if (minimumItems) section.minimumItems = parseInt(minimumItems, 10);
-
-        const startDate = dialog.querySelector('#section-startDate')?.value;
-        const endDate = dialog.querySelector('#section-endDate')?.value;
-        if (startDate) section.startDate = startDate;
-        if (endDate) section.endDate = endDate;
-
-        // Spotlight options (saved to spotlightConfig when Render Mode = Spotlight)
-        if (renderMode === 'Spotlight') {
-            const p = 'section-spotlight-';
-            const slideStateVal = dialog.querySelector('#' + p + 'slideState')?.value || 'dots';
-            const tileCountVal = Math.max(1, Math.min(3, parseInt(dialog.querySelector('#' + p + 'tileCount')?.value || '1', 10)));
-            section.spotlightConfig = {
-                spotlightLayout: dialog.querySelector('#' + p + 'spotlightLayout')?.value || 'Border',
-                spotlightSize: dialog.querySelector('#' + p + 'spotlightSize')?.value || 'normal',
-                tileCount: tileCountVal,
-                autoPlay: dialog.querySelector('#' + p + 'autoPlay')?.checked !== false,
-                interval: parseInt(dialog.querySelector('#' + p + 'interval')?.value || '10000', 10),
-                showSlideState: slideStateVal !== 'none',
-                showDots: slideStateVal === 'dots',
-                showNavButtons: dialog.querySelector('#' + p + 'showNavButtons')?.checked !== false,
-                showClearArt: dialog.querySelector('#' + p + 'showClearArt')?.checked === true,
-                panAnimation: dialog.querySelector('#' + p + 'panAnimation')?.checked !== false,
-                entranceAnimationFirst: dialog.querySelector('#' + p + 'entranceAnimationFirst')?.value || 'fadeIn',
-                entranceAnimationSecond: dialog.querySelector('#' + p + 'entranceAnimationSecond')?.value || 'fadeIn',
-                entranceAnimationThird: dialog.querySelector('#' + p + 'entranceAnimationThird')?.value || 'fadeIn',
-                slideAnimationFirst: dialog.querySelector('#' + p + 'slideAnimationFirst')?.value || 'kenBurnsZoomIn',
-                slideAnimationSecond: dialog.querySelector('#' + p + 'slideAnimationSecond')?.value || 'kenBurnsZoomIn',
-                slideAnimationThird: dialog.querySelector('#' + p + 'slideAnimationThird')?.value || 'kenBurnsZoomIn',
-                cycleBackdrops: dialog.querySelector('#' + p + 'cycleBackdrops')?.checked === true,
-                cycleBackdropsTime: parseInt(dialog.querySelector('#' + p + 'cycleBackdropsTime')?.value || '10000', 10)
-            };
-        } else {
-            delete section.spotlightConfig;
-        }
-
-        // Multi-query sorting
-        if (section.queries.length > 1) {
-            const sortBy = dialog.querySelector('#section-sortBy')?.value;
-            const sortOrder = dialog.querySelector('#section-sortOrder')?.value;
-            if (sortBy) section.sortBy = sortBy;
-            if (sortOrder) section.sortOrder = sortOrder;
-        }
-
-        // Populate the _targetGroupName with the group name specified in the section editor
-        const targetGroupName = dialog.querySelector('select#section-group')?.value;
-        if (targetGroupName) section._targetGroupName = targetGroupName;
-
-        return section;
-    }
-
-    /**
-     * Collect all settings from form
-     */
-    function collectGlobalSettings() {
+    function applyGlobalSettingsFromForm({ save = true, immediate = false } = {}) {
+        if (!currentConfig) return;
         const dialog = document.querySelector(`.dialogContainer[data-modal-id="${MAIN_MODAL_ID}"]`);
-        if (!dialog) return {};
+        const root = dialog?.querySelector('#global-settings-content') || dialog;
+        if (!root) return;
 
-        const discovery = {
-            enabled: dialog.querySelector('#discovery-enabled')?.checked !== false,
-            infiniteScroll: dialog.querySelector('#discovery-infiniteScroll')?.checked !== false,
-            minPeopleAppearances: parseInt(dialog.querySelector('#discovery-minPeopleAppearances')?.value || '10', 10),
-            minGenreMovieCount: parseInt(dialog.querySelector('#discovery-minGenreMovieCount')?.value || '50', 10),
-            defaultItemLimit: parseInt(dialog.querySelector('#discovery-defaultItemLimit')?.value || '16', 10),
-            defaultSortOrder: dialog.querySelector('#discovery-defaultSortOrder')?.value || 'Random',
-            defaultCardFormat: dialog.querySelector('#discovery-defaultCardFormat')?.value || 'Poster',
-            spotlightDiscoveryChance: parseFloat(dialog.querySelector('#discovery-spotlightDiscoveryChance')?.value || '0.5'),
-            renderSpotlightAboveMatching: dialog.querySelector('#discovery-renderSpotlightAboveMatching')?.checked === true,
-            randomizeOrder: dialog.querySelector('#discovery-randomizeOrder')?.checked === true,
-            fadeInSections: dialog.querySelector('#discovery-fadeInSections')?.checked === true
-        };
+        if (root.querySelector('#discovery-enabled')) {
+            currentConfig.DISCOVERY_SETTINGS = {
+                ...(currentConfig.DISCOVERY_SETTINGS || {}),
+                enabled: root.querySelector('#discovery-enabled')?.checked !== false,
+                infiniteScroll: root.querySelector('#discovery-infiniteScroll')?.checked !== false,
+                minPeopleAppearances: parseInt(root.querySelector('#discovery-minPeopleAppearances')?.value || '10', 10),
+                minGenreMovieCount: parseInt(root.querySelector('#discovery-minGenreMovieCount')?.value || '50', 10),
+                spotlightDiscoveryChance: parseFloat(root.querySelector('#discovery-spotlightDiscoveryChance')?.value || '0.5'),
+                renderSpotlightAboveMatching: root.querySelector('#discovery-renderSpotlightAboveMatching')?.checked === true,
+                randomizeOrder: root.querySelector('#discovery-randomizeOrder')?.checked === true,
+                fadeInSections: root.querySelector('#discovery-fadeInSections')?.checked === true
+            };
+        }
 
-        const seasonal = {
-            enabled: dialog.querySelector('#seasonal-enabled')?.checked !== false,
-            enableSeasonalAnimations: dialog.querySelector('#seasonal-enableSeasonalAnimations')?.checked !== false,
-            enableSeasonalBackground: dialog.querySelector('#seasonal-enableSeasonalBackground')?.checked !== false,
-            seasonToggles: (window.KefinHomeConfig2?.SEASONAL_THEME_SETTINGS?.seasonToggles || []).map(season => ({
-                ...season,
-                enabled: dialog.querySelector(`#seasonal-${season.id}`)?.checked === true
-            }))
-        };
+        if (root.querySelector('#seasonal-enableSeasonalAnimations')
+            || root.querySelector('#home-fadeInSections')
+            || root.querySelector('#userHome-inlineConfigure')) {
+            currentConfig.SEASONAL_THEME_SETTINGS = {
+                ...(currentConfig.SEASONAL_THEME_SETTINGS || {}),
+                enableSeasonalAnimations: root.querySelector('#seasonal-enableSeasonalAnimations')?.checked !== false,
+                enableSeasonalBackground: root.querySelector('#seasonal-enableSeasonalBackground')?.checked !== false,
+                seasonToggles: (window.KefinHomeConfig2?.SEASONAL_THEME_SETTINGS?.seasonToggles || []).map(season => ({
+                    ...season,
+                    enabled: root.querySelector(`#seasonal-${season.id}`)
+                        ? root.querySelector(`#seasonal-${season.id}`)?.checked === true
+                        : season.enabled
+                }))
+            };
+            currentConfig.HOME_SETTINGS = {
+                ...(currentConfig.HOME_SETTINGS || {}),
+                fadeInSections: root.querySelector('#home-fadeInSections')?.checked === true,
+                ensureThumbsForPopularTVNetworks: root.querySelector('#home-ensureThumbsForPopularTVNetworks')?.checked === true,
+                SHOW_STALE_DATA_BEFORE_REFRESH: root.querySelector('#home-showStaleDataBeforeRefresh')?.checked === true
+            };
+            currentConfig.USER_HOME_SCREEN_SETTINGS = {
+                ...(currentConfig.USER_HOME_SCREEN_SETTINGS || {}),
+                inlineConfigure: root.querySelector('#userHome-inlineConfigure')?.checked !== false,
+                pinning: root.querySelector('#userHome-pinning')?.checked !== false
+            };
+        }
 
-        const cache = {
-            DEFAULT_TTL: minutesToMs(parseInt(dialog.querySelector('#cache-DEFAULT_TTL')?.value || '30', 10)),
-            VERY_SHORT_TTL: minutesToMs(parseInt(dialog.querySelector('#cache-VERY_SHORT_TTL')?.value || '1', 10)),
-            SHORT_TTL: minutesToMs(parseInt(dialog.querySelector('#cache-SHORT_TTL')?.value || '5', 10)),
-            LONG_TTL: minutesToMs(parseInt(dialog.querySelector('#cache-LONG_TTL')?.value || '1440', 10)),
-            STATIC_TTL: minutesToMs(parseInt(dialog.querySelector('#cache-STATIC_TTL')?.value || '10080', 10)),
-            DISCOVERY_TTL: minutesToMs(parseInt(dialog.querySelector('#cache-DISCOVERY_TTL')?.value || '60', 10)),
-            FORCE_REFRESH_TTL: 0
-        };
+        if (root.querySelector('#cache-DEFAULT_TTL-preset') || root.querySelector('#cache-VERY_SHORT_TTL')) {
+            const defaultTtl = resolveDefaultTtlMsFromForm(root);
+            currentConfig.CACHE = {
+                ...(currentConfig.CACHE || {}),
+                DEFAULT_TTL: defaultTtl != null ? defaultTtl : (currentConfig.CACHE?.DEFAULT_TTL ?? 1800000),
+                VERY_SHORT_TTL: minutesToMs(parseInt(root.querySelector('#cache-VERY_SHORT_TTL')?.value || '1', 10)),
+                SHORT_TTL: minutesToMs(parseInt(root.querySelector('#cache-SHORT_TTL')?.value || '5', 10)),
+                LONG_TTL: minutesToMs(parseInt(root.querySelector('#cache-LONG_TTL')?.value || '1440', 10)),
+                STATIC_TTL: minutesToMs(parseInt(root.querySelector('#cache-STATIC_TTL')?.value || '10080', 10)),
+                DISCOVERY_TTL: minutesToMs(parseInt(root.querySelector('#cache-DISCOVERY_TTL')?.value || '60', 10)),
+                FORCE_REFRESH_TTL: 0
+            };
+        }
 
-        const slideStateVal = dialog.querySelector('#spotlight-slideState')?.value || 'dots';
-        const tileCountVal = parseInt(dialog.querySelector('#spotlight-tileCount')?.value || '1', 10);
-        const spotlight = {
-            spotlightLayout: dialog.querySelector('#spotlight-spotlightLayout')?.value || 'Border',
-            spotlightSize: dialog.querySelector('#spotlight-spotlightSize')?.value || 'normal',
-            tileCount: Math.max(1, Math.min(3, tileCountVal)),
-            autoPlay: dialog.querySelector('#spotlight-autoPlay')?.checked !== false,
-            interval: parseInt(dialog.querySelector('#spotlight-interval')?.value || '10000', 10),
-            showSlideState: slideStateVal !== 'none',
-            showDots: slideStateVal === 'dots',
-            showNavButtons: dialog.querySelector('#spotlight-showNavButtons')?.checked !== false,
-            showClearArt: dialog.querySelector('#spotlight-showClearArt')?.checked === true,
-            panAnimation: dialog.querySelector('#spotlight-panAnimation')?.checked !== false,
-            entranceAnimationFirst: dialog.querySelector('#spotlight-entranceAnimationFirst')?.value || 'fadeIn',
-            entranceAnimationSecond: dialog.querySelector('#spotlight-entranceAnimationSecond')?.value || 'fadeIn',
-            entranceAnimationThird: dialog.querySelector('#spotlight-entranceAnimationThird')?.value || 'fadeIn',
-            slideAnimationFirst: dialog.querySelector('#spotlight-slideAnimationFirst')?.value || 'kenBurnsZoomIn',
-            slideAnimationSecond: dialog.querySelector('#spotlight-slideAnimationSecond')?.value || 'kenBurnsZoomIn',
-            slideAnimationThird: dialog.querySelector('#spotlight-slideAnimationThird')?.value || 'kenBurnsZoomIn',
-            cycleBackdrops: dialog.querySelector('#spotlight-cycleBackdrops')?.checked === true,
-            cycleBackdropsTime: parseInt(dialog.querySelector('#spotlight-cycleBackdropsTime')?.value || '10000', 10)
-        };
+        if (root.querySelector('#spotlight-cycleBackdrops') || root.querySelector('[id^="spotlight-"]')) {
+            const spotlight = se().collectSpotlightConfigFromDialog?.(root, 'spotlight-', { useIntervalSeconds: true });
+            if (spotlight && typeof spotlight === 'object') {
+                currentConfig.SPOTLIGHT_SETTINGS = spotlight;
+            }
+        }
 
-        const homeSettings = {
-            fadeInSections: dialog.querySelector('#home-fadeInSections')?.checked === true,
-            ensureThumbsForPopularTVNetworks: dialog.querySelector('#home-ensureThumbsForPopularTVNetworks')?.checked === true
-        };
+        if (!save) return;
 
-        const mergeNextUp = dialog.querySelector('#merge-next-up')?.checked === true;
+        const runSave = () => saveConfig(currentConfig);
+        if (immediate) {
+            clearTimeout(globalSettingsSaveTimer);
+            globalSettingsSaveTimer = null;
+            return runSave();
+        }
+        clearTimeout(globalSettingsSaveTimer);
+        globalSettingsSaveTimer = setTimeout(() => {
+            globalSettingsSaveTimer = null;
+            runSave();
+        }, 300);
+    }
 
+    /** @deprecated Prefer applyGlobalSettingsFromForm — kept for callers that expect a return object */
+    function collectGlobalSettings() {
+        applyGlobalSettingsFromForm({ save: false });
         return {
-            DISCOVERY_SETTINGS: discovery,
-            SEASONAL_THEME_SETTINGS: seasonal,
-            CACHE: cache,
-            SPOTLIGHT_SETTINGS: spotlight,
-            HOME_SETTINGS: homeSettings,
-            MERGE_NEXT_UP: mergeNextUp
+            DISCOVERY_SETTINGS: currentConfig?.DISCOVERY_SETTINGS,
+            SEASONAL_THEME_SETTINGS: currentConfig?.SEASONAL_THEME_SETTINGS,
+            CACHE: currentConfig?.CACHE,
+            SPOTLIGHT_SETTINGS: currentConfig?.SPOTLIGHT_SETTINGS,
+            HOME_SETTINGS: currentConfig?.HOME_SETTINGS,
+            USER_HOME_SCREEN_SETTINGS: currentConfig?.USER_HOME_SCREEN_SETTINGS,
+            MERGE_NEXT_UP: currentConfig?.MERGE_NEXT_UP
         };
     }
 
-    /**
-     * Open section editor modal
-     */
-    async function openSectionEditor(section, type = 'home') {
-        const isDiscovery = type === 'discovery';
-        const modalId = isDiscovery ? DISCOVERY_EDITOR_MODAL_ID : SECTION_EDITOR_MODAL_ID;
+    const GROUP_TYPE_BY_SECTION_TYPE = {
+        home: 'HOME_SECTION_GROUPS',
+        seasonal: 'SEASONAL_SECTION_GROUPS',
+        discovery: 'DISCOVERY_SECTION_GROUPS',
+        custom: 'CUSTOM_SECTION_GROUPS'
+    };
 
-        // Close if already open
-        if (window.ModalSystem.isOpen(modalId)) {
-            window.ModalSystem.close(modalId);
+    function resolveEditorKind() {
+        return 'advanced';
+    }
+
+    function buildGroupContext(section) {
+        const found = findSectionInAllGroups(currentConfig, section.id);
+        let currentGroupName = found?.group?.name || '';
+        if (!currentGroupName && section._targetGroupName && section._targetGroupName !== 'New...') {
+            currentGroupName = section._targetGroupName;
         }
-
-        // Store original section for default sections (to preserve hidden fields)
-        const originalSection = JSON.parse(JSON.stringify(section));
-
-        const content = document.createElement('div');
-        content.innerHTML = buildSectionEditorHTML(section, isDiscovery);
-
-        const footer = document.createElement('div');
-        footer.style.display = 'flex';
-        footer.style.gap = '0.75em';
-        footer.style.justifyContent = 'flex-end';
-        footer.style.gap = '0.5em';
-        footer.style.display = 'flex';
-        footer.innerHTML = `
-            <button class="emby-button raised section-preview-btn" data-section-id="${section.id}" data-section-type="${type}" style="background: rgba(0, 164, 220, 0.2);">Preview</button>
-            <button class="emby-button raised" onclick="window.ModalSystem.close('${modalId}')">Cancel</button>
-            <button class="emby-button raised block button-submit section-save-btn" data-section-id="${section.id}" data-section-type="${type}">Save</button>
-        `;
-
-        window.ModalSystem.create({
-            id: modalId,
-            title: `Edit Section: ${section.name || 'Unnamed'}`,
-            content: content,
-            footer: footer,
-            closeOnBackdrop: false,
-            closeOnEscape: true,
-            showCloseButton: true,
-            onOpen: (modalInstance) => {
-                // Attach event listeners
-                const saveBtn = modalInstance.dialogFooter.querySelector('.section-save-btn');
-                if (saveBtn) {
-                    saveBtn.addEventListener('click', async () => {
-                        const sectionData = collectSectionEditorData(isDiscovery, originalSection);
-                        if (!sectionData) {
-                            showToast('Error collecting section data');
-                            return;
-                        }
-
-                        // Preserve section ID
-                        sectionData.id = section.id;
-
-                        updateSectionInConfig(sectionData);
-
-                        // Save immediately
-                        await saveConfig(currentConfig);
-
-                        // Close editor first
-                        window.ModalSystem.close(modalId);
-
-                        // Refresh main modal and restore tab functionality
-                        refreshMainModal();
-                    });
-                }
-
-                // Delegated toggle-slider handler for section editor (Spotlight Options, Discovery Enabled, etc.)
-                // Single listener on content root so it works when controls are re-rendered and is not re-added
-                const contentRoot = modalInstance.dialogContent;
-                if (contentRoot) {
-                    contentRoot.addEventListener('click', (e) => {
-                        const btn = e.target.closest('.toggle-slider');
-                        if (!btn || !contentRoot.contains(btn)) return;
-                        const checkboxId = btn.dataset.checkboxId;
-                        if (!checkboxId) return;
-                        e.stopPropagation();
-                        const checkbox = document.getElementById(checkboxId);
-                        if (checkbox && contentRoot.contains(checkbox)) {
-                            checkbox.checked = !checkbox.checked;
-                            checkbox.dispatchEvent(new Event('change', { bubbles: true }));
-                            updateToggleSliderUI(btn, checkbox.checked);
-                        }
-                    });
-                }
-
-                const updateSectionInConfig = (sectionData) => {
-                    const found = findSectionInAllGroups(currentConfig, sectionData.id);
-                    
-                    // Handle group assignment
-                    const targetGroupName = sectionData._targetGroupName;
-                    delete sectionData._targetGroupName; // Remove metadata
-
-                    if (found) {
-                        // Check if the section is in the target group
-                        if (targetGroupName && targetGroupName !== found.group.name) {
-                            // Remove the section from the current group
-                            found.group.sections.splice(found.sectionIndex, 1);
-                            // Add the section to the target group
-                            addSectionToGroup(currentConfig[found.groupType], targetGroupName, sectionData);
-                            return;
-                        }
-
-
-                        // Update the current config with the updated section data
-                        updateSectionInGroups(currentConfig[found.groupType], sectionData.id, sectionData);
-                        return;
-                    } 
-
-                    // Add the section to the config
-                    addSectionToGroup(currentConfig.CUSTOM_SECTION_GROUPS, 'Custom Sections', sectionData);
-                }
-
-                // Preview button handler
-                const previewBtn = modalInstance.dialogFooter.querySelector('.section-preview-btn');
-                if (previewBtn) {
-                    previewBtn.addEventListener('click', async () => {
-                        // Collect current section data from editor
-                        const sectionData = collectSectionEditorData(isDiscovery, originalSection);
-                        if (!sectionData) {
-                            showToast('Error collecting section data for preview');
-                            return;
-                        }
-                        
-                        // Merge with original section to preserve ID and all queryOptions fields
-                        const previewSectionConfig = { ...originalSection, ...sectionData };
-                        await previewSection(previewSectionConfig, type, previewBtn);
-                    });
-                }
-
-                // Add query button handler
-                const addQueryBtn = modalInstance.dialogContent.querySelector('.add-query-btn');
-                if (addQueryBtn) {
-                    addQueryBtn.addEventListener('click', () => {
-                        const queriesList = modalInstance.dialogContent.querySelector('#queries-list');
-                        const newIndex = queriesList.querySelectorAll('.query-editor').length;
-                        const newQueryHTML = buildQueryEditor({}, newIndex, true);
-                        queriesList.insertAdjacentHTML('beforeend', newQueryHTML);
-                        
-                        // Setup additional options listeners for new query
-                        setupAdditionalOptionsListeners(modalInstance, newIndex);
-                        
-                        // Setup badge autocomplete for new query
-                        (async () => {
-                            const emptyQueryOptions = {};
-                            await setupQueryBadgeAutocomplete(modalInstance, newIndex, 'IncludeItemTypes', emptyQueryOptions);
-                            await setupQueryBadgeAutocomplete(modalInstance, newIndex, 'Genres', emptyQueryOptions, ['Movie']);
-                            await setupQueryBadgeAutocomplete(modalInstance, newIndex, 'Tags', emptyQueryOptions, ['Movie']);
-                            // Collections/Playlists will be set up when parent item type is selected
-                        })();
-                        
-                        // Setup query type change handler for new query
-                        const newQueryEditor = queriesList.querySelector(`.query-editor[data-query-index="${newIndex}"]`);
-                        if (newQueryEditor) {
-                            const typeSelect = newQueryEditor.querySelector(`#query-${newIndex}-type`);
-                            if (typeSelect) {
-                                const pathContainer = newQueryEditor.querySelector(`#query-${newIndex}-path-container`);
-                                const dataSourceContainer = newQueryEditor.querySelector(`#query-${newIndex}-dataSource-container`);
-                                
-                                typeSelect.addEventListener('change', () => {
-                                    const newQueryType = typeSelect.value;
-                                    if (pathContainer) pathContainer.style.display = newQueryType === 'custom' ? 'block' : 'none';
-                                    if (dataSourceContainer) dataSourceContainer.style.display = newQueryType === 'datasource' ? 'block' : 'none';
-                                });
-                            }
-                        }
-                        
-                        // Re-attach delete handlers for all queries
-                        modalInstance.dialogContent.querySelectorAll('.delete-query-btn').forEach(btn => {
-                            if (!btn.dataset.listenerAttached) {
-                                btn.dataset.listenerAttached = 'true';
-                                btn.addEventListener('click', () => {
-                                    const index = parseInt(btn.dataset.queryIndex, 10);
-                                    const queryEditor = modalInstance.dialogContent.querySelector(`.query-editor[data-query-index="${index}"]`);
-                                    if (queryEditor) {
-                                        queryEditor.remove();
-                                        // Re-index remaining queries
-                                        modalInstance.dialogContent.querySelectorAll('.query-editor').forEach((editor, newIndex) => {
-                                            editor.dataset.queryIndex = newIndex;
-                                            const titleEl = editor.querySelector('.listItemBodyText');
-                                            if (titleEl) titleEl.textContent = `Query ${newIndex + 1}`;
-                                        });
-                                        // Show/hide merge sorting based on query count
-                                        const queriesCount = modalInstance.dialogContent.querySelectorAll('.query-editor').length;
-                                        const mergeSorting = modalInstance.dialogContent.querySelector('[data-merge-sorting]');
-                                        if (mergeSorting) {
-                                            mergeSorting.style.display = queriesCount > 1 ? 'block' : 'none';
-                                        }
-                                    }
-                                });
-                            }
-                        });
-                        
-                        // Show merge sorting if multiple queries
-                        const queriesCount = modalInstance.dialogContent.querySelectorAll('.query-editor').length;
-                        const mergeSorting = modalInstance.dialogContent.querySelector('[data-merge-sorting]');
-                        if (mergeSorting) {
-                            mergeSorting.style.display = queriesCount > 1 ? 'block' : 'none';
-                        }
-                    });
-                }
-
-                // Delete query button handlers
-                modalInstance.dialogContent.querySelectorAll('.delete-query-btn').forEach(btn => {
-                    btn.addEventListener('click', () => {
-                        const index = parseInt(btn.dataset.queryIndex, 10);
-                        const queryEditor = modalInstance.dialogContent.querySelector(`.query-editor[data-query-index="${index}"]`);
-                        if (queryEditor) {
-                            queryEditor.remove();
-                            // Re-index remaining queries
-                            modalInstance.dialogContent.querySelectorAll('.query-editor').forEach((editor, newIndex) => {
-                                editor.dataset.queryIndex = newIndex;
-                                const titleEl = editor.querySelector('.listItemBodyText');
-                                if (titleEl) titleEl.textContent = `Query ${newIndex + 1}`;
-                                // Update all input IDs
-                                editor.querySelectorAll('input, select, textarea').forEach(input => {
-                                    const oldId = input.id;
-                                    if (oldId && oldId.includes(`query-${index}-`)) {
-                                        input.id = oldId.replace(`query-${index}-`, `query-${newIndex}-`);
-                                        const label = editor.querySelector(`label[for="${oldId}"]`);
-                                        if (label) label.setAttribute('for', input.id);
-                                    }
-                                });
-                            });
-                            // Show/hide merge sorting based on query count
-                            const queriesCount = modalInstance.dialogContent.querySelectorAll('.query-editor').length;
-                            const mergeSorting = modalInstance.dialogContent.querySelector('[data-merge-sorting]');
-                            if (mergeSorting) {
-                                mergeSorting.style.display = queriesCount > 1 ? 'block' : 'none';
-                            }
-                        }
-                    });
-                });
-                
-                // Handle query type changes to show/hide relevant fields
-                modalInstance.dialogContent.querySelectorAll('[id^="query-"][id$="-type"]').forEach(select => {
-                    const queryEditor = select.closest('.query-editor');
-                    const queryIndex = queryEditor.dataset.queryIndex;
-                    
-                    // Set initial state
-                    const queryType = select.value;
-                    const pathContainer = queryEditor.querySelector(`#query-${queryIndex}-path-container`);
-                    const dataSourceContainer = queryEditor.querySelector(`#query-${queryIndex}-dataSource-container`);
-                    
-                    if (pathContainer) pathContainer.style.display = queryType === 'custom' ? 'block' : 'none';
-                    if (dataSourceContainer) dataSourceContainer.style.display = queryType === 'datasource' ? 'block' : 'none';
-                    
-                    // Handle changes
-                    select.addEventListener('change', () => {
-                        const newQueryType = select.value;
-                        if (pathContainer) pathContainer.style.display = newQueryType === 'custom' ? 'block' : 'none';
-                        if (dataSourceContainer) dataSourceContainer.style.display = newQueryType === 'datasource' ? 'block' : 'none';
-                    });
-                });
-
-                // Handle parent item type dropdown changes
-                modalInstance.dialogContent.querySelectorAll('[id^="query-"][id$="-parentItemType"]').forEach(select => {
-                    const queryEditor = select.closest('.query-editor');
-                    const queryIndex = parseInt(queryEditor.dataset.queryIndex, 10);
-                    
-                    const collectionsContainer = queryEditor.querySelector(`#query-${queryIndex}-Collections-container`);
-                    const playlistsContainer = queryEditor.querySelector(`#query-${queryIndex}-Playlists-container`);
-                    const genericParentContainer = queryEditor.querySelector(`#query-${queryIndex}-GenericParent-container`);
-                    const hiddenParentItemType = queryEditor.querySelector(`#query-${queryIndex}-ParentItemType`);
-                    
-                    // Helper function to setup autocomplete for a container
-                    const setupAutocompleteForType = async (containerType, container) => {
-                        if (!container) {
-                            WARN(`Container not found for ${containerType} at query index ${queryIndex}`);
-                            return;
-                        }
-                        // Check if autocomplete is already set up by looking for the autocomplete input
-                        const existingInput = container.querySelector('.autocomplete-input');
-                        if (existingInput) {
-                            LOG(`Autocomplete already set up for ${containerType} at query index ${queryIndex}`);
-                            return; // Already set up
-                        }
-                        LOG(`Setting up autocomplete for ${containerType} at query index ${queryIndex}`);
-                        
-                        // Get query and queryOptions from the section's queries array (passed to openSectionEditor)
-                        // Fallback to empty object if not available
-                        const query = (section.queries && section.queries[queryIndex]) ? section.queries[queryIndex] : {};
-                        const queryOptions = query.queryOptions || {};
-                        const queryParentItemType = query._parentItemType || null;
-                        await setupQueryBadgeAutocomplete(modalInstance, queryIndex, containerType, queryOptions, null, queryParentItemType);
-                    };
-                    
-                    // Set initial state and setup autocomplete if needed
-                    const parentItemType = select.value;
-
-                    // Set parent item type data attribute
-                    const parentElement = select.parentElement?.parentElement;
-                    if (parentElement) {
-                        parentElement.dataset.parentItemType = parentItemType;
-                    }
-
-                    // Set initial display states
-                    if (collectionsContainer) {
-                        collectionsContainer.style.display = parentItemType === 'Collection' ? 'block' : 'none';
-                    }
-                    if (playlistsContainer) {
-                        playlistsContainer.style.display = parentItemType === 'Playlist' ? 'block' : 'none';
-                    }
-                    if (genericParentContainer) {
-                        genericParentContainer.style.display = parentItemType === 'Generic Parent' ? 'block' : 'none';
-                    }
-                    if (hiddenParentItemType) hiddenParentItemType.value = parentItemType;
-
-                    // Setup autocomplete for initially visible containers
-                    if (collectionsContainer && parentItemType === 'Collection') {
-                        setupAutocompleteForType('Collections', collectionsContainer).catch(err => {
-                            ERR('Error setting up Collections autocomplete:', err);
-                        });
-                    }
-                    if (playlistsContainer && parentItemType === 'Playlist') {
-                        setupAutocompleteForType('Playlists', playlistsContainer).catch(err => {
-                            ERR('Error setting up Playlists autocomplete:', err);
-                        });
-                    }
-                    
-                    // Handle changes
-                    select.addEventListener('change', () => {
-                        const newParentItemType = select.value;
-
-                        // Select list immediate parent element
-                        const parentElement = select.parentElement?.parentElement;
-                        if (parentElement) {
-                            parentElement.dataset.parentItemType = newParentItemType;
-                        }
-
-                        // Update display styles synchronously
-                        if (collectionsContainer) {
-                            collectionsContainer.style.display = newParentItemType === 'Collection' ? 'block' : 'none';
-                        }
-                        if (playlistsContainer) {
-                            playlistsContainer.style.display = newParentItemType === 'Playlist' ? 'block' : 'none';
-                        }
-                        if (genericParentContainer) {
-                            genericParentContainer.style.display = newParentItemType === 'Generic Parent' ? 'block' : 'none';
-                        }
-                        if (hiddenParentItemType) hiddenParentItemType.value = newParentItemType;
-                        
-                        // Force synchronous repaint by accessing layout property
-                        if (collectionsContainer) void collectionsContainer.offsetHeight;
-                        if (playlistsContainer) void playlistsContainer.offsetHeight;
-                        if (genericParentContainer) void genericParentContainer.offsetHeight;
-                        
-                        // Defer async autocomplete setup to allow browser to paint first
-                        requestAnimationFrame(async () => {
-                            if (collectionsContainer && newParentItemType === 'Collection') {
-                                await setupAutocompleteForType('Collections', collectionsContainer);
-                            }
-                            if (playlistsContainer && newParentItemType === 'Playlist') {
-                                await setupAutocompleteForType('Playlists', playlistsContainer);
-                            }
-                        });
-                    });
-                });
-
-                // Setup additional options listeners for all queries
-                modalInstance.dialogContent.querySelectorAll('.query-editor').forEach(queryEditor => {
-                    const queryIndex = parseInt(queryEditor.dataset.queryIndex, 10);
-                    setupAdditionalOptionsListeners(modalInstance, queryIndex);
-                });
-                
-                // Setup badge autocomplete for all queries (only for custom sections, not default sections)
-                const queriesList = modalInstance.dialogContent.querySelector('#queries-list');
-                if (queriesList && !isDiscovery) {
-                    // This is a custom section with queries editor
-                    const queries = section.queries || [{}];
-                    queries.forEach(async (query, queryIndex) => {
-                        const queryOptions = query.queryOptions || {};
-                        const includeItemTypes = queryOptions.IncludeItemTypes;
-                        // Always setup: IncludeItemTypes, Genres, Tags
-                        await setupQueryBadgeAutocomplete(modalInstance, queryIndex, 'IncludeItemTypes', queryOptions, null, query._parentItemType);
-                        await setupQueryBadgeAutocomplete(modalInstance, queryIndex, 'Genres', queryOptions, includeItemTypes, query._parentItemType);
-                        await setupQueryBadgeAutocomplete(modalInstance, queryIndex, 'Tags', queryOptions, includeItemTypes, query._parentItemType);
-                        
-                        // Conditionally setup Collections/Playlists based on parent item type
-                        const queryEditor = queriesList.querySelector(`.query-editor[data-query-index="${queryIndex}"]`);
-                        
-                        // Check query level first, then queryOptions for backwards compatibility
-                        let parentItemType = query._parentItemType || queryOptions._parentItemType || '';
-                        
-                        if (parentItemType === 'Collection') {
-                            await setupQueryBadgeAutocomplete(modalInstance, queryIndex, 'Collections', queryOptions, null, query._parentItemType);
-                        } else if (parentItemType === 'Playlist') {
-                            await setupQueryBadgeAutocomplete(modalInstance, queryIndex, 'Playlists', queryOptions, null, query._parentItemType);
-                        }
-                    });
-                }
-                
-                // Render Mode dropdown - show/hide Card Format and Spotlight Options (section editor)
-                const renderModeSelect = modalInstance.dialogContent.querySelector('#section-renderMode');
-                const cardFormatContainer = modalInstance.dialogContent.querySelector('#section-cardFormat-container');
-                const spotlightOptionsContainer = modalInstance.dialogContent.querySelector('#section-spotlight-options-container');
-                if (renderModeSelect) {
-                    const updateRenderModeDependentVisibility = () => {
-                        const isSpotlight = renderModeSelect.value === 'Spotlight';
-                        if (cardFormatContainer) cardFormatContainer.style.display = isSpotlight ? 'none' : 'block';
-                        if (spotlightOptionsContainer) spotlightOptionsContainer.style.display = isSpotlight ? 'block' : 'none';
-                        if (isSpotlight && spotlightOptionsContainer) attachSpotlightSettingsListeners(spotlightOptionsContainer, 'section-spotlight-');
-                    };
-                    renderModeSelect.addEventListener('change', updateRenderModeDependentVisibility);
-                    updateRenderModeDependentVisibility(); // Set initial state
-                }
-
-                // Render Mode dropdown - show/hide Spotlight Options (discovery editor)
-                const discoveryRenderModeSelect = modalInstance.dialogContent.querySelector('#discovery-renderMode');
-                const discoverySpotlightOptionsContainer = modalInstance.dialogContent.querySelector('#discovery-spotlight-options-container');
-                if (discoveryRenderModeSelect && discoverySpotlightOptionsContainer) {
-                    const updateDiscoverySpotlightVisibility = () => {
-                        const isSpotlight = discoveryRenderModeSelect.value === 'Spotlight';
-                        discoverySpotlightOptionsContainer.style.display = isSpotlight ? 'block' : 'none';
-                        if (isSpotlight) attachSpotlightSettingsListeners(discoverySpotlightOptionsContainer, 'discovery-spotlight-');
-                    };
-                    discoveryRenderModeSelect.addEventListener('change', updateDiscoverySpotlightVisibility);
-                    updateDiscoverySpotlightVisibility(); // Set initial state
-                }
-                
-                // Section Group dropdown - show/hide new group input
-                const groupSelect = modalInstance.dialogContent.querySelector('#section-group');
-                const newGroupContainer = modalInstance.dialogContent.querySelector('#section-group-new-container');
-                if (groupSelect && newGroupContainer) {
-                    // Set initial state
-                    if (groupSelect.value === 'New...') {
-                        newGroupContainer.style.display = 'block';
-                    }
-                    groupSelect.addEventListener('change', () => {
-                        newGroupContainer.style.display = groupSelect.value === 'New...' ? 'block' : 'none';
-                    });
-                }
-
-                // Enabled toggle buttons handler
-                modalInstance.dialogContent.querySelectorAll('.enabled-toggle-btn').forEach(btn => {
-                    btn.addEventListener('click', () => {
-                        const enabled = btn.dataset.enabled === 'true';
-                        // Update all buttons
-                        modalInstance.dialogContent.querySelectorAll('.enabled-toggle-btn').forEach(b => {
-                            const isActive = b.dataset.enabled === String(enabled);
-                            b.classList.toggle('active', isActive);
-                            if (isActive) {
-                                b.style.borderColor = enabled ? 'rgba(0, 164, 220, 0.8)' : 'rgba(158, 158, 158, 0.8)';
-                                b.style.background = enabled ? 'rgba(0, 164, 220, 0.2)' : 'rgba(158, 158, 158, 0.2)';
-                                b.style.color = enabled ? 'var(--theme-primary-color, #00a4dc)' : 'rgba(255,255,255,0.9)';
-                                b.style.fontWeight = '600';
-                            } else {
-                                b.style.borderColor = 'rgba(255,255,255,0.2)';
-                                b.style.background = 'transparent';
-                                b.style.color = 'rgba(255,255,255,0.7)';
-                                b.style.fontWeight = '400';
-                            }
-                        });
-                    });
-                });
-
-                // Filter by played status toggle handler
-                const filterToggle = modalInstance.dialogContent.querySelector('.filter-played-toggle');
-                if (filterToggle) {
-                    filterToggle.addEventListener('click', () => {
-                        const currentChecked = filterToggle.dataset.checked === 'true';
-                        const newChecked = !currentChecked;
-                        filterToggle.dataset.checked = newChecked;
-                        
-                        // Update toggle visual state
-                        filterToggle.style.background = newChecked ? 'rgba(0, 164, 220, 0.8)' : 'rgba(158, 158, 158, 0.5)';
-                        
-                        const onText = filterToggle.querySelector('span:first-of-type');
-                        if (onText) {
-                            onText.style.opacity = newChecked ? '1' : '0';
-                            onText.style.left = newChecked ? '8px' : '6px';
-                        }
-                        
-                        const offText = filterToggle.querySelector('span:nth-of-type(2)');
-                        if (offText) {
-                            offText.style.opacity = newChecked ? '0' : '1';
-                            offText.style.right = newChecked ? '6px' : '8px';
-                        }
-                        
-                        const knob = filterToggle.querySelector('span:last-of-type');
-                        if (knob) {
-                            knob.style.left = newChecked ? 'calc(100% - 26px)' : '3px';
-                        }
-                    });
-                }
-
-                const discoveryEnabledToggle = modalInstance.dialogContent.querySelector('.section-discoveryEnabled-toggle');
-                if (discoveryEnabledToggle) {
-                    discoveryEnabledToggle.addEventListener('click', () => {
-                        const currentChecked = discoveryEnabledToggle.dataset.enabled === 'true';
-                        const newChecked = !currentChecked;
-                        discoveryEnabledToggle.dataset.enabled = newChecked;
-
-                        updateToggleSliderUI(discoveryEnabledToggle, newChecked);
-                    });
-                }
-            }
-        });
+        const allGroups = currentConfig.CUSTOM_SECTION_GROUPS || [];
+        const existingGroupNames = [...new Set(allGroups.map(g => g.name).filter(Boolean))];
+        return { currentGroupName, existingGroupNames, found };
     }
 
     /**
      * Refresh main modal content
      */
+
+    async function openSectionEditor(section, sectionType = 'home', options = {}) {
+        const found = findSectionInAllGroups(currentConfig, section.id);
+        const isExisting = !!found;
+        const isNewCustom = sectionType === 'custom' && !isExisting
+            && !window.KefinHomeScreenEditorProfiles?.isKnownDefaultSection(section.id);
+
+        const editCtxBase = {
+            sectionType,
+            config: currentConfig,
+            onSave: async (sectionData) => {
+                const targetGroupName = sectionData._targetGroupName;
+                delete sectionData._targetGroupName;
+
+                const found = findSectionInAllGroups(currentConfig, sectionData.id);
+                const savingToCustom = !found || found.groupType === 'CUSTOM_SECTION_GROUPS'
+                    || (targetGroupName && !found);
+                if (savingToCustom || sectionData.isCustom) {
+                    sectionData.isCustom = true;
+                }
+                const surface = String(sectionData.type || '').toLowerCase();
+                if (!['home', 'seasonal', 'discovery'].includes(surface)) {
+                    if (sectionData.discoveryEnabled === true || sectionData.discoveryType) {
+                        sectionData.type = 'discovery';
+                    } else if (sectionData.startDate && sectionData.endDate) {
+                        sectionData.type = 'seasonal';
+                    } else {
+                        sectionData.type = 'home';
+                    }
+                }
+
+                if (found) {
+                    if (targetGroupName && targetGroupName !== found.group.name) {
+                        found.group.sections.splice(found.sectionIndex, 1);
+                        addSectionToGroup(currentConfig[found.groupType], targetGroupName, sectionData);
+                    } else {
+                        updateSectionInGroups(currentConfig[found.groupType], sectionData.id, sectionData);
+                    }
+                } else {
+                    addSectionToGroup(currentConfig.CUSTOM_SECTION_GROUPS, targetGroupName || 'Custom Sections', sectionData);
+                }
+
+                await saveConfig(currentConfig);
+                showToast(found ? 'Section saved' : 'Saved new Home Screen Section');
+                refreshMainModal();
+                if (options.refreshHomeOnSave && !mainModalInstance) {
+                    try {
+                        await window.homeScreen3?.refreshHomeSections?.();
+                    } catch (e) {
+                        WARN('Failed to refresh home after section save:', e);
+                    }
+                }
+            },
+            onPreview: async (sectionData, type, btn) => {
+                await previewSection(sectionData, type, btn);
+            }
+        };
+
+        if (isNewCustom && window.KefinHomeScreenSectionEditor?.openCreateSection) {
+            return window.KefinHomeScreenSectionEditor.openCreateSection(section, editCtxBase);
+        }
+
+        if (!window.KefinHomeScreenSectionEditor?.openEditSection) {
+            showToast('Section editor not available');
+            return;
+        }
+
+        const originalSection = JSON.parse(JSON.stringify(section));
+        const groupType = found?.groupType || GROUP_TYPE_BY_SECTION_TYPE[sectionType] || null;
+        const isCustomSection = groupType === 'CUSTOM_SECTION_GROUPS';
+        const editorProfile = window.KefinHomeScreenEditorProfiles?.resolveEditorProfile(section, {
+            groupType,
+            isCustomSection
+        }) || 'full';
+        const lockVisibility = window.KefinHomeScreenEditorProfiles?.getEditorProfileDefinition(editorProfile)?.lockVisibility === true;
+
+        return window.KefinHomeScreenSectionEditor.openEditSection(section, {
+            ...editCtxBase,
+            editorKind: resolveEditorKind(),
+            editorProfile,
+            groupType,
+            lockVisibility,
+            originalSection,
+            groupContext: buildGroupContext(section)
+        });
+    }
+
+    const GROUP_TYPE_TO_SECTION_TYPE = {
+        HOME_SECTION_GROUPS: 'home',
+        SEASONAL_SECTION_GROUPS: 'seasonal',
+        DISCOVERY_SECTION_GROUPS: 'discovery',
+        CUSTOM_SECTION_GROUPS: 'custom'
+    };
+
+    /**
+     * Whether the Section Editor can open this section (admin + in config + not pinned).
+     * @param {string} sectionId
+     * @returns {Promise<boolean>}
+     */
+    async function canOpenSectionEditor(sectionId) {
+        if (!sectionId || String(sectionId).startsWith('pinned-')) return false;
+        try {
+            const admin = await window.apiHelper?.isAdmin?.();
+            if (!admin) return false;
+        } catch {
+            return false;
+        }
+        getConfig();
+        return !!findSectionInAllGroups(currentConfig, sectionId);
+    }
+
+    /**
+     * Open the Section Editor for a section id (same path as clicking a row in admin config).
+     * @param {string} sectionId
+     * @returns {Promise<boolean>}
+     */
+    async function openSectionEditorForId(sectionId) {
+        if (!(await canOpenSectionEditor(sectionId))) return false;
+        getConfig();
+        const found = findSectionInAllGroups(currentConfig, sectionId);
+        if (!found?.section) return false;
+        const sectionType = GROUP_TYPE_TO_SECTION_TYPE[found.groupType] || 'home';
+        await openSectionEditor(found.section, sectionType, { refreshHomeOnSave: true });
+        return true;
+    }
+
+
     function refreshMainModal() {
         if (!mainModalInstance) return;
         
@@ -3982,7 +2398,7 @@
         }
 
         // Store current active tab before refresh
-        const savedActiveTab = currentActiveTab || 'settings';
+        const savedActiveTab = normalizeActiveTab(currentActiveTab);
 
         const content = document.createElement('div');
         content.innerHTML = buildMainConfigHTML();
@@ -4021,89 +2437,6 @@
         }
     }
 
-    /**
-     * Setup additional options add/remove listeners for a query
-     */
-    function setupAdditionalOptionsListeners(modalInstance, queryIndex) {
-        const dialog = modalInstance.dialogContainer;
-        const controls = dialog.querySelector(`.query-${queryIndex}-additional-options-controls[data-query-index="${queryIndex}"]`);
-        const listContainer = dialog.querySelector(`.query-${queryIndex}-additional-options-list-container[data-query-index="${queryIndex}"]`);
-        
-        if (controls) {
-            const addBtn = controls.querySelector('.add-additional-option');
-            const select = controls.querySelector('.additional-option-select');
-            const list = listContainer ? listContainer.querySelector('.additional-options-list') : null;
-            
-            if (addBtn && select && list) {
-                addBtn.addEventListener('click', () => {
-                    const key = select.value;
-                    if (!key) return;
-                    
-                    const meta = SUPPORTED_QUERY_OPTIONS[key];
-                    if (!meta) return;
-                    
-                    const index = list.children.length;
-                    const inputId = `query-${queryIndex}-additionalOption-${Date.now()}_${index}`;
-                    
-                    let inputField = '';
-                    if (meta.type === 'boolean') {
-                        inputField = `
-                            <div style="flex: 1;">
-                                <label class="checkboxContainer" style="display: flex; align-items: center; gap: 0.5em;">
-                                    <input type="checkbox" id="${inputId}" class="additional-option-value" data-key="${key}" data-type="boolean" ${meta.default === true ? 'checked' : ''}>
-                                    <span class="listItemBodyText">${meta.label}</span>
-                                </label>
-                            </div>
-                        `;
-                    } else {
-                        inputField = `
-                            <div style="flex: 1;">
-                                <div class="listItemBodyText" style="margin-bottom: 0.25em;">${meta.label}</div>
-                                <input type="${meta.type === 'number' ? 'number' : (meta.type === 'date' ? 'date' : 'text')}" 
-                                       id="${inputId}" 
-                                       class="fld emby-input additional-option-value" 
-                                       value="" 
-                                       data-key="${key}" 
-                                       data-type="${meta.type}" 
-                                       placeholder="${meta.hint || ''}" 
-                                       style="width: 100%;">
-                            </div>
-                        `;
-                    }
-                    
-                    const row = document.createElement('div');
-                    row.className = 'additional-option-row';
-                    row.style.cssText = 'display: flex; align-items: flex-end; gap: 0.5em; margin-top: 0.5em; padding: 0.5em; background: rgba(255,255,255,0.05); border-radius: 4px;';
-                    row.innerHTML = `
-                        ${inputField}
-                        <button type="button" class="remove-additional-option" style="background: none; border: none; color: rgba(255,255,255,0.7); cursor: pointer; padding: 0.25em; display: flex; align-items: center;" title="Remove Option">
-                            <span class="material-icons">close</span>
-                        </button>
-                    `;
-                    
-                    // Add delete listener for new row
-                    row.querySelector('.remove-additional-option').addEventListener('click', () => {
-                        row.remove();
-                    });
-                    
-                    list.appendChild(row);
-                    
-                    // Reset select
-                    select.value = '';
-                });
-            }
-        }
-        
-        // Add listeners for existing delete buttons
-        if (listContainer) {
-            listContainer.querySelectorAll('.remove-additional-option').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const row = e.target.closest('.additional-option-row');
-                    if (row) row.remove();
-                });
-            });
-        }
-    }
 
     /**
      * Render home sections order editor
@@ -4141,6 +2474,25 @@
 
 
     /**
+     * Mount / refresh the Benchmark tab UI (cancels any in-flight run).
+     */
+    function initBenchmarkTab(modalInstance) {
+        const dialog = modalInstance?.dialogContainer || modalInstance?.dialogContent;
+        const root = dialog?.querySelector('#home-screen-benchmark-root');
+        if (!root) return;
+        if (window.KefinHomeScreenBenchmark?.cancelActiveRun) {
+            window.KefinHomeScreenBenchmark.cancelActiveRun(true);
+        }
+        if (window.KefinHomeScreenBenchmark?.renderHomeScreenBenchmarkUI) {
+            window.KefinHomeScreenBenchmark.renderHomeScreenBenchmarkUI(root, {
+                getConfig: () => currentConfig
+            });
+        } else {
+            root.innerHTML = '<p class="listItemBodyText secondary">Benchmark module not loaded.</p>';
+        }
+    }
+
+    /**
      * Attach tab switching listeners
      */
     function attachTabListeners(modalInstance) {
@@ -4152,33 +2504,33 @@
             const btn = e.target.closest('.config-tab-btn');
             if (!btn) return;
             const targetTab = btn.dataset.tab;
+
+            // Persist Global Settings before leaving the settings tab / switching away
+            if (currentActiveTab === 'settings' && targetTab !== 'settings') {
+                applyGlobalSettingsFromForm({ save: true, immediate: true });
+            }
             
             // Update the current active tab tracker
-            currentActiveTab = targetTab;
+            currentActiveTab = normalizeActiveTab(targetTab);
 
             const tabButtons = dialog.querySelectorAll('.config-tab-btn');
             const tabContents = dialog.querySelectorAll('.config-tab-content');
 
             // Update button states
             tabButtons.forEach(b => {
-                b.classList.remove('active');
-                b.style.borderBottomColor = 'transparent';
-                b.style.color = 'rgba(255,255,255,0.7)';
+                b.classList.toggle('active', b === btn);
             });
-            btn.classList.add('active');
-            btn.style.borderBottomColor = 'var(--theme-primary-color, #00a4dc)';
-            btn.style.color = 'var(--theme-primary-color, #00a4dc)';
 
             // Update tab content visibility
             tabContents.forEach(content => {
                 content.style.display = 'none';
             });
-            const targetContent = dialog.querySelector(`#tab-${targetTab}`);
+            const targetContent = dialog.querySelector(`#tab-${currentActiveTab}`);
             if (targetContent) {
                 targetContent.style.display = 'block';
                 
                 // Refresh tab content based on currentConfig when switching tabs
-                if (targetTab === 'order') {
+                if (currentActiveTab === 'order') {
                     // Order Sections tab - refresh with current config
                     const container = targetContent.querySelector('#order-sections-container');
                     if (container) {
@@ -4189,7 +2541,7 @@
                         ];
                         container.innerHTML = renderHomeSectionsOrderEditor(allSections);
                     }
-                } else if (targetTab === 'sections') {
+                } else if (currentActiveTab === 'sections') {
                     // Edit Sections tab - refresh section content based on current active section type
                     const contentContainer = dialog.querySelector('#section-content');
                     if (contentContainer) {
@@ -4200,9 +2552,10 @@
                         // Re-render the section content with current config
                         contentContainer.innerHTML = buildSectionContentHTML(activeType);
                     }
-                } else if (targetTab === 'community') {
-                    // Community Sections tab - refresh community sections content
+                } else if (currentActiveTab === 'import-export') {
                     setupCommunityCollectionsTab(dialog);
+                } else if (currentActiveTab === 'troubleshoot') {
+                    initBenchmarkTab(modalInstance);
                 }
             }
         });
@@ -4267,6 +2620,159 @@
     /**
      * Attach event listeners to main modal
      */
+    function syncDefaultTtlCustomRow(contentRoot) {
+        const root = contentRoot || document.querySelector(`.dialogContainer[data-modal-id="${MAIN_MODAL_ID}"] #global-settings-content`);
+        if (!root) return;
+        const preset = root.querySelector('#cache-DEFAULT_TTL-preset');
+        const row = root.querySelector('#cache-DEFAULT_TTL-custom-row');
+        if (!row || !preset) return;
+        row.style.display = preset.value === 'CUSTOM' ? 'grid' : 'none';
+    }
+
+    function wireGlobalSettingsPanelListeners(contentRoot) {
+        if (!contentRoot) return;
+        syncDefaultTtlCustomRow(contentRoot);
+        window.KefinTweaksUI?.bindToggleCards?.(contentRoot);
+        updateHscToggleCardHints(contentRoot, GENERAL_TOGGLE_DESCRIPTIONS);
+        updateHscToggleCardHints(contentRoot, DISCOVERY_TOGGLE_DESCRIPTIONS);
+    }
+
+    function ensureGlobalSettingsLiveSync(dialog) {
+        if (!dialog || dialog.dataset.hscGlobalSettingsWired === 'true') return;
+        dialog.dataset.hscGlobalSettingsWired = 'true';
+
+        dialog.addEventListener('change', (e) => {
+            if (!e.target?.closest?.('#global-settings-content')) return;
+            if (e.target.id === 'cache-DEFAULT_TTL-preset') syncDefaultTtlCustomRow();
+            const content = dialog.querySelector('#global-settings-content');
+            updateHscToggleCardHints(content, GENERAL_TOGGLE_DESCRIPTIONS);
+            updateHscToggleCardHints(content, DISCOVERY_TOGGLE_DESCRIPTIONS);
+            applyGlobalSettingsFromForm({ save: true });
+        });
+        dialog.addEventListener('input', (e) => {
+            if (!e.target?.closest?.('#global-settings-content')) return;
+            applyGlobalSettingsFromForm({ save: true });
+        });
+        dialog.addEventListener('click', (e) => {
+            const toggle = e.target.closest?.('.toggle-slider, .kefin-toggle-switch');
+            if (!toggle || !toggle.closest('#global-settings-content')) return;
+
+            if (toggle.classList.contains('kefin-toggle-switch')) {
+                const checkboxId = toggle.dataset.checkboxId;
+                const checkbox = checkboxId ? document.getElementById(checkboxId) : null;
+                if (checkbox && toggle.dataset.kefinToggleBound !== 'true') {
+                    checkbox.checked = !checkbox.checked;
+                    checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+                    updateToggleSwitchUI(toggle, checkbox.checked);
+                }
+            }
+
+            setTimeout(() => {
+                const content = dialog.querySelector('#global-settings-content');
+                updateHscToggleCardHints(content, GENERAL_TOGGLE_DESCRIPTIONS);
+                updateHscToggleCardHints(content, DISCOVERY_TOGGLE_DESCRIPTIONS);
+                applyGlobalSettingsFromForm({ save: true });
+            }, 0);
+        });
+    }
+
+    function openNewCustomSectionEditor() {
+        const defaultTtl = Number(currentConfig?.CACHE?.DEFAULT_TTL);
+        const newSection = {
+            id: `custom-${Date.now()}`,
+            name: 'New Custom Section',
+            enabled: true,
+            order: 100,
+            cardFormat: 'Poster',
+            ...(Number.isFinite(defaultTtl) ? { ttl: defaultTtl } : {}),
+            queries: [{
+                queryOptions: {
+                    SortBy: 'Random',
+                    Limit: window.KefinHomeScreenEditorConstants?.DEFAULT_SECTION_QUERY_LIMIT ?? 16
+                }
+            }]
+        };
+        openSectionEditor(newSection, 'custom');
+    }
+
+    function applyOrderListFromForm(dialogRoot) {
+        const orderList = dialogRoot?.querySelector('#order-sections-list');
+        if (!orderList) return;
+        const allRows = Array.from(orderList.querySelectorAll('.section-order-row'));
+        allRows.forEach((r, index) => {
+            const sectionId = r.dataset.sectionId;
+            if (!sectionId) return;
+            const found = findSectionInAllGroups(currentConfig, sectionId);
+            if (found?.section) {
+                found.section.order = (index + 1) * 10;
+            }
+        });
+    }
+
+    async function collectAndSaveConfig(modalInstance) {
+        clearTimeout(globalSettingsSaveTimer);
+        globalSettingsSaveTimer = null;
+        applyGlobalSettingsFromForm({ save: false });
+        applyOrderListFromForm(modalInstance?.dialogContent);
+        await saveConfig(currentConfig);
+    }
+
+    function confirmAndUpdateAllUsers() {
+        if (!window.ModalSystem) {
+            ERR('ModalSystem not available for update confirmation');
+            return;
+        }
+        if (window.ModalSystem.isOpen(UPDATE_ALL_CONFIRM_MODAL_ID)) {
+            window.ModalSystem.close(UPDATE_ALL_CONFIRM_MODAL_ID);
+        }
+
+        const content = document.createElement('div');
+        content.innerHTML = `
+            <div class="listItemBodyText" style="line-height: 1.5;">
+                WARNING: This will forcefully update the KefinTweaks Home Screen user preferences for all accounts on your server. Any changes those users have made to customize their home screen will be lost.
+            </div>
+        `;
+        const footer = document.createElement('div');
+        footer.style.display = 'flex';
+        footer.style.gap = '0.5em';
+        footer.style.justifyContent = 'flex-end';
+        footer.innerHTML = `
+            <button type="button" class="emby-button raised" id="hsc-update-all-cancel">Cancel</button>
+            <button type="button" class="emby-button raised block button-submit" id="hsc-update-all-confirm">Update All Users</button>
+        `;
+
+        window.ModalSystem.create({
+            id: UPDATE_ALL_CONFIRM_MODAL_ID,
+            title: 'Update All Users',
+            content,
+            footer,
+            closeOnBackdrop: true,
+            closeOnEscape: true,
+            showCloseButton: true,
+            fixedSize: true,
+            onOpen: (modal) => {
+                modal.dialogFooter?.querySelector('#hsc-update-all-cancel')?.addEventListener('click', () => {
+                    window.ModalSystem.close(UPDATE_ALL_CONFIRM_MODAL_ID);
+                });
+                modal.dialogFooter?.querySelector('#hsc-update-all-confirm')?.addEventListener('click', async () => {
+                    const confirmBtn = modal.dialogFooter.querySelector('#hsc-update-all-confirm');
+                    if (confirmBtn) confirmBtn.disabled = true;
+                    try {
+                        await collectAndSaveConfig(mainModalInstance);
+                        window.ModalSystem.close(UPDATE_ALL_CONFIRM_MODAL_ID);
+                        showToast('Configuration saved. Updating users…');
+                        await window.KefinUserHomeScreenConfig?.updateUserHomeScreenConfiguration?.();
+                    } catch (e) {
+                        ERR('Error updating configuration for all users:', e);
+                        showToast('Error updating users');
+                    } finally {
+                        if (confirmBtn) confirmBtn.disabled = false;
+                    }
+                });
+            }
+        });
+    }
+
     function attachMainModalListeners(modalInstance) {
         const dialog = modalInstance?.dialogContainer ?? document.querySelector(`.dialogContainer[data-modal-id="${MAIN_MODAL_ID}"]`);
         if (!dialog) return;
@@ -4443,21 +2949,7 @@
         dialog.addEventListener('click', (e) => {
             const btn = e.target.closest('.add-custom-section-btn') || e.target.closest('.section-type-nav-btn[data-section-type="create"]');
             if (!btn) return;
-            
-            const newSection = {
-                id: `custom-${Date.now()}`,
-                name: 'New Custom Section',
-                enabled: true,
-                order: 100,
-                cardFormat: 'Poster',
-                queries: [{
-                    queryOptions: {
-                        SortBy: 'Random',
-                        Limit: 20
-                    }
-                }]
-            };
-            openSectionEditor(newSection, 'custom');
+            openNewCustomSectionEditor();
         });
 
         // Section type toggle buttons - use event delegation
@@ -4504,6 +2996,8 @@
             const subTab = btn.dataset.globalSettingsTab;
             if (!subTab) return;
 
+            applyGlobalSettingsFromForm({ save: true, immediate: true });
+
             currentGlobalSettingsSubTab = subTab;
 
             dialog.querySelectorAll('.global-settings-nav-btn').forEach(b => {
@@ -4524,7 +3018,28 @@
             const contentContainer = dialog.querySelector('#global-settings-content');
             if (contentContainer) {
                 contentContainer.innerHTML = buildGlobalSettingsPanelContent(subTab);
-                if (subTab === 'spotlight') attachSpotlightSettingsListeners(contentContainer, 'spotlight-');
+                if (subTab === 'spotlight') se().attachGlobalSpotlightSettings?.(contentContainer, currentConfig);
+                wireGlobalSettingsPanelListeners(contentContainer);
+            }
+        });
+
+        ensureGlobalSettingsLiveSync(dialog);
+
+        const globalSettingsContent = dialog.querySelector('#global-settings-content');
+        if (globalSettingsContent) {
+            if (currentGlobalSettingsSubTab === 'spotlight') {
+                se().attachGlobalSpotlightSettings?.(globalSettingsContent, currentConfig);
+            }
+            wireGlobalSettingsPanelListeners(globalSettingsContent);
+        }
+
+        dialog.addEventListener('click', (e) => {
+            if (e.target.closest('.hsc-toolbar-new-section-btn')) {
+                openNewCustomSectionEditor();
+                return;
+            }
+            if (e.target.closest('.hsc-toolbar-update-btn')) {
+                confirmAndUpdateAllUsers();
             }
         });
         /* dialog.querySelectorAll('.section-type-nav-btn').forEach(btn => {
@@ -5089,44 +3604,37 @@
     }
 
     /**
-     * Setup community collections tab with card grid layout
+     * Setup community collections grid (Import / Export tab).
+     * Selecting a collection opens a secondary import modal.
      */
     function setupCommunityCollectionsTab(dialog) {
-        // Ensure community config is available
+        const host = dialog.querySelector('#communityCollectionsHost')
+            || dialog.querySelector('#tab-import-export');
+        let collectionsGrid = dialog.querySelector('#communityCollectionsGrid');
+
+        if (!host) {
+            return;
+        }
+
         if (!window.KefinCommunityConfig) {
-            const communityTab = dialog.querySelector('#tab-community');
-            if (communityTab) {
-                communityTab.innerHTML = '<div class="listItemBodyText" style="color: #f44336;">Community configuration not loaded. Please ensure homeScreenConfig-community.js is loaded.</div>';
-            }
+            host.innerHTML = '<div class="listItemBodyText" style="color: #f44336;">Community configuration not loaded. Please ensure homeScreenConfig-community.js is loaded.</div>';
             return;
         }
 
         const communityCollections = window.KefinCommunityConfig.collections || [];
-        
+
         if (communityCollections.length === 0) {
-            const communityTab = dialog.querySelector('#tab-community');
-            if (communityTab) {
-                communityTab.innerHTML = '<div class="listItemBodyText">No community collections available.</div>';
-            }
+            host.innerHTML = '<div class="listItemBodyText">No community collections available.</div>';
             return;
         }
 
-        const collectionsGrid = dialog.querySelector('#communityCollectionsGrid');
-        const sectionsContainer = dialog.querySelector('#communitySectionsContainer');
-        const sectionsList = dialog.querySelector('#communitySectionsList');
-        const sectionsEmpty = dialog.querySelector('#communitySectionsEmpty');
-        const confirmBtn = dialog.querySelector('#confirmCommunityImportBtn');
-
-        if (!collectionsGrid || !sectionsContainer || !sectionsList || !sectionsEmpty || !confirmBtn) {
-            return;
+        if (!collectionsGrid) {
+            host.innerHTML = '<div id="communityCollectionsGrid"></div>';
+            collectionsGrid = dialog.querySelector('#communityCollectionsGrid');
         }
+        if (!collectionsGrid) return;
 
-        let selectedCollection = null;
-        let selectedCollectionIndex = null;
-
-        // Build collection cards
         collectionsGrid.innerHTML = communityCollections.map((collection, index) => {
-            const description = collection.description || 'No description available.';
             return `
                 <div class="community-collection-card" data-collection-index="${index}" style="
                     background: rgba(255,255,255,0.05);
@@ -5164,84 +3672,121 @@
             `;
         }).join('');
 
-        // Add click handlers to collection cards
         collectionsGrid.querySelectorAll('.community-collection-card').forEach((card, index) => {
             card.addEventListener('click', (e) => {
-                // Don't trigger if clicking the info button
                 if (e.target.closest('.community-collection-info-btn')) {
                     return;
                 }
-
-                // Remove previous selection
-                collectionsGrid.querySelectorAll('.community-collection-card').forEach(c => {
-                    c.style.borderColor = 'rgba(255,255,255,0.1)';
-                    c.style.background = 'rgba(255,255,255,0.05)';
-                });
-
-                // Highlight selected card
-                card.style.borderColor = 'rgba(0, 164, 220, 0.8)';
-                card.style.background = 'rgba(0, 164, 220, 0.15)';
-
-                selectedCollection = communityCollections[index];
-                selectedCollectionIndex = index;
-
-                // Render sections list
-                renderSectionsList(selectedCollection, sectionsList, sectionsContainer, sectionsEmpty, confirmBtn);
+                openCommunityImportModal(communityCollections[index]);
             });
         });
 
-        // Add info button handlers for popover
         collectionsGrid.querySelectorAll('.community-collection-info-btn').forEach((btn, index) => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const collection = communityCollections[index];
                 const description = collection.description || 'No description available.';
-                
-                // Create and show popover
                 showInfoPopover(btn, description, collection.name || 'Collection');
             });
         });
+    }
 
-        // Import button handler
-        confirmBtn.addEventListener('click', async () => {
-            if (!selectedCollection) return;
+    /**
+     * Open secondary modal to pick sections from a community collection and import them.
+     */
+    function openCommunityImportModal(collection) {
+        if (!collection) return;
+        if (!window.ModalSystem?.create) {
+            showToast('Modal system not available');
+            return;
+        }
 
-            const selectedIndices = Array.from(dialog.querySelectorAll('.import-community-check:checked')).map(c => parseInt(c.dataset.index));
-            
-            if (selectedIndices.length === 0) {
-                showToast('Please select at least one section to import.');
-                return;
-            }
+        const content = document.createElement('div');
+        content.innerHTML = `
+            <div class="listItemBodyText secondary" style="margin-bottom: 1em;">Select sections to import from this collection.</div>
+            <div id="communitySectionsContainer">
+                <div id="communitySectionsList"></div>
+            </div>
+            <div id="communitySectionsEmpty" class="listItemBodyText secondary" style="display: none; padding: 1em; text-align: center;"></div>
+        `;
 
-            // Import logic - import entire groups to CUSTOM_SECTION_GROUPS
-            if (!currentConfig.CUSTOM_SECTION_GROUPS) currentConfig.CUSTOM_SECTION_GROUPS = [];
-            
-            const selectedSections = selectedIndices.map(i => {
-                const section = JSON.parse(JSON.stringify(selectedCollection.sections[i])); // Deep copy
-                return convertToHomeScreenSection(section);
-            });
-            
-            // Create a group from the collection
-            const importedGroup = {
-                name: selectedCollection.name || 'Imported Collection',
-                author: selectedCollection.author,
-                description: selectedCollection.description,
-                sections: selectedSections.map(section => {
-                    // Check for ID collision - only regenerate if needed
-                    if (section.id && sectionIdExists(currentConfig, section.id)) {
-                        section.id = `${section.id}_community_${Date.now()}_${Math.floor(Math.random()*1000)}`;
+        const footer = document.createElement('div');
+        footer.style.display = 'flex';
+        footer.style.gap = '0.5em';
+        footer.style.justifyContent = 'flex-end';
+        footer.innerHTML = `
+            <button type="button" class="emby-button raised" id="community-import-cancel">Cancel</button>
+            <button type="button" class="emby-button raised block button-submit" id="confirmCommunityImportBtn">Import Selected</button>
+        `;
+
+        window.ModalSystem.create({
+            id: COMMUNITY_IMPORT_MODAL_ID,
+            title: collection.name || 'Import Collection',
+            content,
+            footer,
+            closeOnBackdrop: true,
+            closeOnEscape: true,
+            showCloseButton: true,
+            fixedSize: true,
+            onOpen: (modal) => {
+                const dialog = modal.dialogContent || content;
+                const sectionsList = dialog.querySelector('#communitySectionsList');
+                const sectionsContainer = dialog.querySelector('#communitySectionsContainer');
+                const sectionsEmpty = dialog.querySelector('#communitySectionsEmpty');
+                const confirmBtn = modal.dialogFooter?.querySelector('#confirmCommunityImportBtn')
+                    || dialog.querySelector('#confirmCommunityImportBtn');
+
+                renderSectionsList(collection, sectionsList, sectionsContainer, sectionsEmpty, confirmBtn);
+
+                modal.dialogFooter?.querySelector('#community-import-cancel')?.addEventListener('click', () => {
+                    window.ModalSystem.close(COMMUNITY_IMPORT_MODAL_ID);
+                });
+
+                confirmBtn?.addEventListener('click', async () => {
+                    const selectedIndices = Array.from(dialog.querySelectorAll('.import-community-check:checked'))
+                        .map(c => parseInt(c.dataset.index, 10));
+
+                    if (selectedIndices.length === 0) {
+                        showToast('Please select at least one section to import.');
+                        return;
                     }
-                    return section;
-                })
-            };
-            
-            currentConfig.CUSTOM_SECTION_GROUPS.push(importedGroup);
-            const importedCount = selectedSections.length;
 
-            if (importedCount > 0) {
-                await saveConfig(currentConfig);
-                showToast(`Successfully imported ${importedCount} sections. Refreshing...`);
-                refreshMainModal();
+                    if (!currentConfig.CUSTOM_SECTION_GROUPS) currentConfig.CUSTOM_SECTION_GROUPS = [];
+
+                    const selectedSections = selectedIndices.map(i => {
+                        const section = JSON.parse(JSON.stringify(collection.sections[i]));
+                        return convertToHomeScreenSection(section);
+                    });
+
+                    const importedGroup = {
+                        name: collection.name || 'Imported Collection',
+                        author: collection.author,
+                        description: collection.description,
+                        sections: selectedSections.map(section => {
+                            if (section.id && sectionIdExists(currentConfig, section.id)) {
+                                section.id = `${section.id}_community_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+                            }
+                            return section;
+                        })
+                    };
+
+                    currentConfig.CUSTOM_SECTION_GROUPS.push(importedGroup);
+                    const importedCount = selectedSections.length;
+
+                    if (importedCount > 0) {
+                        confirmBtn.disabled = true;
+                        try {
+                            await saveConfig(currentConfig);
+                            window.ModalSystem.close(COMMUNITY_IMPORT_MODAL_ID);
+                            showToast(`Successfully imported ${importedCount} sections. Refreshing...`);
+                            refreshMainModal();
+                        } catch (e) {
+                            ERR('Error importing community sections:', e);
+                            showToast('Error importing sections');
+                            confirmBtn.disabled = false;
+                        }
+                    }
+                });
             }
         });
     }
@@ -5250,11 +3795,13 @@
      * Render sections list for selected collection
      */
     function renderSectionsList(collection, sectionsList, sectionsContainer, sectionsEmpty, confirmBtn) {
+        if (!sectionsList) return;
+
         if (!collection || !collection.sections || collection.sections.length === 0) {
             sectionsList.innerHTML = '<div class="listItemBodyText secondary">No sections found in this collection.</div>';
-            sectionsContainer.style.display = 'block';
-            sectionsEmpty.style.display = 'none';
-            confirmBtn.style.display = 'none';
+            if (sectionsContainer) sectionsContainer.style.display = 'block';
+            if (sectionsEmpty) sectionsEmpty.style.display = 'none';
+            if (confirmBtn) confirmBtn.style.display = 'none';
             return;
         }
 
@@ -5269,9 +3816,9 @@
             </div>
         `;
 
-        sectionsContainer.style.display = 'block';
-        sectionsEmpty.style.display = 'none';
-        confirmBtn.style.display = 'inline-block';
+        if (sectionsContainer) sectionsContainer.style.display = 'block';
+        if (sectionsEmpty) sectionsEmpty.style.display = 'none';
+        if (confirmBtn) confirmBtn.style.display = 'inline-block';
     }
 
     /**
@@ -5853,9 +4400,12 @@
     async function openConfigModal() {
         try {
             // Load config
-            const config = await loadConfig();
+            const config = loadConfig();
 
-            await verifyLibrarySectionsConfig(config);
+            const { hasChanges } = await verifyLibrarySectionsConfig(config);
+            if (hasChanges) {
+                await saveConfig(config);
+            }
 
             // Build content
             const content = document.createElement('div');
@@ -5866,10 +4416,16 @@
             footer.style.display = 'flex';
             footer.style.gap = '0.75em';
             footer.style.justifyContent = 'flex-end';
+
             footer.innerHTML = `
                 <button class="emby-button raised" onclick="window.ModalSystem.close('${MAIN_MODAL_ID}')">Close</button>
-                <button class="emby-button raised block button-submit" id="save-all-btn">Save</button>
             `;
+
+            /* footer.innerHTML = `
+                <button class="emby-button raised" onclick="window.ModalSystem.close('${MAIN_MODAL_ID}')">Close</button>
+                <button class="emby-button raised" id="update-all-btn" title="Save and apply these settings to all users.">Update</button>
+                <button class="emby-button raised block button-submit" id="save-all-btn" title="Save and apply these settings to new users only.">OK</button>
+            `; */
 
             // Create modal
             mainModalInstance = window.ModalSystem.create({
@@ -5887,30 +4443,30 @@
                     // Attach event listeners
                     attachMainModalListeners(modalInstance);
 
-                    // Save All button
+                    if (normalizeActiveTab(currentActiveTab) === 'troubleshoot') {
+                        initBenchmarkTab(modalInstance);
+                    }
+
                     const saveAllBtn = modalInstance.dialogFooter.querySelector('#save-all-btn');
                     if (saveAllBtn) {
                         saveAllBtn.addEventListener('click', async () => {
-                            const globalSettings = collectGlobalSettings();
-                            Object.assign(currentConfig, globalSettings);
-                            
-                            // If Order Sections tab was used, ensure order values are up to date
-                            const orderList = modalInstance.dialogContent.querySelector('#order-sections-list');
-                            if (orderList) {
-                                const allRows = Array.from(orderList.querySelectorAll('.section-order-row'));
-                                allRows.forEach((r, index) => {
-                                    const sectionId = r.dataset.sectionId;
-                                    if (sectionId) {
-                                        const found = findSectionInAllGroups(currentConfig, sectionId);
-                                        if (found?.section) {
-                                            found.section.order = (index + 1) * 10;
-                                        }
-                                    }
-                                });
+                            saveAllBtn.disabled = true;
+                            try {
+                                await collectAndSaveConfig(modalInstance);
+                                showToast('Configuration saved!');
+                            } catch (e) {
+                                ERR('Error saving configuration:', e);
+                                showToast('Error saving configuration');
+                            } finally {
+                                saveAllBtn.disabled = false;
                             }
-                            
-                            await saveConfig(currentConfig);
-                            showToast('Configuration saved!');
+                        });
+                    }
+
+                    const updateAllBtn = modalInstance.dialogFooter.querySelector('#update-all-btn');
+                    if (updateAllBtn) {
+                        updateAllBtn.addEventListener('click', () => {
+                            confirmAndUpdateAllUsers();
                         });
                     }
                     
@@ -5929,15 +4485,256 @@
                 }
             });
 
-            mainModalInstance.dialog.style.maxWidth = '90vw';
-            mainModalInstance.dialog.style.width = '1400px';
-            mainModalInstance.dialog.style.height = '90vh';
+            if (window.innerWidth >= 900) {
+                mainModalInstance.dialog.style.maxWidth = '90vw';
+                mainModalInstance.dialog.style.width = '1400px';
+                mainModalInstance.dialog.style.height = '90vh';
+            }
 
             LOG('Main configuration modal opened');
         } catch (error) {
             ERR('Error opening config modal:', error);
             showToast('Error opening configuration: ' + error.message);
         }
+    }
+
+    /**
+     * Fetch items for a section preview (shared by modal preview and wizard inline preview).
+     * @param {Object} section
+     * @param {Object} [options]
+     * @param {boolean} [options.useSpotlightFields] - Request spotlight-grade Fields regardless of renderMode
+     * @returns {Promise<{ items: Array, limit: number }>}
+     */
+    async function fetchSectionPreviewItems(section, options = {}) {
+        if (!window.ApiClient || !window.apiHelper || !window.cardBuilder) {
+            throw new Error('Required dependencies not available for preview');
+        }
+
+        const userId = ApiClient.getCurrentUserId();
+        const serverUrl = ApiClient.serverAddress();
+
+        if (!userId || !serverUrl) {
+            throw new Error('Unable to get user ID or server URL');
+        }
+
+        const queries = section.queries || [];
+        if (section.items?.length) {
+            const kefinTweaksRoot = window.KefinTweaksConfig?.kefinTweaksRoot || '';
+            const serverId = ApiClient.serverId();
+            const normalizeTemplate = (value) => (value || '')
+                .replace(/\$\{kefinTweaksRoot\}/g, kefinTweaksRoot)
+                .replace(/\$\{serverId\}/g, serverId);
+
+            const items = section.items.map((item, index) => {
+                const posterUrl = normalizeTemplate(item.posterUrl);
+                const thumbUrl = normalizeTemplate(item.thumbUrl);
+                const squareUrl = normalizeTemplate(item.squareUrl);
+                const imageUrl = normalizeTemplate(item.imageUrl);
+                const cardUrl = normalizeTemplate(item.cardUrl);
+                const backdropUrl = normalizeTemplate(item.backdropUrl);
+                const bannerUrl = normalizeTemplate(item.bannerUrl);
+                const logoUrl = normalizeTemplate(item.logoUrl);
+
+                return {
+                    Name: item.Name,
+                    Id: item.Id || 'static-preview-' + (section.id || 'draft') + '-' + index,
+                    Type: item.Type || 'Folder',
+                    posterUrl,
+                    thumbUrl,
+                    squareUrl,
+                    imageUrl,
+                    cardUrl,
+                    backdropUrl,
+                    bannerUrl,
+                    logoUrl,
+                    CustomFooterText: item.cardFooter || undefined
+                };
+            });
+
+            const processed = window.cardBuilder.postProcessItems
+                ? window.cardBuilder.postProcessItems(section, items)
+                : items;
+            return { items: processed, limit: processed.length };
+        }
+
+        if (queries.length === 0) {
+            throw new Error('Section has no queries to preview');
+        }
+
+        const useSpotlightFields = options.useSpotlightFields === true
+            || section.renderMode === 'Spotlight';
+
+        let allItems = [];
+        for (const query of queries) {
+            const previewQuery = withPreviewQueryOptions(query);
+            let queryUrl = null;
+
+            if (previewQuery.dataSource) {
+                queryUrl = null;
+            } else {
+                queryUrl = window.apiHelper.buildQueryFromSection(previewQuery, userId, serverUrl, useSpotlightFields, { sectionType: section.type });
+            }
+
+            try {
+                let items = [];
+                if (previewQuery.dataSource) {
+                    const response = await window.apiHelper.fetchFromDataSource(previewQuery.dataSource, previewQuery.queryOptions, false);
+                    items = response.Items || response || [];
+                } else if (queryUrl && typeof queryUrl === 'string') {
+                    const result = await apiHelper.getQuery(queryUrl, { useCache: false });
+                    items = result.Items || result || [];
+                }
+                allItems = allItems.concat(items);
+            } catch (error) {
+                console.error('[Preview] Error fetching query:', error);
+                throw new Error(`Error fetching query: ${error.message}`);
+            }
+        }
+
+        if (allItems.length === 0) {
+            return { items: [], limit: 0 };
+        }
+
+        const limit = withPreviewQueryOptions(queries[0]).queryOptions.Limit
+            || section.itemLimit
+            || PREVIEW_DEFAULT_LIMIT;
+        allItems = window.cardBuilder.postProcessItems(section, allItems);
+        const limitedItems = allItems.slice(0, parseInt(limit, 10));
+
+        return { items: limitedItems, limit: parseInt(limit, 10) };
+    }
+
+    const EDITOR_PREVIEW_SECTION_ID = 'hsae-editor-preview';
+
+    function normalizeEditorPreviewConfig(draftSection) {
+        return {
+            ...draftSection,
+            id: EDITOR_PREVIEW_SECTION_ID,
+            enabled: true,
+            order: 0,
+            userConfigurable: false,
+            renderMode: draftSection.renderMode || 'Normal'
+        };
+    }
+
+    function buildEditorPreviewProgressiveSection(draftSection, initialItems) {
+        const config = normalizeEditorPreviewConfig(draftSection);
+        const items = Array.isArray(initialItems) ? initialItems : [];
+
+        let mappedDataPromise = null;
+        const ensureData = () => {
+            if (!mappedDataPromise) {
+                mappedDataPromise = Promise.resolve(items);
+            }
+            return mappedDataPromise;
+        };
+
+        const result = {
+            data: items,
+            isStale: false,
+            isStalePromise: Promise.resolve(false),
+            ensureData
+        };
+
+        Object.defineProperty(result, 'dataPromise', {
+            configurable: true,
+            enumerable: true,
+            get() {
+                return ensureData();
+            }
+        });
+
+        return { config, result };
+    }
+
+    function attachEditorPreviewRefresh(containerEl, getDraftSection) {
+        if (!containerEl || typeof getDraftSection !== 'function') return;
+
+        const refreshBtn = containerEl.querySelector('.section-refresh-button');
+        if (!refreshBtn) return;
+
+        const newBtn = refreshBtn.cloneNode(true);
+        refreshBtn.replaceWith(newBtn);
+
+        newBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const sectionEl = newBtn.closest('.emby-scroller-container')
+                || containerEl.querySelector('.emby-scroller-container');
+            if (sectionEl) sectionEl.dataset.refreshing = 'true';
+
+            try {
+                const draft = getDraftSection();
+                const { items } = await fetchSectionPreviewItems(draft);
+                await renderSectionPreviewInto(draft, items, containerEl, { getDraftSection });
+            } catch (err) {
+                console.error('[Preview] Refresh failed:', err);
+                containerEl.innerHTML = `<p class="listItemBodyText secondary" style="text-align:center;padding:1.5em 0;">${err.message || 'Preview refresh failed'}</p>`;
+            } finally {
+                if (sectionEl) delete sectionEl.dataset.refreshing;
+            }
+        });
+    }
+
+    /**
+     * Render section preview into a DOM container (no modal).
+     * @returns {Promise<boolean>}
+     */
+    async function renderSectionPreviewInto(section, items, containerEl, options = {}) {
+        if (!containerEl) return false;
+        if (!window.cardBuilder) return false;
+
+        if (!items || items.length === 0) {
+            containerEl.innerHTML = '<p class="listItemBodyText secondary" style="text-align:center;padding:1.5em 0;">No items found for preview.</p>';
+            return false;
+        }
+
+        const renderMode = section.renderMode || (section.spotlight ? 'Spotlight' : 'Normal');
+        const useSpotlight = renderMode === 'Spotlight' || (renderMode === 'Random' && Math.random() < 0.5);
+
+        if (useSpotlight && typeof window.cardBuilder.renderSpotlightSection === 'function') {
+            const spotlightCfg = section.spotlightConfig || {};
+            const previewElement = window.cardBuilder.renderSpotlightSection(items, section.name || 'Preview', {
+                autoPlay: false,
+                showDots: true,
+                showNavButtons: true,
+                viewMoreUrl: null,
+                panAnimation: spotlightCfg.panAnimation !== false,
+                spotlightLayout: spotlightCfg.spotlightLayout,
+                spotlightSize: spotlightCfg.spotlightSize,
+                tileCount: spotlightCfg.tileCount
+            });
+
+            if (previewElement) {
+                containerEl.innerHTML = '';
+                containerEl.appendChild(previewElement);
+                return true;
+            }
+
+            containerEl.innerHTML = '<p class="listItemBodyText secondary" style="text-align:center;padding:1.5em 0;">Unable to render preview with the current configuration.</p>';
+            return false;
+        }
+
+        if (typeof window.cardBuilder.renderProgressiveSections !== 'function') {
+            containerEl.innerHTML = '<p class="listItemBodyText secondary" style="text-align:center;padding:1.5em 0;">Preview unavailable.</p>';
+            return false;
+        }
+
+        containerEl.innerHTML = '';
+        const progressiveSection = buildEditorPreviewProgressiveSection(section, items);
+        await window.cardBuilder.renderProgressiveSections(
+            containerEl,
+            [Promise.resolve(progressiveSection)],
+            { showStaleDataBeforeRefresh: true }
+        );
+
+        const getDraftSection = options.getDraftSection;
+        if (typeof getDraftSection === 'function') {
+            attachEditorPreviewRefresh(containerEl, getDraftSection);
+        }
+
+        return true;
     }
 
     /**
@@ -5952,70 +4749,16 @@
         Dashboard.showLoadingMsg();
 
         try {
-            const userId = ApiClient.getCurrentUserId();
-            const serverUrl = ApiClient.serverAddress();
+            const { items } = await fetchSectionPreviewItems(section);
 
-            if (!userId || !serverUrl) {
-                showToast('Unable to get user ID or server URL');
-                return;
-            }
-
-            // Build queries from section configuration
-            const queries = section.queries || [];
-            if (queries.length === 0) {
-                showToast('Section has no queries to preview');
-                return;
-            }
-
-            // Fetch items from all queries
-            let allItems = [];
-            for (const query of queries) {
-                let queryUrl = null;
-                
-                // Build query URL using shared builder (handles minAge/maxAge conversion)
-                if (query.dataSource) {
-                    // Data source - skip for preview (would need special handling)
-                    queryUrl = null;
-                } else if (window.apiHelper && window.apiHelper.buildQueryFromSection) {
-                    // Use shared builder for consistency
-                    queryUrl = window.apiHelper.buildQueryFromSection(query, userId, serverUrl, section.renderMode === 'Spotlight');
-                } else {
-                    // Fallback to individual builders
-                    if (query.path) {
-                        queryUrl = buildCustomEndpointForPreview(query.path, query.queryOptions || {}, userId, serverUrl);
-                    } else {
-                        queryUrl = buildStandardQueryForPreview(query.queryOptions || {}, userId, serverUrl);
-                    }
-                }
-
-                try {
-                    let items = [];
-                    if (query.dataSource) {                            
-                        const response = await window.apiHelper.fetchFromDataSource(query.dataSource, query.queryOptions || {}, false);
-                        items = response.Items || response || [];
-                    }
-                    else if (queryUrl && typeof queryUrl === 'string') {
-                        const result = await apiHelper.getQuery(queryUrl, { useCache: false });
-                        items = result.Items || result || [];
-                    }
-                    allItems = allItems.concat(items);
-                } catch (error) {
-                    console.error('[Preview] Error fetching query:', error);
-                    showToast(`Error fetching query: ${error.message}`);
-                }
-            }
-
-            if (allItems.length === 0) {
+            if (items.length === 0) {
                 showToast('No items found for preview');
 
-                // Additionally temporarily change the visual style of the Preview button
-                // Change the text to "No Items" and give it a distinct red border or make it clear that it's not working   
                 if (btn) {
                     btn.textContent = 'No Items';
                     btn.style.border = '1px solid #ff6b6b';
                     btn.style.color = '#ff6b6b';
                 }
-                // After a short period remove this style and restore the original text and color
                 setTimeout(() => {
                     if (btn) {
                         btn.textContent = 'Preview';
@@ -6026,29 +4769,12 @@
                 return;
             }
 
-            // Apply limit if specified
-            const limit = section.queries?.[0]?.queryOptions?.Limit || section.itemLimit || 20;
-            allItems = window.cardBuilder.postProcessItems(section, allItems);
-            const limitedItems = allItems.slice(0, parseInt(limit, 10));
-
-            // Determine render mode
-            const renderMode = section.renderMode || (section.spotlight ? 'Spotlight' : 'Normal');
-            const useSpotlight = renderMode === 'Spotlight' || (renderMode === 'Random' && Math.random() < 0.5);
-
-            // Determine card format
-            let cardFormat = section.cardFormat || 'Poster';
-            if (cardFormat === 'Random') {
-                const formats = ['Poster', 'Thumb', 'Backdrop'];
-                cardFormat = formats[Math.floor(Math.random() * formats.length)];
-            }
-
-            // Create preview modal
             const previewModalId = 'kefin-preview-section';
             const content = document.createElement('div');
             content.style.cssText = 'padding: 1em; max-width: 1400px; width: 100%;';
             content.innerHTML = `
                 <div class="listItemBodyText" style="margin-bottom: 1em;">
-                    Preview: ${section.name || 'Unnamed Section'} (${limitedItems.length} item${limitedItems.length !== 1 ? 's' : ''})
+                    Preview: ${section.name || 'Unnamed Section'} (${items.length} item${items.length !== 1 ? 's' : ''})
                 </div>
                 <div id="preview-container" style="min-height: 400px;"></div>
             `;
@@ -6064,36 +4790,10 @@
                 size: 'large',
                 closeOnBackdrop: true,
                 closeOnEscape: true,
-                onOpen: (modalInstance) => {
+                onOpen: async (modalInstance) => {
                     const container = modalInstance.dialogContent.querySelector('#preview-container');
                     modalInstance.dialog.style.width = '1400px';
-                    
-                    let previewElement = null;
-                    if (useSpotlight && typeof window.cardBuilder.renderSpotlightSection === 'function') {
-                        previewElement = window.cardBuilder.renderSpotlightSection(limitedItems, section.name || 'Preview', {
-                            autoPlay: false,
-                            showDots: true,
-                            showNavButtons: true,
-                            viewMoreUrl: null
-                        });
-                    } else if (typeof window.cardBuilder.renderCards === 'function') {
-                        previewElement = window.cardBuilder.renderCards(
-                            limitedItems,
-                            section.name || 'Preview',
-                            null,
-                            true,
-                            cardFormat,
-                            section.sortOrder || null,
-                            section.sortOrderDirection || null
-                        );
-                    }
-
-                    if (previewElement) {
-                        container.innerHTML = '';
-                        container.appendChild(previewElement);
-                    } else {
-                        container.innerHTML = '<div style="opacity: 0.75; text-align: center;">Unable to render preview with the current configuration.</div>';
-                    }
+                    await renderSectionPreviewInto(section, items, container);
                 }
             });
 
@@ -6105,81 +4805,6 @@
         }
     }
 
-    /**
-     * Build standard query URL for preview
-     * Uses shared apiHelper.buildQueryFromSection for consistency
-     */
-    function buildStandardQueryForPreview(queryOptions, userId, serverUrl) {
-        if (window.apiHelper && window.apiHelper.buildStandardQuery) {
-            return window.apiHelper.buildStandardQuery(queryOptions, userId, serverUrl);
-        }
-        // Fallback if apiHelper not available
-        // Fields that require pipe delimiter instead of comma
-        const PIPE_DELIMITED_FIELDS = ['Genres', 'Tags', 'OfficialRatings', 'Studios', 'Artists', 'ExcludeArtistsIds', 'Albums', 'AlbumIds', 'StudioIds', 'GenreIds'];
-        
-        const params = new URLSearchParams({
-            Recursive: 'true',
-            Fields: 'PrimaryImageAspectRatio,DateCreated,Overview,Taglines,ProductionYear,RecursiveItemCount,ChildCount,UserData',
-            ImageTypeLimit: '1',
-            UserId: userId
-        });
-
-        Object.entries(queryOptions || {}).forEach(([key, value]) => {
-            if (value !== undefined && value !== null) {
-                if (Array.isArray(value)) {
-                    // Use pipe delimiter for specific fields, comma for others
-                    const delimiter = PIPE_DELIMITED_FIELDS.includes(key) ? '|' : ',';
-                    params.set(key, value.join(delimiter));
-                } else {
-                    params.set(key, value);
-                }
-            }
-        });
-
-        return `${serverUrl}/Items?${params.toString()}`;
-    }
-
-    /**
-     * Build custom endpoint URL for preview
-     * Uses shared apiHelper.buildQueryFromSection for consistency
-     */
-    function buildCustomEndpointForPreview(path, queryOptions, userId, serverUrl) {
-        if (window.apiHelper && window.apiHelper.buildCustomEndpoint) {
-            return window.apiHelper.buildCustomEndpoint(path, queryOptions, userId, serverUrl);
-        }
-        // Fallback if apiHelper not available
-        // Fields that require pipe delimiter instead of comma
-        const PIPE_DELIMITED_FIELDS = ['Genres', 'Tags', 'OfficialRatings', 'Studios', 'Artists', 'ExcludeArtistsIds', 'Albums', 'AlbumIds', 'StudioIds', 'GenreIds'];
-        
-        const params = new URLSearchParams({
-            UserId: userId
-        });
-
-        Object.entries(queryOptions || {}).forEach(([key, value]) => {
-            if (value !== undefined && value !== null) {
-                if (Array.isArray(value)) {
-                    // Use pipe delimiter for specific fields, comma for others
-                    const delimiter = PIPE_DELIMITED_FIELDS.includes(key) ? '|' : ',';
-                    params.set(key, value.join(delimiter));
-                } else {
-                    params.set(key, value);
-                }
-            }
-        });
-
-        if (!params.has('Fields')) {
-            params.set('Fields', 'PrimaryImageAspectRatio,DateCreated,MediaSourceCount,UserData');
-        }
-        if (!params.has('ImageTypeLimit')) {
-            params.set('ImageTypeLimit', '1');
-        }
-        if (!params.has('EnableTotalRecordCount')) {
-            params.set('EnableTotalRecordCount', 'false');
-        }
-
-        return `${serverUrl}${path}?${params.toString()}`;
-    }
-    
     window.KefinTweaksFeatureConfigs = window.KefinTweaksFeatureConfigs || {};
     window.KefinTweaksFeatureConfigs.homeScreen = { openConfigModal };
 
@@ -6187,6 +4812,16 @@
     window.KefinHomeScreen = window.KefinHomeScreen || {};
     window.KefinHomeScreen.getConfig = getConfig;
     window.KefinHomeScreen.getSections = getSections;
+    window.KefinHomeScreen.fetchSectionPreviewItems = fetchSectionPreviewItems;
+    window.KefinHomeScreen.renderSectionPreviewInto = renderSectionPreviewInto;
+    window.KefinHomeScreen.buildEditorPreviewProgressiveSection = buildEditorPreviewProgressiveSection;
+    window.KefinHomeScreen.canOpenSectionEditor = canOpenSectionEditor;
+    window.KefinHomeScreen.openSectionEditorForId = openSectionEditorForId;
+    window.KefinHomeScreen.publishSectionPresentationDefaults = publishSectionPresentationDefaults;
+    window.KefinHomeScreen.findSectionInAllGroups = findSectionInAllGroups;
+    window.KefinHomeScreen.ensureKefinTweaksDefaultSections = ensureKefinTweaksDefaultSections;
+    window.KefinHomeScreen.collectCustomDiscoverySections = collectCustomDiscoverySections;
+
 
     LOG('Home Screen Configuration UI loaded');
     
@@ -6227,5 +4862,7 @@
 
     // Load user config script after a short delay to ensure this script is fully initialized
     setTimeout(loadUserConfigurationScript, 100);
+
+    runStartupDefaultSectionSync().catch(err => ERR('Startup default section sync failed:', err));
     
 })();

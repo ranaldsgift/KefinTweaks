@@ -1,184 +1,292 @@
 .kefin-config-button {
-    -webkit-tap-highlight-color: transparent;
-    background-color: transparent;
-    cursor: pointer;
-    user-select: none;
-    vertical-align: middle;
-    appearance: none;
-    color: inherit;
-    display: flex;
-    -webkit-box-flex: 1;
-    flex-grow: 1;
-    -webkit-box-pack: start;
-    justify-content: flex-start;
-    -webkit-box-align: center;
-    align-items: center;
-    position: relative;
-    min-width: 0px;
-    box-sizing: border-box;
-    text-align: left;
-    padding-top: 8px;
-    padding-bottom: 8px;
-    padding-left: 16px;
-    padding-right: 16px;
-    outline: 0px;
-    border-width: 0px;
-    border-style: initial;
-    border-color: initial;
-    border-image: initial;
-    margin: 0px;
-    border-radius: 0px;
-    text-decoration: none;
-    transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1);
+	-webkit-tap-highlight-color: transparent;
+	background-color: transparent;
+	cursor: pointer;
+	user-select: none;
+	vertical-align: middle;
+	appearance: none;
+	color: inherit;
+	display: flex;
+	-webkit-box-flex: 1;
+	flex-grow: 1;
+	-webkit-box-pack: start;
+	justify-content: flex-start;
+	-webkit-box-align: center;
+	align-items: center;
+	position: relative;
+	min-width: 0px;
+	box-sizing: border-box;
+	text-align: left;
+	padding-top: 8px;
+	padding-bottom: 8px;
+	padding-left: 16px;
+	padding-right: 16px;
+	outline: 0px;
+	border-width: 0px;
+	border-style: initial;
+	border-color: initial;
+	border-image: initial;
+	margin: 0px;
+	border-radius: 0px;
+	text-decoration: none;
+	transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .kefin-config-button:hover {
-    background-color: var(--jf-palette-action-hover);
+	background-color: var(--jf-palette-action-hover);
+}
+
+[data-kefintweaks-dashboard-config-button] span.material-icons.MuiSvgIcon-root {
+	display: block;
+	color: transparent;
+	background: var(--kefinTweaksLogo);
+	background-size: contain;
+	background-position: center;
+	background-repeat: no-repeat;
+	width: 100%;
+	height: 36px;
+}
+
+[data-kefintweaks-user-menu-config-button] span.material-icons.MuiSvgIcon-root {
+	display: block;
+	color: transparent;
+	background: var(--kefinTweaksLogo);
+	background-size: contain;
+	background-position: center;
+	background-repeat: no-repeat;
+	width: 24px;
+	height: 24px;
+}
+
+[data-kefintweaks-config-button] span.material-icons.listItemIcon {
+	display: block;
+	color: transparent;
+	background: var(--kefinTweaksLogo) !important;
+	background-size: contain !important;
+	background-position: center !important;
+	background-repeat: no-repeat !important;
+	width: 100%;
+	height: 36px;
 }
 
 .customMenuOptions {
-    display: flex;
-    flex-direction: column;
+	display: flex;
+	flex-direction: column;
 }
 
 .customMenuOptions > * {
-    order: 1;
+	order: 1;
+}
+
+/* Generic toggle card / switch (shared across config modals) */
+.kefin-toggle-card {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.75em;
+	padding: 0.85em 1em;
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	border-radius: 10px;
+	background: rgba(255, 255, 255, 0.03);
+}
+
+.kefin-toggle-card-text {
+	flex: 1;
+	min-width: 0;
+}
+
+.kefin-toggle-card-label {
+	font-weight: 500;
+}
+
+.kefin-toggle-card-desc {
+	font-size: 0.8125rem;
+	margin-top: 0.25em;
+	line-height: 1.45;
+}
+
+.kefin-toggle-switch {
+	position: relative;
+	width: 52px;
+	height: 28px;
+	border-radius: 14px;
+	border: none;
+	background: rgba(158, 158, 158, 0.5);
+	cursor: pointer;
+	flex-shrink: 0;
+	padding: 0;
+	transition: background-color 0.3s ease;
+}
+
+.kefin-toggle-switch[data-enabled="true"] {
+	background: rgba(0, 164, 220, 0.8);
+}
+
+.kefin-toggle-switch::after {
+	content: "";
+	position: absolute;
+	width: 22px;
+	height: 22px;
+	border-radius: 50%;
+	background: white;
+	top: 3px;
+	left: 3px;
+	transition: left 0.3s ease;
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.kefin-toggle-switch[data-enabled="true"]::after {
+	left: calc(100% - 25px);
 }
 
 .navMenuOption[data-name="configure"] {
-    order: 9999;
-    margin-top: 3em !important;
-    position: relative;
+	order: 9999;
+	margin-top: 3em !important;
+	position: relative;
 }
 
-.navMenuOption[data-name="configure"]>.material-icons {
-    position: relative;
+.navMenuOption[data-name="configure"] > .material-icons {
+	position: relative;
 }
 
-.navMenuOption[data-name="configure"]>.material-icons::after {
-    content: 'KefinTweaks';
-    position: absolute;
-    top: -2.5em;
-    left: -1.25em;
-    font-family: 'Noto Sans';
-    font-size: 14.88px;
+.navMenuOption[data-name="configure"] > .material-icons::after {
+	content: "KefinTweaks";
+	position: absolute;
+	top: -2.5em;
+	left: -1.25em;
+	font-family: "Noto Sans";
+	font-size: 14.88px;
 }
 
 .listItemContent {
-    width: 100%;
+	width: 100%;
 }
 
 #kefinTweaksConfigModal .listItem {
-    align-items: start;
-    overflow: visible;
+	align-items: start;
+	overflow: visible;
+}
+
+[dir="ltr"]
+	.kefin-config-wrapper
+	.listItem.feature-card:not(.actionSheetMenuItem, .childrenItemsContainer .listItem, .activityLogListWidget .listItem) {
+	padding: 0.75em !important;
 }
 
 #customSections_list .listItem {
-    overflow: visible;
+	overflow: visible;
 }
 
 /* Autocomplete suggestions styling */
 .autocomplete-suggestions {
-    background: #1a1a1a !important;
-    color: rgba(255,255,255,0.87) !important;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.5) !important;
-    opacity: 1 !important;
-    z-index: 10000 !important;
+	background: #1a1a1a !important;
+	color: rgba(255, 255, 255, 0.87) !important;
+	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5) !important;
+	opacity: 1 !important;
+	z-index: 10000 !important;
 }
 
 .autocomplete-suggestion {
-    color: rgba(255,255,255,0.87) !important;
-    background: transparent !important;
+	color: rgba(255, 255, 255, 0.87) !important;
+	background: transparent !important;
 }
 
 .autocomplete-suggestion:hover {
-    background: rgba(255,255,255,0.1) !important;
+	background: rgba(255, 255, 255, 0.1) !important;
 }
 
-#kefinTweaksConfigModal .checkboxContainer, #kefinTweaksConfigModal .checkboxListContainer {
-    margin-bottom: 0 !important;
+#kefinTweaksConfigModal .checkboxContainer,
+#kefinTweaksConfigModal .checkboxListContainer {
+	margin-bottom: 0 !important;
 }
 
 #kefinTweaksConfigModal .info-tooltip {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 18px;
-    height: 18px;
-    border: 1px solid rgba(255,255,255,0.4);
-    border-radius: 50%;
-    cursor: help;
-    color: rgba(255,255,255,0.8);
-    transition: border-color 0.15s ease, color 0.15s ease;
-    outline: none;
-    font-family: 'Material Icons';
-    font-style: normal;
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 18px;
+	height: 18px;
+	border: 1px solid rgba(255, 255, 255, 0.4);
+	border-radius: 50%;
+	cursor: help;
+	color: rgba(255, 255, 255, 0.8);
+	transition:
+		border-color 0.15s ease,
+		color 0.15s ease;
+	outline: none;
+	font-family: "Material Icons";
+	font-style: normal;
 }
 
 #kefinTweaksConfigModal .info-tooltip:hover,
 #kefinTweaksConfigModal .info-tooltip:focus-visible {
-    border-color: rgba(255,255,255,0.8);
-    color: #ffffff;
+	border-color: rgba(255, 255, 255, 0.8);
+	color: #ffffff;
 }
 
 #kefinTweaksConfigModal .info-tooltip::after {
-    content: attr(data-tooltip);
-    position: absolute;
-    bottom: 180%;
-    left: 50%;
-    transform: translate(-50%, 0);
-    background: rgba(0,0,0,0.9);
-    color: #fff;
-    padding: 0.4em 0.6em;
-    border-radius: 4px;
-    font-size: 0.9rem;
-    white-space: nowrap;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.15s ease, transform 0.15s ease;
-    z-index: 20;
-    font-family: 'Noto Sans';
+	content: attr(data-tooltip);
+	position: absolute;
+	bottom: 180%;
+	left: 50%;
+	transform: translate(-50%, 0);
+	background: rgba(0, 0, 0, 0.9);
+	color: #fff;
+	padding: 0.4em 0.6em;
+	border-radius: 4px;
+	font-size: 0.9rem;
+	white-space: nowrap;
+	opacity: 0;
+	pointer-events: none;
+	transition:
+		opacity 0.15s ease,
+		transform 0.15s ease;
+	z-index: 20;
+	font-family: "Noto Sans";
 }
 
 #kefinTweaksConfigModal .info-tooltip:hover::after,
 #kefinTweaksConfigModal .info-tooltip:focus-visible::after {
-    opacity: 1;
-    transform: translate(-50%, 6px);
+	opacity: 1;
+	transform: translate(-50%, 6px);
 }
 
 details[open] summary.listItemBodyText::after {
-    content: '▲';
+	content: "▲";
 }
 
 summary.listItemBodyText::after {
-    content: '▼';
-    position: absolute;
-    bottom: 0px;
-    left: 0;
-    right: 0;
-    text-align: center;
-    font-size: 0.8rem;
+	content: "▼";
+	position: absolute;
+	bottom: 0px;
+	left: 0;
+	right: 0;
+	text-align: center;
+	font-size: 0.8rem;
 }
 
 summary.listItemBodyText {
-    position: relative;
+	position: relative;
 }
 
 .kefin-config-button:hover {
-    background-color: rgba(255, 255, 255, 0.08);
+	background-color: rgba(255, 255, 255, 0.08);
 }
 
 .preview-section-container .custom-scroller-container {
-    max-width: calc(100% - 4rem);
+	max-width: calc(100% - 4rem);
 }
 
 .navMenuOption[data-name="configure"]:hover:not(.navMenuOption-selected) {
-    transform: none !important;
-    margin-top: 3em !important;
+	transform: none !important;
+	margin-top: 3em !important;
 }
 
-div#homeScreen_recentlyReleased_container .listItem:has(#homeScreen_recentlyReleased_movies_sortOrder),
+/* div#homeScreen_recentlyReleased_container .listItem:has(#homeScreen_recentlyReleased_movies_sortOrder),
 div#homeScreen_recentlyReleased_container .listItem:has(#homeScreen_recentlyReleased_episodes_sortOrder) {
     display: none;
+} */
+.emby-scroller-container[data-section-id].hideIndicators .cardIndicators {
+	display: none;
 }

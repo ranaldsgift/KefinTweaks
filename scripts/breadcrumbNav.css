@@ -1,126 +1,127 @@
 /* KefinTweaks Breadcrumbs Styles */
 .kefinTweaks-breadcrumbs-wrapper {
-    display: none;
+	display: none;
 }
 
 @media (min-width: 768px) {
-    .kefinTweaks-breadcrumbs-wrapper {
-        display: block;
-        margin-left: -.5em;
-        transition: background 0.2s ease;
-    }
+	.kefinTweaks-breadcrumbs-wrapper {
+		display: block;
+		margin-left: -0.5em;
+		transition: background 0.2s ease;
+	}
 
-    .kefinTweaks-breadcrumbs-wrapper:hover {
-        background: rgba(0, 0, 0, 0.5);
-        border-radius: 0.5em;
-    }
+	.kefinTweaks-breadcrumbs-wrapper:hover {
+		background: rgba(0, 0, 0, 0.5);
+		border-radius: 0.5em;
+	}
 
-    .kefinTweaks-breadcrumbs {
-        color: rgba(255, 255, 255, 0.8);
-        font-size: 1.17em;
-        font-family: inherit;
-        pointer-events: auto;
-        position: relative;
-        padding: 8px 12px;
-        border-radius: 4px;
-        word-wrap: break-word;
-        display: inline-block;
-    }
+	.kefinTweaks-breadcrumbs {
+		color: rgba(255, 255, 255, 0.8);
+		font-size: 1.17em;
+		font-family: inherit;
+		pointer-events: auto;
+		position: relative;
+		padding: 8px 12px;
+		border-radius: 4px;
+		word-wrap: break-word;
+		display: inline-block;
+	}
 
-    .kefinTweaks-popover-container {
-        position: absolute;
-        top: 100%;
-        left: 0;
-        z-index: 1001;
-        pointer-events: all;
-    }
+	.kefinTweaks-popover-container {
+		position: absolute;
+		top: 100%;
+		left: 0;
+		z-index: 1001;
+		pointer-events: all;
+	}
 
-    /* When breadcrumbs are at bottom of page, open popover above */
-    .kefinTweaks-popover-container.kefinTweaks-popover-container--above {
-        top: auto;
-        bottom: 100%;
-    }
+	/* When breadcrumbs are at bottom of page, open popover above */
+	.kefinTweaks-popover-container.kefinTweaks-popover-container--above {
+		top: auto;
+		bottom: 100%;
+	}
 
-    .kefinTweaks-popover.kefinTweaks-popover--above {
-        margin-top: 0;
-        margin-bottom: 8px;
-    }
+	.kefinTweaks-popover.kefinTweaks-popover--above {
+		margin-top: 0;
+		margin-bottom: 8px;
+	}
 
-    .kefinTweaks-breadcrumbs span {
-        display: inline;
-    }
+	.kefinTweaks-breadcrumbs span {
+		display: inline;
+	}
 
-    .kefinTweaks-breadcrumbs span:hover {
-        color: rgba(255, 255, 255, 1);
-    }
+	.kefinTweaks-breadcrumbs span:hover {
+		color: rgba(255, 255, 255, 1);
+	}
 
-    /* Hover effects for clickable breadcrumbs only */
-    .kefinTweaks-breadcrumbs span[style*="cursor: pointer"]:hover {
-        text-decoration: underline !important;
-    }
+	/* Hover effects for clickable breadcrumbs only */
+	.kefinTweaks-breadcrumbs span[style*="cursor: pointer"]:hover {
+		text-decoration: underline !important;
+	}
 
-    /* Popover styles for seasons and albums */
-    .kefinTweaks-popover {
-        position: relative;
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        border-radius: 4px;
-        padding: 0;
-        max-height: 300px;
-        overflow-y: auto !important;
-        z-index: 1001;
-        display: block;
-        margin-top: 8px;
-    }
+	/* Popover styles for seasons and albums */
+	.kefinTweaks-popover {
+		position: relative;
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		border-radius: 4px;
+		padding: 0;
+		max-height: 300px;
+		overflow-y: auto !important;
+		z-index: 1001;
+		display: block;
+		margin-top: 8px;
+	}
 
-    .kefinTweaks-popover-item {
-        padding: 8px 16px 8px 24px;
-        cursor: pointer;
-        color: rgba(255, 255, 255, 0.8);
-        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-        position: relative;
-    }
+	.kefinTweaks-popover-item {
+		padding: 8px 16px 8px 24px;
+		cursor: pointer;
+		color: rgba(255, 255, 255, 0.8);
+		border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+		position: relative;
+	}
 
-    .kefinTweaks-popover-item:hover {
-        background-color: rgba(255, 255, 255, 0.1);
-        color: rgba(255, 255, 255, 1);
-    }
+	.kefinTweaks-popover-item:hover {
+		background-color: rgba(255, 255, 255, 0.1);
+		color: rgba(255, 255, 255, 1);
+	}
 
-    .kefinTweaks-popover-item:last-child {
-        border-bottom: none;
-    }
+	.kefinTweaks-popover-item:last-child {
+		border-bottom: none;
+	}
 
-    .kefinTweaks-popover-item.selected {
-        color: rgba(255, 255, 255, 1);
-        font-weight: bold;
-    }
+	.kefinTweaks-popover-item.selected {
+		color: rgba(255, 255, 255, 1);
+		font-weight: bold;
+	}
 
-    .kefinTweaks-popover-item.selected::before {
-        content: '>';
-        position: absolute;
-        left: 8px;
-        top: calc(50% - 1px);
-        transform: translateY(-50%);
-        font-weight: bold;
-    }
+	.kefinTweaks-popover-item.selected::before {
+		content: ">";
+		position: absolute;
+		left: 8px;
+		top: calc(50% - 1px);
+		transform: translateY(-50%);
+		font-weight: bold;
+	}
 
-    .skinHeader {
-        contain: none;
-    }
+	.skinHeader {
+		contain: none;
+	}
 
-    .headerLeft {
-        overflow: visible;
-    }
+	.headerLeft {
+		overflow: visible;
+	}
 }
 
 .kefinTweaks-popover.itemDetailsGroup:has(.detailsGroupItem:not(.hide)) {
-    padding: 0 !important;
-    overflow-y: auto !important;
-    backdrop-filter: blur(50px);
+	padding: 0 !important;
+	overflow-y: auto !important;
+	backdrop-filter: blur(50px);
 }
 .kefinTweaks-popover.itemDetailsGroup:has(.detailsGroupItem:not(.hide)) .kefinTweaks-popover-item.detailsGroupItem {
-    padding: .5em 2em;
-    margin: 0 !important;
-    border-radius: 0 !important;
-    width: initial !important;
-    max-width: initial !important;
+	padding: 0.5em 2em;
+	margin: 0 !important;
+	border-radius: 0 !important;
+	width: initial !important;
+	max-width: initial !important;
+	white-space: nowrap;
 }

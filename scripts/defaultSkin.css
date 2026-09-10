@@ -28,7 +28,8 @@ div#seriesScheduleSection {
 @media (max-width: 768px) {
     .headerRight .btnRecommendations, 
     .headerRight .btnAdmin, 
-    .headerRight .headerAppearanceButton {
+    .headerRight .headerAppearanceButton,
+    .headerRight [data-kefin-custom-menu-top-right] {
         display: none;
     }
 }

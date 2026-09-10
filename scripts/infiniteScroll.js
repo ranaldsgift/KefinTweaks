@@ -140,10 +140,7 @@
         const style = document.createElement('style');
         style.id = styleId;
         style.textContent = `
-            #moviesTab .listPaging>div, 
-            #seriesTab .listPaging>div {
-                display: none !important;
-            }
+            
             
             /* Infinite scroll loading indicator */
             .infinite-scroll-loading {
@@ -189,8 +186,7 @@
     function waitForApiClient() {
         return new Promise((resolve) => {
             if (typeof ApiClient !== 'undefined' && ApiClient._serverInfo && ApiClient._serverInfo.UserId) {
-                userId = ApiClient._serverInfo.UserId;
-                LOG('ApiClient ready, userId:', userId);
+                LOG('ApiClient ready, userId:', ApiClient._serverInfo.UserId);
                 resolve();
             } else {
                 LOG('Waiting for ApiClient...');
@@ -345,20 +341,8 @@
     }
 
     // Update pagination display to show current range
-    function updatePaginationDisplay() {
-        const page = getCurrentPage();
-        if (!page) return;
-        
-        let activeTab = null;
-        if (page === 'tv.html') {
-            activeTab = document.querySelector("#seriesTab.is-active");
-        } else if (page === 'movies.html') {
-            activeTab = document.querySelector("#moviesTab.is-active");
-        }
-        
-        if (!activeTab) return;
-        
-        const listPagings = activeTab.querySelectorAll(".listPaging");
+    function updatePaginationDisplay() {        
+        const listPagings = document.querySelectorAll(".page:not(.hide) .pageTabContent.is-active .listPaging");
         if (!listPagings.length) return;
         
         listPagings.forEach(listPaging => {
@@ -387,9 +371,9 @@
         
         let activeTab = null;
         if (page === 'tv.html' || page === 'tv') {
-            activeTab = libraryPage.querySelector("#seriesTab.is-active");
+            activeTab = libraryPage.querySelector("#seriesTab.is-active") || document.querySelector("#tvshowsPage:not(.hide)");
         } else if (page === 'movies.html' || page === 'movies') {
-            activeTab = libraryPage.querySelector("#moviesTab.is-active");
+            activeTab = libraryPage.querySelector("#moviesTab.is-active") || document.querySelector("#moviesPage:not(.hide)");
         }
         
         if (!activeTab) {
@@ -402,6 +386,31 @@
         }
         
         return container;
+    }
+
+    /**
+     * Infer card format from existing cards in the items container.
+     * @param {Element} container
+     * @returns {string|null} 'backdrop'|'square'|'banner'|'portrait'|null
+     */
+    function inferCardFormatFromContainer(container) {
+        if (!container) return null;
+        const existing = container.querySelector('.card');
+        if (!existing) return null;
+
+        if (existing.classList.contains('backdropCard') || existing.classList.contains('overflowBackdropCard')) {
+            return 'backdrop';
+        }
+        if (existing.classList.contains('squareCard') || existing.classList.contains('overflowSquareCard')) {
+            return 'square';
+        }
+        if (existing.classList.contains('bannerCard') || existing.classList.contains('overflowBannerCard')) {
+            return 'banner';
+        }
+        if (existing.classList.contains('portraitCard') || existing.classList.contains('overflowPortraitCard')) {
+            return 'portrait';
+        }
+        return null;
     }
 
     async function loadMore() {
@@ -521,7 +530,7 @@
             LOG('Added alpha picker filter:', alphaPicker);
         }
 
-        const url = ApiClient.getUrl("Users/" + userId + "/Items", apiParams);
+        const url = ApiClient.getUrl("Users/" + ApiClient.getCurrentUserId() + "/Items", apiParams);
 
         LOG('Loading more items:', { page, tab, startIndex, limit, url });
 
@@ -553,8 +562,10 @@
                     });
                     
                     // Build each card individually and append to container
+                    const cardFormat = inferCardFormatFromContainer(container);
+                    LOG('Inferred card format from container:', cardFormat);
                     result.Items.forEach((item, index) => {
-                        const card = window.cardBuilder.buildCard(item);
+                        const card = window.cardBuilder.buildCard(item, false, cardFormat);
                         card.setAttribute('data-index', startIndex + index);
                         container.appendChild(card);
                     });
@@ -734,6 +745,8 @@
 
     // Check if we should initialize infinite scroll
     function shouldInitialize() {
+        if (hasInitialized) return false;
+
         const page = getCurrentPage();
         const container = getContainer();
         
@@ -746,25 +759,16 @@
             return false;
         }
         
-        // Double-check that we have the correct active tab
-        let activeTab = null;
-        if (page === 'tv.html' || page === 'tv') {
-            activeTab = document.querySelector("#seriesTab.is-active");
-        } else if (page === 'movies.html' || page === 'movies') {
-            activeTab = document.querySelector("#moviesTab.is-active");
+        if (page === 'tv.html' || page === 'tv' || page === 'movies.html' || page === 'movies') {
+            return true;
         }
-        
-        if (!activeTab) {
-            LOG('No active tab found for page, skipping initialization:', page);
-            return false;
-        }
-        
-        return true;
+
+        return false;
     }
     
     // Initialize infinite scroll
     async function initialize() {
-        if (!shouldInitialize() || hasInitialized || isInitializing) {
+        if (hasInitialized || isInitializing) {
             return;
         }
         
@@ -788,9 +792,6 @@
             reset();
             //loadMore(); // load first page
             setupScrollWatcher();
-            
-            // Update pagination display with initial state
-            updatePaginationDisplay();
         } finally {
             isInitializing = false;
         }

@@ -1,83 +1,207 @@
 [data-modal-id="kefin-homescreen-config-main"] .config-tab-content details {
-    max-height: calc(90vh - 19em);
-    overflow: auto;
+	max-height: calc(90vh - 19em);
+	overflow: auto;
 }
-[data-type="Collections"], [data-type="Playlists"], [data-type="Generic Parent"] {
-    display: none;
+
+[data-modal-id="kefin-homescreen-config-main"] .config-tab-nav {
+	display: flex;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+	margin-bottom: 1em;
+	flex-wrap: wrap;
+	gap: 0.25em;
+}
+
+[data-modal-id="kefin-homescreen-config-main"] .config-tab-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4em;
+	padding: 0.75em 1.25em;
+	background: none;
+	border: none;
+	border-bottom: 2px solid transparent;
+	color: rgba(255, 255, 255, 0.7);
+	cursor: pointer;
+	font-weight: 500;
+}
+
+[data-modal-id="kefin-homescreen-config-main"] .config-tab-btn.active {
+	border-bottom-color: var(--theme-primary-color, #00a4dc);
+	color: var(--theme-primary-color, #00a4dc);
+}
+
+[data-modal-id="kefin-homescreen-config-main"] .config-tab-icon {
+	font-size: 1.25em;
+	line-height: 1;
+}
+
+[data-modal-id="kefin-homescreen-config-main"] #communityCollectionsGrid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+	gap: 1em;
+	max-height: 600px;
+	overflow-y: auto;
+	padding-right: 0.5em;
+}
+
+.layout-mobile [data-modal-id="kefin-homescreen-config-main"] .config-tab-label {
+	display: none;
+}
+
+.layout-mobile [data-modal-id="kefin-homescreen-config-main"] .config-tab-btn {
+	padding: 0.75em;
+}
+
+[data-type="Collections"],
+[data-type="Playlists"],
+[data-type="Generic Parent"] {
+	display: none;
 }
 [data-parent-item-type="Collection"] [data-type="Collections"] {
-    display: block;
+	display: block;
 }
 [data-parent-item-type="Playlist"] [data-type="Playlists"] {
-    display: block;
+	display: block;
 }
 [data-parent-item-type="Generic Parent"] [data-type="Generic Parent"] {
-    display: block;
+	display: block;
 }
 
 [data-modal-id="kefin-homescreen-config-main"] details[open] summary.listItemBodyText::after {
-    content: '';
+	content: "";
 }
 
 [data-modal-id="kefin-homescreen-config-main"] #section-content {
-    padding-right: 1em;
+	padding-right: 1em;
 }
 
 [data-modal-id="kefin-homescreen-config-main"] div#section-content {
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 4px;
-    padding: 0.75em;
-    max-height: calc(90vh - 19em);
-    overflow: auto;
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 4px;
+	padding: 0.75em;
+	max-height: calc(90vh - 19em);
+	overflow: auto;
 }
 
 div#order-sections-container .editable-group-name {
-    pointer-events: none;
+	pointer-events: none;
 }
 
 .section-group[data-section-type-seasonal="false"] .section-row[data-section-type="Seasonal"] {
-    display: none !important;
+	display: none !important;
 }
 .section-group[data-section-type-default="false"] .section-row[data-section-type="Default"] {
-    display: none !important;
+	display: none !important;
 }
 .section-group[data-section-type-custom="false"] .section-row[data-section-type="Custom"] {
-    display: none !important;
+	display: none !important;
 }
 
 div#discovery-sections-list .section-preview-btn {
-    display: none;
-}
-
-.listItem.section-row:has(.discovery-tag) {
-    box-shadow: black inset 1px 1px 2px 1px;
+	display: none;
 }
 
 div#order-sections-container .section-group .group-sections-list {
-    max-height: calc(90vh - 25em);
-    overflow: auto;
-    margin-bottom: -1em;
+	max-height: calc(90vh - 25em);
+	overflow: auto;
+	margin-bottom: -1em;
 }
 
 span.listItemBodyText.secondary.discovery-tag {
-    background: #3F51B5;
-    padding: 2px 5px;
+	background: #3f51b5;
+	padding: 2px 5px;
 }
 span.listItemBodyText.secondary.spotlight-tag {
-    background: #501515;
-    padding: 2px 5px;
+	background: #501515;
+	padding: 2px 5px;
 }
 span.listItemBodyText.secondary.seasonal-tag {
-    background: #3b5562;
-    padding: 2px 5px;
+	background: #3b5562;
+	padding: 2px 5px;
 }
 
-.discovery-tag, .spotlight-tag, .seasonal-tag {
-    color: rgba(255, 255, 255, 0.9) !important;    
-    border-radius: 5px;
+.discovery-tag,
+.spotlight-tag,
+.seasonal-tag {
+	color: rgba(255, 255, 255, 0.9) !important;
+	border-radius: 5px;
 }
 
-.homeScreenSettingsContainer:has(#kefin-user-home-sections-editor) form>div:first-child > *:not(.verticalSection-extrabottompadding) {
+.homeScreenSettingsContainer form {
+	display: flex;
+	flex-direction: column;
+}
+
+.homeScreenSettingsContainer form > * {
+	order: 2;
+}
+
+.homeScreenSettingsContainer #kefin-user-home-sections-editor {
+	order: 1;
+}
+
+.kefin-restore-defaults-btn .restoreBtn::after {
+	content: "Restore Defaults";
+}
+
+/* Split panes: side nav on desktop, horizontal nav on mobile */
+[data-modal-id="kefin-homescreen-config-main"] .hsc-split-pane {
+	display: grid;
+	grid-template-columns: 200px 1fr;
+	gap: 1.5em;
+}
+
+.layout-mobile [data-modal-id="kefin-homescreen-config-main"] .hsc-split-pane,
+[data-modal-id="kefin-homescreen-config-main"] .hsc-split-pane.hsc-split-pane-narrow {
+	grid-template-columns: 1fr;
+	gap: 1em;
+}
+
+.layout-mobile [data-modal-id="kefin-homescreen-config-main"] #global-settings-navigation > div,
+.layout-mobile [data-modal-id="kefin-homescreen-config-main"] #section-navigation > div {
+	display: flex !important;
+	flex-direction: row !important;
+	flex-wrap: wrap;
+	gap: 0.5em;
+	max-height: none;
+	overflow-x: auto;
+}
+
+.layout-mobile [data-modal-id="kefin-homescreen-config-main"] #global-settings-navigation .global-settings-nav-btn,
+.layout-mobile [data-modal-id="kefin-homescreen-config-main"] #section-navigation .section-type-nav-btn {
+	flex: 0 0 auto;
+	white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+	[data-modal-id="kefin-homescreen-config-main"] .hsc-split-pane {
+		grid-template-columns: 1fr;
+		gap: 1em;
+	}
+
+	[data-modal-id="kefin-homescreen-config-main"] #global-settings-navigation > div,
+	[data-modal-id="kefin-homescreen-config-main"] #section-navigation > div {
+		display: flex !important;
+		flex-direction: row !important;
+		flex-wrap: wrap;
+		gap: 0.5em;
+	}
+
+	[data-modal-id="kefin-homescreen-config-main"] #global-settings-navigation .global-settings-nav-btn,
+	[data-modal-id="kefin-homescreen-config-main"] #section-navigation .section-type-nav-btn {
+		flex: 0 0 auto;
+		white-space: nowrap;
+	}
+
+	[data-modal-id="kefin-homescreen-config-main"] .config-tab-label {
+		display: none;
+	}
+
+	[data-modal-id="kefin-homescreen-config-main"] .config-tab-btn {
+		padding: 0.75em;
+	}
+}
+
+/* .homeScreenSettingsContainer:has(#kefin-user-home-sections-editor) form>div:first-child > *:not(.verticalSection-extrabottompadding) {
     display: none;
 }
 
@@ -85,19 +209,135 @@ span.listItemBodyText.secondary.seasonal-tag {
     margin-bottom: 0;
 }
 
-.homeScreenSettingsContainer form {
-    display: flex;
-    flex-direction: column;
+.listItem.section-row:has(.discovery-tag) {
+    box-shadow: black inset 1px 1px 2px 1px;
+} */
+
+.homeScreenSettingsContainer:has(#kefin-user-home-sections-editor) .selectContainer {
+	display: none;
 }
 
-.homeScreenSettingsContainer form > * {
-    order: 2;
+/* Global Settings panel layouts */
+[data-modal-id="kefin-homescreen-config-main"] #global-settings-content .hsc-settings-panel {
+	display: flex;
+	flex-direction: column;
+	gap: 1em;
 }
 
-.homeScreenSettingsContainer #kefin-user-home-sections-editor {
-    order: 1;
+[data-modal-id="kefin-homescreen-config-main"] #global-settings-content .hsc-settings-desc {
+	font-size: 0.9em;
+	line-height: 1.5;
 }
 
-.kefin-restore-defaults-btn .restoreBtn::after {
-    content: 'Restore Defaults';
+[data-modal-id="kefin-homescreen-config-main"] #global-settings-content .hsc-settings-desc p {
+	margin: 0 0 0.75em;
 }
+
+[data-modal-id="kefin-homescreen-config-main"] #global-settings-content .hsc-settings-desc p:last-child {
+	margin-bottom: 0;
+}
+
+[data-modal-id="kefin-homescreen-config-main"] #global-settings-content .hsc-settings-grid {
+	display: grid;
+	gap: 0.75em;
+	align-items: stretch;
+}
+
+[data-modal-id="kefin-homescreen-config-main"] #global-settings-content .hsc-settings-grid-2 {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+[data-modal-id="kefin-homescreen-config-main"] #global-settings-content .hsc-settings-grid-3 {
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+[data-modal-id="kefin-homescreen-config-main"] #global-settings-content .hsc-settings-span-2 {
+	grid-column: 1 / -1;
+}
+
+[data-modal-id="kefin-homescreen-config-main"] #global-settings-content .hsc-settings-span-2 > .kefin-toggle-card {
+	width: 100%;
+}
+
+[data-modal-id="kefin-homescreen-config-main"] #global-settings-content .hsae-field-grid {
+	display: grid;
+	gap: 0.75em 1.25em;
+	margin-top: 0.75em;
+}
+
+[data-modal-id="kefin-homescreen-config-main"] #global-settings-content .hsae-spotlight-inner > .hsae-field-grid:first-child,
+[data-modal-id="kefin-homescreen-config-main"] #global-settings-content .hsae-spotlight-inner > .hsae-toggle-card-grid:first-child {
+	margin-top: 0;
+}
+
+[data-modal-id="kefin-homescreen-config-main"] #global-settings-content .hsae-field-grid-2 {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+[data-modal-id="kefin-homescreen-config-main"] #global-settings-content .hsae-field-grid-4 {
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+[data-modal-id="kefin-homescreen-config-main"] #global-settings-content .hsae-toggle-card-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 0.75em;
+	margin-top: 0.75em;
+}
+
+[data-modal-id="kefin-homescreen-config-main"] #global-settings-content .hsae-field-wrap {
+	min-width: 0;
+}
+
+[data-modal-id="kefin-homescreen-config-main"] #global-settings-content .hsae-field-wrap .fld,
+[data-modal-id="kefin-homescreen-config-main"] #global-settings-content .hsae-field-wrap select {
+	width: 100%;
+}
+
+[data-modal-id="kefin-homescreen-config-main"] #global-settings-content .hsae-query-divider {
+	height: 1px;
+	margin: 1em 0;
+	background: rgba(255, 255, 255, 0.1);
+	border: 0;
+}
+
+[data-modal-id="kefin-homescreen-config-main"] #global-settings-content .hsae-spotlight-backdrops-row {
+	margin-top: 0.75em;
+}
+
+[data-modal-id="kefin-homescreen-config-main"] #global-settings-content .hsae-spotlight-animations {
+	display: grid;
+	gap: 0.75em 1.25em;
+	grid-template-columns: minmax(0, 1fr);
+	margin-top: 0.75em;
+}
+
+[data-modal-id="kefin-homescreen-config-main"] #global-settings-content .hsae-spotlight-anim-group {
+	min-width: 0;
+}
+
+[data-modal-id="kefin-homescreen-config-main"] #global-settings-content .hsae-spotlight-row-autoplay {
+	margin-top: 0.75em;
+	align-items: end;
+}
+
+@media (max-width: 900px) {
+	[data-modal-id="kefin-homescreen-config-main"] #global-settings-content .hsae-field-grid-4 {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	[data-modal-id="kefin-homescreen-config-main"] #global-settings-content .hsc-settings-grid-3 {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
+@media (max-width: 640px) {
+	[data-modal-id="kefin-homescreen-config-main"] #global-settings-content .hsc-settings-grid-2,
+	[data-modal-id="kefin-homescreen-config-main"] #global-settings-content .hsc-settings-grid-3,
+	[data-modal-id="kefin-homescreen-config-main"] #global-settings-content .hsae-field-grid-2,
+	[data-modal-id="kefin-homescreen-config-main"] #global-settings-content .hsae-field-grid-4,
+	[data-modal-id="kefin-homescreen-config-main"] #global-settings-content .hsae-toggle-card-grid {
+		grid-template-columns: 1fr;
+	}
+}
+

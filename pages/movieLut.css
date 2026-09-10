@@ -1,0 +1,313 @@
+/* Movie LUT – mockup-aligned card layout */
+
+:root {
+	--mlut-bg: #2c2e33;
+	--mlut-card: #f4f1ea;
+	--mlut-text: #1a1b1e;
+	--mlut-muted: #5c5f66;
+	--mlut-border: #1a1b1e;
+	--mlut-btn: #1c7ed6;
+	--mlut-btn-text: #fff;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	margin: 0;
+	min-height: 100%;
+}
+
+body.mlut-body {
+	font-family:
+		"Segoe UI",
+		system-ui,
+		-apple-system,
+		sans-serif;
+	background: var(--mlut-bg);
+	color: #e9ecef;
+	padding: 1.5rem 0.75rem 3rem;
+}
+
+.mlut-app {
+	max-width: 1000px;
+	margin: 0 auto;
+	overflow: visible;
+}
+
+.mlut-header {
+	text-align: center;
+	margin-bottom: 1.25rem;
+}
+
+.mlut-header h1 {
+	margin: 0 0 0.35em;
+	font-size: 1.5rem;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+}
+
+.mlut-scorebar {
+	display: flex;
+	justify-content: center;
+	gap: 1.25rem;
+	margin: 0 0 1rem;
+	font-size: 0.9rem;
+	color: #ced4da;
+}
+
+.mlut-scorebar strong {
+	color: #fff;
+}
+
+.mlut-status {
+	text-align: center;
+	min-height: 1.4em;
+	margin: 0 0 1rem;
+	font-size: 0.9rem;
+	color: #ffd43b;
+}
+
+.mlut-status[data-tone="muted"] {
+	color: #adb5bd;
+}
+
+.mlut-status[data-tone="error"] {
+	color: #ffa8a8;
+}
+
+.mlut-status[data-tone="ok"] {
+	color: #8ce99a;
+}
+
+/* Stage: nav outside card (sides of swatch), full-width barcode under options */
+.mlut-stage {
+	display: grid;
+	grid-template-columns: 2.5rem minmax(0, 1fr) 2.5rem;
+	grid-template-rows: auto auto;
+	column-gap: 0.4rem;
+	row-gap: 0.35rem;
+	align-items: stretch;
+	overflow: visible;
+}
+
+.mlut-card {
+	grid-column: 2;
+	grid-row: 1;
+	background: var(--mlut-card);
+	color: var(--mlut-text);
+	border-radius: 14px;
+	overflow: hidden;
+	box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+	display: none;
+	flex-direction: column;
+	min-width: 0;
+}
+
+.mlut-card.is-visible {
+	display: flex;
+}
+
+.mlut-options {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.mlut-option {
+	display: block;
+	width: 100%;
+	text-align: left;
+	border: none;
+	border-bottom: 1px solid var(--mlut-border);
+	background: transparent;
+	color: var(--mlut-text);
+	font: inherit;
+	font-size: 0.95rem;
+	font-weight: 600;
+	padding: 0.9rem 1.1rem;
+	cursor: pointer;
+	transition: background 0.12s ease;
+}
+
+.mlut-option:last-of-type {
+	border-bottom: 1px solid var(--mlut-border);
+}
+
+.mlut-option:hover:not(:disabled),
+.mlut-option:focus-visible:not(:disabled) {
+	background: rgba(0, 0, 0, 0.05);
+	outline: none;
+}
+
+.mlut-option:disabled {
+	cursor: default;
+}
+
+.mlut-option .mlut-option-letter {
+	font-weight: 800;
+	margin-right: 0.35em;
+}
+
+.mlut-option.is-correct {
+	background: rgba(85, 62, 242, 0.8) !important;
+}
+
+.mlut-option.is-wrong {
+	background: rgba(197, 14, 14, 0.8) !important;
+}
+
+.mlut-nav-btn {
+	grid-row: 1;
+	width: 100%;
+	height: 100%
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border: none;
+	border-radius: 10px;
+	background: rgba(0, 0, 0, 0.35);
+	color: #f1f3f5;
+	cursor: pointer;
+	padding: 0;
+	transition:
+		background 0.12s ease,
+		color 0.12s ease;
+}
+
+#mlut-prev {
+	grid-column: 1;
+}
+
+#mlut-next {
+	grid-column: 3;
+}
+
+.mlut-nav-btn:hover,
+.mlut-nav-btn:focus-visible {
+	background: rgba(28, 126, 214, 0.55);
+	color: #fff;
+	outline: none;
+}
+
+.mlut-nav-btn[hidden] {
+	/* Keep the side columns so card width stays stable */
+	display: flex;
+	visibility: hidden;
+	pointer-events: none;
+}
+
+.mlut-swatch-wrap {
+	position: relative;
+	width: 100%;
+	height: 10rem;
+	background: #111;
+}
+
+.mlut-swatch {
+	display: block;
+	width: 100%;
+	height: 100%;
+	image-rendering: pixelated;
+}
+
+.mlut-swatch-placeholder {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: #868e96;
+	font-size: 0.85rem;
+	padding: 1rem;
+	text-align: center;
+}
+
+/* Post-guess stills under card; vertical pointers up to barcode stripes */
+.mlut-reveal {
+	grid-column: 2;
+	grid-row: 2;
+	position: relative;
+	padding: 0 0 0.5rem;
+	overflow: visible;
+}
+
+.mlut-reveal[hidden] {
+	display: none !important;
+}
+
+.mlut-reveal-connectors {
+	position: absolute;
+	left: 0;
+	top: 0;
+	width: 100%;
+	pointer-events: none;
+	overflow: visible;
+	z-index: 0;
+}
+
+.mlut-reveal-connectors line {
+	stroke: #dee2e6;
+	stroke-width: 2;
+	stroke-linecap: round;
+}
+
+.mlut-reveal-connectors polygon {
+	fill: #dee2e6;
+}
+
+.mlut-reveal-tiles {
+	position: relative;
+	z-index: 1;
+	display: flex;
+	justify-content: stretch;
+	align-items: flex-start;
+	gap: 0.5rem;
+	width: 100%;
+	padding-top: 2.75rem;
+	overflow: visible;
+}
+
+.mlut-reveal-tile {
+	/* Equal thirds under the swatch — left/right edges match barcode */
+	flex: 1 1 0;
+	min-width: 0;
+	margin: 0;
+}
+
+.mlut-reveal-tile canvas,
+.mlut-reveal-tile img,
+.mlut-reveal-tile .mlut-reveal-ph {
+	display: block;
+	width: 100%;
+	aspect-ratio: 16 / 9;
+	object-fit: cover;
+	border-radius: 8px;
+	border: 2px solid rgba(255, 255, 255, 0.4);
+	background: #111;
+	box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+}
+
+@media (min-width: 480px) {
+	.mlut-stage {
+		grid-template-columns: 2.75rem minmax(0, 1fr) 2.75rem;
+	}
+
+	.mlut-swatch-wrap {
+		height: 12rem;
+	}
+
+	.mlut-reveal-tiles {
+		padding-top: 3rem;
+		gap: 0.55rem;
+	}
+}
+
+.mlut-footer {
+    position: fixed;
+    bottom: 5vh;
+    left: 50%;
+    transform: translateX(-50%);
+}

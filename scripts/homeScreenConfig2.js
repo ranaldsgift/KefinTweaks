@@ -26,10 +26,12 @@
                 {
                     id: 'my-media',
                     name: 'My Media',
+                    jellyfinId: 'smalllibrarytiles',
                     enabled: false,
                     order: 5,
                     cardFormat: 'Thumb',
                     ttl: CACHE_CONFIG.LONG_TTL,
+                    userConfigurable: true,
                     queries: [
                         {
                             path: '/UserViews',
@@ -44,10 +46,12 @@
                 {
                     id: 'my-media-small',
                     name: 'My Media (Small)',
+                    jellyfinId: 'librarybuttons',
                     enabled: false,
                     order: 6,
                     cardFormat: 'Button',
                     ttl: CACHE_CONFIG.LONG_TTL,
+                    userConfigurable: true,
                     queries: [
                         {
                             path: '/UserViews',
@@ -68,20 +72,24 @@
             sections: [
                 {
                     id: 'continueWatching',
-                    name: 'Resume',
+                    name: 'Continue Watching',
+                    jellyfinId: 'resume',
                     enabled: false,
                     hidden: false,
                     order: 10,
                     cardFormat: 'Thumb',
                     ttl: CACHE_CONFIG.FORCE_REFRESH_TTL,
+                    userConfigurable: true,
                     queries: [
                         {
+                            path: '/UserItems/Resume',
                             queryOptions: {
-                                SortBy: 'DatePlayed',
-                                SortOrder: 'Descending',
-                                Filters: 'IsResumable',
-                                IncludeItemTypes: ['Episode', 'Movie'],
-                                Limit: 24
+                                MediaTypes: 'Video',
+                                Fields: 'PrimaryImageAspectRatio',
+                                Limit: 12,
+                                ImageTypeLimit: 1,
+                                EnableImageTypes: 'Primary,Backdrop,Thumb',
+                                EnableTotalRecordCount: 'false',
                             }
                         }
                     ]
@@ -89,24 +97,31 @@
                 {
                     id: 'nextUp',
                     name: 'Next Up',
+                    jellyfinId: 'nextup',
                     enabled: false,
                     hidden: false,
                     order: 11,
                     cardFormat: 'Thumb',
                     ttl: CACHE_CONFIG.FORCE_REFRESH_TTL,
+                    userConfigurable: true,
                     queries: [
                         {
                             path: '/Shows/NextUp',
                             queryOptions: {
+                                Fields: 'PrimaryImageAspectRatio,DateCreated,Path,MediaSourceCount',
                                 Limit: 24,
-                                EnableResumable: 'false'
+                                EnableResumable: 'false',
+                                ImageTypeLimit: 1,
+                                EnableImageTypes: 'Primary,Backdrop,Thumb',
+                                EnableTotalRecordCount: 'false',
                             }
                         }
                     ]
                 },
                 {
                     id: 'continueWatchingAndNextUp',
-                    name: 'Continue Watching',
+                    name: 'Continue Watching and Next Up',
+                    jellyfinId: 'resume',
                     enabled: false, // Disabled by default - only used when merge setting is enabled
                     order: 10,
                     hidden: true,
@@ -114,23 +129,29 @@
                     ttl: CACHE_CONFIG.FORCE_REFRESH_TTL,
                     sortBy: 'DatePlayed',      // Used to sort merged results from both queries
                     sortOrder: 'Descending',   // Most recent first
+                    userConfigurable: true,
                     queries: [
                         {
-                            // Continue Watching (Movies only when merged)
+                            path: '/UserItems/Resume',
                             queryOptions: {
-                                SortBy: 'DatePlayed',
-                                SortOrder: 'Descending',
-                                Filters: 'IsResumable',
+                                MediaTypes: 'Video',
                                 IncludeItemTypes: ['Movie'],
-                                Limit: 24
+                                Fields: 'PrimaryImageAspectRatio',
+                                Limit: 12,
+                                ImageTypeLimit: 1,
+                                EnableImageTypes: 'Primary,Backdrop,Thumb',
+                                EnableTotalRecordCount: 'false',
                             }
                         },
                         {
-                            // Next Up (Episodes)
                             path: '/Shows/NextUp',
                             queryOptions: {
+                                Fields: 'PrimaryImageAspectRatio,DateCreated,Path,MediaSourceCount',
                                 Limit: 24,
-                                EnableResumable: 'true'
+                                EnableResumable: 'true',
+                                ImageTypeLimit: 1,
+                                EnableImageTypes: 'Primary,Backdrop,Thumb',
+                                EnableTotalRecordCount: 'false',
                             }
                         }
                     ]
@@ -138,17 +159,23 @@
                 {
                     id: 'continueListening',
                     name: 'Continue Listening',
+                    jellyfinId: 'resumeaudio',
                     enabled: false,
                     hidden: false,
                     order: 10,
                     cardFormat: 'Square',
                     ttl: CACHE_CONFIG.FORCE_REFRESH_TTL,
+                    userConfigurable: true,
                     queries: [
                         {
                             path: '/UserItems/Resume',
                             queryOptions: {
                                 MediaTypes: 'Audio',
-                                Limit: 16
+                                Fields: 'PrimaryImageAspectRatio',
+                                Limit: 12,
+                                ImageTypeLimit: 1,
+                                EnableImageTypes: 'Primary,Backdrop,Thumb',
+                                EnableTotalRecordCount: 'false',
                             }
                         }
                     ]
@@ -156,17 +183,23 @@
                 {
                     id: 'continueReading',
                     name: 'Continue Reading',
+                    jellyfinId: 'resumebook',
                     enabled: false,
                     hidden: false,
                     order: 10,
                     cardFormat: 'Poster',
                     ttl: CACHE_CONFIG.FORCE_REFRESH_TTL,
+                    userConfigurable: true,
                     queries: [
                         {
                             path: '/UserItems/Resume',
                             queryOptions: {
                                 MediaTypes: 'Book',
-                                Limit: 16
+                                Fields: 'PrimaryImageAspectRatio',
+                                Limit: 12,
+                                ImageTypeLimit: 1,
+                                EnableImageTypes: 'Primary,Backdrop,Thumb',
+                                EnableTotalRecordCount: 'false',
                             }
                         }
                     ]
@@ -186,6 +219,8 @@
                     cardFormat: 'Thumb',
                     flattenSeries: true,
                     ttl: CACHE_CONFIG.LONG_TTL,
+                    userConfigurable: true,
+                    sectionCssClass: 'hideIndicators',
                     queries: [
                         {
                             path: '/Shows/Upcoming',
@@ -209,6 +244,7 @@
                     order: 20,
                     cardFormat: 'Poster',
                     ttl: CACHE_CONFIG.DEFAULT_TTL,
+                    userConfigurable: true,
                     queries: [
                         {
                             minAge: 0,
@@ -231,6 +267,7 @@
                     cardFormat: 'Thumb',
                     flattenSeries: true,
                     ttl: CACHE_CONFIG.DEFAULT_TTL,
+                    userConfigurable: true,
                     queries: [
                         {
                             minAge: 0,
@@ -261,15 +298,20 @@
                 {
                     id: 'liveTv-recordings',
                     name: 'Recordings',
+                    jellyfinId: 'activerecordings',
                     enabled: false,
                     order: 90,
                     cardFormat: 'Poster',
                     ttl: CACHE_CONFIG.SHORT_TTL,
+                    userConfigurable: true,
                     queries: [
                         {
                             path: '/LiveTv/Recordings',
                             queryOptions: {
-                                Limit: 20,
+                                IsInProgress: true,
+                                Fields: 'PrimaryImageAspectRatio',
+                                Limit: 12,
+                                EnableTotalRecordCount: 'false',
                             }
                         }
                     ]
@@ -281,6 +323,7 @@
                     order: 91,
                     cardFormat: 'Poster',
                     ttl: CACHE_CONFIG.SHORT_TTL,
+                    userConfigurable: true,
                     queries: [
                         {
                             path: '/LiveTv/Timers',
@@ -295,9 +338,11 @@
                 {
                     id: 'liveTv-browse',
                     name: 'Live TV',
+                    jellyfinId: 'livetv',
                     enabled: false,
                     order: 91,
                     cardFormat: 'Button',
+                    userConfigurable: true,
                     items: [
                         {
                             Name: 'Programs',
@@ -328,16 +373,22 @@
                 {
                     id: 'liveTv-on-now',
                     name: 'On Now',
+                    jellyfinId: 'livetv',
                     enabled: false,
                     order: 92,
                     cardFormat: 'Poster',
                     ttl: CACHE_CONFIG.VERY_SHORT_TTL,
+                    userConfigurable: true,
                     queries: [
                         {
                             path: '/LiveTv/Programs/Recommended',
                             queryOptions: {
                                 IsAiring: true,
-                                Limit: 24,
+                                Fields: 'ChannelInfo,PrimaryImageAspectRatio',
+                                Limit: 1,
+                                ImageTypeLimit: 1,
+                                EnableImageTypes: 'Primary,Backdrop,Thumb',
+                                EnableTotalRecordCount: 'false',
                             }
                         }
                     ]
@@ -349,6 +400,7 @@
                     order: 92,
                     cardFormat: 'Poster',
                     ttl: CACHE_CONFIG.VERY_SHORT_TTL,
+                    userConfigurable: true,
                     queries: [
                         {
                             path: '/LiveTv/Programs',
@@ -368,6 +420,7 @@
                     cardFormat: 'Thumb',
                     hideCardFooter: true,
                     ttl: CACHE_CONFIG.LONG_TTL,
+                    userConfigurable: true,
                     queries: [
                         {
                             path: '/LiveTv/Channels',
@@ -385,6 +438,7 @@
                     order: 92,
                     cardFormat: 'Poster',
                     ttl: CACHE_CONFIG.VERY_SHORT_TTL,
+                    userConfigurable: true,
                     queries: [
                         {
                             path: '/LiveTv/Programs',
@@ -408,6 +462,7 @@
                     order: 92,
                     cardFormat: 'Poster',
                     ttl: CACHE_CONFIG.VERY_SHORT_TTL,
+                    userConfigurable: true,
                     queries: [
                         {
                             path: '/LiveTv/Programs',
@@ -427,6 +482,7 @@
                     order: 92,
                     cardFormat: 'Poster',
                     ttl: CACHE_CONFIG.VERY_SHORT_TTL,
+                    userConfigurable: true,
                     queries: [
                         {
                             path: '/LiveTv/Programs',
@@ -446,6 +502,7 @@
                     order: 92,
                     cardFormat: 'Poster',
                     ttl: CACHE_CONFIG.VERY_SHORT_TTL,
+                    userConfigurable: true,
                     queries: [
                         {
                             path: '/LiveTv/Programs',
@@ -465,6 +522,7 @@
                     order: 92,
                     cardFormat: 'Poster',
                     ttl: CACHE_CONFIG.VERY_SHORT_TTL,
+                    userConfigurable: true,
                     queries: [
                         {
                             path: '/LiveTv/Programs',
@@ -491,6 +549,7 @@
                     order: 70,
                     cardFormat: 'Poster',
                     ttl: CACHE_CONFIG.LONG_TTL,
+                    userConfigurable: true,
                     queries: [
                         {
                             dataSource: 'MoviesCache.getImdbTop250Movies',
@@ -520,6 +579,7 @@
                     sortBy: 'Random',
                     limitBeforeSort: true,
                     hideCardFooter: true,
+                    userConfigurable: true,
                     queries: [
                         {
                             path: '/Studios',
@@ -543,6 +603,7 @@
                     sortBy: 'Random',
                     limitBeforeSort: true,
                     hideCardFooter: true,
+                    userConfigurable: true,
                     queries: [
                         {
                             path: '/Studios',
@@ -566,6 +627,7 @@
                     sortBy: 'Random',
                     limitBeforeSort: true,
                     hideCardFooter: true,
+                    userConfigurable: true,
                     queries: [
                         {
                             path: '/Studios',
@@ -598,6 +660,7 @@
                     order: 73,
                     cardFormat: 'Random',
                     ttl: CACHE_CONFIG.DEFAULT_TTL,
+                    userConfigurable: true,
                     queries: [
                         {
                             queryOptions: {
@@ -623,6 +686,7 @@
                     order: 71,
                     cardFormat: 'Poster',
                     ttl: CACHE_CONFIG.DEFAULT_TTL,
+                    userConfigurable: true,
                     queries: [
                         {
                             queryOptions: {
@@ -648,6 +712,7 @@
                     order: 74,
                     cardFormat: 'Poster',
                     ttl: CACHE_CONFIG.DEFAULT_TTL,
+                    userConfigurable: true,
                     queries: [
                         {
                             queryOptions: {
@@ -667,6 +732,7 @@
                     order: 75,
                     cardFormat: 'Poster',
                     ttl: CACHE_CONFIG.DEFAULT_TTL,
+                    userConfigurable: true,
                     queries: [
                         {
                             queryOptions: {
@@ -685,6 +751,7 @@
                     order: 76,
                     cardFormat: 'Poster',
                     ttl: CACHE_CONFIG.DEFAULT_TTL,
+                    userConfigurable: true,
                     queries: [
                         {
                             queryOptions: {
@@ -702,6 +769,7 @@
                     order: 77,
                     cardFormat: 'Poster',
                     ttl: CACHE_CONFIG.DEFAULT_TTL,
+                    userConfigurable: true,
                     queries: [
                         {
                             queryOptions: {
@@ -723,6 +791,7 @@
                     id: 'thematic-story-origins',
                     name: 'Story Origins',
                     enabled: false,
+                    userConfigurable: true,
                     order: 81,
                     cardFormat: 'Poster',
                     sortBy: 'Random',
@@ -741,6 +810,7 @@
                     id: 'thematic-core-concepts',
                     name: 'Core Concepts',
                     enabled: false,
+                    userConfigurable: true,
                     order: 82,
                     cardFormat: 'Poster',
                     sortBy: 'Random',
@@ -772,6 +842,7 @@
                     id: 'thematic-crime-stories',
                     name: 'Crime Stories',
                     enabled: false,
+                    userConfigurable: true,
                     order: 83,
                     cardFormat: 'Poster',
                     sortBy: 'Random',
@@ -795,6 +866,7 @@
                     id: 'thematic-character-perspective',
                     name: 'Character Perspective',
                     enabled: false,
+                    userConfigurable: true,
                     order: 84,
                     cardFormat: 'Poster',
                     sortBy: 'Random',
@@ -815,6 +887,7 @@
                     id: 'thematic-settings',
                     name: 'Settings',
                     enabled: false,
+                    userConfigurable: true,
                     order: 85,
                     cardFormat: 'Poster',
                     sortBy: 'Random',
@@ -836,6 +909,7 @@
                     id: 'thematic-tone-style',
                     name: 'Tone & Style',
                     enabled: false,
+                    userConfigurable: true,
                     order: 86,
                     cardFormat: 'Poster',
                     sortBy: 'Random',
@@ -854,6 +928,7 @@
                     id: 'thematic-themes-topics',
                     name: 'Themes & Topics',
                     enabled: false,
+                    userConfigurable: true,
                     order: 87,
                     cardFormat: 'Poster',
                     sortBy: 'Random',
@@ -886,6 +961,7 @@
                     id: 'seasonal.halloween.halloween-tag',
                     name: 'Halloween Movies',
                     enabled: true,
+                    userConfigurable: true,
                     startDate: '10-01',
                     endDate: '10-31',
                     order: 50,
@@ -905,6 +981,7 @@
                     id: 'seasonal.halloween.halloween-horror',
                     name: 'Horror Movies',
                     enabled: true,
+                    userConfigurable: true,
                     startDate: '10-01',
                     endDate: '10-31',
                     order: 51,
@@ -924,6 +1001,7 @@
                     id: 'seasonal.halloween.halloween-thriller',
                     name: 'Thriller Movies',
                     enabled: true,
+                    userConfigurable: true,
                     startDate: '10-01',
                     endDate: '10-31',
                     order: 52,
@@ -950,6 +1028,7 @@
                     id: 'seasonal.christmas.christmas-movies',
                     name: 'Christmas Movies',
                     enabled: true,
+                    userConfigurable: true,
                     startDate: '12-01',
                     endDate: '12-31',
                     order: 50,
@@ -970,6 +1049,7 @@
                     id: 'seasonal.christmas.christmas-episodes',
                     name: 'Christmas Episodes',
                     enabled: true,
+                    userConfigurable: true,
                     startDate: '12-01',
                     endDate: '12-31',
                     order: 51,
@@ -996,6 +1076,7 @@
                     id: 'seasonal.new-years.new-years-movies',
                     name: 'New Year\'s Movies',
                     enabled: true,
+                    userConfigurable: true,
                     startDate: '01-01',
                     endDate: '01-02',
                     order: 50,
@@ -1015,6 +1096,7 @@
                     id: 'seasonal.new-years.new-years-episodes',
                     name: 'New Year\'s Episodes',
                     enabled: true,
+                    userConfigurable: true,
                     startDate: '01-01',
                     endDate: '01-02',
                     order: 51,
@@ -1041,6 +1123,7 @@
                     id: 'seasonal.valentines.valentines-movies',
                     name: 'Valentine\'s Movies',
                     enabled: true,
+                    userConfigurable: true,
                     startDate: '02-07',
                     endDate: '02-14',
                     order: 50,
@@ -1060,6 +1143,7 @@
                     id: 'seasonal.valentines.valentines-episodes',
                     name: 'Valentine\'s Episodes',
                     enabled: true,
+                    userConfigurable: true,
                     startDate: '02-07',
                     endDate: '02-14',
                     order: 51,
@@ -1086,6 +1170,7 @@
                     id: 'seasonal.thanksgiving.thanksgiving-movies',
                     name: 'Thanksgiving Movies',
                     enabled: true,
+                    userConfigurable: true,
                     startDate: '11-20',
                     endDate: '11-30',
                     order: 50,
@@ -1105,6 +1190,7 @@
                     id: 'seasonal.thanksgiving.thanksgiving-episodes',
                     name: 'Thanksgiving Episodes',
                     enabled: true,
+                    userConfigurable: true,
                     startDate: '11-20',
                     endDate: '11-30',
                     order: 51,
@@ -1135,10 +1221,12 @@
             sections: [
                 {
                     id: 'genreMovies',
-                    type: 'Genre',
+                    type: 'discovery',
+                    discoveryType: 'Genre',
                     source: 'Dynamic', // Will be filled with a random Genre ID/Name
                     name: '{Genre} Movies',
                     enabled: true,
+                    userConfigurable: true,
                     itemLimit: 20,
                     sortOrder: 'Random',
                     cardFormat: 'Poster',
@@ -1147,10 +1235,12 @@
                 },
                 {
                     id: 'spotlightGenre',
-                    type: 'Genre',
+                    type: 'discovery',
+                    discoveryType: 'Genre',
                     source: 'Dynamic',
                     name: 'Top Rated {Genre}',
                     enabled: true,
+                    userConfigurable: true,
                     itemLimit: 20,
                     sortOrder: 'CommunityRating',
                     sortOrderDirection: 'Descending',
@@ -1167,11 +1257,13 @@
             sections: [
                 {
                     id: 'directedByTopDirector',
-                    type: 'Person',
+                    type: 'discovery',
+                    discoveryType: 'Person',
                     source: 'Dynamic', // Random Director ID
                     personType: 'Director', // Extra metadata for dynamic logic
                     name: 'Directed by {Person}',
                     enabled: true,
+                    userConfigurable: true,
                     itemLimit: 20,
                     sortOrder: 'Random',
                     cardFormat: 'Poster',
@@ -1180,11 +1272,13 @@
                 },
                 {
                     id: 'writtenByTopWriter',
-                    type: 'Person',
+                    type: 'discovery',
+                    discoveryType: 'Person',
                     source: 'Dynamic', // Random Writer ID
                     personType: 'Writer',
                     name: 'Written by {Person}',
                     enabled: true,
+                    userConfigurable: true,
                     itemLimit: 20,
                     sortOrder: 'Random',
                     cardFormat: 'Poster',
@@ -1193,11 +1287,13 @@
                 },
                 {
                     id: 'starringTopActor',
-                    type: 'Person',
+                    type: 'discovery',
+                    discoveryType: 'Person',
                     source: 'Dynamic', // Random Actor ID
                     personType: 'Actor',
                     name: 'Starring {Person}',
                     enabled: true,
+                    userConfigurable: true,
                     itemLimit: 20,
                     sortOrder: 'Random',
                     cardFormat: 'Poster',
@@ -1213,12 +1309,15 @@
             sections: [
                 {
                     id: 'starringActorRecentlyWatched',
-                    type: 'Person',
+                    type: 'discovery',
+                    discoveryType: 'Person',
                     source: 'Dynamic', // Actor from Recently Watched
                     personType: 'Actor',
                     sourceType: 'watched-recent', // Hint for source generator
-                    name: 'Starring {Person} since you watched {Title}',
+                    name: 'Starring {Person}',
+                    caption: 'because you recently watched {Title}',
                     enabled: true,
+                    userConfigurable: true,
                     itemLimit: 20,
                     sortOrder: 'Random',
                     cardFormat: 'Poster',
@@ -1227,12 +1326,15 @@
                 },
                 {
                     id: 'directedByDirectorRecentlyWatched',
-                    type: 'Person',
+                    type: 'discovery',
+                    discoveryType: 'Person',
                     source: 'Dynamic', // Director from Recently Watched
                     personType: 'Director',
                     sourceType: 'watched-recent',
-                    name: 'Directed by {Person} since you watched {Title}',
+                    name: 'Directed by {Person}',
+                    caption: 'because you recently watched {Title}',
                     enabled: true,
+                    userConfigurable: true,
                     itemLimit: 20,
                     sortOrder: 'Random',
                     cardFormat: 'Poster',
@@ -1241,12 +1343,15 @@
                 },
                 {
                     id: 'writtenByWriterRecentlyWatched',
-                    type: 'Person',
+                    type: 'discovery',
+                    discoveryType: 'Person',
                     source: 'Dynamic',
                     personType: 'Writer',
                     sourceType: 'watched-recent',
-                    name: 'Written by {Person} since you watched {Title}',
+                    name: 'Written by {Person}',
+                    caption: 'because you recently watched {Title}',
                     enabled: true,
+                    userConfigurable: true,
                     itemLimit: 20,
                     sortOrder: 'Random',
                     cardFormat: 'Poster',
@@ -1262,11 +1367,13 @@
             sections: [
                 {
                     id: 'becauseYouWatched',
-                    type: 'Similar',
+                    type: 'discovery',
+                    discoveryType: 'Similar',
                     source: 'Dynamic', // Random Watched Item ID
                     sourceType: 'watched',
                     name: 'Because you watched {Title}',
                     enabled: true,
+                    userConfigurable: true,
                     itemLimit: 20,
                     sortOrder: 'Random', // Typically 'Similarity' but usually returned sorted by API
                     includeItemTypes: ['Movie'],
@@ -1274,11 +1381,13 @@
                 },
                 {
                     id: 'becauseYouRecentlyWatched',
-                    type: 'Similar',
+                    type: 'discovery',
+                    discoveryType: 'Similar',
                     source: 'Dynamic', // Random Recently Watched ID
                     sourceType: 'watched-recent',
                     name: 'Because you recently watched {Title}',
                     enabled: true,
+                    userConfigurable: true,
                     itemLimit: 20,
                     sortOrder: 'Random',
                     cardFormat: 'Poster',
@@ -1294,11 +1403,13 @@
             sections: [
                 {
                     id: 'becauseYouLiked',
-                    type: 'Similar',
+                    type: 'discovery',
+                    discoveryType: 'Similar',
                     source: 'Dynamic', // Random Favorite Item ID
                     sourceType: 'liked',
                     name: 'Because you liked {Title}',
                     enabled: true,
+                    userConfigurable: true,
                     itemLimit: 20,
                     sortOrder: 'Random',
                     cardFormat: 'Poster',
@@ -1314,10 +1425,12 @@
             sections: [
                 {
                     id: 'studioShows',
-                    type: 'Studio',
+                    type: 'discovery',
+                    discoveryType: 'Studio',
                     source: 'Dynamic', // Random Studio ID
                     name: 'Shows from {Studio}',
                     enabled: true,
+                    userConfigurable: true,
                     itemLimit: 20,
                     sortOrder: 'Random',
                     cardFormat: 'Poster',
@@ -1326,10 +1439,12 @@
                 },
                 {
                     id: 'spotlightNetwork',
-                    type: 'Studio',
+                    type: 'discovery',
+                    discoveryType: 'Studio',
                     source: 'Dynamic',
                     name: 'Top Rated from {Studio}',
                     enabled: true,
+                    userConfigurable: true,
                     itemLimit: 20,
                     sortOrder: 'CommunityRating',
                     sortOrderDirection: 'Descending',
@@ -1346,10 +1461,12 @@
             sections: [
                 {
                     id: 'collections',
-                    type: 'Collection', // Standard type, but source is dynamic here
+                    type: 'discovery',
+                    discoveryType: 'Collection',
                     source: 'Dynamic',
                     name: '{Collection}',
                     enabled: true,
+                    userConfigurable: true,
                     itemLimit: 20,
                     sortOrder: 'Random', // Order within the collection
                     includeItemTypes: ['Movie', 'Series'],
@@ -1400,6 +1517,12 @@
         minimumSeriesForPopularTVNetworks: 10,
         fadeInSections: false,
         ensureThumbsForPopularTVNetworks: false,
+        SHOW_STALE_DATA_BEFORE_REFRESH: false,
+    }
+
+    const USER_HOME_SCREEN_SETTINGS = {
+        inlineConfigure: true,
+        pinning: true
     }
 
     const SPOTLIGHT_SETTINGS = {
@@ -1421,10 +1544,27 @@
         REMOVE_CONFLICTING_SECTIONS: true,
         MERGE_NEXT_UP: false,
         HOME_SETTINGS: HOME_SETTINGS,
+        USER_HOME_SCREEN_SETTINGS: USER_HOME_SCREEN_SETTINGS,
         DISCOVERY_SETTINGS: DISCOVERY_SETTINGS,
         SEASONAL_THEME_SETTINGS: SEASONAL_THEME_SETTINGS,
         SPOTLIGHT_SETTINGS: SPOTLIGHT_SETTINGS
     };
+
+    /*
+    window.KefinHomeUserConfig = {
+        CACHE: CACHE_CONFIG,
+        HOME_SECTION_GROUPS: KEFINTWEAKS_HOME_SECTION_GROUPS, // modified by user configuration
+        SEASONAL_SECTION_GROUPS: KEFINTWEAKS_SEASONAL_SECTION_GROUPS, // modified by user configuration`
+        DISCOVERY_SECTION_GROUPS: KEFINTWEAKS_DISCOVERY_SECTION_GROUPS, // modified by user configuration
+        CUSTOM_SECTION_GROUPS: [], // Empty by default - user-created/imported sections // modified by user configuration
+        REMOVE_CONFLICTING_SECTIONS: true,
+        MERGE_NEXT_UP: false,
+        HOME_SETTINGS: HOME_SETTINGS,
+        DISCOVERY_SETTINGS: DISCOVERY_SETTINGS,
+        SEASONAL_THEME_SETTINGS: SEASONAL_THEME_SETTINGS,
+        SPOTLIGHT_SETTINGS: SPOTLIGHT_SETTINGS
+    }
+    */
 
     console.log('[KefinTweaks HomeConfig2] Configuration loaded');
 

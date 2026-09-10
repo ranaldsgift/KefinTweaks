@@ -18,10 +18,9 @@
          */
         createBadge(value, displayText) {
             const badge = document.createElement('span');
-            badge.className = 'tag-badge';
+            badge.className = 'tag-badge kt-autocomplete-badge';
             badge.setAttribute('data-value', value);
-            badge.style.cssText = 'display: inline-flex; align-items: center; gap: 0.25em; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 0.25em 0.5em; margin: 0.25em; font-size: 0.9em;';
-            badge.innerHTML = `${displayText}<button type="button" class="tag-badge-remove" style="background: none; border: none; color: rgba(255,255,255,0.7); cursor: pointer; padding: 0; margin-left: 0.25em; font-size: 1.2em; line-height: 1; display: flex; align-items: center;" title="Remove">×</button>`;
+            badge.innerHTML = `${displayText}<button type="button" class="tag-badge-remove kt-autocomplete-badge-remove" title="Remove"><span class="material-icons">close</span></button>`;
             return badge;
         },
         
@@ -127,6 +126,7 @@
             sectionIndex,
             container,
             label = type,
+            description = '',
             currentValuesArray = [],
             availableTypes = null,
             includeItemTypes = null,
@@ -163,9 +163,9 @@
             const displayText = (type === 'Collection' || type === 'Playlist') && typeof val === 'object' ? val.name : val;
             const value = (type === 'Collection' || type === 'Playlist') && typeof val === 'object' ? val.id : val;
             return `
-                <span class="tag-badge" data-value="${value}" ${(type === 'Collection' || type === 'Playlist') ? 'data-loading="true"' : ''} style="display: inline-flex; align-items: center; gap: 0.25em; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 0.25em 0.5em; margin: 0.25em; font-size: 0.9em;">
+                <span class="tag-badge kt-autocomplete-badge" data-value="${value}" ${(type === 'Collection' || type === 'Playlist') ? 'data-loading="true"' : ''}>
                     ${displayText}
-                    <button type="button" class="tag-badge-remove" style="background: none; border: none; color: rgba(255,255,255,0.7); cursor: pointer; padding: 0; margin-left: 0.25em; font-size: 1.2em; line-height: 1; display: flex; align-items: center;" title="Remove">×</button>
+                    <button type="button" class="tag-badge-remove kt-autocomplete-badge-remove" title="Remove"><span class="material-icons">close</span></button>
                 </span>
             `;
         }).join('');
@@ -173,37 +173,31 @@
         const typeKey = type === 'IncludeItemTypes' ? 'includeItemTypes' : type.toLowerCase();
         const placeholderText = type === 'IncludeItemTypes' ? 'Type to add item type...' : `Type to add ${type.toLowerCase()}...`;
 
-        // Determine if refresh button should be shown (for cached data types)
         const showRefresh = (type === 'Tag' || type === 'Genre' || type === 'Collection' || type === 'Playlist');
-        
-        // Determine if badges should appear below input (for IncludeItemTypes, Genres, Tags)
-        // Check for both singular and plural forms since type may be normalized
-        const badgesBelowInput = (type === 'IncludeItemTypes' || type === 'Genres' || type === 'Tags' || type === 'Genre' || type === 'Tag');
-        
+
         html = `
-            <div class="${prefix}_${typeKey}_container" data-section-index="${sectionIndex}" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; position: static;">
-                <div style="position: relative;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5em;">
-                        <div class="listItemBodyText">${label}</div>
-                        <div style="display: flex; gap: 0.5em;">
-                            ${showRefresh ? `<button type="button" class="badge-refresh" data-section-index="${sectionIndex}" data-type="${type}" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 0.25em 0.5em; color: rgba(255,255,255,0.87); cursor: pointer; font-size: 0.85em;" title="Refresh Data">🔄</button>` : ''}
-                            <button type="button" class="badge-clear-all" data-section-index="${sectionIndex}" data-type="${type}" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 0.25em 0.5em; color: rgba(255,255,255,0.87); cursor: pointer; font-size: 0.85em;" title="Clear All">Clear All</button>
-                        </div>
+            <div class="kt-autocomplete-control tag-badge-container ${prefix}_${typeKey}_container" data-section-index="${sectionIndex}" data-prefix="${prefix}" data-type="${type}" ${type === 'IncludeItemTypes' ? `data-available-types="${allAvailableItemTypes.join(',')}"` : ''}>
+                <div class="kt-autocomplete-header">
+                    <div class="kt-autocomplete-text">
+                        <div class="listItemBodyText kt-autocomplete-label">${label}</div>
+                        ${description ? `<div class="listItemBodyText secondary kt-autocomplete-desc">${description}</div>` : ''}
                     </div>
-                    <div class="tag-badge-container" data-section-index="${sectionIndex}" data-prefix="${prefix}" data-type="${type}" ${type === 'IncludeItemTypes' ? `data-available-types="${allAvailableItemTypes.join(',')}"` : ''} style="min-height: 2.5em; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 0.5em; margin-bottom: 0.5em; background: rgba(0,0,0,0.2); ${badgesBelowInput ? 'display: block;' : 'display: flex; gap: 0.5em; align-items: flex-start;'} overflow: hidden; position: relative;">
-                        <div style="display: flex; align-items: center; gap: 0.25em; ${badgesBelowInput ? 'width: 100%; margin-bottom: 0.5em;' : 'flex: 0 0 auto; width: 200px; min-width: 200px;'}">
-                            <input type="text" class="${prefix}_${typeKey} fld emby-input autocomplete-input" data-section-index="${sectionIndex}" data-prefix="${prefix}" data-type="${type}" placeholder="${placeholderText}" autocomplete="off" style="flex: 1; border: none; background: transparent; outline: none; color: rgba(255,255,255,0.87); padding: 0.25em;">
-                            <button type="button" class="autocomplete-chevron" data-section-index="${sectionIndex}" data-type="${type}" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 0.25em; color: rgba(255,255,255,0.87); cursor: pointer; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px;" title="Show All Options">
-                                <span class="material-icons" style="font-size: 18px;">keyboard_arrow_down</span>
-                            </button>
-                        </div>
-                        <div class="tag-badge-wrapper" style="${badgesBelowInput ? 'width: 100%;' : 'flex: 1; min-width: 0;'} display: flex; flex-wrap: wrap; gap: 0.25em; align-items: flex-start; overflow-wrap: break-word;">
-                            ${badgesHtml}
-                        </div>
+                    <div class="kt-autocomplete-actions">
+                        ${showRefresh ? `<button type="button" class="kt-autocomplete-icon-btn badge-refresh" data-section-index="${sectionIndex}" data-type="${type}" title="Refresh data"><span class="material-icons">refresh</span></button>` : ''}
+                        <button type="button" class="kt-autocomplete-icon-btn badge-clear-all" data-section-index="${sectionIndex}" data-type="${type}" title="Clear all"><span class="material-icons">clear_all</span></button>
                     </div>
-                    <input type="hidden" class="${prefix}_${typeKey}_hidden" data-section-index="${sectionIndex}" value="${currentValues.map(v => typeof v === 'object' ? v.id : v).join(', ')}">
-                    <div class="autocomplete-suggestions" data-section-index="${sectionIndex}" style="display: none; position: absolute; z-index: 10000; background: #1a1a1a !important; color: rgba(255,255,255,0.87) !important; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; max-height: 200px; overflow-y: auto; margin-top: 2px; width: 100%; box-sizing: border-box; opacity: 1 !important; top: 100%; left: 0;"></div>
                 </div>
+                <div class="kt-autocomplete-field">
+                    <div class="kt-autocomplete-input-row">
+                        <input type="text" class="${prefix}_${typeKey} fld emby-input autocomplete-input" data-section-index="${sectionIndex}" data-prefix="${prefix}" data-type="${type}" placeholder="${placeholderText}" autocomplete="off">
+                        <button type="button" class="kt-autocomplete-icon-btn autocomplete-chevron" data-section-index="${sectionIndex}" data-type="${type}" title="Show all options">
+                            <span class="material-icons">keyboard_arrow_down</span>
+                        </button>
+                    </div>
+                    <div class="autocomplete-suggestions" data-section-index="${sectionIndex}"></div>
+                </div>
+                <div class="tag-badge-wrapper kt-autocomplete-badges">${badgesHtml}</div>
+                <input type="hidden" class="${prefix}_${typeKey}_hidden" data-section-index="${sectionIndex}" value="${currentValues.map(v => typeof v === 'object' ? v.id : v).join(', ')}">
             </div>
         `;
 
@@ -827,41 +821,6 @@
     }
 
     /**
-     * Build toggle slider HTML (simplified version for user editor)
-     */
-    function buildToggleSliderHTML(checked, sectionId, onToggle) {
-        const isEnabled = checked !== false;
-        return `
-            <button type="button" class="toggle-slider section-toggle-switch" data-section-id="${sectionId}" data-enabled="${isEnabled}" style="
-                position: relative;
-                width: 60px;
-                height: 28px;
-                border-radius: 14px;
-                border: none;
-                background: ${isEnabled ? 'rgba(0, 164, 220, 0.8)' : 'rgba(158, 158, 158, 0.5)'};
-                cursor: pointer;
-                transition: background-color 0.3s ease;
-                flex-shrink: 0;
-                padding: 0;
-                display: flex;
-                align-items: center;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-            ">
-                <span style="
-                    position: absolute;
-                    left: ${isEnabled ? '32px' : '2px'};
-                    width: 24px;
-                    height: 24px;
-                    border-radius: 50%;
-                    background: white;
-                    transition: left 0.3s ease;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-                "></span>
-            </button>
-        `;
-    }
-
-    /**
      * Build section row HTML for order editor
      */
     function buildSectionRowHTMLForEditor(section, options = {}) {
@@ -889,7 +848,11 @@
         return `
             <div class="listItem viewItem section-row" data-section-id="${sectionId}" data-section-type="${sectionType}" ${draggableAttr} ${dataAttrsStr}>
                 <span class="material-icons drag_handle"></span>
-                ${buildToggleSliderHTML(isEnabled, sectionId)}
+                ${buildToggleSlider('', isEnabled, '', {
+                    wrapInLabel: false,
+                    cssClass: 'toggle-slider section-toggle-switch',
+                    dataAttributes: { 'section-id': sectionId }
+                })}
                 <div class="listItemBody">
                     <div style="display: flex; align-items: center; gap: 0.5em;">
                         <span>${sectionName.replace(/"/g, '&quot;')}</span>
@@ -1432,17 +1395,28 @@
             const currentState = sectionsContainer.getAttribute(attrName);
             const newState = currentState === 'false' ? 'true' : 'false';
             const newStateBool = newState === 'true';
-            
-            // Update container attribute
+
+            // Keep at least one section type visible — do not turn off the last active type
+            if (!newStateBool && currentState === 'true') {
+                let enabledTypeCount = 0;
+                for (const attr of sectionsContainer.attributes) {
+                    if (attr.name.startsWith('data-section-type-') && attr.value === 'true') {
+                        enabledTypeCount++;
+                    }
+                }
+                if (enabledTypeCount <= 1) {
+                    return;
+                }
+            }
+
             sectionsContainer.setAttribute(attrName, newState);
-            
-            // Update button appearance
+
             if (newStateBool) {
                 toggleBtn.classList.add('button-submit');
             } else {
                 toggleBtn.classList.remove('button-submit');
             }
-            
+
             // Save the new state to localStorage
             const savedToggleStates = getSectionTypeToggleStates();
             savedToggleStates[sectionTypeLower] = newStateBool;
@@ -1553,12 +1527,329 @@
         }
     }
 
+    /**
+     * Escape HTML special characters for safe attribute/text insertion.
+     */
+    function escapeHtml(str) {
+        if (str == null) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    /**
+     * Build Jellyfin select/dropdown HTML
+     */
+    function buildSelect(id, options, selectedValue, label) {
+        const optionsHTML = options.map(opt => {
+            const value = typeof opt === 'string' ? opt : opt.value;
+            const optLabel = typeof opt === 'string' ? opt : opt.label;
+            const selected = value === selectedValue ? 'selected' : '';
+            return `<option value="${value}" ${selected}>${optLabel}</option>`;
+        }).join('');
+
+        return `
+            <div class="hsae-field-wrap">
+                <label class="listItemBodyText" for="${id}" style="display: block; margin-bottom: 0.25em;">${label}</label>
+                <select id="${id}" class="fld emby-select emby-select-withcolor">
+                    ${optionsHTML}
+                </select>
+            </div>
+        `;
+    }
+
+    /**
+     * Build Jellyfin text input HTML
+     * @param {Record<string, string|number|boolean>} [attrs] Extra HTML attributes (e.g. { min: 0, step: 1 })
+     */
+    function buildTextInput(id, value, label, type = 'text', placeholder = '', attrs = {}) {
+        const extraAttrs = Object.entries(attrs || {})
+            .filter(([, v]) => v != null && v !== false)
+            .map(([k, v]) => (v === true
+                ? ` ${k}`
+                : ` ${k}="${String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"`))
+            .join('');
+        return `
+            <div class="hsae-field-wrap">
+                <label class="listItemBodyText" for="${id}" style="display: block; margin-bottom: 0.25em;">${label}</label>
+                <input type="${type}" id="${id}" class="fld emby-input" value="${value || ''}" placeholder="${placeholder || ''}"${extraAttrs}>
+            </div>
+        `;
+    }
+
+    /**
+     * Build checkbox control HTML (Jellyfin emby-checkbox markup).
+     * @param {string} [id] - Optional input id (omit/empty for class-based inputs)
+     * @param {boolean} checked
+     * @param {string} label
+     * @param {object} [options]
+     * @param {string} [options.className] - Extra classes on the input
+     * @param {object} [options.dataAttributes] - data-* attrs, e.g. { id: 'x' } → data-id="x"
+     * @param {boolean} [options.wrapInSection] - Wrap in .sectioncheckbox
+     */
+    function buildCheckbox(id, checked, label, options = {}) {
+        const {
+            className = '',
+            dataAttributes = {},
+            wrapInSection = false
+        } = options;
+
+        const safeLabel = escapeHtml(label);
+        const idAttr = id ? ` id="${escapeHtml(id)}"` : '';
+        const extraClass = className ? ` ${escapeHtml(className)}` : '';
+        const dataAttrs = Object.entries(dataAttributes)
+            .map(([key, value]) => ` data-${escapeHtml(key)}="${escapeHtml(String(value))}"`)
+            .join('');
+
+        const control = `
+            <label class="checkboxContainer emby-checkbox-label">
+                <input is="emby-checkbox" type="checkbox"${idAttr}
+                    class="emby-checkbox${extraClass}" data-embycheckbox="true" ${checked ? 'checked' : ''}${dataAttrs}>
+                <span class="checkboxLabel">${safeLabel}</span>
+                <span class="checkboxOutline">
+                    <span class="material-icons checkboxIcon checkboxIcon-checked check" aria-hidden="true"></span>
+                    <span class="material-icons checkboxIcon checkboxIcon-unchecked" aria-hidden="true"></span>
+                </span>
+            </label>
+        `;
+
+        if (wrapInSection) {
+            return `<div class="sectioncheckbox">${control}</div>`;
+        }
+        return control;
+    }
+
+    /**
+     * Build toggle card with label, description, and pill switch (via buildToggleSlider).
+     */
+    function buildToggleCard(id, checked, label, description, options = {}) {
+        const isEnabled = checked !== false;
+        const {
+            hintKey,
+            checkboxClass = '',
+            checkboxDataAttributes = {}
+        } = options;
+        const hintAttr = hintKey ? ` data-hsae-hint="${escapeHtml(hintKey)}"` : '';
+        const checkboxClassAttr = checkboxClass ? ` class="${escapeHtml(checkboxClass)}"` : '';
+        const checkboxDataAttrs = Object.entries(checkboxDataAttributes)
+            .map(([key, value]) => ` data-${escapeHtml(key)}="${escapeHtml(String(value))}"`)
+            .join(' ');
+        const toggleBtn = buildToggleSlider(id, checked, '', {
+            includeHiddenCheckbox: false,
+            wrapInLabel: false,
+            cssClass: 'kefin-toggle-switch',
+            knob: 'css',
+            dataAttributes: checkboxDataAttributes
+        });
+        return `
+            <div class="kefin-toggle-card">
+                <input type="checkbox" id="${escapeHtml(id)}"${checkboxClassAttr}${checkboxDataAttrs} ${isEnabled ? 'checked' : ''} style="display: none;">
+                <div class="kefin-toggle-card-text">
+                    <div class="listItemBodyText kefin-toggle-card-label">${escapeHtml(label)}</div>
+                    ${description ? `<div class="listItemBodyText secondary kefin-toggle-card-desc"${hintAttr}>${escapeHtml(description)}</div>` : ''}
+                </div>
+                ${toggleBtn}
+            </div>
+        `;
+    }
+
+    /**
+     * Update minimal pill toggle switch UI (no ON/OFF text).
+     */
+    function updateToggleSwitchUI(btn, checked) {
+        if (!btn) return;
+        const isEnabled = checked === true;
+        btn.dataset.enabled = isEnabled;
+        btn.setAttribute('aria-pressed', String(isEnabled));
+        const checkboxId = btn.dataset.checkboxId;
+        if (checkboxId) {
+            const checkbox = document.getElementById(checkboxId);
+            if (checkbox) checkbox.checked = isEnabled;
+        }
+    }
+
+    /**
+     * Wire kefin-toggle-switch buttons under root (idempotent).
+     * @param {ParentNode} root
+     */
+    function bindToggleCards(root) {
+        if (!root || typeof root.querySelectorAll !== 'function') return;
+        root.querySelectorAll('.kefin-toggle-switch').forEach((btn) => {
+            if (btn.dataset.kefinToggleBound === 'true') return;
+            btn.dataset.kefinToggleBound = 'true';
+            btn.addEventListener('click', () => {
+                const next = btn.dataset.enabled !== 'true';
+                updateToggleSwitchUI(btn, next);
+            });
+        });
+    }
+
+    /**
+     * Build enabled toggle buttons (ENABLED/DISABLED)
+     */
+    function buildEnabledToggleButtons(id, enabled) {
+        const isEnabled = enabled !== false;
+        return `
+            <div style="margin-bottom: 1.5em; display: flex; gap: 0.5em;">
+                <button type="button" class="enabled-toggle-btn ${isEnabled ? 'active' : ''}" data-enabled="true" style="
+                    flex: 1;
+                    padding: 0.75em 1.5em;
+                    border: 2px solid ${isEnabled ? 'rgba(0, 164, 220, 0.8)' : 'rgba(255,255,255,0.2)'};
+                    border-radius: 4px;
+                    background: ${isEnabled ? 'rgba(0, 164, 220, 0.2)' : 'transparent'};
+                    color: ${isEnabled ? 'var(--theme-primary-color, #00a4dc)' : 'rgba(255,255,255,0.7)'};
+                    font-weight: ${isEnabled ? '600' : '400'};
+                    cursor: pointer;
+                    transition: all 0.2s;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                ">
+                    Enabled
+                </button>
+                <button type="button" class="enabled-toggle-btn ${!isEnabled ? 'active' : ''}" data-enabled="false" style="
+                    flex: 1;
+                    padding: 0.75em 1.5em;
+                    border: 2px solid ${!isEnabled ? 'rgba(158, 158, 158, 0.8)' : 'rgba(255,255,255,0.2)'};
+                    border-radius: 4px;
+                    background: ${!isEnabled ? 'rgba(158, 158, 158, 0.2)' : 'transparent'};
+                    color: ${!isEnabled ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.7)'};
+                    font-weight: ${!isEnabled ? '600' : '400'};
+                    cursor: pointer;
+                    transition: all 0.2s;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                ">
+                    Disabled
+                </button>
+            </div>
+        `;
+    }
+
+    /**
+     * Build toggle slider (compact thumb switch, no ON/OFF text).
+     * @param {string} id
+     * @param {boolean} checked
+     * @param {string} label
+     * @param {Object} options
+     * @param {boolean} [options.includeHiddenCheckbox]
+     * @param {Object} [options.dataAttributes]
+     * @param {string} [options.cssClass='toggle-slider']
+     * @param {boolean} [options.wrapInLabel=true]
+     * @param {'element'|'css'} [options.knob] - element = inline thumb span; css = ::after (e.g. kefin-toggle-switch)
+     * @param {string} [options.checkboxClass]
+     */
+    function buildToggleSlider(id, checked, label, options = {}) {
+        const {
+            includeHiddenCheckbox = false,
+            dataAttributes = {},
+            cssClass = 'toggle-slider',
+            wrapInLabel = true,
+            checkboxClass = '',
+            knob
+        } = options;
+
+        const isEnabled = checked !== false;
+        const useCssKnob = knob === 'css' || (knob == null && String(cssClass).includes('kefin-toggle-switch'));
+        const dataAttrsString = Object.entries(dataAttributes)
+            .map(([key, value]) => `data-${escapeHtml(key)}="${escapeHtml(String(value))}"`)
+            .join(' ');
+        const checkboxClassAttr = checkboxClass ? ` class="${escapeHtml(checkboxClass)}"` : '';
+
+        const inlineStyle = useCssKnob ? '' : ` style="
+                position: relative;
+                width: 52px;
+                height: 28px;
+                border-radius: 14px;
+                border: none;
+                background: ${isEnabled ? 'rgba(0, 164, 220, 0.8)' : 'rgba(158, 158, 158, 0.5)'};
+                cursor: pointer;
+                transition: background-color 0.3s ease;
+                flex-shrink: 0;
+                padding: 0;
+                display: inline-flex;
+                align-items: center;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            "`;
+
+        const knobHtml = useCssKnob ? '' : `
+                <span class="toggle-slider-thumb" style="
+                    position: absolute;
+                    width: 22px;
+                    height: 22px;
+                    border-radius: 50%;
+                    background: white;
+                    left: ${isEnabled ? 'calc(100% - 25px)' : '3px'};
+                    transition: left 0.3s ease;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                    pointer-events: none;
+                "></span>`;
+
+        const toggleButton = `
+            <button type="button" class="${escapeHtml(cssClass)}" ${dataAttrsString} ${id ? `data-checkbox-id="${escapeHtml(id)}"` : ''} data-enabled="${isEnabled}" aria-pressed="${isEnabled}"${inlineStyle}>
+                ${knobHtml}
+            </button>
+        `;
+
+        const hiddenCheckbox = includeHiddenCheckbox && id ? `
+            <input type="checkbox" id="${escapeHtml(id)}"${checkboxClassAttr} ${isEnabled ? 'checked' : ''} style="display: none;">
+        ` : '';
+
+        if (wrapInLabel) {
+            return `
+                <label class="checkboxContainer" style="display: flex; align-items: center; gap: 0.5em;">
+                    ${hiddenCheckbox}
+                    ${toggleButton}
+                    <span class="listItemBodyText">${escapeHtml(label || '')}</span>
+                </label>
+            `;
+        }
+        return hiddenCheckbox + toggleButton;
+    }
+
+    /**
+     * Update toggle slider UI programmatically
+     */
+    function updateToggleSliderUI(toggleButton, isEnabled) {
+        if (!toggleButton) return;
+
+        const enabled = !!isEnabled;
+        toggleButton.dataset.enabled = enabled;
+        toggleButton.setAttribute('aria-pressed', String(enabled));
+
+        if (toggleButton.style && toggleButton.getAttribute('style')) {
+            toggleButton.style.background = enabled ? 'rgba(0, 164, 220, 0.8)' : 'rgba(158, 158, 158, 0.5)';
+        }
+
+        const knob = toggleButton.querySelector('.toggle-slider-thumb');
+        if (knob) {
+            knob.style.left = enabled ? 'calc(100% - 25px)' : '3px';
+        }
+
+        const checkboxId = toggleButton.dataset.checkboxId;
+        if (checkboxId) {
+            const checkbox = document.getElementById(checkboxId);
+            if (checkbox) checkbox.checked = enabled;
+        }
+    }
+
     // Expose to global scope
     window.KefinTweaksUI = {
         createAutoCompleteInput,
         BadgeSystem,
         renderHomeSectionsOrderEditor,
-        setupOrderEditorListeners
+        setupOrderEditorListeners,
+        escapeHtml,
+        buildSelect,
+        buildTextInput,
+        buildCheckbox,
+        buildToggleCard,
+        buildToggleSlider,
+        buildEnabledToggleButtons,
+        updateToggleSwitchUI,
+        updateToggleSliderUI,
+        bindToggleCards
     };
 
     LOG('UI utilities loaded');

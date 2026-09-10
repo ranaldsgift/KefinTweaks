@@ -331,14 +331,13 @@
                 throw new Error('ApiClient not available for authorization');
             }
             
-            const token = ApiClient.accessToken();
             const serverUrl = ApiClient.serverAddress();
             
             const response = await fetch(`${serverUrl}/Items/${itemId}/RemoteSearch/Subtitles/${language}`, {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',
-                    'Authorization': `MediaBrowser Token="${token}"`
+                    'Authorization': window.apiHelper.getAuthHeader()
                 }
             });
             
@@ -418,14 +417,13 @@
                 throw new Error('ApiClient not available');
             }
             
-            const token = ApiClient.accessToken();
             const serverUrl = ApiClient.serverAddress();
             
             const response = await fetch(`${serverUrl}/Items/${itemId}`, {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',
-                    'Authorization': `MediaBrowser Token="${token}"`
+                    'Authorization': window.apiHelper.getAuthHeader()
                 }
             });
             
@@ -505,14 +503,13 @@
                 throw new Error('ApiClient not available');
             }
             
-            const token = ApiClient.accessToken();
             const serverUrl = ApiClient.serverAddress();
             
             const response = await fetch(`${serverUrl}/Items/${itemId}`, {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',
-                    'Authorization': `MediaBrowser Token="${token}"`
+                    'Authorization': window.apiHelper.getAuthHeader()
                 }
             });
             
@@ -569,7 +566,6 @@
                 throw new Error('ApiClient not available');
             }
             
-            const token = ApiClient.accessToken();
             const serverUrl = ApiClient.serverAddress();
             const deviceId = ApiClient.deviceId();
             
@@ -588,7 +584,7 @@
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',
-                    'Authorization': `MediaBrowser Token="${token}"`
+                    'Authorization': window.apiHelper.getAuthHeader()
                 }
             });
             
@@ -625,7 +621,6 @@
                 throw new Error('ApiClient not available');
             }
             
-            const token = ApiClient.accessToken();
             const serverUrl = ApiClient.serverAddress();
             const userId = ApiClient.getCurrentUserId();
             
@@ -638,7 +633,7 @@
             const response = await fetch(`${serverUrl}/Sessions/${sessionId}/Command`, {
                 method: 'POST',
                 headers: {
-                    'X-Emby-Token': token,
+                    'Authorization': window.apiHelper.getAuthHeader(),
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
@@ -758,7 +753,6 @@
                 throw new Error('No play state found in session');
             }
             
-            const token = ApiClient.accessToken();
             const serverUrl = ApiClient.serverAddress();
             
             // Get current item ID
@@ -788,7 +782,7 @@
             const commandResponse = await fetch(`${serverUrl}/Sessions/${sessionId}/Playing?${params.toString()}`, {
                 method: 'POST',
                 headers: {
-                    'X-Emby-Token': token
+                    'Authorization': window.apiHelper.getAuthHeader()
                 }
             });
             
@@ -897,13 +891,12 @@
             // Get existing subtitle streams before download
             const existingStreams = await getExistingSubtitleStreams(itemId);
             
-            const token = ApiClient.accessToken();
             const serverUrl = ApiClient.serverAddress();
             
             const response = await fetch(`${serverUrl}/Items/${itemId}/RemoteSearch/Subtitles/${subId}`, {
                 method: 'POST',
                 headers: {
-                    'Authorization': `MediaBrowser Token="${token}"`
+                    'Authorization': window.apiHelper.getAuthHeader()
                 }
             });
             

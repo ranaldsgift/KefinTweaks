@@ -136,9 +136,11 @@
                 }
             });
             
-            modalInstance.dialog.style.maxWidth = '90vw';
-            modalInstance.dialog.style.width = '1400px';
-            modalInstance.dialog.style.height = '90vh';
+            if (window.innerWidth >= 900) {
+                modalInstance.dialog.style.maxWidth = '90vw';
+                modalInstance.dialog.style.width = '1400px';
+                modalInstance.dialog.style.height = '90vh';
+            }
 
             LOG('Series Info configuration modal opened');
         } catch (error) {

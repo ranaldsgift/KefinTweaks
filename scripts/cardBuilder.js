@@ -5,10 +5,6 @@
 (function() {
     'use strict';
 
-    const state = {
-        useEpisodeImages: false,
-    };
-
     // Global toggle for progressive section fade-in.
     // Developers can set this to false to disable the behavior.
     const FADE_IN_SECTIONS = true;
@@ -39,6 +35,523 @@
             [arr[i], arr[j]] = [arr[j], arr[i]];
         }
         return arr;
+    }
+
+    /** Cream deco border styles that need injected child pieces on `.cardBorder`. */
+    const CARD_BORDER_DECO_CHILDREN = {
+        triple: ['cardBorder-tall', 'cardBorder-mid', 'cardBorder-wide'],
+        stairstep: [
+            'cardBorder-outer-left', 'cardBorder-outer-right',
+            'cardBorder-mid-left', 'cardBorder-mid-right',
+            'cardBorder-mid-top', 'cardBorder-mid-bottom',
+            'cardBorder-inner-top', 'cardBorder-inner-bottom'
+        ],
+        square: [
+            'cardBorder-inner',
+            'cardBorder-square-left-top', 'cardBorder-square-left-bottom',
+            'cardBorder-square-right-top', 'cardBorder-square-right-bottom',
+            'cardBorder-tall', 'cardBorder-wide'
+        ],
+        diamond: [
+            'cardBorder-square-left-top', 'cardBorder-square-left-bottom',
+            'cardBorder-square-right-top', 'cardBorder-square-right-bottom',
+            'cardBorder-tall-outer', 'cardBorder-tall-inner',
+            'cardBorder-wide-outer', 'cardBorder-wide-inner'
+        ],
+        corner: [
+            'cardBorder-corner cardBorder-corner-tl',
+            'cardBorder-corner cardBorder-corner-tr',
+            'cardBorder-corner cardBorder-corner-bl',
+            'cardBorder-corner cardBorder-corner-br'
+        ],
+        'picture-frame': ['cardBorder-pf-inner']
+    };
+
+    /** Legacy art-deco / slim-fancy / vintage-wide prefs map onto current equivalents. */
+    const CARD_BORDER_ALIASES = {
+        'art-deco': 'stairstep',
+        'art-deco-2': 'square',
+        'slim-fancy': 'double',
+        'vintage-wide': 'vintage'
+    };
+
+    const CARD_BORDER_CSS_ONLY = new Set([
+        'fancy',
+        'slim',
+        'double',
+        'modern-poster',
+        'film-reel',
+        'profile',
+        'wood',
+        'art-gallery'
+    ]);
+
+    function normalizeCardBorderStyle(style) {
+        if (!style) return '';
+        return CARD_BORDER_ALIASES[style] || style;
+    }
+
+    function getCardBorderAssetUrl(filename) {
+        const root = String(window.KefinTweaksConfig?.kefinTweaksRoot || '').replace(/\/$/, '');
+        return `${root}/pages/images/${filename}`;
+    }
+
+    function getRetroPosterMarqueeLabel(item) {
+        if (item?.PremiereDate) {
+            const premiere = new Date(item.PremiereDate);
+            if (!Number.isNaN(premiere.getTime()) && premiere.getTime() > Date.now()) {
+                return 'COMING SOON';
+            }
+        }
+        return 'NOW PLAYING';
+    }
+
+    function createCardBorderHost() {
+        const host = document.createElement('div');
+        host.className = 'cardBorder';
+        host.setAttribute('aria-hidden', 'true');
+        return host;
+    }
+
+    function ensureRetroPosterMarquee(scalable) {
+        if (!scalable) return;
+        const card = scalable.closest('.card');
+        let marquee = scalable.querySelector(':scope > .retroPosterMarquee');
+        if (!marquee) {
+            marquee = document.createElement('div');
+            marquee.className = 'retroPosterMarquee';
+            marquee.setAttribute('aria-hidden', 'true');
+            const label = document.createElement('span');
+            label.className = 'retroPosterMarquee-label';
+            marquee.appendChild(label);
+            const border = scalable.querySelector(':scope > .cardBorder');
+            if (border) scalable.insertBefore(marquee, border);
+            else scalable.appendChild(marquee);
+        }
+        const labelEl = marquee.querySelector('.retroPosterMarquee-label');
+        if (labelEl) {
+            labelEl.textContent = card?.dataset.retroMarquee || 'NOW PLAYING';
+        }
+    }
+
+    function removeRetroPosterMarquee(scalable) {
+        scalable?.querySelector(':scope > .retroPosterMarquee')?.remove();
+    }
+
+    function fillVintageBorder(host) {
+        host.style.setProperty(
+            '--v-corner-deco',
+            `url("${getCardBorderAssetUrl('corner-decoration.svg')}")`
+        );
+
+        const outer = document.createElement('div');
+        outer.className = 'cardBorder-v-outer';
+        const mid = document.createElement('div');
+        mid.className = 'cardBorder-v-mid';
+        const inner = document.createElement('div');
+        inner.className = 'cardBorder-v-inner';
+
+        ['tl', 'tr', 'br', 'bl'].forEach((pos) => {
+            const corner = document.createElement('div');
+            corner.className = `cardBorder-v-corner cardBorder-v-corner-${pos}`;
+            inner.appendChild(corner);
+        });
+
+        mid.appendChild(inner);
+        outer.appendChild(mid);
+        host.appendChild(outer);
+    }
+
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    /** Target px between bulb centers along each edge. */
+    const RP_BULB_PITCH = 16;
+    const RP_BULB_LAYERS = [
+        { cls: 'cardBorder-rp-bulb-glow', r: 5.5 },
+        { cls: 'cardBorder-rp-bulb-mid', r: 3.5 },
+        { cls: 'cardBorder-rp-bulb-core', r: 1.75 }
+    ];
+    const RP_DEFAULT_THIN = 2;
+    const RP_DEFAULT_BAND = 16;
+    /** Cards to sync bulbs for per animation frame (keeps style switches snappy). */
+    const RP_SYNC_BATCH = 3;
+
+    let rpBulbSyncQueue = [];
+    let rpBulbSyncRaf = 0;
+
+    function disconnectRetroPosterBulbs(host) {
+        if (!host) return;
+        if (host._rpRoRaf) {
+            cancelAnimationFrame(host._rpRoRaf);
+            host._rpRoRaf = 0;
+        }
+        if (host._rpBulbRo) {
+            host._rpBulbRo.disconnect();
+            host._rpBulbRo = null;
+        }
+        host._rpBulbPending = false;
+        host._rpBulbW = null;
+        host._rpBulbH = null;
+        if (rpBulbSyncQueue.length) {
+            rpBulbSyncQueue = rpBulbSyncQueue.filter((svg) => svg?.parentElement !== host);
+        }
+    }
+
+    function getRetroPosterBandMetrics(sectionEl) {
+        if (sectionEl?._rpBandMetrics) return sectionEl._rpBandMetrics;
+        let thin = RP_DEFAULT_THIN;
+        let band = RP_DEFAULT_BAND;
+        try {
+            const cs = getComputedStyle(sectionEl || document.documentElement);
+            const t = parseFloat(cs.getPropertyValue('--rp-thin'));
+            const b = parseFloat(cs.getPropertyValue('--rp-band'));
+            if (Number.isFinite(t) && t > 0) thin = t;
+            if (Number.isFinite(b) && b > 0) band = b;
+        } catch {
+            /* keep defaults */
+        }
+        const metrics = { thin, band };
+        if (sectionEl) sectionEl._rpBandMetrics = metrics;
+        return metrics;
+    }
+
+    function enqueueRetroPosterBulbSync(svg) {
+        if (!svg?.isConnected) return;
+        const host = svg.parentElement;
+        if (!host || host._rpBulbPending) return;
+        host._rpBulbPending = true;
+        rpBulbSyncQueue.push(svg);
+        if (!rpBulbSyncRaf) {
+            rpBulbSyncRaf = requestAnimationFrame(flushRetroPosterBulbSyncQueue);
+        }
+    }
+
+    function flushRetroPosterBulbSyncQueue() {
+        rpBulbSyncRaf = 0;
+        let n = 0;
+        while (n < RP_SYNC_BATCH && rpBulbSyncQueue.length) {
+            const svg = rpBulbSyncQueue.shift();
+            const host = svg?.parentElement;
+            if (host) host._rpBulbPending = false;
+            if (svg?.isConnected && host?.dataset?.style === 'retro-poster') {
+                syncRetroPosterBulbs(svg);
+            }
+            n += 1;
+        }
+        if (rpBulbSyncQueue.length) {
+            rpBulbSyncRaf = requestAnimationFrame(flushRetroPosterBulbSyncQueue);
+        }
+    }
+
+    function syncRetroPosterBulbs(svg) {
+        const host = svg?.parentElement;
+        if (!host) return;
+        const w = host.clientWidth;
+        const h = host.clientHeight;
+        if (w < 8 || h < 8) return;
+
+        // Skip rebuild when size unchanged and bulbs already exist
+        if (host._rpBulbW === w && host._rpBulbH === h && svg.querySelector('circle')) return;
+        host._rpBulbW = w;
+        host._rpBulbH = h;
+
+        const sectionEl = host.closest('[data-border], [data-border-style]');
+        const { thin, band } = getRetroPosterBandMetrics(sectionEl);
+        const mid = thin + band / 2;
+        const x1 = mid;
+        const y1 = mid;
+        const x2 = w - mid;
+        const y2 = h - mid;
+        const rw = Math.max(0, x2 - x1);
+        const rh = Math.max(0, y2 - y1);
+
+        svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+
+        /* Independent edge spacing so each side has a corner bulb + even steps between. */
+        const kW = Math.max(1, Math.round(rw / RP_BULB_PITCH));
+        const kH = Math.max(1, Math.round(rh / RP_BULB_PITCH));
+        const sW = rw / kW;
+        const sH = rh / kH;
+
+        const points = [
+            [x1, y1], [x2, y1], [x2, y2], [x1, y2]
+        ];
+        for (let i = 1; i < kW; i++) {
+            points.push([x1 + i * sW, y1], [x1 + i * sW, y2]);
+        }
+        for (let i = 1; i < kH; i++) {
+            points.push([x1, y1 + i * sH], [x2, y1 + i * sH]);
+        }
+
+        RP_BULB_LAYERS.forEach(({ cls, r }) => {
+            const g = svg.querySelector(`g.${cls}`);
+            if (!g) return;
+            const frag = document.createDocumentFragment();
+            points.forEach(([cx, cy]) => {
+                const circle = document.createElementNS(SVG_NS, 'circle');
+                circle.setAttribute('cx', String(cx));
+                circle.setAttribute('cy', String(cy));
+                circle.setAttribute('r', String(r));
+                frag.appendChild(circle);
+            });
+            g.replaceChildren(frag);
+        });
+    }
+
+    function fillRetroPosterBorder(host) {
+        disconnectRetroPosterBulbs(host);
+
+        const svg = document.createElementNS(SVG_NS, 'svg');
+        svg.setAttribute('class', 'cardBorder-rp-bulbs');
+        svg.setAttribute('aria-hidden', 'true');
+
+        RP_BULB_LAYERS.forEach(({ cls }) => {
+            const g = document.createElementNS(SVG_NS, 'g');
+            g.setAttribute('class', cls);
+            svg.appendChild(g);
+        });
+
+        host.appendChild(svg);
+
+        // Coalesce RO storms; do not sync synchronously on attach (causes border-switch hitch).
+        const ro = new ResizeObserver(() => {
+            if (host._rpRoRaf) return;
+            host._rpRoRaf = requestAnimationFrame(() => {
+                host._rpRoRaf = 0;
+                host._rpBulbW = null;
+                host._rpBulbH = null;
+                enqueueRetroPosterBulbSync(svg);
+            });
+        });
+        ro.observe(host);
+        host._rpBulbRo = ro;
+        enqueueRetroPosterBulbSync(svg);
+    }
+
+    function fillCardBorder(host, style) {
+        if (!host) return;
+        const next = normalizeCardBorderStyle(style);
+        const isVintage = next === 'vintage';
+        const isRetro = next === 'retro-poster';
+        const needsChildren = next
+            && !CARD_BORDER_CSS_ONLY.has(next)
+            && (isVintage || isRetro || !!CARD_BORDER_DECO_CHILDREN[next]);
+        if (host.dataset.style === next) {
+            const vintageNeedsRefresh = isVintage && !host.style.getPropertyValue('--v-corner-deco');
+            if (!vintageNeedsRefresh && (!needsChildren || host.childElementCount > 0)) return;
+        }
+        disconnectRetroPosterBulbs(host);
+        host.dataset.style = next;
+        host.replaceChildren();
+        if (!needsChildren) return;
+
+        if (isVintage) {
+            fillVintageBorder(host);
+            return;
+        }
+
+        if (isRetro) {
+            fillRetroPosterBorder(host);
+            return;
+        }
+
+        for (const cls of CARD_BORDER_DECO_CHILDREN[next]) {
+            const piece = document.createElement('div');
+            piece.className = cls;
+            host.appendChild(piece);
+        }
+    }
+
+    /**
+     * Sync `.cardBorder` hosts under a section from its data-border / data-border-style.
+     * Creates hosts when missing; removes them when border is cleared.
+     */
+    function ensureCardBorders(sectionEl) {
+        if (!sectionEl) return;
+        const raw = sectionEl.dataset.border || sectionEl.dataset.borderStyle || '';
+        const style = normalizeCardBorderStyle(raw);
+        if (style && style !== raw) {
+            sectionEl.dataset.border = style;
+            sectionEl.dataset.borderStyle = style;
+        }
+        // Refresh cached band metrics when (re)applying so CSS vars stay current
+        delete sectionEl._rpBandMetrics;
+
+        if (style === 'wood') {
+            sectionEl.style.setProperty(
+                '--wood-vert-img',
+                `url("${getCardBorderAssetUrl('wood.png')}")`
+            );
+        } else {
+            sectionEl.style.removeProperty('--wood-vert-img');
+        }
+        const cards = sectionEl.querySelectorAll('.card:not(.card-layout-dummy) .cardScalable');
+        cards.forEach((scalable) => {
+            let host = scalable.querySelector(':scope > .cardBorder');
+            if (!style) {
+                if (host) {
+                    disconnectRetroPosterBulbs(host);
+                    host.remove();
+                }
+                removeRetroPosterMarquee(scalable);
+                return;
+            }
+            if (!host) {
+                host = createCardBorderHost();
+                scalable.appendChild(host);
+            }
+            fillCardBorder(host, style);
+            if (style === 'retro-poster') ensureRetroPosterMarquee(scalable);
+            else removeRetroPosterMarquee(scalable);
+        });
+    }
+
+    /** Skin-wide card corner radius; measured once and exposed as --kefin-card-radius. */
+    let cachedCardRadius = null;
+
+    const SQUARE_CARD_BORDER_STYLES = new Set([
+        'retro-poster',
+        'modern-poster',
+        'picture-frame',
+        'art-gallery',
+        'wood',
+        'profile',
+        'film-reel'
+    ]);
+
+    function sectionHasSquareCardBorder(el) {
+        const section = el?.closest?.('[data-border], [data-border-style]');
+        if (!section) return false;
+        const style = section.dataset.borderStyle || section.dataset.border || '';
+        return SQUARE_CARD_BORDER_STYLES.has(style);
+    }
+
+    function getCardRadius() {
+        if (cachedCardRadius != null) return cachedCardRadius;
+
+        const candidates = document.querySelectorAll(
+            '.card:not(.card-layout-dummy) .cardScalable, .card:not(.card-layout-dummy) .cardContent, .card:not(.card-layout-dummy)'
+        );
+        let sample = null;
+        for (const el of candidates) {
+            if (!sectionHasSquareCardBorder(el)) {
+                sample = el;
+                break;
+            }
+        }
+
+        if (!sample) return '0px';
+
+        const style = getComputedStyle(sample);
+        let radius = (style.borderBottomLeftRadius || style.borderRadius || '').trim();
+        if (!radius || radius === '0' || radius === '0px') {
+            const themeRound =
+                (style.getPropertyValue('--theme-roundness') ||
+                    getComputedStyle(document.documentElement).getPropertyValue('--theme-roundness') ||
+                    '').trim();
+            radius = themeRound || radius || '0px';
+        }
+
+        cachedCardRadius = radius;
+        return cachedCardRadius;
+    }
+
+    function ensureCardRadiusCssVar() {
+        document.documentElement.style.setProperty('--kefin-card-radius', getCardRadius());
+    }
+
+    function invalidateCardRadiusCache() {
+        cachedCardRadius = null;
+        document.documentElement.style.removeProperty('--kefin-card-radius');
+    }
+
+    function applySectionPresentationAttrs(element, sectionConfig) {
+        if (!element || !sectionConfig) return;
+
+        if (sectionConfig.sectionCssClass) {
+            sectionConfig.sectionCssClass.split(/\s+/).filter(Boolean).forEach(cls => element.classList.add(cls));
+        }
+
+        const border = sectionConfig.borderStyle;
+        if (border) {
+            element.dataset.border = border;
+            element.dataset.borderStyle = border;
+        } else {
+            delete element.dataset.border;
+            delete element.dataset.borderStyle;
+        }
+        const borderColor = sectionConfig.borderColor && String(sectionConfig.borderColor).trim();
+        if (borderColor) {
+            element.style.setProperty('--kefin-card-border-color', borderColor);
+        } else {
+            element.style.removeProperty('--kefin-card-border-color');
+        }
+        ensureCardBorders(element);
+
+        const titleColor = sectionConfig.cardTitleColor && String(sectionConfig.cardTitleColor).trim();
+        if (titleColor) {
+            element.style.setProperty('--kefin-card-title-color', titleColor);
+        } else {
+            element.style.removeProperty('--kefin-card-title-color');
+        }
+
+        if (sectionConfig.hideName === true) {
+            element.dataset.hideSectionName = 'true';
+        } else {
+            delete element.dataset.hideSectionName;
+        }
+        delete element.dataset.hideName;
+
+        const titleVisibility = sectionConfig.cardTitleVisibility
+            || (sectionConfig.hideCardTitles === true ? 'hidden' : null);
+        if (titleVisibility && titleVisibility !== 'visible') {
+            element.dataset.cardTitleVisibility = titleVisibility;
+        }
+        if (sectionConfig.cardTitlePosition) {
+            element.dataset.cardTitlePosition = sectionConfig.cardTitlePosition;
+        } else {
+            delete element.dataset.cardTitlePosition;
+        }
+        if (sectionConfig.cardTitleCapitalization && sectionConfig.cardTitleCapitalization !== 'normal') {
+            element.dataset.cardTitleCapitalization = sectionConfig.cardTitleCapitalization;
+        } else {
+            delete element.dataset.cardTitleCapitalization;
+        }
+        if (sectionConfig.cardTitleFontFamily && sectionConfig.cardTitleFontFamily !== 'default') {
+            element.dataset.fontFamily = sectionConfig.cardTitleFontFamily;
+        } else {
+            delete element.dataset.fontFamily;
+        }
+        if (sectionConfig.cardTitleFontSize && sectionConfig.cardTitleFontSize !== 'normal') {
+            element.dataset.fontSize = sectionConfig.cardTitleFontSize;
+        } else {
+            delete element.dataset.fontSize;
+        }
+
+        const itemsLayout = resolveItemsLayout(sectionConfig);
+        applyItemsLayoutState(element, itemsLayout, resolveUseGaplessCards(sectionConfig));
+
+        const sectionType = String(sectionConfig.type || '').toLowerCase();
+        const isCustomSection = sectionConfig.isCustom === true
+            || sectionType === 'custom'
+            || sectionType === 'custom-discovery'
+            || String(sectionConfig.id || '').startsWith('custom');
+        const isDiscoverySection = sectionConfig.discoveryEnabled === true
+            || sectionConfig.discoverySection === true
+            || sectionType === 'discovery'
+            || sectionType === 'custom-discovery'
+            || !!sectionConfig.discoveryType;
+
+        if (sectionConfig.type) {
+            element.setAttribute('data-section-type', sectionConfig.type);
+        } else {
+            element.removeAttribute('data-section-type');
+        }
+
+        if (isCustomSection) element.dataset.customSection = 'true';
+        else delete element.dataset.customSection;
+
+        if (isDiscoverySection) element.dataset.discoverySection = 'true';
+        else delete element.dataset.discoverySection;
     }
 
     /**
@@ -122,6 +635,19 @@
         return formats[Math.floor(Math.random() * formats.length)];
     }
 
+    function sectionHasRandomQuerySort(sectionConfig) {
+        // Treat as random if any query has an undefined/null/non-existent SortBy without a path
+        if (String(sectionConfig?.sortBy || '').toLowerCase() === 'random') {
+            return true;
+        }
+
+        if (sectionConfig?.queries?.some((q) => !q.queryOptions?.SortBy && !q.path)) {
+            return true;
+        }
+        return (sectionConfig?.queries || []).some((q) =>
+            String(q.queryOptions?.SortBy || '').toLowerCase() === 'random');
+    }
+
     function flattenSeriesEpisodes(items) {
         if (!items || items.length === 0) return items;
 
@@ -153,24 +679,64 @@
         return date.toLocaleDateString('en-US', options);
     }
 
+    function countAvailableArtwork(item) {
+        let count = 0;
+        const tags = item?.ImageTags;
+        if (tags && typeof tags === 'object') {
+            for (const value of Object.values(tags)) {
+                if (value) count++;
+            }
+        }
+        if (item?.SeriesPrimaryImageTag) count++;
+        if (item?.ParentBackdropImageTags?.length) count++;
+        if (item?.ParentThumbImageTag) count++;
+        if (item?.ParentLogoImageTag) count++;
+        return count;
+    }
+
+    function getProviderKeys(item) {
+        const ids = item?.ProviderIds;
+        if (!ids) return [];
+        return [ids.Imdb, ids.Tmdb, ids.Tvdb].filter(Boolean);
+    }
+
     function deduplicateItems(items) {
         const deduplicated = [];
-        const ids = new Set();
+        const idToIndex = new Map();
+
         for (const item of items) {
-            if (!item.ProviderIds) {
+            const keys = getProviderKeys(item);
+            if (keys.length === 0) {
                 deduplicated.push(item);
                 continue;
             }
 
-            if (item.ProviderIds.Imdb && ids.has(item.ProviderIds.Imdb)) continue;
-            if (item.ProviderIds.Tmdb && ids.has(item.ProviderIds.Tmdb)) continue;
-            if (item.ProviderIds.Tvdb && ids.has(item.ProviderIds.Tvdb)) continue;
+            let existingIndex = -1;
+            for (const key of keys) {
+                if (idToIndex.has(key)) {
+                    existingIndex = idToIndex.get(key);
+                    break;
+                }
+            }
 
-            deduplicated.push(item);
-            ids.add(item.ProviderIds.Imdb);
-            ids.add(item.ProviderIds.Tmdb);
-            ids.add(item.ProviderIds.Tvdb);
+            if (existingIndex === -1) {
+                const index = deduplicated.length;
+                deduplicated.push(item);
+                for (const key of keys) {
+                    idToIndex.set(key, index);
+                }
+                continue;
+            }
+
+            const existing = deduplicated[existingIndex];
+            if (countAvailableArtwork(item) > countAvailableArtwork(existing)) {
+                deduplicated[existingIndex] = item;
+            }
+            for (const key of keys) {
+                idToIndex.set(key, existingIndex);
+            }
         }
+
         return deduplicated;
     }
 
@@ -267,10 +833,26 @@
         if (isResumableFilter) {
             processed = processed.filter(item => item.UserData?.PlayedPercentage && item.UserData?.PlayedPercentage !== 100 && item.UserData?.PlayedPercentage > 0);
         }
+
+        // Check if the MinPlayCount filter is set on any of the queries
+        const minPlayCount = sectionConfig.minPlayCount || sectionConfig.queries?.[0]?.queryOptions?.MinPlayCount || 0;
+        if (minPlayCount > 0) {
+            processed = processed.filter(item => item.UserData?.PlayCount && item.UserData?.PlayCount >= minPlayCount);
+        }
+
+        // Check if the MaxPlayCount filter is set on any of the queries
+        const maxPlayCount = sectionConfig.maxPlayCount || sectionConfig.queries?.[0]?.queryOptions?.MaxPlayCount || 0;
+        if (maxPlayCount > 0) {
+            processed = processed.filter(item => item.UserData?.PlayCount && item.UserData?.PlayCount <= maxPlayCount);
+        }
                  
         // Flatten Series Episodes
         if (sectionConfig.flattenSeries === true) {
             processed = flattenSeriesEpisodes(processed);
+        }
+
+        if (sectionConfig.type === 'series-episodes' && Array.isArray(processed)) {
+            processed = [...processed].sort((a, b) => (a.IndexNumber || 0) - (b.IndexNumber || 0));
         }
 
 /*         if (sectionConfig.id === 'popularTVNetworks') {
@@ -353,6 +935,228 @@
         return processed;
     }
 
+    function getQueryDisplayName(query, index) {
+        const trimmed = query?.name?.trim?.();
+        if (trimmed) return trimmed;
+        return `Query ${index + 1}`;
+    }
+
+    function resolveActiveQueryIndex(sectionConfig, options = {}) {
+        const queries = sectionConfig?.queries || [];
+        if (queries.length <= 1) return 0;
+
+        const stored = sectionConfig._selectedQueryIndex;
+        if (Number.isInteger(stored) && stored >= 0 && stored < queries.length) {
+            return stored;
+        }
+
+        if (options.initialize !== false) {
+            let index = 0;
+            if (sectionConfig.useRandomQuery === true) {
+                index = Math.floor(Math.random() * queries.length);
+            }
+            sectionConfig._selectedQueryIndex = index;
+            return index;
+        }
+
+        return 0;
+    }
+
+    function resolveQueriesToLoad(sectionConfig, options = {}) {
+        const queries = sectionConfig?.queries || [];
+        if (queries.length <= 1) return queries;
+
+        if (sectionConfig.useMultiQueryPicker === true) {
+            const index = resolveActiveQueryIndex(sectionConfig, options);
+            return [queries[index]];
+        }
+
+        if (sectionConfig.useRandomQuery === true) {
+            const randomIndex = Math.floor(Math.random() * queries.length);
+            return [queries[randomIndex]];
+        }
+
+        return queries;
+    }
+
+    function getMultiQueryPickerButtonLabel(sectionConfig) {
+        const customLabel = sectionConfig?.multiQueryPickerLabel?.trim?.();
+        if (customLabel) return customLabel;
+
+        const queries = sectionConfig?.queries || [];
+        if (queries.length <= 1) return getQueryDisplayName(queries[0], 0);
+
+        const index = resolveActiveQueryIndex(sectionConfig, { initialize: false });
+        return getQueryDisplayName(queries[index], index);
+    }
+
+    function getSectionTitleForMultiQuery(sectionConfig) {
+        if (sectionConfig?.useMultiQueryPicker === true
+            && sectionConfig?.useQueryNamesForSection === true
+            && (sectionConfig?.queries?.length || 0) > 1) {
+            const index = resolveActiveQueryIndex(sectionConfig, { initialize: true });
+            return getQueryDisplayName(sectionConfig.queries[index], index);
+        }
+        return sectionConfig?.name || '';
+    }
+
+    function getActiveViewMoreUrl(sectionConfig) {
+        const queries = sectionConfig?.queries || [];
+        if (sectionConfig?.useMultiQueryPicker === true && queries.length > 1) {
+            const index = resolveActiveQueryIndex(sectionConfig, { initialize: true });
+            const queryUrl = queries[index]?.viewMoreUrl;
+            if (queryUrl) return queryUrl;
+        }
+        return sectionConfig?.viewMoreUrl || null;
+    }
+
+    function getSectionCaption(sectionConfig) {
+        return sectionConfig?.caption?.trim() || null;
+    }
+
+    function getSectionCaptionUrl(sectionConfig) {
+        return sectionConfig?.captionUrl || null;
+    }
+
+    function updateSectionTitleText(sectionElement, titleText, captionText) {
+        if (!sectionElement) return;
+        if (titleText != null) {
+            const titleEl = sectionElement.querySelector('.sectionTitleContainer .sectionTitle.sectionTitle-cards');
+            if (titleEl) titleEl.textContent = titleText;
+        }
+        if (captionText != null) {
+            const captionEl = sectionElement.querySelector('.sectionTitle.sectionCaption');
+            if (captionEl) captionEl.textContent = captionText;
+        }
+    }
+
+    function updateSectionViewMoreLink(sectionElement, url) {
+        if (!sectionElement) return;
+        const titleLink = sectionElement.querySelector('a.sectionTitle-link');
+        if (!titleLink) return;
+        if (url) {
+            titleLink.href = url;
+            return;
+        }
+        titleLink.removeAttribute('href');
+    }
+
+    function resolveSectionQueryTtl(sectionConfig) {
+        if (Number(sectionConfig?.ttl) >= 0) return Number(sectionConfig.ttl);
+        const fromConfig2 = window.KefinHomeConfig2?.CACHE?.DEFAULT_TTL;
+        if (Number(fromConfig2) >= 0) return Number(fromConfig2);
+        const fromConfig = window.KefinHomeConfig?.CACHE?.DEFAULT_TTL;
+        if (Number(fromConfig) >= 0) return Number(fromConfig);
+        return 60 * 60 * 1000;
+    }
+
+    function extractItemsFromQueryPayload(data) {
+        if (!data) return [];
+        if (Array.isArray(data)) return data;
+        if (Array.isArray(data.Items)) return data.Items;
+        return [];
+    }
+
+    /**
+     * Cache-aware load of the active query set (multi-query picker switches).
+     * Respects section TTL — does not force-bypass cache.
+     * @param {Object} sectionConfig
+     * @returns {Promise<{ items: Array, canPaintCached: boolean, itemsPromise: Promise<Array> }>}
+     */
+    async function loadActiveSectionQueryItems(sectionConfig) {
+        if (!sectionConfig.queries || !Array.isArray(sectionConfig.queries) || sectionConfig.queries.length === 0) {
+            console.warn(`[KefinTweaks CardBuilder] Section ${sectionConfig.id} has no queries array`);
+            return {
+                items: [],
+                canPaintCached: false,
+                itemsPromise: Promise.resolve([])
+            };
+        }
+
+        const userId = ApiClient.getCurrentUserId();
+        const serverUrl = ApiClient.serverAddress();
+        const ApiHelper = window.apiHelper;
+        const results = [];
+        const queriesToLoad = resolveQueriesToLoad(sectionConfig, { initialize: false });
+        const sectionTtl = resolveSectionQueryTtl(sectionConfig);
+
+        for (const query of queriesToLoad) {
+            let queryResult;
+
+            if (query.dataSource) {
+                queryResult = await ApiHelper.fetchFromDataSource(query.dataSource, query.queryOptions || {});
+            } else {
+                const queryUrl = ApiHelper.buildQueryFromSection(
+                    query,
+                    userId,
+                    serverUrl,
+                    sectionConfig.renderMode === 'Spotlight',
+                    { sectionType: sectionConfig.type }
+                );
+
+                if (typeof queryUrl === 'string') {
+                    queryResult = await ApiHelper.getQuery(queryUrl, {
+                        useCache: true,
+                        ttl: sectionTtl
+                    });
+                } else {
+                    console.warn(`[KefinTweaks CardBuilder] Invalid query URL for section ${sectionConfig.id}`);
+                    continue;
+                }
+            }
+
+            results.push(queryResult);
+        }
+
+        const resolveFreshItems = async () => {
+            if (results.length > 1) {
+                const merged = ApiHelper.mergeMultiQueryResults(results, sectionConfig);
+                const raw = typeof merged.result?.ensureData === 'function'
+                    ? await merged.result.ensureData()
+                    : await (merged.result?.dataPromise ?? merged.result?.data);
+                return extractItemsFromQueryPayload(raw);
+            }
+            if (results.length === 1) {
+                const qr = results[0];
+                const raw = typeof qr.ensureData === 'function'
+                    ? await qr.ensureData()
+                    : await (qr.dataPromise ?? qr.data);
+                return postProcessItems(sectionConfig, extractItemsFromQueryPayload(raw));
+            }
+            return [];
+        };
+
+        if (results.length > 1) {
+            const merged = ApiHelper.mergeMultiQueryResults(results, sectionConfig);
+            const syncItems = extractItemsFromQueryPayload(merged.result?.data);
+            // Multi-merge is usable only when every source reported a fresh cache hit.
+            const canPaintCached = results.every((r) => r && r.isStale === false && r.data != null);
+            return {
+                items: canPaintCached ? syncItems : [],
+                canPaintCached,
+                itemsPromise: canPaintCached ? Promise.resolve(syncItems) : resolveFreshItems()
+            };
+        }
+
+        if (results.length === 1) {
+            const qr = results[0];
+            const syncItems = postProcessItems(sectionConfig, extractItemsFromQueryPayload(qr?.data));
+            // Strict: only paint when apiHelper reported a non-stale cache hit with a payload.
+            const canPaintCached = qr?.isStale === false && qr?.data != null;
+            return {
+                items: canPaintCached ? syncItems : [],
+                canPaintCached,
+                itemsPromise: canPaintCached ? Promise.resolve(syncItems) : resolveFreshItems()
+            };
+        }
+
+        return {
+            items: [],
+            canPaintCached: false,
+            itemsPromise: Promise.resolve([])
+        };
+    }
+
     /**
      * Refresh section queries by re-executing them without cache
      * @param {Object} sectionConfig - Section configuration with queries array
@@ -368,9 +1172,10 @@
         const serverUrl = ApiClient.serverAddress();
         const ApiHelper = window.apiHelper;
         const results = [];
+        const queriesToLoad = resolveQueriesToLoad(sectionConfig, { initialize: false });
 
-        // Process each query in the queries array
-        for (const query of sectionConfig.queries) {
+        // Process each query in the active set
+        for (const query of queriesToLoad) {
             let queryResult;
             
             if (query.dataSource) {
@@ -378,7 +1183,7 @@
                 queryResult = await ApiHelper.fetchFromDataSource(query.dataSource, query.queryOptions || {}, false);
             } else {
                 // Build and execute query
-                const queryUrl = ApiHelper.buildQueryFromSection(query, userId, serverUrl, sectionConfig.renderMode === 'Spotlight');
+                const queryUrl = ApiHelper.buildQueryFromSection(query, userId, serverUrl, sectionConfig.renderMode === 'Spotlight', { sectionType: sectionConfig.type });
                 
                 if (typeof queryUrl === 'string') {
                     // Standard query - use useCache: false to bypass cache
@@ -460,110 +1265,527 @@
         }, 1500);
     }
 
-    /**
-     * Create refresh button for progressive sections
-     * @param {Object} sectionConfig - Section configuration
-     * @param {HTMLElement} sectionElement - The section element to refresh
-     * @returns {HTMLElement} - The refresh button element
-     */
-    function createRefreshButton(sectionConfig, sectionElement) {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'section-refresh-button material-icons refresh';
-        button.title = 'Refresh Section';
-        button.setAttribute('aria-label', 'Refresh Section');
-        
-        // Click handler
-        button.addEventListener('click', async (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            
-            // Set refreshing state
-            sectionElement.dataset.refreshing = 'true';
-            
-            try {
-                // Refresh the queries
-                const freshItems = await refreshSectionQueries(sectionConfig);
-                
-                if (freshItems.length === 0) {
-                    // If no items, remove section
-                    sectionElement.remove();
-                    return;
-                }
-                
-                // Get card format from current section
-                let finalCardFormat = sectionConfig.cardFormat;
-                const currentCardFormat = sectionElement.getAttribute('data-card-format');
-                if (currentCardFormat) {
-                    finalCardFormat = currentCardFormat;
-                }
-                
-                // Create new content
-                let content = null;
-                if (sectionConfig.spotlight || sectionConfig.renderMode === 'Spotlight') {
-                    content = createSpotlightSection(freshItems, sectionConfig.name, { 
-                        viewMoreUrl: sectionConfig.viewMoreUrl, 
-                        ...sectionConfig.spotlightConfig
-                    });
-                } else {
-                    content = createScrollableContainer(freshItems, sectionConfig.name, sectionConfig.viewMoreUrl, sectionConfig.overflowCard, finalCardFormat, sectionConfig.forcedImageType);
-                }
-                
-                // Preserve all styles, classes, and attributes
-                content.style.cssText = sectionElement.style.cssText;
-                content.className = sectionElement.className;
-                Array.from(sectionElement.attributes).forEach(attr => {
-                    content.setAttribute(attr.name, attr.value);
-                });
-                
-                // Preserve data-expanded state from old itemsContainer to new one
-                const oldItemsContainer = sectionElement.querySelector('.itemsContainer');
-                const newItemsContainer = content.querySelector('.itemsContainer');
-                if (oldItemsContainer && newItemsContainer) {
-                    const isExpanded = oldItemsContainer.getAttribute('data-expanded') === 'true';
-                    if (isExpanded) {
-                        newItemsContainer.setAttribute('data-expanded', 'true');
-                        // Also update the show-all-button text if it exists
-                        const showAllButton = content.querySelector('.show-all-button');
-                        if (showAllButton) {
-                            showAllButton.title = 'Show items in scrollable layout';
-                        }
-                        // Hide scroll buttons if they exist
-                        const scrollButtons = content.querySelector('.emby-scrollbuttons');
-                        if (scrollButtons) {
-                            scrollButtons.style.display = 'none';
-                        }
-                    }
-                }
-                
-                // Replace the section element
-                sectionElement.replaceWith(content);
-                //checkSectionOverflow(content, true);
-                setTimeout(() => checkSectionOverflow(content, true), 150);
+    async function replaceSectionContent(sectionConfig, sectionElement, freshItems) {
+        if (freshItems.length === 0) {
+            sectionElement.remove();
+            return null;
+        }
 
-                // Add refresh button to new content
-                const sectionTitleContainer = content.querySelector('.sectionTitleContainer');
-                let newButton = null;
-                if (sectionTitleContainer) {
-                    newButton = createRefreshButton(sectionConfig, content);
-                    sectionTitleContainer.appendChild(newButton);
+        let finalCardFormat = sectionConfig.cardFormat;
+        const currentCardFormat = sectionElement.getAttribute('data-card-format');
+        if (currentCardFormat) {
+            finalCardFormat = currentCardFormat;
+        }
+
+        const displayTitle = getSectionTitleForMultiQuery(sectionConfig);
+        const activeViewMoreUrl = getActiveViewMoreUrl(sectionConfig);
+
+        if (sectionConfig.spotlight || sectionConfig.renderMode === 'Spotlight') {
+            const refreshed = refreshSpotlight(sectionElement, freshItems, {
+                name: displayTitle,
+                viewMoreUrl: activeViewMoreUrl,
+                spotlightConfig: sectionConfig.spotlightConfig,
+                dataItems: [],
+                keepCurrentSlide: false,
+                sectionConfig
+            });
+            const content = refreshed.content;
+            ensureCardBorders(content);
+            content.dataset.refreshing = 'false';
+            attachSectionControlButtons(sectionConfig, content, freshItems);
+            return content;
+        }
+
+        const content = createScrollableContainer(
+            freshItems,
+            displayTitle,
+            activeViewMoreUrl,
+            sectionConfig.overflowCard,
+            finalCardFormat,
+            sectionConfig
+        );
+        content.style.cssText = sectionElement.style.cssText;
+        content.className = sectionElement.className;
+        Array.from(sectionElement.attributes).forEach(attr => {
+            content.setAttribute(attr.name, attr.value);
+        });
+
+        const oldItemsContainer = sectionElement.querySelector('.itemsContainer');
+        const layoutFromDom = oldItemsContainer?.getAttribute('data-layout');
+        const layout = (layoutFromDom === 'grid' || layoutFromDom === 'row')
+            ? layoutFromDom
+            : resolveItemsLayout(sectionConfig);
+        const gapless = oldItemsContainer
+            ? oldItemsContainer.getAttribute('data-gapless') === 'true'
+            : resolveUseGaplessCards(sectionConfig);
+        invalidateLastRowPadding(sectionElement.querySelector('.itemsContainer'));
+        sectionElement.replaceWith(content);
+        applyItemsLayoutState(content, layout, gapless);
+        ensureCardBorders(content);
+        attachSectionControlButtons(sectionConfig, content, freshItems);
+        content.dataset.refreshing = 'false';
+        return content;
+    }
+
+    /**
+     * Immediately swap section body to skeleton cards while a query fetch is in flight.
+     * @returns {HTMLElement} The skeleton section element now in the DOM
+     */
+    function showSectionQuerySkeletons(sectionConfig, sectionElement) {
+        let finalCardFormat = sectionConfig.cardFormat;
+        const currentCardFormat = sectionElement.getAttribute('data-card-format');
+        if (currentCardFormat) {
+            finalCardFormat = currentCardFormat;
+        }
+        if (finalCardFormat === 'random' || finalCardFormat === 'Random') {
+            finalCardFormat = getRandomCardFormat();
+        }
+
+        const displayTitle = getSectionTitleForMultiQuery(sectionConfig);
+        const activeViewMoreUrl = getActiveViewMoreUrl(sectionConfig);
+
+        let skeleton;
+        if (sectionConfig.spotlight || sectionConfig.renderMode === 'Spotlight') {
+            const spotlightSettings = { ...(sectionConfig.spotlightConfig || {}) };
+            if (activeViewMoreUrl) spotlightSettings.viewMoreUrl = activeViewMoreUrl;
+            skeleton = createSkeletonSpotlightSection(displayTitle, spotlightSettings);
+        } else {
+            skeleton = createProgressivelyEnhancedScrollableContainer(
+                displayTitle,
+                activeViewMoreUrl,
+                finalCardFormat,
+                sectionConfig.overflowCard,
+                sectionConfig
+            );
+        }
+
+        skeleton.style.cssText = sectionElement.style.cssText;
+        skeleton.className = sectionElement.className;
+        Array.from(sectionElement.attributes).forEach(attr => {
+            skeleton.setAttribute(attr.name, attr.value);
+        });
+        if (finalCardFormat) {
+            skeleton.setAttribute('data-card-format', finalCardFormat);
+        }
+        applySectionPresentationAttrs(skeleton, sectionConfig);
+        skeleton.dataset.refreshing = 'true';
+
+        const oldItemsContainer = sectionElement.querySelector('.itemsContainer');
+        const layoutFromDom = oldItemsContainer?.getAttribute('data-layout');
+        const layout = (layoutFromDom === 'grid' || layoutFromDom === 'row')
+            ? layoutFromDom
+            : resolveItemsLayout(sectionConfig);
+        const gapless = oldItemsContainer
+            ? oldItemsContainer.getAttribute('data-gapless') === 'true'
+            : resolveUseGaplessCards(sectionConfig);
+
+        sectionElement.replaceWith(skeleton);
+        applyItemsLayoutState(skeleton, layout, gapless);
+        attachSectionControlButtons(sectionConfig, skeleton, []);
+        return skeleton;
+    }
+
+    function attachMultiQueryPicker(sectionConfig, sectionElement, titleContainer) {
+        const queries = sectionConfig?.queries || [];
+        if (queries.length <= 1 || sectionConfig.useMultiQueryPicker !== true) {
+            titleContainer.querySelectorAll('.multi-query-picker-button').forEach((btn) => btn.remove());
+            return;
+        }
+
+        titleContainer.querySelectorAll('.multi-query-picker-button').forEach((btn) => btn.remove());
+
+        resolveActiveQueryIndex(sectionConfig, { initialize: true });
+        updateSectionTitleText(sectionElement, getSectionTitleForMultiQuery(sectionConfig), getSectionCaption(sectionConfig));
+        updateSectionViewMoreLink(sectionElement, getActiveViewMoreUrl(sectionConfig));
+
+        const selectButton = document.createElement('button');
+        selectButton.type = 'button';
+        selectButton.className = 'emby-button raised multi-query-picker-button';
+        selectButton.textContent = getMultiQueryPickerButtonLabel(sectionConfig);
+        selectButton.style.cssText = 'margin-left: 1em; padding: 0.5em 1em; font-size: 0.9em;';
+        selectButton.setAttribute('aria-label', 'Select query');
+
+        const controlsMount = titleContainer.querySelector('.section-controls');
+        const titleLink = titleContainer.querySelector('a.sectionTitle-link');
+        const sectionTitle = titleContainer.querySelector('.sectionTitle');
+        if (controlsMount) {
+            titleContainer.insertBefore(selectButton, controlsMount);
+        } else if (titleLink?.parentNode) {
+            titleLink.parentNode.insertBefore(selectButton, titleLink.nextSibling);
+        } else if (sectionTitle?.parentNode) {
+            sectionTitle.parentNode.insertBefore(selectButton, sectionTitle.nextSibling);
+        } else {
+            titleContainer.appendChild(selectButton);
+        }
+
+        let activePopover = null;
+        const closePopover = () => {
+            if (activePopover) {
+                activePopover.remove();
+                activePopover = null;
+            }
+        };
+
+        if (!document.getElementById('kefinTweaks-multiQueryPopover-style')) {
+            const styleElement = document.createElement('style');
+            styleElement.id = 'kefinTweaks-multiQueryPopover-style';
+            styleElement.textContent = `
+                .multiQueryPopover {
+                    background-color: rgba(0, 0, 0, 0.95);
+                    position: absolute !important;
+                    z-index: 1001;
+                    display: block;
                 }
-                
-                // Set refreshing state to false
+            `;
+            document.head.appendChild(styleElement);
+        }
+
+        selectButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+
+            if (activePopover) {
+                closePopover();
+                return;
+            }
+
+            const popover = document.createElement('div');
+            popover.className = 'kefinTweaks-popover multiQueryPopover itemDetailsGroup';
+            const selectedIndex = resolveActiveQueryIndex(sectionConfig, { initialize: false });
+            let selectedItemElement = null;
+
+            queries.forEach((query, index) => {
+                const itemElement = document.createElement('div');
+                itemElement.className = 'kefinTweaks-popover-item detailsGroupItem';
+                if (index === selectedIndex) {
+                    itemElement.classList.add('selected');
+                    selectedItemElement = itemElement;
+                }
+                itemElement.textContent = getQueryDisplayName(query, index);
+                itemElement.addEventListener('click', async () => {
+                    closePopover();
+                    if (index === resolveActiveQueryIndex(sectionConfig, { initialize: false })) {
+                        return;
+                    }
+
+                    sectionConfig._selectedQueryIndex = index;
+
+                    const sectionIdAttr = (typeof CSS !== 'undefined' && typeof CSS.escape === 'function')
+                        ? CSS.escape(String(sectionConfig.id))
+                        : String(sectionConfig.id).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
+                    // Prefer the live section node (may have been replaced by a prior switch).
+                    let activeSectionEl = document.querySelector(
+                        `.verticalSection[data-section-id="${sectionIdAttr}"], .spotlight-section[data-section-id="${sectionIdAttr}"]`
+                    ) || sectionElement;
+
+                    const livePicker = activeSectionEl.querySelector('.multi-query-picker-button');
+                    if (livePicker) {
+                        livePicker.textContent = getMultiQueryPickerButtonLabel(sectionConfig);
+                    }
+                    updateSectionTitleText(activeSectionEl, getSectionTitleForMultiQuery(sectionConfig), getSectionCaption(sectionConfig));
+                    updateSectionViewMoreLink(activeSectionEl, getActiveViewMoreUrl(sectionConfig));
+                    activeSectionEl.dataset.refreshing = 'true';
+
+                    try {
+                        const loaded = await loadActiveSectionQueryItems(sectionConfig);
+                        let newContent = null;
+
+                        if (loaded.canPaintCached) {
+                            newContent = await replaceSectionContent(sectionConfig, activeSectionEl, loaded.items);
+                        } else {
+                            // Skeletons before awaiting network — cache check already finished above.
+                            activeSectionEl = showSectionQuerySkeletons(sectionConfig, activeSectionEl);
+                            const freshItems = await loaded.itemsPromise;
+                            newContent = await replaceSectionContent(sectionConfig, activeSectionEl, freshItems);
+                        }
+
+                        if (typeof sectionConfig._onMultiQueryChange === 'function') {
+                            sectionConfig._onMultiQueryChange(index, sectionConfig, newContent);
+                        }
+                    } catch (error) {
+                        console.error('[KefinTweaks CardBuilder] Error switching query:', error);
+                        const live = document.querySelector(
+                            `.verticalSection[data-section-id="${sectionIdAttr}"], .spotlight-section[data-section-id="${sectionIdAttr}"]`
+                        ) || activeSectionEl;
+                        if (live) live.dataset.refreshing = 'false';
+                    }
+                });
+                popover.appendChild(itemElement);
+            });
+
+            titleContainer.style.position = 'relative';
+            selectButton.parentNode.insertBefore(popover, selectButton.nextSibling);
+            const buttonRect = selectButton.getBoundingClientRect();
+            const containerRect = titleContainer.getBoundingClientRect();
+            popover.style.left = `${Math.max(0, buttonRect.left - containerRect.left)}px`;
+            popover.style.top = '100%';
+            popover.style.bottom = 'auto';
+            popover.style.marginTop = '8px';
+            popover.style.marginBottom = '0';
+            activePopover = popover;
+
+            if (selectedItemElement) {
+                setTimeout(() => {
+                    selectedItemElement.scrollIntoView({
+                        behavior: 'instant',
+                        block: 'nearest',
+                        inline: 'nearest'
+                    });
+                }, 10);
+            }
+
+            const closeHandler = (ev) => {
+                if (!popover.contains(ev.target) && !selectButton.contains(ev.target)) {
+                    closePopover();
+                    document.removeEventListener('click', closeHandler);
+                }
+            };
+            setTimeout(() => {
+                document.addEventListener('click', closeHandler);
+            }, 100);
+        });
+    }
+
+    function ensureSectionControlsMount(titleContainer) {
+        const wrapper = titleContainer.querySelector(':scope > .sectionTitle-wrapper');
+        const mountParent = wrapper || titleContainer;
+
+        let controls = mountParent.querySelector(':scope > .section-controls');
+        if (!controls) {
+            controls = titleContainer.querySelector(':scope > .section-controls');
+        }
+
+        if (!controls) {
+            controls = document.createElement('div');
+            controls.className = 'section-controls';
+
+            const inline = document.createElement('div');
+            inline.className = 'section-controls-inline';
+
+            const moreButton = document.createElement('button');
+            moreButton.type = 'button';
+            moreButton.className = 'section-controls-more material-icons more_vert';
+            moreButton.title = 'More';
+            moreButton.setAttribute('aria-label', 'More');
+
+            controls.appendChild(inline);
+            controls.appendChild(moreButton);
+            mountParent.appendChild(controls);
+        } else if (controls.parentNode !== mountParent) {
+            mountParent.appendChild(controls);
+        }
+
+        return {
+            controls,
+            inline: controls.querySelector('.section-controls-inline'),
+            moreButton: controls.querySelector('.section-controls-more')
+        };
+    }
+
+    /**
+     * Refresh section content in place (used by section control registry).
+     * @returns {Promise<HTMLElement|null>} refresh button on the new section, if any
+     */
+    async function executeSectionRefresh(sectionConfig, sectionElement) {
+        sectionElement.dataset.refreshing = 'true';
+
+        try {
+            const freshItems = await refreshSectionQueries(sectionConfig);
+
+            if (freshItems.length === 0) {
+                sectionElement.remove();
+                return null;
+            }
+
+            let finalCardFormat = sectionConfig.cardFormat;
+            const currentCardFormat = sectionElement.getAttribute('data-card-format');
+            if (currentCardFormat) {
+                finalCardFormat = currentCardFormat;
+            }
+
+            let content = null;
+            if (sectionConfig.spotlight || sectionConfig.renderMode === 'Spotlight') {
+                const refreshed = refreshSpotlight(sectionElement, freshItems, {
+                    name: getSectionTitleForMultiQuery(sectionConfig),
+                    viewMoreUrl: getActiveViewMoreUrl(sectionConfig),
+                    spotlightConfig: sectionConfig.spotlightConfig,
+                    dataItems: [],
+                    keepCurrentSlide: false,
+                    sectionConfig
+                });
+                content = refreshed.content;
+                ensureCardBorders(content);
                 content.dataset.refreshing = 'false';
-                
-                // Show checkmark on the new button
+                const newButton = attachSectionControlButtons(sectionConfig, content, freshItems);
                 if (newButton) {
                     showRefreshComplete(newButton);
                 }
-                
-            } catch (error) {
-                console.error('[KefinTweaks CardBuilder] Error refreshing section:', error);
-                sectionElement.dataset.refreshing = 'false';
+                return newButton;
+            }
+
+            content = createScrollableContainer(
+                freshItems,
+                getSectionTitleForMultiQuery(sectionConfig),
+                getActiveViewMoreUrl(sectionConfig),
+                sectionConfig.overflowCard,
+                finalCardFormat,
+                sectionConfig
+            );
+
+            content.style.cssText = sectionElement.style.cssText;
+            content.className = sectionElement.className;
+            Array.from(sectionElement.attributes).forEach(attr => {
+                content.setAttribute(attr.name, attr.value);
+            });
+
+            const oldItemsContainer = sectionElement.querySelector('.itemsContainer');
+            const layoutFromDom = oldItemsContainer?.getAttribute('data-layout');
+            const layout = (layoutFromDom === 'grid' || layoutFromDom === 'row')
+                ? layoutFromDom
+                : resolveItemsLayout(sectionConfig);
+            const gapless = oldItemsContainer
+                ? oldItemsContainer.getAttribute('data-gapless') === 'true'
+                : resolveUseGaplessCards(sectionConfig);
+            invalidateLastRowPadding(content.querySelector('.itemsContainer'));
+
+            sectionElement.replaceWith(content);
+            applyItemsLayoutState(content, layout, gapless);
+            ensureCardBorders(content);
+
+            const newButton = attachSectionControlButtons(sectionConfig, content, freshItems);
+            content.dataset.refreshing = 'false';
+            if (newButton) {
+                showRefreshComplete(newButton);
+            }
+            return newButton;
+        } catch (error) {
+            console.error('[KefinTweaks CardBuilder] Error refreshing section:', error);
+            sectionElement.dataset.refreshing = 'false';
+            return null;
+        }
+    }
+
+    function attachSectionControlButtons(sectionConfig, sectionElement, cachedItems) {
+        const titleContainer = sectionElement.querySelector('.sectionTitleContainer')
+            || sectionElement.querySelector('.spotlight-section-title-container');
+        if (!titleContainer) return null;
+
+        titleContainer.querySelectorAll(
+            ':scope > .show-all-button, :scope > .section-refresh-button, :scope > .section-configure-button'
+        ).forEach((el) => el.remove());
+
+        ensureSectionControlsMount(titleContainer);
+        const definitions = getSectionControlDefinitions(sectionConfig, sectionElement, cachedItems);
+        const refreshButton = renderSectionControls(sectionConfig, sectionElement, titleContainer, definitions);
+
+        const itemsContainer = sectionElement.querySelector('.itemsContainer');
+        const layout = itemsContainer?.getAttribute('data-layout') || resolveItemsLayout(sectionConfig);
+        const showAllBtn = titleContainer.querySelector('.show-all-button');
+        if (showAllBtn) {
+            const resolved = layout === 'grid' ? layout : 'row';
+            showAllBtn.title = ITEMS_LAYOUT_NEXT_TITLE[resolved] || ITEMS_LAYOUT_NEXT_TITLE.row;
+            showAllBtn.setAttribute('aria-label', showAllBtn.title);
+            setShowAllIcon(showAllBtn, nextItemsLayout(resolved));
+        }
+
+        attachMultiQueryPicker(sectionConfig, sectionElement, titleContainer);
+        return refreshButton;
+    }
+
+    let cardUserDataListenerStarted = false;
+
+    function getPrimaryUserIdForCardSync() {
+        return (typeof ApiClient !== 'undefined' && typeof ApiClient.getCurrentUserId === 'function')
+            ? ApiClient.getCurrentUserId()
+            : null;
+    }
+
+    function extractUserDataChangePayload(event) {
+        const data = event?.detail ?? event;
+        const userId = data?.Data?.UserId ?? data?.UserId ?? null;
+        const list = data?.Data?.UserDataList ?? data?.UserDataList;
+        if (!Array.isArray(list)) return { userId, entries: [] };
+        return { userId, entries: list };
+    }
+
+    function isPrimaryUserDataChange(userId) {
+        const primaryId = getPrimaryUserIdForCardSync();
+        if (!primaryId) return false;
+        if (!userId) return true;
+        return userId === primaryId;
+    }
+
+    /**
+     * Keep data-positionticks on visible cards aligned with primary-user playstate.
+     * Driven by UserDataChanged (same event Jellyfin uses for progress bars) — not DOM observation.
+     */
+    function updateCardResumeAttributes(itemId, userData) {
+        if (!itemId || !userData) return;
+
+        const escapedId = typeof CSS !== 'undefined' && CSS.escape
+            ? CSS.escape(itemId)
+            : itemId.replace(/["\\]/g, '\\$&');
+        const cards = document.querySelectorAll(`.card[data-id="${escapedId}"]`);
+        if (!cards.length) return;
+
+        const ticks = userData.PlaybackPositionTicks;
+
+        cards.forEach((card) => {
+            if (userData.Played === true) {
+                card.removeAttribute('data-positionticks');
+                return;
+            }
+            if (typeof ticks === 'number' && ticks > 0) {
+                card.setAttribute('data-positionticks', String(ticks));
+            } else {
+                card.removeAttribute('data-positionticks');
             }
         });
-        
-        return button;
+    }
+
+    function applyUserDataEntriesToCards(entries, userId) {
+        if (!isPrimaryUserDataChange(userId)) return;
+        entries.forEach((entry) => {
+            if (entry?.ItemId) {
+                updateCardResumeAttributes(entry.ItemId, entry);
+            }
+        });
+    }
+
+    function handleCardUserDataChangedEvent(event) {
+        const { userId, entries } = extractUserDataChangePayload(event);
+        if (!entries.length) return;
+        applyUserDataEntriesToCards(entries, userId);
+    }
+
+    function startCardUserDataListener() {
+        if (cardUserDataListenerStarted) return;
+
+        let registered = false;
+
+        if (window.ApiClient?.addEventListener) {
+            window.ApiClient.addEventListener('userdatachanged', handleCardUserDataChangedEvent);
+            registered = true;
+        }
+
+        if (window.websocketHelper?.listen) {
+            window.websocketHelper.listen('UserDataChanged', (msg) => {
+                const userId = msg?.Data?.UserId;
+                const entries = msg?.Data?.UserDataList;
+                if (!Array.isArray(entries) || !entries.length) return;
+                applyUserDataEntriesToCards(entries, userId);
+            });
+            registered = true;
+        }
+
+        if (registered) {
+            cardUserDataListenerStarted = true;
+            console.log('[KefinTweaks CardBuilder] Listening for UserDataChanged to sync card resume attributes');
+            return;
+        }
+
+        setTimeout(startCardUserDataListener, 1000);
     }
     
     // Main card builder object
@@ -576,6 +1798,25 @@
          */
         postProcessItems: postProcessItems,
         postProcessItemsByQuery: postProcessItemsByQuery,
+        getQueryDisplayName: getQueryDisplayName,
+        resolveActiveQueryIndex: resolveActiveQueryIndex,
+        resolveQueriesToLoad: resolveQueriesToLoad,
+        getSectionTitleForMultiQuery: getSectionTitleForMultiQuery,
+        getActiveViewMoreUrl: getActiveViewMoreUrl,
+        refreshSectionQueries: refreshSectionQueries,
+        loadActiveSectionQueryItems: loadActiveSectionQueryItems,
+        attachSectionControlButtons: attachSectionControlButtons,
+        ensureCardBorders: ensureCardBorders,
+        applyItemsLayoutState: applyItemsLayoutState,
+        resolveItemsLayout: resolveItemsLayout,
+        resolveUseGaplessCards: resolveUseGaplessCards,
+        invalidateLastRowPadding: invalidateLastRowPadding,
+        invalidateCardRadiusCache: invalidateCardRadiusCache,
+        ensureCardRadiusCssVar: ensureCardRadiusCssVar,
+        getScrollerPosition: getScrollerPosition,
+        setScrollerPosition: setScrollerPosition,
+        getItemMaterialIcon: getItemMaterialIcon,
+        createLibraryButtonElement: createLibraryButtonElement,
         /**
          * Main entry point function to build a Jellyfin card
          * @param {Object} item - The Jellyfin item object
@@ -599,23 +1840,25 @@
          * @param {string} sortOrderDirection - Direction: 'Ascending' or 'Descending'
          * @returns {HTMLElement} - The constructed scrollable container
          */
-        renderCards: function(items, title, viewMoreUrl = null, overflowCard = false, cardFormat = null, sortOrder = null, sortOrderDirection = 'Ascending', forcedImageType = null) {
-            // Handle Random card format - pick one format for entire section
+        renderCards: function(items, title, viewMoreUrl = null, overflowCard = false, cardFormat = null, sortOrder = null, sortOrderDirection = 'Ascending') {
             let finalCardFormat = cardFormat;
             if (cardFormat === 'random' || cardFormat === 'Random') {
                 finalCardFormat = getRandomCardFormat();
             }
-            
-            // Sort items if sortOrder is provided
+
             let sortedItems = items;
             if (sortOrder && sortOrder !== 'Random') {
                 sortedItems = sortItems(items, sortOrder, sortOrderDirection);
             } else if (sortOrder === 'Random') {
                 sortedItems = shuffle([...items]);
             }
-            
-            const container = createScrollableContainer(sortedItems, title, viewMoreUrl, overflowCard, finalCardFormat, forcedImageType);
+
+            const container = createScrollableContainer(sortedItems, title, viewMoreUrl, overflowCard, finalCardFormat);
             return container;
+        },
+
+        renderSpotlightSection: function(items, title, options = {}) {
+            return createSpotlightSection(items, title, options);
         },
 
         /**
@@ -640,7 +1883,7 @@
          * @param {string} sortOrderDirection - Direction: 'Ascending' or 'Descending'
          * @returns {HTMLElement} - The constructed scrollable container (initially with skeletons)
          */
-        renderProgressivelyEnhancedCards: async function(itemsPromise, title, viewMoreUrl = null, overflowCard = false, cardFormat = null, sortOrder = null, sortOrderDirection = 'Ascending', forcedImageType = null, minimumItems = -1) {
+        renderProgressivelyEnhancedCards: async function(itemsPromise, title, viewMoreUrl = null, overflowCard = false, cardFormat = null, sortOrder = null, sortOrderDirection = 'Ascending', minimumItems = -1) {
             // Handle Random card format - Must resolve ONCE for both skeleton and real cards
             let resolvedFormat = cardFormat;
             if (cardFormat === 'random' || cardFormat === 'Random') {
@@ -652,7 +1895,7 @@
                 // Resolve the promise and get the items
                 const items = await itemsPromise;
                 // Replace the skeleton with the real cards
-                const container = createScrollableContainer(items, title, viewMoreUrl, overflowCard, resolvedFormat, forcedImageType);
+                const container = createScrollableContainer(items, title, viewMoreUrl, overflowCard, resolvedFormat);
                 return container;
             }
 
@@ -696,7 +1939,7 @@
                 }
 
                 // Generate real cards container (off-DOM) using the SAME resolved format
-                const realContainer = createScrollableContainer(sortedItems, title, viewMoreUrl, overflowCard, resolvedFormat, forcedImageType);
+                const realContainer = createScrollableContainer(sortedItems, title, viewMoreUrl, overflowCard, resolvedFormat);
 
                 // Copy critical attributes to preserve layout/order
                 if (skeletonContaineElement.style.order) {
@@ -705,12 +1948,16 @@
                 if (skeletonContaineElement.hasAttribute('data-section-id')) {
                     realContainer.setAttribute('data-section-id', skeletonContainer.getAttribute('data-section-id'));
                 }
-                
+                if (skeletonContaineElement.dataset.border) {
+                    realContainer.dataset.border = skeletonContaineElement.dataset.border;
+                    realContainer.dataset.borderStyle = skeletonContaineElement.dataset.borderStyle
+                        || skeletonContaineElement.dataset.border;
+                }
+
                 // Replace content of skeleton container with real content
                 // This preserves the container element itself and its layout properties (like order)
                 skeletonContaineElement.replaceWith(realContainer);
-                checkSectionOverflow(realContainer, true);
-                //setTimeout(() => checkSectionOverflow(realContainer, true), 150);
+                ensureCardBorders(realContainer);
             }).catch(error => {
                 console.error('[KefinTweaks CardBuilder] Error loading items for progressive enhancement:', error);
                 // Optionally remove skeleton on error or show error state
@@ -730,12 +1977,17 @@
          * @param {Object} options - Configuration options
          */
         renderProgressiveSections: async function(container, sections, options = {}) {
-            const { revealSectionsSequentially = false, waitForContainerClass = null } = options;
+            const {
+                revealSectionsSequentially = false,
+                waitForContainerClass = null,
+                enhanceOnVisible = false,
+                enhanceRootMargin = '30% 0px 30% 0px',
+                showStaleDataBeforeRefresh = true
+            } = options;
 
             const renderProgressiveSectionsStartTime = performance.now();
 
-            // Get the HTML for all of the progressive sections and append it to the container at once
-            let sectionElements = [];
+            const sectionEnhancementTargets = [];
             const fragment = document.createDocumentFragment();
             for (const sectionPromise of sections) {
                 const sectionPromiseStartTime = performance.now();
@@ -761,19 +2013,25 @@
                 }
 
                 let dataItems = section.result?.data?.Items ?? section.result?.data;
-                
-                // If the data is already available, we should render the section instead of the skeleton
-                if (dataItems && dataItems.length > 0) {
+                const isRandomQuerySort = sectionHasRandomQuerySort(sectionConfig);
+
+                // If the section has items, it is a static query
+                const isStaticQuery = Array.isArray(sectionConfig.items) && sectionConfig.items.length > 0;
+                    
+                const renderCachedData = isStaticQuery || (!section.result?.isStale && !isRandomQuerySort) || (showStaleDataBeforeRefresh && (!isRandomQuerySort || sectionConfig.renderMode === 'Spotlight'));
+
+                // Paint cached cards when valid, or when stale display is opted in
+                if (renderCachedData) {
                     let content = null;
 
                     if (sectionConfig.spotlight || sectionConfig.renderMode === 'Spotlight') {
-                        content = createSpotlightSection(dataItems, sectionConfig.name, { 
-                            viewMoreUrl: sectionConfig.viewMoreUrl, 
+                        content = createSpotlightSection(dataItems, getSectionTitleForMultiQuery(sectionConfig), { 
+                            viewMoreUrl: getActiveViewMoreUrl(sectionConfig), 
                             progressiveEnhancement: true,
                             ...sectionConfig.spotlightConfig
                         });
                     } else {
-                        content = createScrollableContainer(dataItems, sectionConfig.name, sectionConfig.viewMoreUrl, sectionConfig.overflowCard, finalCardFormat, sectionConfig.forcedImageType);
+                        content = createScrollableContainer(dataItems, getSectionTitleForMultiQuery(sectionConfig), getActiveViewMoreUrl(sectionConfig), sectionConfig.overflowCard, finalCardFormat, sectionConfig);
                     }
 
                     content.setAttribute('data-section-id', sectionConfig.id);
@@ -783,15 +2041,12 @@
                     if (sectionConfig.hideCardFooter === true) {
                         content.dataset.hideCardFooter = 'true';
                     }
+                    applySectionPresentationAttrs(content, sectionConfig);
                     
-                    // Add refresh button to rendered section
-                    const sectionTitleContainer = content.querySelector('.sectionTitleContainer');
-                    if (sectionTitleContainer) {
-                        const refreshButton = createRefreshButton(sectionConfig, content);
-                        sectionTitleContainer.appendChild(refreshButton);
-                    }
+                    // Add section control buttons to rendered section
+                    attachSectionControlButtons(sectionConfig, content, dataItems);
                     
-                    sectionElements.push(content);
+                    sectionEnhancementTargets.push({ element: content, section });
                     //container.appendChild(content);
                     //content.style.contentVisibility = 'hidden';
 
@@ -812,12 +2067,12 @@
                 let sectionElement = null;
                 if (sectionConfig.spotlight || sectionConfig.renderMode === 'Spotlight') {
                     const spotlightSettings = sectionConfig.spotlightConfig ?? {};
-                    if (sectionConfig.viewMoreUrl) {
-                        spotlightSettings.viewMoreUrl = sectionConfig.viewMoreUrl;
+                    if (getActiveViewMoreUrl(sectionConfig)) {
+                        spotlightSettings.viewMoreUrl = getActiveViewMoreUrl(sectionConfig);
                     }
-                    sectionElement = createSkeletonSpotlightSection(sectionConfig.name, spotlightSettings);
+                    sectionElement = createSkeletonSpotlightSection(getSectionTitleForMultiQuery(sectionConfig), spotlightSettings);
                 } else {
-                    sectionElement = createProgressivelyEnhancedScrollableContainer(sectionConfig.name, sectionConfig.viewMoreUrl, sectionConfig.cardFormat, sectionConfig.overflowCard);
+                    sectionElement = createProgressivelyEnhancedScrollableContainer(getSectionTitleForMultiQuery(sectionConfig), getActiveViewMoreUrl(sectionConfig), finalCardFormat, sectionConfig.overflowCard, sectionConfig);
                 }
                 sectionElement.setAttribute('data-section-id', sectionConfig.id);
                 sectionElement.style.order = sectionConfig.order;
@@ -825,6 +2080,7 @@
                 if (sectionConfig.hideCardFooter === true) {
                     sectionElement.dataset.hideCardFooter = 'true';
                 }
+                applySectionPresentationAttrs(sectionElement, sectionConfig);
                 //container.appendChild(sectionElement);
                 
                 // set section element content-visibility to hidden
@@ -835,7 +2091,7 @@
                     sectionElement.style.display = 'none';
                 }
 
-                sectionElements.push(sectionElement);
+                sectionEnhancementTargets.push({ element: sectionElement, section });
                 fragment.appendChild(sectionElement);
                 const sectionEndTime = performance.now();
                 const sectionDuration = sectionEndTime - sectionStartTime;
@@ -863,6 +2119,7 @@
             }
 
             container.appendChild(fragment);
+            syncAttachedGridTilesLayouts(container);
 
             // Update the scroll buttons for all scrollable containers
             /* const scrollableContainers = container.querySelectorAll('.emby-scroller');
@@ -912,156 +2169,24 @@
             // Set up section reveal animations if enabled
             if (revealSectionsSequentially) {
                 initializeSectionRevealObserver();
-                sectionElements.forEach(section => {
-                    section.style.display = '';
-                    observeSectionForReveal(section);
+                sectionEnhancementTargets.forEach(({ element }) => {
+                    element.style.display = '';
+                    observeSectionForReveal(element);
                 });
             }
 
-            for (let index = 0; index < sectionElements.length; index++) {
+            const enhanceOptions = {
+                enhanceOnVisible,
+                enhanceRootMargin,
+                revealSectionsSequentially
+            };
+
+            for (let index = 0; index < sectionEnhancementTargets.length; index++) {
                 const sectionStartTime = performance.now();
+                const { element: sectionElement, section } = sectionEnhancementTargets[index];
 
-                const sectionElement = sectionElements[index];
-                const section = await sections[index];
+                scheduleSectionProgressiveEnhancement(sectionElement, section, enhanceOptions);
 
-                section.result?.isStalePromise?.then(async isStale => {
-                    if (isStale) {
-                        // Add refreshing state to the section element
-                        sectionElement.dataset.refreshing = 'true';
-                        return;
-                    }
-                });
-
-                section.result?.dataPromise?.then(async result => {
-                    // Remove refreshing state from the section element
-                    sectionElement.dataset.refreshing = 'false';
-
-                    const sectionConfig = section.config;
-                    let items = result?.Items ?? result ?? [];
-
-                    // Check if the data is stale if it was previously available first
-                    const dataItems = section.result?.data?.Items ?? section.result?.data ?? [];
-
-                    let itemsMatch = true;
-
-                    // Check if the items in the section are the same as the items in the data
-                    const itemsInSection = sectionElement.querySelectorAll('.itemsContainer .card[data-id]');
-                    
-                    // Check that each item appears in order in the section by going through the itemsInSection and making sure the itemsInData index matches
-                    for (let i = 0; i < itemsInSection.length; i++) {
-                        const itemInSection = itemsInSection[i];
-                        const item = items[i];
-                        if (item && itemInSection && itemInSection.getAttribute('data-id') !== item.Id) {
-                            itemsMatch = false;
-                            break;
-                        }
-                    }
-
-                    if (items.length !== dataItems.length) {
-                        itemsMatch = false;
-                    }
-
-                    for (const item of items) {
-                        const dataItem = dataItems.find(dataItem => dataItem.Id === item.Id);
-                        if (!dataItem) {
-                            itemsMatch = false;
-                            break;
-                        }
-
-                        if (dataItem.UserData) {
-                            for (const key in dataItem.UserData) {
-                                if (dataItem.UserData[key] !== item.UserData[key]) {
-                                    itemsMatch = false;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-
-                    const shouldRefresh = !itemsMatch;
-
-                    // If there are no items, remove any existing section element
-                    if (items.length === 0) {
-                        sectionElement.remove();
-                        return;
-                    }
-
-                    if (!shouldRefresh) {
-                        return;
-                    }
-
-                    let content = null;
-
-                    let finalCardFormat = sectionConfig.cardFormat;
-
-                    // Get card format from skeleton container
-                    const skeletonCardFormat = sectionElement.getAttribute('data-card-format');
-                    if (skeletonCardFormat) {
-                        finalCardFormat = skeletonCardFormat;
-                    }
-
-                    //items = postProcessItems(sectionConfig, items);
-
-                    if (sectionConfig.spotlight || sectionConfig.renderMode === 'Spotlight') {
-                        content = createSpotlightSection(items, sectionConfig.name, { 
-                            viewMoreUrl: sectionConfig.viewMoreUrl, 
-                            ...sectionConfig.spotlightConfig
-                        });
-                    } else {
-                        content = createScrollableContainer(items, sectionConfig.name, sectionConfig.viewMoreUrl, sectionConfig.overflowCard, finalCardFormat, sectionConfig.forcedImageType);
-                    }
-
-                    //content.setAttribute('data-section-id', sectionConfig.id);
-                    //content.style.order = sectionConfig.order;
-                    //content.setAttribute('data-card-format', finalCardFormat);
-                    //content.style.contentVisibility = sectionElement.style.contentVisibility ?? 'hidden';
-
-                    // Ensure all styles and classes and attributes are retained in the new content
-                    content.style.cssText = sectionElement.style.cssText;
-                    content.className = sectionElement.className;
-                    Array.from(sectionElement.attributes).forEach(attr => {
-                        content.setAttribute(attr.name, attr.value);
-                    });
-
-                    // Preserve data-expanded state from old itemsContainer to new one
-                    const oldItemsContainer = sectionElement.querySelector('.itemsContainer');
-                    const newItemsContainer = content.querySelector('.itemsContainer');
-                    if (oldItemsContainer && newItemsContainer) {
-                        const isExpanded = oldItemsContainer.getAttribute('data-expanded') === 'true';
-                        if (isExpanded) {
-                            newItemsContainer.setAttribute('data-expanded', 'true');
-                            // Also update the show-all-button text if it exists
-                            const showAllButton = content.querySelector('.show-all-button');
-                            if (showAllButton) {
-                                showAllButton.title = 'Show items in scrollable layout';
-                            }
-                            // Hide scroll buttons if they exist
-                            const scrollButtons = content.querySelector('.emby-scrollbuttons');
-                            if (scrollButtons) {
-                                scrollButtons.style.display = 'none';
-                            }
-                        }
-                    }
-
-                    // Add refresh button to new content
-                    const sectionTitleContainer = content.querySelector('.sectionTitleContainer');
-                    if (sectionTitleContainer) {
-                        const refreshButton = createRefreshButton(sectionConfig, content);
-                        sectionTitleContainer.appendChild(refreshButton);
-                    }
-
-                    sectionElement.replaceWith(content);
-                    // Update the scroll buttons for the new content
-                    //updateScrollableContainerScrollButtons(content.querySelector('.emby-scroller'));
-
-                    //checkSectionOverflow(content, true);
-                    //setTimeout(() => checkSectionOverflow(content, true), 150);
-
-                    // If revealSectionsSequentially is enabled and section hasn't been revealed yet, re-observe it
-                    if (revealSectionsSequentially && content.classList.contains('cardbuilder-section-reveal') && !content.classList.contains('in-viewport')) {
-                        observeSectionForReveal(content);
-                    }
-                });
                 const sectionEndTime = performance.now();
                 const sectionDuration = sectionEndTime - sectionStartTime;
                 console.log(`Section ${index} progressive initialization time: ${sectionDuration.toFixed(2)}ms`);
@@ -1086,7 +2211,6 @@
                 overflowCard = false,
                 sortOrder = null,
                 sortOrderDirection = 'Ascending',
-                forcedImageType = null,
                 sectionId = null,
                 order = null,
                 expectedItemType = null,
@@ -1122,7 +2246,7 @@
                 if (spotlight) {
                     return createSpotlightSection(sortedItems, title, { viewMoreUrl });
                 } else {
-                    return createScrollableContainer(sortedItems, title, viewMoreUrl, overflowCard, resolvedFormat, forcedImageType);
+                    return createScrollableContainer(sortedItems, title, viewMoreUrl, overflowCard, resolvedFormat);
                 }
             };
 
@@ -1148,8 +2272,7 @@
                             content.setAttribute(attr.name, attr.value);
                         });
                         skeleton.replaceWith(content);
-                        /* checkSectionOverflow(content, true);
-                        setTimeout(() => checkSectionOverflow(content, true), 150); */
+                        ensureCardBorders(content);
                     } else {
                         skeleton.remove();
                     }
@@ -1284,6 +2407,8 @@
         sortItems: function(items, sortOrder, sortOrderDirection) {
             return sortItems(items, sortOrder, sortOrderDirection);
         },
+
+        updateCardResumeAttributes: updateCardResumeAttributes,
         
     };
 
@@ -1416,15 +2541,13 @@
      * Get blurhash string for the card image when the image is from the current item.
      * Mirrors the image URL logic; returns undefined when image comes from parent/series (we don't have their ImageBlurHashes).
      * @param {Object} item - Jellyfin item
-     * @param {string|null} cardFormat - 'backdrop'|'square'|'portrait'|'poster'|'thumb'|null
-     * @param {string|null} forcedImageType - e.g. 'Primary'
+     * @param {string|null} cardFormat - 'backdrop'|'square'|'portrait'|'poster'|'thumb'|'series thumb'|'series poster'|null
      * @returns {string|undefined} - Blurhash string or undefined
      */
-    function getBlurhashForCard(item, cardFormat, forcedImageType) {
+    function getBlurhashForCard(item, cardFormat) {
         const hashes = item.ImageBlurHashes;
         if (!hashes || typeof hashes !== 'object') return undefined;
         cardFormat = cardFormat?.toLowerCase() || null;
-        forcedImageType = forcedImageType?.toLowerCase() || null;
 
         if (cardFormat === 'backdrop') {
             if (item.BackdropImageTags && item.BackdropImageTags[0])
@@ -1447,14 +2570,33 @@
             return undefined;
         }
         if (cardFormat === 'portrait' || cardFormat === 'poster') {
+            if (item.Type === 'Episode' && item.SeriesPrimaryImageTag) return undefined;
             if (item.ImageTags?.Primary) return hashes.Primary?.[item.ImageTags.Primary];
             if (item.PrimaryImageTag) return hashes.Primary?.[item.PrimaryImageTag];
             if (item.ImageTags?.Thumb) return hashes.Thumb?.[item.ImageTags.Thumb];
             return undefined;
         }
+        if (cardFormat === 'series poster') {
+            if (item.SeriesPrimaryImageTag) return undefined;
+            if (item.ImageTags?.Primary) return hashes.Primary?.[item.ImageTags.Primary];
+            return undefined;
+        }
+        if (cardFormat === 'series thumb') {
+            if (item.ParentThumbImageTag) return undefined;
+            if (item.ParentBackdropImageTags && item.ParentBackdropImageTags[0]) return undefined;
+            if (item.ImageTags?.Thumb) return hashes.Thumb?.[item.ImageTags.Thumb];
+            if (item.BackdropImageTags && item.BackdropImageTags[0])
+                return hashes.Backdrop?.[item.BackdropImageTags[0]];
+            if (item.ImageTags?.Primary) return hashes.Primary?.[item.ImageTags.Primary];
+            return undefined;
+        }
         if (cardFormat === 'thumb') {
-            if (forcedImageType && state.useEpisodeImages && item.Type === 'Episode' && item.ImageTags?.Primary)
-                return hashes.Primary?.[item.ImageTags.Primary];
+            if (item.Type === 'Episode') {
+                if (item.ImageTags?.Primary) return hashes.Primary?.[item.ImageTags.Primary];
+                if (item.PrimaryImageTag) return hashes.Primary?.[item.PrimaryImageTag];
+                if (item.ImageTags?.Thumb) return hashes.Thumb?.[item.ImageTags.Thumb];
+                return undefined;
+            }
             if (item.ImageTags?.Thumb) return hashes.Thumb?.[item.ImageTags.Thumb];
             if (item.ImageTags?.Primary) return hashes.Primary?.[item.ImageTags.Primary];
             return undefined;
@@ -1467,16 +2609,102 @@
         return undefined;
     }
 
+    function useEpisodeImagesInNextUpAndResume(userId) {
+        return localStorage.getItem(`${userId}-useEpisodeImagesInNextUpAndResume`) === 'true';
+    }
+
+    function getItemMaterialIcon(item) {
+        const itemType = item?.Type;
+        if (itemType === 'CollectionFolder' || item?.CollectionType) {
+            switch ((item.CollectionType || '').toLowerCase()) {
+                case 'tvshows': return 'tv';
+                case 'movies': return 'movie';
+                case 'boxsets': return 'video_library';
+                case 'playlists': return 'queue';
+                case 'books': return 'book';
+                case 'music': return 'music_note';
+                case 'homevideos': return 'photo';
+                case 'folders': return 'folder';
+                case 'livetv': return 'live_tv';
+                default: return 'folder';
+            }
+        }
+        if (itemType === 'Movie') return 'movie';
+        if (itemType === 'Series') return 'tv';
+        if (itemType === 'Episode') return 'play_circle';
+        if (itemType === 'Person') return 'person';
+        if (itemType === 'MusicAlbum') return 'album';
+        if (itemType === 'Audio') return 'music_note';
+        if (itemType === 'Artist' || itemType === 'MusicArtist') return 'person';
+        return 'folder';
+    }
+
+    function buildCollectionFolderHref(item, serverId, options = {}) {
+        const { useHtmlExtension = false } = options;
+        if (!item?.Id || (item.Type !== 'CollectionFolder' && !item.CollectionType)) return null;
+
+        const id = item.Id;
+        const ext = useHtmlExtension ? '.html' : '';
+        switch ((item.CollectionType || '').toLowerCase()) {
+            case 'movies':
+                return `#/movies${ext}?topParentId=${id}&collectionType=movies`;
+            case 'tvshows':
+                return `#/tv${ext}?topParentId=${id}&collectionType=tvshows`;
+            case 'music':
+                return `#/music${ext}?topParentId=${id}&collectionType=music`;
+            case 'livetv':
+                return `#/livetv${ext}?collectionType=livetv`;
+            default:
+                return `#/list${ext}?parentId=${id}&serverId=${serverId}`;
+        }
+    }
+
+    function getCollectionFolderUrl(item, serverId) {
+        return buildCollectionFolderHref(item, serverId, { useHtmlExtension: false });
+    }
+
+    function createLibraryButtonElement(item) {
+        const serverId = ApiClient.serverId();
+        const icon = getItemMaterialIcon(item);
+        const href = item.cardUrl
+            || getCollectionFolderUrl(item, serverId)
+            || `#/details?id=${item.Id}&serverId=${serverId}`;
+
+        const link = document.createElement('a');
+        link.setAttribute('is', 'emby-linkbutton');
+        link.href = href;
+        link.className = 'raised homeLibraryButton emby-button';
+        if (item.Id) {
+            link.setAttribute('data-id', item.Id);
+        }
+
+        const iconSpan = document.createElement('span');
+        iconSpan.className = `material-icons homeLibraryIcon ${icon}`;
+        iconSpan.setAttribute('aria-hidden', 'true');
+
+        const textSpan = document.createElement('span');
+        textSpan.className = 'homeLibraryText';
+        textSpan.textContent = item.Name || '';
+
+        link.appendChild(iconSpan);
+        link.appendChild(textSpan);
+        return link;
+    }
+
     /**
      * Creates a Jellyfin card element from an item
      * @param {Object} item - The Jellyfin item object
      * @param {boolean} overflowCard - Use overflow card classes instead of normal card classes
-     * @param {string} cardFormat - Override card format: 'portrait', 'backdrop', 'thumb', or 'square'
+     * @param {string} cardFormat - Override card format: 'portrait', 'backdrop', 'thumb', 'square', 'series thumb', 'series poster'
      * @param {string} customFooterText - Optional custom footer text (e.g., air date for episodes)
-     * @param {string} forcedImageType - Force specific image type (e.g., 'Primary')
      * @returns {HTMLElement} - The constructed card element
      */
-    function createJellyfinCardElement(item, overflowCard = false, cardFormat = null, customFooterText = null, forcedImageType = null) {
+    function createJellyfinCardElement(item, overflowCard = false, cardFormat = null, customFooterText = null) {
+        cardFormat = cardFormat?.toLowerCase() || null;
+        if (cardFormat === 'button') {
+            return createLibraryButtonElement(item);
+        }
+
         const serverId = ApiClient.serverId();
         const serverAddress = ApiClient.serverAddress();
         const itemId = item.Id || '';
@@ -1491,8 +2719,6 @@
 
         // Determine card type based on cardFormat override or item type
         let cardClass, padderClass, imageParams;
-        cardFormat = cardFormat?.toLowerCase() || null;
-        forcedImageType = forcedImageType?.toLowerCase() || null;
 
         // Use custom footer text from item property if not explicitly provided
         if (!customFooterText && item.CustomFooterText) {
@@ -1501,7 +2727,7 @@
 
         if (cardFormat) {
             // Use specified cardFormat
-            if (cardFormat === 'backdrop' || cardFormat === 'thumb' || cardFormat === 'logo' || cardFormat === 'clear art' || forcedImageType) {
+            if (cardFormat === 'backdrop' || cardFormat === 'thumb' || cardFormat === 'series thumb' || cardFormat === 'logo' || cardFormat === 'clear art') {
                 cardClass = overflowCard ? 'overflowBackdropCard' : 'backdropCard';
                 padderClass = 'cardPadder-backdrop';
                 imageParams = 'fillHeight=267&fillWidth=474';
@@ -1514,7 +2740,7 @@
                 padderClass = 'cardPadder-banner';
                 imageParams = 'fillHeight=100&fillWidth=540';
             } else {
-                // portrait (default)
+                // portrait / poster / series poster (default)
                 cardClass = overflowCard ? 'overflowPortraitCard' : 'portraitCard';
                 padderClass = 'cardPadder-portrait';
                 imageParams = 'fillHeight=446&fillWidth=297';
@@ -1546,6 +2772,7 @@
         if (!isCustomCard) card.setAttribute('data-id', itemId);
         if (isCustomCard) card.setAttribute('data-custom-card', 'true');
         card.setAttribute('data-type', itemType);
+        card.setAttribute('data-retro-marquee', getRetroPosterMarqueeLabel(item));
         const mediaType = item.MediaType === 'Unknown' && item.ChannelId ? 'Video' : item.MediaType;
         card.setAttribute('data-mediatype', mediaType || 'Video');
         
@@ -1592,21 +2819,7 @@
         cardIcon.setAttribute('aria-hidden', 'true');
         
         // Set icon based on item type
-        if (itemType === 'Movie') {
-            cardIcon.textContent = 'movie';
-        } else if (itemType === 'Series') {
-            cardIcon.textContent = 'tv';
-        } else if (itemType === 'Episode') {
-            cardIcon.textContent = 'play_circle';
-        } else if (itemType === 'MusicAlbum') {
-            cardIcon.textContent = 'album';
-        } else if (itemType === 'Audio') {
-            cardIcon.textContent = 'music_note';
-        } else if (itemType === 'Artist') {
-            cardIcon.textContent = 'person';
-        } else {
-            cardIcon.textContent = 'folder';
-        }
+        cardIcon.textContent = getItemMaterialIcon(item);
         
         cardPadder.appendChild(cardIcon);
 
@@ -1620,23 +2833,7 @@
 
         let libraryUrl = '';
         if (item.Type === 'CollectionFolder') {
-            switch (item.CollectionType) {
-                case 'movies':
-                    libraryUrl = `#/movies.html?topParentId=${item.Id}&collectionType=movies`;
-                    break;
-                case 'tvshows':
-                    libraryUrl = `#/tv.html?topParentId=${item.Id}&collectionType=tvshows`;
-                    break;
-                case 'music':
-                    libraryUrl = `#/music.html?topParentId=${item.Id}&collectionType=music`;
-                    break;
-                case 'livetv':
-                    libraryUrl = `#/livetv.html`;
-                    break;
-                default:
-                    libraryUrl = `#/list.html?parentId=${item.Id}&serverId=${serverId}`;
-                    break;
-            }
+            libraryUrl = buildCollectionFolderHref(item, serverId, { useHtmlExtension: true }) || '';
         }
 
         let cardUrl = item.cardUrl || libraryUrl || `#/details?id=${itemId}&serverId=${serverId}`;
@@ -1646,31 +2843,24 @@
             cardUrl = `#/list.html?genreId=${item.Id}&serverId=${serverId}${parentParam}`;
         }
 
-        // Card image container
-        const cardImageContainer = document.createElement('a');
-        cardImageContainer.href = cardUrl;
-        cardImageContainer.className = 'cardImageContainer coveredImage cardContent itemAction lazy blurhashed lazy-image-fadein-fast';
-        cardImageContainer.setAttribute('data-action', 'link');
-        cardImageContainer.setAttribute('aria-label', item.Name || 'Unknown');
-
-        // Force specific image if card format is specified
-/*         if (forcedImageType === 'Primary' && item.ImageTags?.Primary) {
-             const imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.ImageTags.Primary}`;
-             cardImageContainer.style.backgroundImage = `url("${imageUrl}")`;
-        } else  */
         let imageUrl = '';
 
-        const hasCustomImages = item.posterUrl || item.thumbUrl || item.squareUrl || item.imageUrl;
+        const hasCustomImages = item.posterUrl || item.thumbUrl || item.squareUrl || item.imageUrl
+            || item.backdropUrl || item.bannerUrl || item.logoUrl;
 
         const imageItem = item.Type === 'Timer' ? item.ProgramInfo : item;
 
         if (hasCustomImages) {
-            if (cardFormat === 'backdrop' || cardFormat === 'thumb') {
-                imageUrl = `${item.thumbUrl || item.imageUrl || item.posterUrl || item.squareUrl}`;
+            if (cardFormat === 'backdrop' || cardFormat === 'thumb' || cardFormat === 'series thumb') {
+                imageUrl = `${item.backdropUrl || item.thumbUrl || item.imageUrl || item.posterUrl || item.squareUrl}`;
+            } else if (cardFormat === 'banner') {
+                imageUrl = `${item.bannerUrl || item.backdropUrl || item.thumbUrl || item.imageUrl || item.posterUrl || item.squareUrl}`;
+            } else if (cardFormat === 'logo' || cardFormat === 'clear art') {
+                imageUrl = `${item.logoUrl || item.imageUrl || item.posterUrl || item.thumbUrl || item.squareUrl}`;
             } else if (cardFormat === 'square') {
                 imageUrl = `${item.squareUrl || item.imageUrl || item.posterUrl || item.thumbUrl}`;
             } else {
-                // portrait/poster or default
+                // portrait/poster/series poster or default
                 imageUrl = `${item.posterUrl || item.imageUrl || item.thumbUrl || item.squareUrl}`;
             }
         } else if (cardFormat === 'backdrop') {
@@ -1688,15 +2878,21 @@
                 imageUrl = item.BackdropImageTags && item.BackdropImageTags[0] ? `${serverAddress}/Items/${item.Id}/Images/Backdrop?${imageParams}&quality=96&tag=${item.BackdropImageTags[0]}` : item.ImageTags?.Primary ? `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.ImageTags?.Primary}` : '';
             } else if (item.ImageTags?.Primary) {
                 imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.ImageTags?.Primary}`;
-            } else if (item.PrimaryImageTag) { 
+            } else if (item.PrimaryImageTag && item.Type === 'Episode') { 
                 imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.PrimaryImageTag}`;
-            } else if (item.SeriesPrimaryImageTag) {
-                imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.SeriesPrimaryImageTag}`;
             } else if (item.BackdropImageTags && item.BackdropImageTags[0]) {
                 imageUrl = `${serverAddress}/Items/${item.Id}/Images/Backdrop?${imageParams}&quality=96&tag=${item.BackdropImageTags[0]}`;
+            } else if (item.ParentBackdropImageTags && item.ParentBackdropImageTags[0]) {
+                imageUrl = `${serverAddress}/Items/${item.ParentBackdropItemId}/Images/Backdrop?${imageParams}&quality=96&tag=${item.ParentBackdropImageTags[0]}`;
             } else if (item.ImageTags?.Thumb) {
                 imageUrl = `${serverAddress}/Items/${item.Id}/Images/Thumb?${imageParams}&quality=96&tag=${item.ImageTags?.Thumb}`;
-            }
+            } else if (item.ParentThumbImageTag) {
+                imageUrl = `${serverAddress}/Items/${item.ParentThumbItemId}/Images/Thumb?${imageParams}&quality=96&tag=${item.ParentThumbImageTag}`;
+            } else if (item.SeriesPrimaryImageTag) {
+                imageUrl = `${serverAddress}/Items/${item.SeriesId}/Images/Primary?${imageParams}&quality=96&tag=${item.SeriesPrimaryImageTag}`;
+            } else if (item.PrimaryImageTag) { 
+                imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.PrimaryImageTag}`;
+            } 
         } else if (cardFormat === 'portrait' || cardFormat === 'poster') {
             if (item.Type === 'Episode' && item.SeriesPrimaryImageTag) {
                 imageUrl = `${serverAddress}/Items/${item.SeriesId}/Images/Primary?${imageParams}&quality=96&tag=${item.SeriesPrimaryImageTag}`;                
@@ -1707,10 +2903,39 @@
             } else if (item.ImageTags?.Thumb) {
                 imageUrl = `${serverAddress}/Items/${item.Id}/Images/Thumb?${imageParams}&quality=96&tag=${item.ImageTags?.Thumb}`;
             }
+        } else if (cardFormat === 'series poster') {
+            if (item.SeriesPrimaryImageTag) {
+                imageUrl = `${serverAddress}/Items/${item.SeriesId}/Images/Primary?${imageParams}&quality=96&tag=${item.SeriesPrimaryImageTag}`;
+            } else if (item.ImageTags?.Primary) {
+                imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.ImageTags.Primary}`;
+            }
+        } else if (cardFormat === 'series thumb') {
+            if (item.ParentThumbImageTag) {
+                imageUrl = `${serverAddress}/Items/${item.ParentThumbItemId || item.SeriesId}/Images/Thumb?${imageParams}&quality=96&tag=${item.ParentThumbImageTag}`;
+            } else if (item.ParentBackdropImageTags && item.ParentBackdropImageTags[0]) {
+                imageUrl = `${serverAddress}/Items/${item.ParentBackdropItemId}/Images/Backdrop?${imageParams}&quality=96&tag=${item.ParentBackdropImageTags[0]}`;
+            } else if (item.ImageTags?.Thumb) {
+                imageUrl = `${serverAddress}/Items/${item.Id}/Images/Thumb?${imageParams}&quality=96&tag=${item.ImageTags.Thumb}`;
+            } else if (item.BackdropImageTags && item.BackdropImageTags[0]) {
+                imageUrl = `${serverAddress}/Items/${item.Id}/Images/Backdrop?${imageParams}&quality=96&tag=${item.BackdropImageTags[0]}`;
+            } else if (item.ImageTags?.Primary) {
+                imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.ImageTags.Primary}`;
+            }
         } else if (cardFormat === 'thumb') {
-            if (forcedImageType && state.useEpisodeImages && item.Type === 'Episode') {
-                // Explicit override for episodes – always use the episode's primary image
-                imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.ImageTags?.Primary}`;
+            if (item.Type === 'Episode') {
+                if (item.ImageTags?.Primary) {
+                    imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.ImageTags.Primary}`;
+                } else if (item.PrimaryImageTag) {
+                    imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.PrimaryImageTag}`;
+                } else if (item.ImageTags?.Thumb) {
+                    imageUrl = `${serverAddress}/Items/${item.Id}/Images/Thumb?${imageParams}&quality=96&tag=${item.ImageTags.Thumb}`;
+                } else if (item.ParentThumbImageTag) {
+                    imageUrl = `${serverAddress}/Items/${item.ParentThumbItemId || item.SeriesId}/Images/Thumb?${imageParams}&quality=96&tag=${item.ParentThumbImageTag}`;
+                } else if (item.ParentBackdropImageTags && item.ParentBackdropImageTags[0]) {
+                    imageUrl = `${serverAddress}/Items/${item.ParentBackdropItemId}/Images/Backdrop?${imageParams}&quality=96&tag=${item.ParentBackdropImageTags[0]}`;
+                } else if (item.SeriesPrimaryImageTag) {
+                    imageUrl = `${serverAddress}/Items/${item.SeriesId}/Images/Primary?${imageParams}&quality=96&tag=${item.SeriesPrimaryImageTag}`;
+                }
             } else if (item.ImageTags?.Thumb) {
                 // Prefer explicit thumb on the item
                 imageUrl = `${serverAddress}/Items/${item.Id}/Images/Thumb?${imageParams}&quality=96&tag=${item.ImageTags?.Thumb}`;
@@ -1746,8 +2971,12 @@
             imageUrl = `${serverAddress}/Items/${itemId}/Images/Logo?${imageParams}&quality=96&tag=${logoTag}`;
         } else if (cardFormat === 'clear art' && item.ImageTags?.Art) {
             imageUrl = `${serverAddress}/Items/${item.Id}/Images/Art?${imageParams}&quality=96&tag=${item.ImageTags.Art}`;
-        } else if (cardFormat === 'banner' && item.ImageTags?.Banner) {
-            imageUrl = `${serverAddress}/Items/${item.Id}/Images/Banner?${imageParams}&quality=96&tag=${item.ImageTags.Banner}`;
+        } else if (cardFormat === 'banner') {
+            if (item.ImageTags?.Banner) {
+                imageUrl = `${serverAddress}/Items/${item.Id}/Images/Banner?${imageParams}&quality=96&tag=${item.ImageTags.Banner}`;
+            } else {
+                imageUrl = `${serverAddress}/Items/${item.SeriesId || item.ParentId}/Images/Banner?${imageParams}&quality=96`;
+            }
         } else if (cardFormat === 'disc' && item.ImageTags?.Disc) {
             imageUrl = `${serverAddress}/Items/${item.Id}/Images/Disc?${imageParams}&quality=96&tag=${item.ImageTags.Disc}`;
         } else if (item.ImageTags?.Primary) {
@@ -1770,36 +2999,27 @@
             imageUrl = `${serverAddress}/Items/${item.Id}/Images/Backdrop?${imageParams}&quality=96&tag=${item.BackdropImageTags[0]}`;
         } else if (item.ParentBackdropImageTags && item.ParentBackdropImageTags.length > 0) {
             imageUrl = `${serverAddress}/Items/${item.ParentBackdropItemId}/Images/Backdrop?${imageParams}&quality=96&tag=${item.ParentBackdropImageTags[0]}`;
-            
-        } else {
-            // No image - add icon as inner element
+        }
+
+        // Card image container
+        const cardImageContainer = document.createElement('a');
+        cardImageContainer.href = cardUrl;
+        cardImageContainer.className = `cardImageContainer ${!imageUrl ? 'defaultCardBackground defaultCardBackground2' : ''} coveredImage cardContent itemAction lazy blurhashed lazy-image-fadein-fast`;
+        cardImageContainer.setAttribute('data-action', 'link');
+        cardImageContainer.setAttribute('aria-label', item.Name || 'Unknown');
+        
+        // No image - add icon as inner element
+        if (!imageUrl) {
             const iconSpan = document.createElement('span');
             iconSpan.className = 'cardImageIcon material-icons';
             iconSpan.setAttribute('aria-hidden', 'true');
-            
+        
             // Set icon based on item type
-            if (item.Type === 'Movie') {
-                iconSpan.textContent = 'movie';
-            } else if (item.Type === 'Series') {
-                iconSpan.textContent = 'tv';
-            } else if (item.Type === 'Episode') {
-                iconSpan.textContent = 'tv';
-            } else if (item.Type === 'Person') {
-                iconSpan.textContent = 'person';
-            } else if (item.Type === 'MusicAlbum') {
-                iconSpan.textContent = 'album';
-            } else if (item.Type === 'Audio') {
-                iconSpan.textContent = 'music_note';
-            } else if (item.Type === 'Artist' || item.Type === 'MusicArtist') {
-                iconSpan.textContent = 'person';
-            } else {
-                iconSpan.textContent = 'folder';
-            }
-            
+            iconSpan.textContent = getItemMaterialIcon(item);            
             cardImageContainer.appendChild(iconSpan);
         }
 
-        const blurhashStr = !item.imageUrl ? getBlurhashForCard(item, cardFormat, forcedImageType) : null;
+        const blurhashStr = !item.imageUrl ? getBlurhashForCard(item, cardFormat) : null;
         if (!blurhashStr || cardFormat === 'logo' || cardFormat === 'clear art' || cardFormat === 'disc') {
             blurhashCanvas.classList.add('lazy-hidden');
         } else {
@@ -1825,16 +3045,6 @@
             const cardIndicators = document.createElement('div');
             cardIndicators.className = 'cardIndicators';
 
-            if (item.UserData?.Played) {
-                const playedIndicator = document.createElement('div');
-                playedIndicator.className = 'playedIndicator indicator';
-                const playedIndicatorIcon = document.createElement('span');
-                playedIndicatorIcon.className = 'material-icons indicatorIcon check';
-                playedIndicatorIcon.setAttribute('aria-hidden', 'true');
-                playedIndicator.appendChild(playedIndicatorIcon);
-                cardIndicators.appendChild(playedIndicator);
-            }
-
             if (item.UserData?.UnplayedItemCount && item.UserData?.UnplayedItemCount > 0) {
                 const unplayedIndicator = document.createElement('div');
                 unplayedIndicator.className = 'countIndicator indicator';
@@ -1843,10 +3053,27 @@
             }
 
             if (item.LocationType === 'Virtual') {
-                const virtualIndicator = document.createElement('div');
-                virtualIndicator.className = 'missingIndicator';
-                virtualIndicator.textContent = 'Missing';
-                cardIndicators.appendChild(virtualIndicator);
+                if (item.PremiereDate && new Date(item.PremiereDate) > new Date()) {
+                    const premiereIndicator = document.createElement('div');
+                    premiereIndicator.className = 'unairedIndicator';
+                    premiereIndicator.textContent = 'Unaired';
+                    cardIndicators.appendChild(premiereIndicator);
+                } else {
+                    const virtualIndicator = document.createElement('div');
+                    virtualIndicator.className = 'missingIndicator';
+                    virtualIndicator.textContent = 'Missing';
+                    cardIndicators.appendChild(virtualIndicator);
+                }
+            }
+
+            if (item.UserData?.Played) {
+                const playedIndicator = document.createElement('div');
+                playedIndicator.className = 'playedIndicator indicator';
+                const playedIndicatorIcon = document.createElement('span');
+                playedIndicatorIcon.className = 'material-icons indicatorIcon check';
+                playedIndicatorIcon.setAttribute('aria-hidden', 'true');
+                playedIndicator.appendChild(playedIndicatorIcon);
+                cardIndicators.appendChild(playedIndicator);
             }
 
             if (parentItem && parentItem.Type === 'Timer') {
@@ -1858,6 +3085,13 @@
 
             if (cardIndicators.childElementCount > 0) {
                 cardImageContainer.appendChild(cardIndicators);
+            }
+
+            if (item.MediaSourceCount > 1) {
+                const mediaSourceIndicator = document.createElement('div');
+                mediaSourceIndicator.className = 'mediaSourceIndicator';
+                mediaSourceIndicator.textContent = item.MediaSourceCount;
+                cardImageContainer.appendChild(mediaSourceIndicator);
             }
 
             if (item.UserData?.PlayedPercentage && item.UserData?.PlayedPercentage > 0) {
@@ -2102,11 +3336,24 @@
         cardScalable.appendChild(blurhashCanvas);
         cardScalable.appendChild(cardImageContainer);
         cardScalable.appendChild(cardOverlayContainer);
+        cardScalable.appendChild(createCardBorderHost());
 
         cardBox.appendChild(cardScalable);
-        cardBox.appendChild(cardTextFragment);
+        if (cardTextFragment.childNodes.length) {
+            const cardTextStack = document.createElement('div');
+            cardTextStack.className = 'cardTextStack';
+            cardTextStack.appendChild(cardTextFragment);
+            cardBox.appendChild(cardTextStack);
+        } else {
+            cardBox.appendChild(cardTextFragment);
+        }
         
         card.appendChild(cardBox);
+
+        ensureCardRadiusCssVar();
+        if (cachedCardRadius == null) {
+            requestAnimationFrame(() => ensureCardRadiusCssVar());
+        }
 
         return card;
     }
@@ -2141,14 +3388,16 @@
             spotlightSize,
             tileCount: tileCountOpt,
             cycleBackdrops = false,
-            cycleBackdropsTime = 10000,
+            cycleBackdropsTime,
+            backdropsCount: backdropsCountOpt,
             entranceAnimationFirst = 'fadeIn',
             entranceAnimationSecond = 'fadeIn',
             entranceAnimationThird = 'fadeIn',
             slideAnimationFirst = 'kenBurnsZoomIn',
             slideAnimationSecond = 'kenBurnsZoomIn',
             slideAnimationThird = 'kenBurnsZoomIn',
-            viewMoreUrl = null
+            viewMoreUrl = null,
+            initialIndex = 0
         } = options;
         // Backward compat: derive layout/size from fullScreen if new keys missing
         const fullScreen = options.fullScreen === true;
@@ -2159,11 +3408,17 @@
             tileCount = size === 'full' ? 1 : size === 'large' ? 2 : 3;
         }
         tileCount = Math.max(1, Math.min(3, Math.floor(tileCount)));
+        let backdropsCount = backdropsCountOpt;
+        if (backdropsCount == null && cycleBackdropsTime > 0 && interval > 0) {
+            backdropsCount = Math.max(1, Math.round(interval / cycleBackdropsTime));
+        }
+        backdropsCount = Math.max(1, parseInt(backdropsCount, 10) || 1);
+        const perBackdropMs = Math.max(500, Math.round(interval / backdropsCount));
         const serverId = ApiClient.serverId();
         const serverAddress = ApiClient.serverAddress();
         const sectionKey = 'spotlight_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
         const cycleBackdropMap = new Map();
-        let currentIndex = 0;
+        let currentIndex = Math.max(0, Math.min(items.length - 1, parseInt(initialIndex, 10) || 0));
         let autoPlayTimer = null;
         let cycleBackdropTimer = null;
         let advanceDue = false;
@@ -2188,48 +3443,48 @@
         const bannerContainer = document.createElement('div');
         bannerContainer.className = 'spotlight-banner-container';
         
-        // Add section title in top left corner (absolute positioning, aligned with controls)
-        if (title) {
-            let sectionTitleEl;
-            
-            if (viewMoreUrl) {
-                // Create clickable title
-                const titleLink = document.createElement('a');
-                titleLink.className = 'emby-tab-button emby-tab-button-active';
-                titleLink.textContent = title;
-                titleLink.title = 'See All';
-                titleLink.style.textDecoration = 'none';
-                
-                // Handle both URL and function
-                if (typeof viewMoreUrl === 'function') {
-                    titleLink.addEventListener('click', (e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        viewMoreUrl();
-                    });
-                } else {
-                    titleLink.href = viewMoreUrl;
-                    titleLink.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                    });
-                }
-                
-                sectionTitleEl = titleLink;
-            } else {
-                // Regular non-clickable title
-                sectionTitleEl = document.createElement('div');
-                sectionTitleEl.className = 'emby-tab-button emby-tab-button-active';
-                sectionTitleEl.textContent = title;
-            }
-
-            const sectionTitleWrapper = document.createElement('div');
-            sectionTitleWrapper.className = `spotlight-section-title ${viewMoreUrl ? '' : 'spotlight-title-link '}headerTabs sectionTabs`;
-            sectionTitleWrapper.appendChild(sectionTitleEl);
-
+        // Title container hosts section name + refresh/configure controls.
+        // Always create it so controls can attach even when the section has no name.
+        {
             const sectionTitleContainer = document.createElement('div');
             sectionTitleContainer.className = 'spotlight-section-title-container';
-            sectionTitleContainer.appendChild(sectionTitleWrapper);
-            
+
+            if (title) {
+                let sectionTitleEl;
+
+                if (viewMoreUrl) {
+                    const titleLink = document.createElement('a');
+                    titleLink.className = 'emby-tab-button emby-tab-button-active';
+                    titleLink.textContent = title;
+                    titleLink.title = 'See All';
+                    titleLink.style.textDecoration = 'none';
+
+                    if (typeof viewMoreUrl === 'function') {
+                        titleLink.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            viewMoreUrl();
+                        });
+                    } else {
+                        titleLink.href = viewMoreUrl;
+                        titleLink.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                        });
+                    }
+
+                    sectionTitleEl = titleLink;
+                } else {
+                    sectionTitleEl = document.createElement('div');
+                    sectionTitleEl.className = 'emby-tab-button emby-tab-button-active';
+                    sectionTitleEl.textContent = title;
+                }
+
+                const sectionTitleWrapper = document.createElement('div');
+                sectionTitleWrapper.className = `spotlight-section-title ${viewMoreUrl ? '' : 'spotlight-title-link '}headerTabs sectionTabs`;
+                sectionTitleWrapper.appendChild(sectionTitleEl);
+                sectionTitleContainer.appendChild(sectionTitleWrapper);
+            }
+
             bannerContainer.appendChild(sectionTitleContainer);
         }
         
@@ -2245,7 +3500,7 @@
         }
 
         // Sliding window: render current + 4 prev + 4 next (9 slides). Update DOM as user navigates.
-        let currentWindowIndices = getSpotlightWindowIndices(0, items.length);
+        let currentWindowIndices = getSpotlightWindowIndices(currentIndex, items.length);
 
         function createAndAppendSlide(item, index, eagerLoadImages) {
             const itemType = item.Type || 'Movie';
@@ -2413,7 +3668,7 @@
                 const group = document.createElement('div');
                 group.className = 'headerTabs sectionTabs';
                 const item = document.createElement(tag);
-                item.className = 'emby-tab-button' + (extraClasses ? ' ' + extraClasses : '');
+                item.className = 'emby-tab-button emby-button-foreground' + (extraClasses ? ' ' + extraClasses : '');
                 if (icon) item.setAttribute('data-icon', icon);
                 if (typeof content === 'string') {
                     item.textContent = content;
@@ -2480,7 +3735,7 @@
                 }
                 
                 const displayContainer = document.createElement('span');
-                displayContainer.className = 'emby-tab-button';
+                displayContainer.className = 'emby-tab-button emby-button-foreground';
                 if (icon) displayContainer.setAttribute('data-icon', icon);
                 if (label) {
                     const labelSpan = document.createElement('span');
@@ -2750,7 +4005,7 @@
             
             // Play button (material icon span button)
             const playButton = document.createElement('button');
-            playButton.className = 'emby-button submit-button raised button-flat btnPlay detailButton';
+            playButton.className = 'emby-button raised button-flat btnPlay detailButton';
             playButton.title = 'Play';
             const playIcon = document.createElement('span');
             playIcon.className = 'material-icons';
@@ -2951,15 +4206,15 @@
             return itemDiv;
         }
 
-        // Initial render: create slides for window around index 0
+        // Initial render: create slides for window around currentIndex
         currentWindowIndices.forEach((idx) => {
-            createAndAppendSlide(items[idx], idx, idx === 0);
+            createAndAppendSlide(items[idx], idx, idx === currentIndex);
         });
         
         bannerContainer.appendChild(itemsContainer);
 
-        // Mark the initially visible slide (index 0) as active so only it is shown
-        const firstItemActive = bannerContainer.querySelector('.spotlight-item[data-index="0"]');
+        // Mark the initially visible slide as active so only it is shown
+        const firstItemActive = bannerContainer.querySelector(`.spotlight-item[data-index="${currentIndex}"]`);
         if (firstItemActive) {
             firstItemActive.setAttribute('data-active', 'true');
         }
@@ -2987,12 +4242,12 @@
             }
         });
 
-        // Apply initial pan animation to first slide (helper also sets up completion tracking)
+        // Apply initial pan animation to the starting slide (helper also sets up completion tracking)
         if (panAnimation && items.length > 0) {
-            const firstItemPan = bannerContainer.querySelector('.spotlight-item[data-index="0"]');
+            const firstItemPan = bannerContainer.querySelector(`.spotlight-item[data-index="${currentIndex}"]`);
             if (firstItemPan) {
                 applyPanAnimationToSlide(firstItemPan);
-                startCycleBackdropTimer(firstItemPan, items[0].Id);
+                startCycleBackdropTimer(firstItemPan, items[currentIndex].Id);
             }
         }
         
@@ -3067,14 +4322,15 @@
         if (showSlideState && items.length > 1) {
             const dotsContainer = document.createElement('div');
             dotsContainer.className = 'spotlight-dots' + (showDots ? '' : ' spotlight-dots-numeric');
-            dotsContainer.setAttribute('data-index', '1'); /* 1-based for "N / X" display */
+            dotsContainer.setAttribute('data-index', String(currentIndex + 1)); /* 1-based for "N / X" display */
             dotsContainer.setAttribute('data-total-items', String(items.length));
             
             if (showDots) {
                 const numDots = Math.min(items.length, MAX_DOTS);
+                const activeDotIndex = currentIndex % numDots;
                 for (let i = 0; i < numDots; i++) {
                     const dot = document.createElement('button');
-                    dot.className = 'spotlight-dot' + (i === 0 ? ' active' : '');
+                    dot.className = 'spotlight-dot' + (i === activeDotIndex ? ' active' : '');
                     dot.setAttribute('data-dot-index', i);
                     dot.addEventListener('click', (e) => {
                         e.stopPropagation();
@@ -3170,7 +4426,7 @@
             const entry = cycleBackdropMap.get(mapKey);
             if (!entry || !entry.shuffledUrls.length) return;
             var cycleCount = 0;
-            var maxCycles = Math.max(0, Math.ceil(interval / cycleBackdropsTime) - 1);
+            var maxCycles = Math.max(0, backdropsCount - 1);
             if (imgs.length >= 2) {
                 const bottomImg = imgs[0];
                 const topImg = imgs[1];
@@ -3206,7 +4462,7 @@
                         topImg.addEventListener('transitionend', handler);
                     };
                     preload.src = nextUrl;
-                }, cycleBackdropsTime);
+                }, perBackdropMs);
             } else {
                 const img = slideElement.querySelector('.spotlight-background-single img');
                 if (!img) return;
@@ -3233,7 +4489,7 @@
                         });
                     };
                     preload.src = nextUrl;
-                }, cycleBackdropsTime);
+                }, perBackdropMs);
             }
         }
 
@@ -3466,138 +4722,580 @@
         return container;
     }
 
-    /**
-     * Check if a section's items overflow the scroller and set data-expandable for show-all button visibility.
-     * Can be called for any .emby-scroller-container that contains .itemsContainer (e.g. when section is detected in DOM).
-     * @param {HTMLElement} verticalSection - Section element (emby-scroller-container)
-     * @param {boolean} forceUpdate - If true, update even when data-expandable is already set (e.g. on resize)
-     */
-    function checkSectionOverflow(verticalSection, forceUpdate = false) {
-        return;
-        if (!verticalSection || verticalSection.nodeType !== 1) return;
-        const itemsContainer = verticalSection.querySelector('.itemsContainer');
-        const scroller = verticalSection.querySelector('.emby-scroller');
-        if (!itemsContainer || !scroller) return;
-        if (!forceUpdate && verticalSection.hasAttribute('data-expandable')) return;
-        const hasOverflow = itemsContainer.scrollWidth > scroller.clientWidth;
-        verticalSection.setAttribute('data-expandable', hasOverflow ? 'true' : 'false');
+    const ITEMS_LAYOUT_CYCLE = ['row', 'grid'];
+    const ITEMS_LAYOUT_ICONS = {
+        row: 'view_array',
+        grid: 'grid_view'
+    };
+    const ITEMS_LAYOUT_NEXT_TITLE = {
+        row: 'Show as grid',
+        grid: 'Show as scrollable row'
+    };
+
+    function resolveItemsLayout(sectionConfig) {
+        if (!sectionConfig) return 'row';
+        if (sectionConfig.itemsLayout === 'grid') return 'grid';
+        if (sectionConfig.itemsLayout === 'row') return 'row';
+        if (sectionConfig.gridExpanded === true) return 'grid';
+        return 'row';
+    }
+
+    function resolveUseGaplessCards(sectionConfig) {
+        return sectionConfig?.useGaplessCards === true;
+    }
+
+    function nextItemsLayout(current) {
+        const idx = ITEMS_LAYOUT_CYCLE.indexOf(current);
+        return ITEMS_LAYOUT_CYCLE[(idx < 0 ? 0 : idx + 1) % ITEMS_LAYOUT_CYCLE.length];
+    }
+
+    function setShowAllIcon(button, layout) {
+        if (!button) return;
+        button.classList.remove('view_array', 'grid_view', 'grid_on');
+        button.classList.add(ITEMS_LAYOUT_ICONS[layout] || 'view_array');
+    }
+
+    function isButtonCardFormat(cardFormat) {
+        return (cardFormat || '').toLowerCase() === 'button';
+    }
+
+    function getPaintedSectionItems(itemsContainer, cardFormat) {
+        if (!itemsContainer) return [];
+        if (isButtonCardFormat(cardFormat)) {
+            return Array.from(itemsContainer.querySelectorAll(':scope > .homeLibraryButton'));
+        }
+        return Array.from(itemsContainer.querySelectorAll(':scope > .card:not(.card-layout-dummy)'));
+    }
+
+    function getRealLayoutCards(itemsContainer) {
+        if (!itemsContainer) return [];
+        return Array.from(itemsContainer.querySelectorAll(':scope > .card:not(.card-layout-dummy)'));
+    }
+
+    function removeLayoutDummies(itemsContainer) {
+        if (!itemsContainer) return;
+        itemsContainer.querySelectorAll(':scope > .card-layout-dummy').forEach((el) => el.remove());
+    }
+
+    function invalidateLastRowPadding(itemsContainer) {
+        if (!itemsContainer) return;
+        removeLayoutDummies(itemsContainer);
+        itemsContainer.removeAttribute('data-last-row-padding');
+        itemsContainer.removeAttribute('data-last-row-padding-layout');
+        itemsContainer.removeAttribute('data-measuring');
+    }
+
+    function canMeasureLastRowPadding(itemsContainer) {
+        return !!(itemsContainer?.isConnected && itemsContainer.clientWidth >= 1);
+    }
+
+    function createLayoutDummyCard(templateCard, layout) {
+        const dummy = document.createElement('div');
+        dummy.className = templateCard?.className || 'card';
+        dummy.classList.add('card', 'card-layout-dummy');
+        dummy.classList.remove('card-hoverable');
+        dummy.setAttribute('aria-hidden', 'true');
+        dummy.setAttribute('tabindex', '-1');
+
+        // cardBox
+        const cardBox = document.createElement('div');
+        cardBox.className = 'cardBox';
+        dummy.appendChild(cardBox);
+
+        // cardScalable
+        const cardScalable = document.createElement('div');
+        cardScalable.className = 'cardScalable';
+        cardBox.appendChild(cardScalable);
+
+        if (layout === 'grid') {
+            const templatePadder = templateCard?.querySelector('.cardPadder');
+            const padder = document.createElement('div');
+            padder.className = templatePadder?.className
+                || 'cardPadder cardPadder-portrait lazy-hidden-children';
+            const cardIcon = document.createElement('span');
+            cardIcon.className = 'cardImageIcon material-icons';
+            cardIcon.setAttribute('aria-hidden', 'true');
+            cardIcon.textContent = 'folder';
+            padder.appendChild(cardIcon);
+            cardScalable.appendChild(padder);
+
+            const border = createCardBorderHost();
+            const section = templateCard?.closest('[data-border],[data-border-style]');
+            const raw = section?.dataset?.border
+                || section?.dataset?.borderStyle
+                || templateCard?.querySelector('.cardBorder')?.dataset?.style
+                || '';
+            const style = normalizeCardBorderStyle(raw);
+            if (style) fillCardBorder(border, style);
+            cardScalable.appendChild(border);
+        }
+
+        return dummy;
     }
 
     /**
-     * Creates a scrollable container with horizontal scrolling functionality
-     * @param {Array} items - Array of Jellyfin item objects
-     * @param {string} title - Title for the scrollable container
-     * @param {string} viewMoreUrl - Optional URL to make title clickable
-     * @param {boolean} overflowCard - Use overflow card classes instead of normal card classes
-     * @param {string} cardFormat - Override card format: 'portrait', 'backdrop', or 'square'
-     * @returns {HTMLElement} - The constructed scrollable container
+     * Count how many real cards fit on the first row at natural (non-growing) width.
+     * @param {HTMLElement} itemsContainer
+     * @returns {number}
      */
-    function createScrollableContainer(items, title, viewMoreUrl = null, overflowCard = false, cardFormat = null, forcedImageType = null) {        
-        // Create the main vertical section container
-        const verticalSection = document.createElement('div');
-        verticalSection.className = 'verticalSection emby-scroller-container custom-scroller-container';
-        
-        // Persist the card format if provided (ensures consistency for random/updates)
-        if (cardFormat) {
-            verticalSection.setAttribute('data-card-format', cardFormat);
+    function countItemsPerRow(itemsContainer) {
+        if (!canMeasureLastRowPadding(itemsContainer)) return 0;
+        const cards = getRealLayoutCards(itemsContainer);
+        if (!cards.length) return 0;
+        itemsContainer.setAttribute('data-measuring', 'true');
+        void itemsContainer.offsetWidth;
+        const firstTop = cards[0].offsetTop;
+        let count = 0;
+        for (const card of cards) {
+            if (card.offsetTop !== firstTop) break;
+            count++;
         }
+        itemsContainer.removeAttribute('data-measuring');
+        return count;
+    }
 
-        // Create section title
-        const sectionTitleContainer = document.createElement('div');
-        sectionTitleContainer.className = 'sectionTitleContainer sectionTitleContainer-cards padded-left';
-        
-        if (viewMoreUrl) {
-            // Create clickable title with chevron icon
-            const titleLink = document.createElement('a');
-            titleLink.className = 'sectionTitle-link button-flat button-flat-mini sectionTitleTextButton emby-button';
-            titleLink.style.cssText = 'text-decoration: none; cursor: pointer; display: flex; align-items: center;';
-            
-            // Handle both URL and function
-            if (typeof viewMoreUrl === 'function') {
-                titleLink.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    viewMoreUrl();
-                });
-            } else {
-                titleLink.href = viewMoreUrl;
-            }
-            
-            const titleText = document.createElement('h2');
-            titleText.className = 'sectionTitle sectionTitle-cards';
-            titleText.textContent = title;
-            
-            const chevronIcon = document.createElement('span');
-            chevronIcon.className = 'material-icons chevron_right';
-            chevronIcon.setAttribute('aria-hidden', 'true');
-            
-            titleLink.appendChild(titleText);
-            titleLink.appendChild(chevronIcon);
-            sectionTitleContainer.appendChild(titleLink);
+    /**
+     * Pad the last flex row with invisible dummy cards so grow distribution matches full rows.
+     * Reuses data-last-row-padding when cached for the same layout.
+     * @param {HTMLElement} itemsContainer
+     * @param {'grid'} layout
+     */
+    function syncLastRowPadding(itemsContainer, layout) {
+        if (!itemsContainer || layout !== 'grid') return;
+
+        const cachedPad = itemsContainer.getAttribute('data-last-row-padding');
+        const cachedLayout = itemsContainer.getAttribute('data-last-row-padding-layout');
+        const hasCache = cachedPad != null
+            && cachedPad !== ''
+            && cachedLayout === layout
+            && /^\d+$/.test(cachedPad);
+
+        // Disconnected / zero-width: do not measure or cache (retry when laid out).
+        if (!hasCache && !canMeasureLastRowPadding(itemsContainer)) return;
+
+        removeLayoutDummies(itemsContainer);
+
+        let padding;
+        if (hasCache) {
+            padding = parseInt(cachedPad, 10);
         } else {
-            // Regular non-clickable title            
-            const titleText = document.createElement('h2');
-            titleText.className = 'sectionTitle sectionTitle-cards';
-            titleText.textContent = title;
-            sectionTitleContainer.appendChild(titleText);
+            itemsContainer.removeAttribute('data-last-row-padding');
+            itemsContainer.removeAttribute('data-last-row-padding-layout');
+            const cards = getRealLayoutCards(itemsContainer);
+            if (!cards.length) return;
+            const perRow = countItemsPerRow(itemsContainer);
+            if (perRow <= 0) return;
+            const rem = cards.length % perRow;
+            padding = rem === 0 ? 0 : perRow - rem;
+            itemsContainer.setAttribute('data-last-row-padding', String(padding));
+            itemsContainer.setAttribute('data-last-row-padding-layout', layout);
         }
 
-        // Create "Show All" button (always created, shown/hidden based on data-expandable attribute)
-        const showAllButton = document.createElement('button');
-        showAllButton.type = 'button';
-        showAllButton.className = 'show-all-button';
-        showAllButton.title = 'Show all items';
-        sectionTitleContainer.appendChild(showAllButton);
+        if (padding <= 0) return;
+        if (!itemsContainer.isConnected) return;
+        const template = getRealLayoutCards(itemsContainer)[0];
+        if (!template) return;
+        const frag = document.createDocumentFragment();
+        for (let i = 0; i < padding; i++) {
+            frag.appendChild(createLayoutDummyCard(template, layout));
+        }
+        itemsContainer.appendChild(frag);
+    }
 
-        // Create scroller container
+    let lastRowPaddingResizeTimer = null;
+    function handleLastRowPaddingWindowResize() {
+        clearTimeout(lastRowPaddingResizeTimer);
+        lastRowPaddingResizeTimer = setTimeout(() => {
+            document.querySelectorAll(
+                '.itemsContainer[data-layout="grid"]'
+            ).forEach((container) => {
+                const layout = container.getAttribute('data-layout');
+                invalidateLastRowPadding(container);
+                syncLastRowPadding(container, layout);
+            });
+        }, 150);
+    }
+    if (!window.__kefinLastRowPaddingResizeBound) {
+        window.__kefinLastRowPaddingResizeBound = true;
+        window.addEventListener('resize', handleLastRowPaddingWindowResize);
+    }
+
+    let lastRowPaddingRo = null;
+    let lastRowPaddingRoTimer = null;
+    const lastRowPaddingRoPending = new Set();
+
+    function ensureLastRowPaddingResizeObserver() {
+        if (lastRowPaddingRo || typeof ResizeObserver === 'undefined') return lastRowPaddingRo;
+        lastRowPaddingRo = new ResizeObserver((entries) => {
+            entries.forEach((entry) => {
+                if (entry?.target) lastRowPaddingRoPending.add(entry.target);
+            });
+            clearTimeout(lastRowPaddingRoTimer);
+            lastRowPaddingRoTimer = setTimeout(() => {
+                const targets = [...lastRowPaddingRoPending];
+                lastRowPaddingRoPending.clear();
+                targets.forEach((el) => {
+                    const layout = el.getAttribute?.('data-layout');
+                    if (layout !== 'grid') return;
+                    invalidateLastRowPadding(el);
+                    syncLastRowPadding(el, layout);
+                });
+            }, 80);
+        });
+        return lastRowPaddingRo;
+    }
+
+    function observeLastRowPadding(itemsContainer) {
+        const ro = ensureLastRowPaddingResizeObserver();
+        if (!ro || !itemsContainer) return;
+        try {
+            ro.observe(itemsContainer);
+        } catch (_) { /* ignore */ }
+    }
+
+    function unobserveLastRowPadding(itemsContainer) {
+        if (!lastRowPaddingRo || !itemsContainer) return;
+        try {
+            lastRowPaddingRo.unobserve(itemsContainer);
+        } catch (_) { /* ignore */ }
+    }
+
+    /**
+     * Apply items layout (row|grid) and optional gapless cards on a scrollable section.
+     * @param {HTMLElement} verticalSection
+     * @param {string} layout
+     * @param {boolean} [gapless]
+     */
+    function applyItemsLayoutState(verticalSection, layout, gapless) {
+        if (!verticalSection) return;
+        const itemsContainer = verticalSection.querySelector('.itemsContainer');
+        if (!itemsContainer) return;
+        const resolved = layout === 'grid' ? 'grid' : 'row';
+        const showAllButton = verticalSection.querySelector('.show-all-button');
+        const scrollButtons = verticalSection.querySelector('.emby-scrollbuttons');
+        itemsContainer.setAttribute('data-layout', resolved);
+        itemsContainer.removeAttribute('data-expanded');
+        if (gapless === true) {
+            itemsContainer.setAttribute('data-gapless', 'true');
+        } else if (gapless === false) {
+            itemsContainer.removeAttribute('data-gapless');
+        }
+        if (resolved === 'row') {
+            unobserveLastRowPadding(itemsContainer);
+            removeLayoutDummies(itemsContainer);
+            if (scrollButtons) scrollButtons.style.display = '';
+        } else if (scrollButtons) {
+            scrollButtons.style.display = 'none';
+        }
+        if (showAllButton) {
+            const nextLayout = nextItemsLayout(resolved);
+            showAllButton.title = ITEMS_LAYOUT_NEXT_TITLE[resolved] || ITEMS_LAYOUT_NEXT_TITLE.row;
+            showAllButton.setAttribute('aria-label', showAllButton.title);
+            setShowAllIcon(showAllButton, nextLayout);
+        }
+        if (resolved === 'grid') {
+            observeLastRowPadding(itemsContainer);
+            // Two frames so wrap layout is settled before measuring / padding
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    if (itemsContainer.getAttribute('data-layout') !== resolved) return;
+                    syncLastRowPadding(itemsContainer, resolved);
+                });
+            });
+        }
+    }
+
+    function syncAttachedGridTilesLayouts(root) {
+        if (!root?.querySelectorAll) return;
+        root.querySelectorAll(
+            '.itemsContainer[data-layout="grid"]'
+        ).forEach((itemsContainer) => {
+            const layout = itemsContainer.getAttribute('data-layout');
+            const gapless = itemsContainer.getAttribute('data-gapless') === 'true';
+            const section = itemsContainer.closest('.verticalSection, .emby-scroller-container')
+                || itemsContainer.parentElement;
+            if (section) applyItemsLayoutState(section, layout, gapless);
+            else {
+                observeLastRowPadding(itemsContainer);
+                invalidateLastRowPadding(itemsContainer);
+                syncLastRowPadding(itemsContainer, layout);
+            }
+        });
+    }
+
+    /** @deprecated Use applyItemsLayoutState */
+    function applyGridExpandedState(verticalSection, expanded) {
+        applyItemsLayoutState(verticalSection, expanded ? 'grid' : 'row');
+    }
+
+    const pendingItemsLayoutSaves = new Map();
+    let itemsLayoutSaveTimeout = null;
+
+    function scheduleItemsLayoutSave(sectionId, layout, sectionType) {
+        if (!sectionId) return;
+        const value = layout === 'grid' ? layout : 'row';
+        pendingItemsLayoutSaves.set(sectionId, { layout: value, type: sectionType });
+        window.KefinHomeScreenSectionConfigure?.updateRuntimeItemsLayout?.(sectionId, value);
+        clearTimeout(itemsLayoutSaveTimeout);
+        itemsLayoutSaveTimeout = setTimeout(async () => {
+            const batch = new Map(pendingItemsLayoutSaves);
+            pendingItemsLayoutSaves.clear();
+            const api = window.KefinUserHomeScreenConfig;
+            const save = api?.saveSectionItemsLayout || api?.saveSectionGridExpanded;
+            if (!save) return;
+            for (const [id, entry] of batch) {
+                try {
+                    const itemsLayout = typeof entry === 'object' ? entry.layout : entry;
+                    const type = typeof entry === 'object' ? entry.type : undefined;
+                    await save.call(api, id, itemsLayout, type ? { type } : undefined);
+                } catch (e) {
+                    console.warn('[KefinTweaks CardBuilder] Failed to save itemsLayout:', e);
+                }
+            }
+        }, 300);
+    }
+
+    function isCardScrollerSection(sectionElement) {
+        return !!sectionElement?.querySelector('.itemsContainer');
+    }
+
+    function getShowAllControlLabel(sectionElement) {
+        const itemsContainer = sectionElement?.querySelector('.itemsContainer');
+        const currentLayout = itemsContainer?.getAttribute('data-layout') || 'row';
+        const resolved = currentLayout === 'grid' ? currentLayout : 'row';
+        return ITEMS_LAYOUT_NEXT_TITLE[resolved] || ITEMS_LAYOUT_NEXT_TITLE.row;
+    }
+
+    function handleShowAllLayoutToggle(sectionElement) {
+        const verticalSection = sectionElement.closest('.emby-scroller-container') || sectionElement;
+        const itemsContainer = verticalSection.querySelector('.itemsContainer');
+        if (!itemsContainer) return;
+
+        const scroller = verticalSection.querySelector('.emby-scroller');
+        const currentLayout = itemsContainer.getAttribute('data-layout') || 'row';
+        const gapless = itemsContainer.getAttribute('data-gapless') === 'true';
+        const layout = nextItemsLayout(currentLayout === 'grid' ? currentLayout : 'row');
+        const sectionId = verticalSection.getAttribute('data-section-id') || verticalSection.dataset?.sectionId;
+        const sectionType = verticalSection.getAttribute('data-section-type') || verticalSection.dataset?.sectionType;
+
+        if (layout === 'row') {
+            applyItemsLayoutState(verticalSection, 'row', gapless);
+            updateScrollButtonStateForSection(verticalSection);
+            const saved = parseFloat(itemsContainer.getAttribute('data-row-scroll-x'));
+            const position = Number.isFinite(saved) ? saved : 0;
+            setScrollerPosition(scroller, position, true);
+            requestAnimationFrame(() => applyScrollButtonState(verticalSection));
+            scheduleItemsLayoutSave(sectionId, 'row', sectionType);
+        } else {
+            if (currentLayout === 'row') {
+                itemsContainer.setAttribute('data-row-scroll-x', String(getScrollerPosition(scroller)));
+                setScrollerPosition(scroller, 0, false);
+            }
+            applyItemsLayoutState(verticalSection, layout, gapless);
+            scheduleItemsLayoutSave(sectionId, layout, sectionType);
+        }
+    }
+
+    function getSectionControlDefinitions(sectionConfig, sectionElement, cachedItems) {
+        const definitions = [];
+
+        definitions.push({
+            id: 'refresh',
+            icon: 'refresh',
+            label: 'Refresh Section',
+            className: 'section-refresh-button',
+            isVisible: () => true,
+            onClick: async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                await executeSectionRefresh(sectionConfig, sectionElement);
+            }
+        });
+
+        if (isCardScrollerSection(sectionElement)) {
+            definitions.push({
+                id: 'showAll',
+                icon: 'grid_view',
+                getLabel: () => getShowAllControlLabel(sectionElement),
+                label: 'Show as grid',
+                className: 'show-all-button',
+                isVisible: () => true,
+                onClick: (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleShowAllLayoutToggle(sectionElement);
+                }
+            });
+        }
+
+        const configureDef = window.KefinHomeScreenSectionConfigure?.getConfigureSectionControl?.(
+            sectionConfig,
+            sectionElement,
+            cachedItems
+        );
+        if (configureDef) {
+            definitions.push(configureDef);
+        }
+
+        return definitions;
+    }
+
+    function renderSectionControls(sectionConfig, sectionElement, titleContainer, definitions) {
+        const { inline, moreButton } = ensureSectionControlsMount(titleContainer);
+        inline.innerHTML = '';
+
+        const visibleDefinitions = definitions.filter((def) => !def.isVisible || def.isVisible());
+        let refreshButton = null;
+
+        visibleDefinitions.forEach((def) => {
+            const label = typeof def.getLabel === 'function' ? def.getLabel() : def.label;
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = `${def.className} material-icons ${def.icon}`;
+            button.title = label;
+            button.setAttribute('aria-label', label);
+            button.dataset.sectionControlId = def.id;
+            button.addEventListener('click', (e) => {
+                def.onClick(e, button);
+            });
+            inline.appendChild(button);
+            if (def.id === 'refresh') {
+                refreshButton = button;
+            }
+        });
+
+        const newMoreButton = moreButton.cloneNode(true);
+        moreButton.replaceWith(newMoreButton);
+
+        let activeMorePopover = null;
+        const closeMorePopover = () => {
+            if (activeMorePopover) {
+                activeMorePopover.remove();
+                activeMorePopover = null;
+            }
+        };
+
+        newMoreButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+
+            if (activeMorePopover) {
+                closeMorePopover();
+                return;
+            }
+
+            const popover = document.createElement('div');
+            popover.className = 'kefinTweaks-popover section-controls-more-popover itemDetailsGroup';
+
+            visibleDefinitions.forEach((def) => {
+                const label = typeof def.getLabel === 'function' ? def.getLabel() : def.label;
+                const item = document.createElement('div');
+                item.className = 'kefinTweaks-popover-item detailsGroupItem section-controls-more-item';
+                item.setAttribute('role', 'button');
+                item.setAttribute('tabindex', '0');
+
+                const iconSpan = document.createElement('span');
+                iconSpan.className = `material-icons section-controls-more-item-icon ${def.icon}`;
+                iconSpan.setAttribute('aria-hidden', 'true');
+
+                const labelSpan = document.createElement('span');
+                labelSpan.className = 'section-controls-more-item-label';
+                labelSpan.textContent = label;
+
+                item.appendChild(iconSpan);
+                item.appendChild(labelSpan);
+
+                const activate = (ev) => {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    closeMorePopover();
+                    def.onClick(ev, newMoreButton);
+                };
+                item.addEventListener('click', activate);
+                item.addEventListener('keydown', (ev) => {
+                    if (ev.key === 'Enter' || ev.key === ' ') {
+                        activate(ev);
+                    }
+                });
+                popover.appendChild(item);
+            });
+
+            titleContainer.style.position = 'relative';
+            newMoreButton.parentNode.insertBefore(popover, newMoreButton.nextSibling);
+
+            const buttonRect = newMoreButton.getBoundingClientRect();
+            const containerRect = titleContainer.getBoundingClientRect();
+            popover.style.right = '40px';
+            popover.style.left = 'auto';
+            popover.style.top = '0px';
+            popover.style.minWidth = `${Math.max(buttonRect.width, 180)}px`;
+            popover.style.maxWidth = `${Math.max(0, containerRect.width)}px`;
+
+            activeMorePopover = popover;
+
+            const closeHandler = (ev) => {
+                if (!popover.contains(ev.target) && !newMoreButton.contains(ev.target)) {
+                    closeMorePopover();
+                    document.removeEventListener('click', closeHandler);
+                }
+            };
+            setTimeout(() => {
+                document.addEventListener('click', closeHandler);
+            }, 100);
+        });
+
+        return refreshButton;
+    }
+
+    function isMobileLayout() {
+        return document.documentElement.classList.contains('layout-mobile') || window.innerWidth < 900;
+    }
+
+    function getSectionSkeletonCount(sectionConfig) {
+        const raw = sectionConfig?.itemLimit || sectionConfig?.queries?.[0]?.queryOptions?.Limit || 0;
+        return raw > 0 ? raw : 16;
+    }
+
+    function createScrollerElement() {
         const scroller = document.createElement('div');
-        //scroller.setAttribute('is', 'emby-scroller');
-
-        const isMobile = document.documentElement.classList.contains('layout-mobile');
+        const isMobile = isMobileLayout();
 
         scroller.setAttribute('data-horizontal', 'true');
         scroller.setAttribute('data-centerfocus', 'card');
-        scroller.className = `padded-top-focusscale padded-bottom-focusscale emby-scroller custom-scroller${isMobile ? ' scrollX hiddenScrollX' : ''}`;
+        scroller.className = `padded-top-focusscale padded-bottom-focusscale emby-scroller padded-left custom-scroller${isMobile ? ' scrollX hiddenScrollX' : ''}`;
         scroller.setAttribute('data-scroll-mode-x', 'custom');
-        // Enable mobile swipe scrolling
         scroller.style.scrollSnapType = 'none';
-		// Allow both axes so vertical page scroll isn't blocked when gesture starts over the scroller
-		scroller.style.touchAction = 'auto';
-		// Keep horizontal scroll self-contained but allow vertical to bubble to page
-		scroller.style.overscrollBehaviorX = 'contain';
-		scroller.style.overscrollBehaviorY = 'auto';
-		// iOS inertia scrolling
-		scroller.style.webkitOverflowScrolling = 'touch';
-		scroller.style.setProperty('--scroll-x', '0');
+        scroller.style.touchAction = 'auto';
+        scroller.style.overscrollBehaviorX = 'contain';
+        scroller.style.overscrollBehaviorY = 'auto';
+        scroller.style.webkitOverflowScrolling = 'touch';
+        scroller.style.setProperty('--scroll-x', '0');
 
-        // Create items container
+        return scroller;
+    }
+
+    function createItemsSliderElement() {
+        const isMobile = isMobileLayout();
         const itemsContainer = document.createElement('div');
         itemsContainer.setAttribute('is', 'emby-itemscontainer');
         itemsContainer.className = `focuscontainer-x itemsContainer scrollSlider${!isMobile ? ' animatedScrollX' : ''}`;
         itemsContainer.style.whiteSpace = 'nowrap';
+        return itemsContainer;
+    }
 
-        // If the items contain more episodes than non-episodes, and the card format is Poster, set the forced image type to Primary
-        if (items.filter(item => item.Type === 'Episode').length > items.filter(item => item.Type !== 'Episode').length && cardFormat === 'Poster') {
-            forcedImageType = 'Primary';
-        }
-
-        // Add items to container
-        items.forEach((item, index) => {
-            const card = createJellyfinCardElement(item, overflowCard, cardFormat, null, forcedImageType);
-            card.setAttribute('data-index', index);
-            itemsContainer.appendChild(card);
-        });
-
-        scroller.appendChild(itemsContainer);
-
-        // Create the left/right scroll buttons for the scroller
-
+    /**
+     * Attach scroll buttons and desktop drag handlers to a scrollable section scroller.
+     * @param {HTMLElement} verticalSection
+     * @param {HTMLElement} scroller
+     * @returns {HTMLElement} scrollButtons container
+     */
+    function attachScrollableSectionChrome(verticalSection, scroller) {
+        const isMobile = isMobileLayout();
         const scrollButtons = document.createElement('div');
-        //scrollButtons.setAttribute('is', 'emby-scrollbuttons');
         scrollButtons.className = 'emby-scrollbuttons padded-right';
 
         const leftButton = document.createElement('button');
         leftButton.type = 'button';
-        //leftButton.setAttribute('is', 'paper-icon-button-light');
         leftButton.setAttribute('data-ripple', 'false');
         leftButton.setAttribute('data-direction', 'left');
         leftButton.setAttribute('title', 'Previous');
@@ -3608,7 +5306,6 @@
         leftSpan.setAttribute('aria-hidden', 'true');
         leftButton.appendChild(leftSpan);
 
-        // Shared helpers for translateX-based scrolling
         function getCurrentPosition() {
             const v = scroller.style.getPropertyValue('--scroll-x');
             if (v !== '' && !isNaN(parseFloat(v))) return parseFloat(v);
@@ -3618,7 +5315,6 @@
         }
 
         function getMaxPosition() {
-            // Ensure we scroll enough to see the last card
             return scroller.scrollWidth - scroller.clientWidth;
         }
 
@@ -3627,7 +5323,6 @@
             const maxPosition = getMaxPosition() + 300;
             const clampedPosition = Math.min(Math.max(newPosition, 0), Math.max(maxPosition, 0));
 
-            // Control whether movement is animated or immediate
             if (opts.animate) {
                 scroller.style.transition = 'transform 270ms ease-out';
             } else {
@@ -3637,29 +5332,26 @@
             scroller.style.transform = `translateX(-${clampedPosition}px)`;
             scroller.style.setProperty('--scroll-x', String(clampedPosition));
 
-            const verticalSection = scroller.closest('.emby-scroller-container');
-            if (verticalSection && typeof applyScrollButtonState === 'function') {
+            const section = scroller.closest('.emby-scroller-container');
+            if (section && typeof applyScrollButtonState === 'function') {
                 if (opts.animate) {
                     const onTransitionEnd = () => {
                         scroller.removeEventListener('transitionend', onTransitionEnd);
-                        applyScrollButtonState(verticalSection);
+                        applyScrollButtonState(section);
                     };
                     scroller.addEventListener('transitionend', onTransitionEnd);
                 } else {
-                    requestAnimationFrame(() => applyScrollButtonState(verticalSection));
+                    requestAnimationFrame(() => applyScrollButtonState(section));
                 }
             }
         }
 
         leftButton.addEventListener('click', () => {
-            // Scroll backward by viewport width
             const itemsContainer = scroller.querySelector('.itemsContainer');
             if (!itemsContainer) return;
-            const scrollAmount = itemsContainer.clientWidth;
-
+            const scrollAmount = itemsContainer.clientWidth - itemsContainer.offsetLeft;
             const currentPosition = getCurrentPosition();
             const newPosition = scrollAmount > currentPosition ? 0 : currentPosition - scrollAmount;
-
             setPosition(newPosition, { animate: true });
         });
 
@@ -3667,7 +5359,6 @@
 
         const rightButton = document.createElement('button');
         rightButton.type = 'button';
-        //rightButton.setAttribute('is', 'paper-icon-button-light');
         rightButton.setAttribute('data-ripple', 'false');
         rightButton.setAttribute('data-direction', 'right');
         rightButton.setAttribute('title', 'Next');
@@ -3679,42 +5370,14 @@
 
         rightButton.addEventListener('click', () => {
             const itemsContainer = scroller.querySelector('.itemsContainer');
-
             if (!itemsContainer) return;
-
-            const scrollAmount = itemsContainer.clientWidth;
-
+            const scrollAmount = itemsContainer.clientWidth - itemsContainer.offsetLeft;
             const currentPosition = getCurrentPosition();
-            const newPosition = currentPosition + scrollAmount;
-
-            setPosition(newPosition, { animate: true });
+            setPosition(currentPosition + scrollAmount, { animate: true });
         });
 
         scrollButtons.appendChild(rightButton);
 
-        // Update button states based on scroll position
-        function updateScrollButtons() {
-            const currentPosition = getCurrentPosition();
-            const maxPosition = getMaxPosition();
-
-            // Disable left button at start
-            leftButton.disabled = currentPosition === 0;
-
-            // Disable right button at end
-            rightButton.disabled = currentPosition >= maxPosition;
-        }
-
-        // Update on resize (for responsive layouts)
-        /* const resizeObserver = new ResizeObserver(() => updateScrollButtons());
-        resizeObserver.observe(scroller); */
-
-        // Initial button state on creation
-        //updateScrollButtons();
-
-        // Call updateScrollButtons when the container is added to the DOM
-        /* verticalSection.addEventListener('DOMContentLoaded', () => {
-            updateScrollButtons();
-        }); */
         let dragState = {
             isDragging: false,
             startX: 0,
@@ -3729,27 +5392,21 @@
             momentumId: null
         };
 
-
         if (!isMobile) {
-            // Movement threshold (px) before we treat the gesture as a drag. Avoids getMaxPosition/layout work on simple clicks.
             const DRAG_THRESHOLD_PX = 8;
 
-            // Touch and drag support (translateX-based). Expensive drag setup runs only after pointer moves past threshold.
             function onPointerDown(e) {
-                // Only handle left mouse button for drag (button 0)
                 if (e.type === 'mousedown' && e.button !== 0) {
                     return;
                 }
 
                 const point = e.touches ? e.touches[0] : e;
 
-                // Cancel any existing momentum animation
                 if (dragState.momentumId !== null) {
                     cancelAnimationFrame(dragState.momentumId);
                     dragState.momentumId = null;
                 }
 
-                // Store only cheap state until we know it's a drag
                 dragState.startX = point.clientX;
                 dragState.startY = point.clientY;
                 dragState.isDragging = false;
@@ -3760,7 +5417,6 @@
                     const dy = p.clientY - dragState.startY;
                     if (Math.abs(dx) < DRAG_THRESHOLD_PX && Math.abs(dy) < DRAG_THRESHOLD_PX) return;
 
-                    // Committing to drag: do expensive work once
                     dragState.isDragging = true;
                     dragState.startPosition = getCurrentPosition();
                     dragState.currentPosition = dragState.startPosition;
@@ -3791,7 +5447,7 @@
                     }
                 }
 
-                function onPointerUp(upEvent) {
+                function onPointerUp() {
                     if (!dragState.isDragging) cleanupPending();
                 }
 
@@ -3806,38 +5462,30 @@
             }
 
             function onDragMove(e) {
-                console.log('onDragMove', dragState.currentPosition);
                 if (!dragState.isDragging) return;
-                
+
                 const point = e.touches ? e.touches[0] : e;
                 const deltaX = dragState.startX - point.clientX;
                 const deltaY = dragState.startY - point.clientY;
-                
-                // Directional check: require horizontal movement to be dominant
-                // Only trigger horizontal scroll if:
-                // 1. Moved more than 10px horizontally (increased threshold)
-                // 2. Horizontal movement is greater than vertical movement (directional check)
+
                 if (Math.abs(deltaX) > 10 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
                     dragState.hasMoved = true;
 
                     const rawNewPosition = dragState.startPosition + deltaX;
-                    // Clamp using cached maxPosition to avoid repeated layout work
                     const clampedPosition = Math.min(Math.max(rawNewPosition, 0), Math.max(dragState.maxPosition, 0));
                     dragState.currentPosition = clampedPosition;
 
                     setPosition(clampedPosition, { animate: false });
-                    
-                    // Calculate velocity for momentum scrolling
+
                     const currentTime = Date.now();
                     const timeDelta = currentTime - dragState.lastTime;
                     if (timeDelta > 0) {
                         const positionDelta = point.clientX - dragState.lastX;
-                        dragState.velocity = positionDelta / timeDelta; // pixels per millisecond
+                        dragState.velocity = positionDelta / timeDelta;
                     }
                     dragState.lastX = point.clientX;
                     dragState.lastTime = currentTime;
-                    
-                    // Prevent default to stop page scrolling on touch
+
                     if (e.touches) {
                         e.preventDefault();
                     }
@@ -3845,10 +5493,8 @@
             }
 
             function onDragEnd(e) {
-                console.log('onDragEnd', dragState.currentPosition);
                 if (!dragState.isDragging) return;
-                
-                // Clean up listeners
+
                 if (e.type === 'touchend') {
                     document.removeEventListener('touchmove', onDragMove);
                     document.removeEventListener('touchend', onDragEnd);
@@ -3856,25 +5502,20 @@
                     document.removeEventListener('mousemove', onDragMove);
                     document.removeEventListener('mouseup', onDragEnd);
                 }
-                
-                // If user dragged, prevent click events from firing
+
                 if (dragState.hasMoved) {
-                    // Temporarily disable clicks on the scroller
                     scroller.style.pointerEvents = 'none';
                     requestAnimationFrame(() => {
                         scroller.style.pointerEvents = '';
                     });
                 }
-                
+
                 dragState.isDragging = false;
-                
-                // Apply momentum scrolling if there's sufficient velocity
-                // Tunable constants to better match native Jellyfin inertia
-                const friction = 0.965; // Higher = slides longer
-                const velocityThreshold = 0.01; // pixels per millisecond
-                const velocityBoost = 2.0; // Scale swipe strength to increase carry distance
-                
-                // Boost the measured velocity before starting momentum to increase travel distance
+
+                const friction = 0.965;
+                const velocityThreshold = 0.01;
+                const velocityBoost = 2.0;
+
                 dragState.velocity *= velocityBoost;
 
                 if (Math.abs(dragState.velocity) > velocityThreshold) {
@@ -3883,32 +5524,28 @@
                     let lastTimestamp = 0;
 
                     const step = (timestamp) => {
-                        // Compute frame time in ms using rAF timestamp
                         const frameTime = lastTimestamp ? (timestamp - lastTimestamp) : 16;
                         lastTimestamp = timestamp;
 
                         if (Math.abs(dragState.velocity) > velocityThreshold) {
                             currentPosition -= dragState.velocity * frameTime;
-
-                            // Clamp locally to avoid extra layout work
                             currentPosition = Math.min(Math.max(currentPosition, 0), Math.max(maxPosition, 0));
                             setPosition(currentPosition, { animate: false });
 
-                            // If we've hit an edge, stop the momentum
                             if (currentPosition === 0 || currentPosition === maxPosition) {
                                 dragState.velocity = 0;
                                 dragState.momentumId = null;
                                 return;
                             }
 
-                            dragState.velocity *= friction; // Apply deceleration
+                            dragState.velocity *= friction;
                             dragState.momentumId = requestAnimationFrame(step);
                         } else {
                             dragState.velocity = 0;
                             dragState.momentumId = null;
                         }
                     };
-                    
+
                     dragState.momentumId = requestAnimationFrame(step);
                 } else {
                     dragState.velocity = 0;
@@ -3916,87 +5553,165 @@
                 }
             }
 
-            // Attach drag start listeners (threshold inside onPointerDown defers getMaxPosition until real drag)
             scroller.addEventListener('mousedown', onPointerDown);
-
         }
 
-        // Overflow detection will be handled by ResizeObserver below
+        return scrollButtons;
+    }
 
-        // Toggle between scroll and grid view
-        showAllButton.addEventListener('click', () => {
-            const performanceTimerStart = performance.now();
+    /**
+     * Creates a scrollable container with horizontal scrolling functionality
+     * @param {Array} items - Array of Jellyfin item objects
+     * @param {string} title - Title for the scrollable container
+     * @param {string} viewMoreUrl - Optional URL to make title clickable
+     * @param {boolean} overflowCard - Use overflow card classes instead of normal card classes
+     * @param {string} cardFormat - Override card format: 'portrait', 'backdrop', or 'square'
+     * @returns {HTMLElement} - The constructed scrollable container
+     */
+    function getFacetRowType(items) {
+        if (!Array.isArray(items) || items.length === 0) return null;
+        let genreCount = 0;
+        let studioCount = 0;
+        items.forEach((item) => {
+            if (item?.Type === 'Genre') genreCount++;
+            else if (item?.Type === 'Studio') studioCount++;
+        });
+        const threshold = Math.ceil(items.length / 2);
+        if (genreCount >= threshold) return 'Genre';
+        if (studioCount >= threshold) return 'Studio';
+        return null;
+    }
 
-            // Find the scroll buttons for this container
-            const scrollerContainer = showAllButton.closest('.emby-scroller-container');
+    function appendSectionTitleContent(sectionTitleContainer, { title, caption, captionUrl, viewMoreUrl }) {
+        const captionText = caption && String(caption).trim();
+        const hasCaption = !!captionText;
+        let parent = sectionTitleContainer;
 
-            const performanceTimerEnd = performance.now();
-            const performanceTime = performanceTimerEnd - performanceTimerStart;
-            console.log(`[KefinTweaks CardBuilder] Time to find scroller container: ${performanceTime}ms`);
+        if (hasCaption) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'sectionTitle-wrapper';
+            sectionTitleContainer.appendChild(wrapper);
+            parent = wrapper;
+        }
 
-            const performanceTimerStart2 = performance.now();
+        if (viewMoreUrl) {
+            const titleLink = document.createElement('a');
+            titleLink.className = 'sectionTitle-link button-flat button-flat-mini sectionTitleTextButton emby-button';
+            titleLink.style.cssText = 'text-decoration: none; cursor: pointer; display: flex; align-items: center;';
 
-            const scrollButtons = scrollerContainer ? scrollerContainer.querySelector('.emby-scrollbuttons') : null;
-        
-            const performanceTimerEnd2 = performance.now();
-            const performanceTime2 = performanceTimerEnd2 - performanceTimerStart2;
-            console.log(`[KefinTweaks CardBuilder] Time to find scroll buttons: ${performanceTime2}ms`);
-
-            const performanceTimerStart3 = performance.now();
-
-            const isExpanded = itemsContainer.getAttribute('data-expanded') === 'true';
-
-            if (isExpanded) {
-                // Switch back to scroll view
-                itemsContainer.removeAttribute('data-expanded');
-                if (scrollButtons) scrollButtons.style.display = '';
-                showAllButton.title = 'Show all items in a grid layout';
-                setPosition(dragState.currentPosition, { animate: true });
+            if (typeof viewMoreUrl === 'function') {
+                titleLink.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    viewMoreUrl();
+                });
             } else {
-                // Switch to grid view
-                dragState.currentPosition = getCurrentPosition();
-                setPosition(0, { animate: false });
-                itemsContainer.setAttribute('data-expanded', 'true');
-                if (scrollButtons) scrollButtons.style.display = 'none';
-                showAllButton.title = 'Show items in scrollable layout';
+                titleLink.href = viewMoreUrl;
             }
 
-            const performanceTimerEnd3 = performance.now();
-            const performanceTime3 = performanceTimerEnd3 - performanceTimerStart3;
-            console.log(`[KefinTweaks CardBuilder] Time to switch view: ${performanceTime3}ms`);
+            const titleText = document.createElement('h2');
+            titleText.className = 'sectionTitle sectionTitle-cards';
+            titleText.textContent = title;
+
+            const chevronIcon = document.createElement('span');
+            chevronIcon.className = 'material-icons chevron_right';
+            chevronIcon.setAttribute('aria-hidden', 'true');
+
+            titleLink.appendChild(titleText);
+            titleLink.appendChild(chevronIcon);
+            parent.appendChild(titleLink);
+        } else {
+            const titleText = document.createElement('h2');
+            titleText.className = 'sectionTitle sectionTitle-cards';
+            titleText.textContent = title;
+            parent.appendChild(titleText);
+        }
+
+        if (hasCaption) {
+            let captionEl;
+            if (captionUrl) {
+                captionEl = document.createElement('a');
+                captionEl.className = 'sectionTitle sectionCaption button-flat button-flat-mini sectionTitleTextButton emby-button';
+                if (typeof captionUrl === 'function') {
+                    captionEl.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        captionUrl();
+                    });
+                } else {
+                    captionEl.href = captionUrl;
+                }
+            } else {
+                captionEl = document.createElement('span');
+                captionEl.className = 'sectionTitle sectionCaption';
+            }
+            captionEl.textContent = captionText;
+            parent.appendChild(captionEl);
+        }
+    }
+
+    function createScrollableContainer(items, title, viewMoreUrl = null, overflowCard = false, cardFormat = null, sectionConfig = null) {
+        const normalizedFormat = (cardFormat || '').toLowerCase();
+        const isButtonLayout = normalizedFormat === 'button';
+
+        // Create the main vertical section container
+        const verticalSection = document.createElement('div');
+        verticalSection.className = 'verticalSection emby-scroller-container custom-scroller-container';
+        const facetRowType = getFacetRowType(items);
+        if (facetRowType) {
+            verticalSection.style.setProperty('--row-hue', `${Math.floor(Math.random() * 360)}deg`);
+            verticalSection.dataset.facetRowType = facetRowType;
+        }
+        
+        // Persist the card format if provided (ensures consistency for random/updates)
+        if (cardFormat) {
+            verticalSection.setAttribute('data-card-format', cardFormat);
+        }
+
+        // Create section title
+        const sectionTitleContainer = document.createElement('div');
+        sectionTitleContainer.className = 'sectionTitleContainer sectionTitleContainer-cards padded-left';
+
+        appendSectionTitleContent(sectionTitleContainer, {
+            title,
+            caption: getSectionCaption(sectionConfig),
+            captionUrl: getSectionCaptionUrl(sectionConfig),
+            viewMoreUrl
         });
 
-        // Track window size to detect actual window resize events
-        /* let lastWindowWidth = window.innerWidth;
-        let lastWindowHeight = window.innerHeight;
+        ensureSectionControlsMount(sectionTitleContainer);
 
-        // Window resize handler - only update data-expandable on actual window resize
-        let windowResizeTimer = null;
-        function handleWindowResize() {
-            const currentWidth = window.innerWidth;
-            const currentHeight = window.innerHeight;
-            
-            // Only update if window size actually changed
-            if (currentWidth !== lastWindowWidth || currentHeight !== lastWindowHeight) {
-                lastWindowWidth = currentWidth;
-                lastWindowHeight = currentHeight;
-                
-                // Debounce window resize checks
-                clearTimeout(windowResizeTimer);
-                windowResizeTimer = setTimeout(() => {
-                    checkSectionOverflow(verticalSection, true); // Force update on window resize
-                }, 100); // 100ms debounce
-            }
+        if (isButtonLayout) {
+            const itemsContainer = document.createElement('div');
+            itemsContainer.setAttribute('is', 'emby-itemscontainer');
+            itemsContainer.className = 'itemsContainer padded-left padded-right focuscontainer-x';
+
+            items.forEach((item, index) => {
+                const button = createLibraryButtonElement(item);
+                button.setAttribute('data-index', index);
+                itemsContainer.appendChild(button);
+            });
+
+            /* verticalSection.appendChild(sectionTitleContainer);
+            verticalSection.appendChild(itemsContainer);
+            return verticalSection; */
         }
 
-        // Listen for window resize events
-        window.addEventListener('resize', handleWindowResize); */
+        // Create scroller container
+        const scroller = createScrollerElement();
+        const itemsContainer = createItemsSliderElement();
 
-        // Initial overflow check is done when section is detected in the DOM by overflowMutationObserver
+        // Add items to container
+        items.forEach((item, index) => {
+            const card = createJellyfinCardElement(item, overflowCard, cardFormat, item.cardFooter);
+            card.setAttribute('data-index', index);
+            itemsContainer.appendChild(card);
+        });
+
+        scroller.appendChild(itemsContainer);
+
+        const scrollButtons = attachScrollableSectionChrome(verticalSection, scroller);
 
         // Assemble the section
         verticalSection.appendChild(sectionTitleContainer);
-        //const scrollButtons2 = document.createElement('div');
         verticalSection.appendChild(scrollButtons);
         verticalSection.appendChild(scroller);
 
@@ -4018,7 +5733,7 @@
         let cardClass, padderClass;
         cardFormat = cardFormat?.toLowerCase() || 'portrait';
         
-        if (cardFormat === 'backdrop' || cardFormat === 'thumb') {
+        if (cardFormat === 'backdrop' || cardFormat === 'thumb' || cardFormat === 'series thumb') {
             cardClass = overflowCard ? 'overflowBackdropCard' : 'backdropCard';
             padderClass = 'cardPadder-backdrop';
         } else if (cardFormat === 'square') {
@@ -4072,39 +5787,42 @@
         const bannerContainer = document.createElement('div');
         bannerContainer.className = 'spotlight-banner-container';
 
-        // Add section title (same structure as createSpotlightSection for minimal layout shift)
-        if (title) {
-            let sectionTitleEl;
-            if (viewMoreUrl) {
-                const titleLink = document.createElement('a');
-                titleLink.className = 'emby-tab-button emby-tab-button-active emby-button-foreground';
-                titleLink.textContent = title;
-                titleLink.title = 'See All';
-                titleLink.style.textDecoration = 'none';
-                if (typeof viewMoreUrl === 'function') {
-                    titleLink.addEventListener('click', (e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        viewMoreUrl();
-                    });
-                } else {
-                    titleLink.href = viewMoreUrl;
-                    titleLink.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                    });
-                }
-                sectionTitleEl = titleLink;
-            } else {
-                sectionTitleEl = document.createElement('div');
-                sectionTitleEl.className = 'emby-tab-button emby-tab-button-active emby-button-foreground';
-                sectionTitleEl.textContent = title;
-            }
-            const sectionTitleWrapper = document.createElement('div');
-            sectionTitleWrapper.className = `spotlight-section-title ${viewMoreUrl ? '' : 'spotlight-title-link '}headerTabs sectionTabs`;
-            sectionTitleWrapper.appendChild(sectionTitleEl);
+        // Title container hosts section name + refresh/configure controls.
+        // Always create it so controls can attach even when the section has no name.
+        {
             const sectionTitleContainer = document.createElement('div');
             sectionTitleContainer.className = 'spotlight-section-title-container';
-            sectionTitleContainer.appendChild(sectionTitleWrapper);
+            if (title) {
+                let sectionTitleEl;
+                if (viewMoreUrl) {
+                    const titleLink = document.createElement('a');
+                    titleLink.className = 'emby-tab-button emby-tab-button-active emby-button-foreground';
+                    titleLink.textContent = title;
+                    titleLink.title = 'See All';
+                    titleLink.style.textDecoration = 'none';
+                    if (typeof viewMoreUrl === 'function') {
+                        titleLink.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            viewMoreUrl();
+                        });
+                    } else {
+                        titleLink.href = viewMoreUrl;
+                        titleLink.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                        });
+                    }
+                    sectionTitleEl = titleLink;
+                } else {
+                    sectionTitleEl = document.createElement('div');
+                    sectionTitleEl.className = 'emby-tab-button emby-tab-button-active emby-button-foreground';
+                    sectionTitleEl.textContent = title;
+                }
+                const sectionTitleWrapper = document.createElement('div');
+                sectionTitleWrapper.className = `spotlight-section-title ${viewMoreUrl ? '' : 'spotlight-title-link '}headerTabs sectionTabs`;
+                sectionTitleWrapper.appendChild(sectionTitleEl);
+                sectionTitleContainer.appendChild(sectionTitleWrapper);
+            }
             bannerContainer.appendChild(sectionTitleContainer);
         }
 
@@ -4133,7 +5851,7 @@
      * @param {boolean} overflowCard - Use overflow card classes
      * @returns {HTMLElement} - Container with skeleton cards
      */
-    function createProgressivelyEnhancedScrollableContainer(title, viewMoreUrl = null, cardFormat = null, overflowCard = false) {
+    function createProgressivelyEnhancedScrollableContainer(title, viewMoreUrl = null, cardFormat = null, overflowCard = false, sectionConfig = null) {
         // Create the main vertical section container (same structure as createScrollableContainer)
         const verticalSection = document.createElement('div');
         verticalSection.className = 'verticalSection emby-scroller-container custom-scroller-container';
@@ -4146,58 +5864,20 @@
         // Create section title
         const sectionTitleContainer = document.createElement('div');
         sectionTitleContainer.className = 'sectionTitleContainer sectionTitleContainer-cards padded-left';
-        
-        if (viewMoreUrl) {
-            const titleLink = document.createElement('a');
-            titleLink.className = 'sectionTitle-link sectionTitleTextButton';
-            titleLink.style.cssText = 'text-decoration: none; cursor: pointer; display: flex; align-items: center;';
-            
-            if (typeof viewMoreUrl === 'function') {
-                titleLink.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    viewMoreUrl();
-                });
-            } else {
-                titleLink.href = viewMoreUrl;
-            }
-            
-            const titleText = document.createElement('h2');
-            titleText.className = 'sectionTitle sectionTitle-cards';
-            titleText.textContent = title;
-            
-            const chevronIcon = document.createElement('span');
-            chevronIcon.className = 'material-icons chevron_right';
-            chevronIcon.setAttribute('aria-hidden', 'true');
-            
-            titleLink.appendChild(titleText);
-            titleLink.appendChild(chevronIcon);
-            sectionTitleContainer.appendChild(titleLink);
-        } else {
-            const titleText = document.createElement('h2');
-            titleText.className = 'sectionTitle sectionTitle-cards';
-            titleText.textContent = title;
-            sectionTitleContainer.appendChild(titleText);
-        }
 
-        // Create scroller container
-        const scroller = document.createElement('div');
-        scroller.setAttribute('data-horizontal', 'true');
-        scroller.setAttribute('data-centerfocus', 'card');
-        scroller.className = 'padded-top-focusscale padded-bottom-focusscale emby-scroller custom-scroller';
-        scroller.setAttribute('data-scroll-mode-x', 'custom');
-        scroller.style.scrollSnapType = 'none';
-        scroller.style.touchAction = 'auto';
-        scroller.style.overscrollBehaviorX = 'contain';
-        scroller.style.overscrollBehaviorY = 'auto';
-        scroller.style.webkitOverflowScrolling = 'touch';
+        appendSectionTitleContent(sectionTitleContainer, {
+            title,
+            caption: getSectionCaption(sectionConfig),
+            captionUrl: getSectionCaptionUrl(sectionConfig),
+            viewMoreUrl
+        });
 
-        // Create items container
-        const itemsContainer = document.createElement('div');
-        itemsContainer.className = 'focuscontainer-x itemsContainer scrollSlider animatedScrollX';
-        itemsContainer.style.whiteSpace = 'nowrap';
+        ensureSectionControlsMount(sectionTitleContainer);
 
-        // Add skeleton cards (enough to fill viewport width)
-        const skeletonCount = (cardFormat === 'backdrop' || cardFormat === 'thumb') ? 8 : 10;
+        const scroller = createScrollerElement();
+        const itemsContainer = createItemsSliderElement();
+
+        const skeletonCount = getSectionSkeletonCount(sectionConfig);
         for (let i = 0; i < skeletonCount; i++) {
             const skeletonCard = createSkeletonCard(cardFormat, overflowCard);
             skeletonCard.setAttribute('data-index', i);
@@ -4205,8 +5885,14 @@
         }
 
         scroller.appendChild(itemsContainer);
+
+        const scrollButtons = attachScrollableSectionChrome(verticalSection, scroller);
+
         verticalSection.appendChild(sectionTitleContainer);
+        verticalSection.appendChild(scrollButtons);
         verticalSection.appendChild(scroller);
+
+        registerScrollSectionScrollButtons(verticalSection);
 
         return verticalSection;
     }
@@ -4265,9 +5951,6 @@
     // Smart Lazy Image Loading with Global Observers
     let lazyImageObserver = null;
     let lazyMutationObserver = null;
-
-    // Overflow check: run checkSectionOverflow when .emby-scroller-container with .itemsContainer appears in DOM
-    let overflowMutationObserver = null;
 
     // Run updateScrollButtonStateForSection once when a section becomes visible (so --max-scroll is computed after layout)
     let scrollSectionVisibilityObserver = null;
@@ -4419,45 +6102,6 @@
     }
 
     /**
-     * Collect section elements (.emby-scroller-container containing .itemsContainer) from an added node
-     * @param {Node} node - Added node (element or fragment)
-     * @returns {HTMLElement[]} - Deduplicated section elements to run overflow check on
-     */
-    function getScrollerSectionsForOverflowCheck(node) {
-        if (!node || node.nodeType !== 1 || !node.querySelectorAll) return [];
-        const sections = [];
-        const selfMatch = node.classList && node.classList.contains('emby-scroller-container') && node.querySelector('.itemsContainer');
-        if (selfMatch) sections.push(node);
-        const inner = node.querySelectorAll('.emby-scroller-container');
-        inner.forEach(el => {
-            if (el !== node && el.querySelector('.itemsContainer')) sections.push(el);
-        });
-        return sections;
-    }
-
-    /**
-     * Initialize the MutationObserver that runs checkSectionOverflow when sections appear in the DOM
-     */
-    function initOverflowMutationObserver() {
-        if (overflowMutationObserver) return;
-        overflowMutationObserver = new MutationObserver((mutations) => {
-            const sectionsToCheck = new Set();
-            mutations.forEach(mutation => {
-                mutation.addedNodes.forEach(node => {
-                    getScrollerSectionsForOverflowCheck(node).forEach(section => sectionsToCheck.add(section));
-                });
-            });
-            sectionsToCheck.forEach(section => {
-                requestAnimationFrame(() => {
-                    checkSectionOverflow(section, false);
-                    // Re-check after a short delay so images/layout can affect dimensions
-                    setTimeout(() => checkSectionOverflow(section, true), 150);
-                });
-            });
-        });
-    }
-
-    /**
      * Initialize the smart lazy loading system
      * Scans existing elements and starts both observers
      */
@@ -4466,45 +6110,23 @@
             return; // Browser doesn't support observers
         }
         
-        // Initialize observers
         initLazyImageObserver();
         initLazyMutationObserver();
-        initOverflowMutationObserver();
         
-        // Scan existing elements with data-src
         const existingLazyImages = document.querySelectorAll('.cardImageContainer[data-src]');
         existingLazyImages.forEach(img => {
             lazyImageObserver.observe(img);
         });
         
-        // Run overflow check on any sections already in the DOM
-        document.querySelectorAll('.emby-scroller-container').forEach(section => {
-            if (section.querySelector('.itemsContainer')) {
-                requestAnimationFrame(() => checkSectionOverflow(section, false));
-            }
-        });
-        
-        // Start watching for new elements
         if (document.body) {
             lazyMutationObserver.observe(document.body, {
                 childList: true,
                 subtree: true
             });
-            overflowMutationObserver.observe(document.body, {
-                childList: true,
-                subtree: true
-            });
         } else {
-            // If body isn't ready, wait for DOMContentLoaded
             document.addEventListener('DOMContentLoaded', () => {
                 if (lazyMutationObserver && document.body) {
                     lazyMutationObserver.observe(document.body, {
-                        childList: true,
-                        subtree: true
-                    });
-                }
-                if (overflowMutationObserver && document.body) {
-                    overflowMutationObserver.observe(document.body, {
                         childList: true,
                         subtree: true
                     });
@@ -4518,6 +6140,784 @@
         document.addEventListener('DOMContentLoaded', initSmartLazyLoading);
     } else {
         initSmartLazyLoading();
+    }
+
+    // Progressive section enhancement (deferred via IntersectionObserver when enhanceOnVisible)
+    let sectionEnhanceObserver = null;
+    let sectionEnhanceObserverRootMargin = null;
+    const sectionEnhancePending = new WeakMap();
+
+    /**
+     * Read the currently active spotlight slide from a live section.
+     * @param {HTMLElement} sectionEl
+     * @returns {{ slide: HTMLElement, index: number, id: string } | null}
+     */
+    function getActiveSpotlightSlide(sectionEl) {
+        if (!sectionEl) return null;
+        const slide = sectionEl.querySelector('.spotlight-item[data-active="true"], .spotlight-item[data-active]');
+        if (!slide || slide.classList.contains('skeleton-spotlight-item')) return null;
+        const index = parseInt(slide.getAttribute('data-index'), 10);
+        const id = slide.getAttribute('data-id');
+        if (!id || Number.isNaN(index) || index < 0) return null;
+        return { slide, index, id };
+    }
+
+    /**
+     * Build the item list for a keep-current-slide spotlight refresh.
+     * Dedupes activeId from results when present; inserts at i or appends as N+1 when beyond.
+     * @param {Array} newItems
+     * @param {{ index: number, id: string }} activeMeta
+     * @param {Array} dataItems - prior/cached items used to resolve the active item object
+     * @returns {{ items: Array, preserveIndex: number }}
+     */
+    function buildSpotlightRefreshItems(newItems, activeMeta, dataItems) {
+        const source = Array.isArray(newItems) ? newItems.slice() : [];
+        const i = activeMeta.index;
+        const activeId = String(activeMeta.id);
+        const N = source.length;
+
+        const findById = (list) => (list || []).find((d) => d && String(d.Id) === activeId);
+        let activeItem = findById(dataItems) || findById(source);
+        if (!activeItem) {
+            return {
+                items: source,
+                preserveIndex: Math.min(i, Math.max(0, N - 1)),
+                canPreserve: false
+            };
+        }
+
+        // Prefer cached object so the kept slide matches item data
+        activeItem = findById(dataItems) || activeItem;
+
+        const wasInResults = source.some((d) => d && String(d.Id) === activeId);
+        let working = wasInResults
+            ? source.filter((d) => !(d && String(d.Id) === activeId))
+            : source;
+
+        if (wasInResults) {
+            if (i <= working.length) {
+                working.splice(i, 0, activeItem);
+                return { items: working, preserveIndex: i, canPreserve: true };
+            }
+            working.push(activeItem);
+            return { items: working, preserveIndex: working.length - 1, canPreserve: true };
+        }
+
+        if (i < N) {
+            working.splice(i, 0, activeItem);
+            return { items: working, preserveIndex: i, canPreserve: true };
+        }
+        working.push(activeItem);
+        return { items: working, preserveIndex: working.length - 1, canPreserve: true };
+    }
+
+    /**
+     * Replace the rebuilt slide at preserveIndex with the detached active slide DOM.
+     * @param {HTMLElement} newSection
+     * @param {HTMLElement} activeSlide
+     * @param {number} preserveIndex
+     */
+    function transplantActiveSpotlightSlide(newSection, activeSlide, preserveIndex) {
+        if (!newSection || !activeSlide) return;
+        const container = newSection.querySelector('.spotlight-items-container');
+        if (!container) return;
+
+        activeSlide.setAttribute('data-index', String(preserveIndex));
+        activeSlide.setAttribute('data-active', 'true');
+        activeSlide.removeAttribute('data-fade-out');
+        activeSlide.removeAttribute('data-entering');
+
+        const built = container.querySelector(`.spotlight-item[data-index="${preserveIndex}"]`);
+        if (built) {
+            built.replaceWith(activeSlide);
+        } else {
+            container.appendChild(activeSlide);
+        }
+    }
+
+    /**
+     * Rebuild a spotlight section from fresh items, optionally preserving the active slide.
+     * @param {HTMLElement} sectionElement
+     * @param {Array} items
+     * @param {Object} options
+     * @param {string} options.name
+     * @param {string} [options.viewMoreUrl]
+     * @param {Object} [options.spotlightConfig]
+     * @param {Array} [options.dataItems]
+     * @param {boolean} [options.keepCurrentSlide]
+     * @param {Object} [options.sectionConfig]
+     * @returns {{ content: HTMLElement, items: Array }}
+     */
+    function refreshSpotlight(sectionElement, items, options = {}) {
+        const {
+            name,
+            viewMoreUrl = null,
+            spotlightConfig = {},
+            dataItems = [],
+            keepCurrentSlide = false,
+            sectionConfig = null
+        } = options;
+
+        let itemsForBuild = Array.isArray(items) ? items.slice() : [];
+        let preserveIndex = 0;
+        let activeSlide = null;
+        let doPreserve = false;
+
+        if (keepCurrentSlide) {
+            const activeMeta = getActiveSpotlightSlide(sectionElement);
+            if (activeMeta) {
+                const built = buildSpotlightRefreshItems(itemsForBuild, activeMeta, dataItems);
+                if (built.canPreserve) {
+                    itemsForBuild = built.items;
+                    preserveIndex = built.preserveIndex;
+                    activeSlide = activeMeta.slide;
+                    doPreserve = true;
+                    // Detach before the old section is discarded so we can transplant it
+                    activeSlide.remove();
+                }
+            }
+        }
+
+        const content = createSpotlightSection(itemsForBuild, name, {
+            viewMoreUrl,
+            ...spotlightConfig,
+            ...(doPreserve ? { initialIndex: preserveIndex } : {})
+        });
+
+        if (doPreserve && activeSlide) {
+            transplantActiveSpotlightSlide(content, activeSlide, preserveIndex);
+        }
+
+        content.style.cssText = sectionElement.style.cssText;
+        content.className = sectionElement.className;
+        Array.from(sectionElement.attributes).forEach((attr) => {
+            content.setAttribute(attr.name, attr.value);
+        });
+
+        if (sectionConfig) {
+            attachSectionControlButtons(sectionConfig, content, itemsForBuild);
+        }
+
+        sectionElement.replaceWith(content);
+        return { content, items: itemsForBuild };
+    }
+
+    function getPaintedCardIds(sectionElement) {
+        const cards = sectionElement.querySelectorAll('.itemsContainer > .card[data-id]:not(.card-layout-dummy):not(.skeleton-card)');
+        if (cards.length) {
+            return Array.from(cards).map((card) => card.getAttribute('data-id')).filter(Boolean);
+        }
+        const buttons = sectionElement.querySelectorAll('.itemsContainer > .homeLibraryButton[data-id]');
+        return Array.from(buttons).map((button) => button.getAttribute('data-id')).filter(Boolean);
+    }
+
+    function classifyIdSequence(staleIds, freshIds) {
+        if (!staleIds.length || !freshIds.length) return { type: 'replace' };
+        if (staleIds.length === freshIds.length && staleIds.every((id, i) => id === freshIds[i])) {
+            return { type: 'perfect' };
+        }
+
+        const staleSet = new Set(staleIds);
+        const freshSet = new Set(freshIds);
+        const sharedStale = staleIds.filter((id) => freshSet.has(id));
+        const sharedFresh = freshIds.filter((id) => staleSet.has(id));
+        if (!sharedStale.length || sharedStale.length !== sharedFresh.length) return { type: 'replace' };
+        if (sharedStale.some((id, i) => id !== sharedFresh[i])) return { type: 'replace' };
+        return { type: 'reconcile' };
+    }
+
+    function runAfterTransition(element, durationMs, callback) {
+        let done = false;
+        const finish = () => {
+            if (done) return;
+            done = true;
+            element.removeEventListener('transitionend', onEnd);
+            callback();
+        };
+        const onEnd = (event) => {
+            if (event.target !== element) return;
+            finish();
+        };
+        element.addEventListener('transitionend', onEnd);
+        setTimeout(finish, durationMs);
+    }
+
+    function patchCardProgressBar(card, item) {
+        const imageContainer = card.querySelector('.cardImageContainer');
+        if (!imageContainer) return;
+
+        const percent = item.UserData?.PlayedPercentage;
+        const existingBar = imageContainer.querySelector('.itemProgressBarForeground');
+        const existingFooter = existingBar?.closest('.innerCardFooter');
+
+        if (percent && percent > 0) {
+            if (existingBar) {
+                existingBar.style.width = `${percent}%`;
+                return;
+            }
+            const innerCardFooter = document.createElement('div');
+            innerCardFooter.className = 'innerCardFooter fullInnerCardFooter innerCardFooterClear';
+            const itemProgressBar = document.createElement('div');
+            itemProgressBar.className = 'itemProgressBar';
+            const itemProgressBarForeground = document.createElement('div');
+            itemProgressBarForeground.className = 'itemProgressBarForeground';
+            itemProgressBarForeground.style.width = `${percent}%`;
+            itemProgressBar.appendChild(itemProgressBarForeground);
+            innerCardFooter.appendChild(itemProgressBar);
+            imageContainer.appendChild(innerCardFooter);
+            return;
+        }
+
+        if (existingFooter && existingFooter.querySelector('.itemProgressBar')) {
+            existingFooter.remove();
+        }
+    }
+
+    function patchCardsUserData(sectionElement, items) {
+        items.forEach((item) => {
+            if (!item?.Id) return;
+            updateCardResumeAttributes(item.Id, item.UserData || {});
+            const escapedId = typeof CSS !== 'undefined' && CSS.escape
+                ? CSS.escape(item.Id)
+                : String(item.Id).replace(/["\\]/g, '\\$&');
+            const card = sectionElement.querySelector(`.itemsContainer > .card[data-id="${escapedId}"]`);
+            if (card) patchCardProgressBar(card, item);
+        });
+    }
+
+    function getCardOuterWidth(card) {
+        if (!card) return 0;
+        const style = window.getComputedStyle(card);
+        return card.getBoundingClientRect().width
+            + (parseFloat(style.marginLeft) || 0)
+            + (parseFloat(style.marginRight) || 0);
+    }
+
+    function getScrollerPosition(scroller) {
+        if (!scroller) return 0;
+        if (scroller.classList.contains('scrollX')) return scroller.scrollLeft || 0;
+        const v = scroller.style.getPropertyValue('--scroll-x');
+        if (v !== '' && !isNaN(parseFloat(v))) return parseFloat(v);
+        return 0;
+    }
+
+    function setScrollerPosition(scroller, position, animate) {
+        if (!scroller) return;
+        const maxPosition = Math.max(0, (scroller.scrollWidth - scroller.clientWidth) || 0);
+        const clamped = Math.min(Math.max(position, 0), maxPosition + 300);
+        if (scroller.classList.contains('scrollX')) {
+            scroller.scrollTo({ left: clamped, behavior: animate ? 'smooth' : 'auto' });
+            return;
+        }
+        scroller.style.transition = animate ? 'transform 400ms ease-out' : 'none';
+        scroller.style.transform = `translateX(-${clamped}px)`;
+        scroller.style.setProperty('--scroll-x', String(clamped));
+    }
+
+    function reindexSectionCards(itemsContainer) {
+        getRealLayoutCards(itemsContainer).forEach((card, index) => {
+            card.setAttribute('data-index', String(index));
+        });
+    }
+
+    function appendCardsForItems(itemsContainer, items, overflowCard, cardFormat, startIndex = 0) {
+        const cards = [];
+        items.forEach((item, offset) => {
+            const card = createJellyfinCardElement(item, overflowCard, cardFormat, item.cardFooter);
+            card.setAttribute('data-index', String(startIndex + offset));
+            itemsContainer.appendChild(card);
+            cards.push(card);
+        });
+        return cards;
+    }
+
+    function clearCardReconcileStyles(card) {
+        card.classList.remove('cardbuilder-card-insert', 'cardbuilder-card-collapse', 'is-in');
+        card.style.width = '';
+        card.style.minWidth = '';
+        card.style.maxWidth = '';
+        card.style.marginLeft = '';
+        card.style.marginRight = '';
+        card.style.overflow = '';
+        card.style.opacity = '';
+        card.style.paddingLeft = '';
+        card.style.paddingRight = '';
+    }
+
+    function captureCardLayout(card) {
+        const style = window.getComputedStyle(card);
+        return {
+            card,
+            width: card.getBoundingClientRect().width,
+            marginLeft: style.marginLeft,
+            marginRight: style.marginRight
+        };
+    }
+
+    function applyCardCollapsedSize(card) {
+        card.style.width = '0px';
+        card.style.minWidth = '0px';
+        card.style.maxWidth = '0px';
+        card.style.marginLeft = '0px';
+        card.style.marginRight = '0px';
+        card.style.overflow = 'hidden';
+        card.style.opacity = '0';
+    }
+
+    function applyCardExpandedSize(layout) {
+        const { card, width, marginLeft, marginRight } = layout;
+        card.style.width = `${width}px`;
+        card.style.minWidth = `${width}px`;
+        card.style.maxWidth = `${width}px`;
+        card.style.marginLeft = marginLeft;
+        card.style.marginRight = marginRight;
+        card.style.overflow = 'hidden';
+        card.style.opacity = '1';
+    }
+
+    function reconcileRowItems(sectionElement, items, sectionConfig, onComplete) {
+        const itemsContainer = sectionElement.querySelector('.itemsContainer');
+        const scroller = sectionElement.querySelector('.emby-scroller');
+        if (!itemsContainer) return false;
+
+        const overflowCard = sectionConfig.overflowCard;
+        const cardFormat = sectionElement.getAttribute('data-card-format') || sectionConfig.cardFormat;
+
+        const paintedCards = getRealLayoutCards(itemsContainer).filter((card) => {
+            return card.getAttribute('data-id') && !card.classList.contains('skeleton-card');
+        });
+        const cardById = new Map();
+        paintedCards.forEach((card) => {
+            const id = card.getAttribute('data-id');
+            if (id && !cardById.has(id)) cardById.set(id, card);
+        });
+
+        const freshIds = items.map((item) => item?.Id).filter(Boolean);
+        const freshSet = new Set(freshIds);
+        const outgoing = paintedCards.filter((card) => !freshSet.has(card.getAttribute('data-id')));
+        const inserted = [];
+        const prefixInserted = [];
+
+        let nextNode = paintedCards[0] || null;
+        let seenKept = false;
+
+        items.forEach((item) => {
+            if (!item?.Id) return;
+            const existing = cardById.get(item.Id);
+            if (existing) {
+                seenKept = true;
+                nextNode = existing.nextElementSibling;
+                while (nextNode && (nextNode.classList.contains('card-layout-dummy') || nextNode.classList.contains('skeleton-card'))) {
+                    nextNode = nextNode.nextElementSibling;
+                }
+                return;
+            }
+
+            const card = createJellyfinCardElement(item, overflowCard, cardFormat, item.cardFooter);
+            if (nextNode) itemsContainer.insertBefore(card, nextNode);
+            else itemsContainer.appendChild(card);
+            inserted.push(card);
+            if (!seenKept) prefixInserted.push(card);
+        });
+
+        ensureCardBorders(sectionElement);
+
+        const previousPosition = getScrollerPosition(scroller);
+        let prefixWidth = 0;
+        prefixInserted.forEach((card) => {
+            prefixWidth += getCardOuterWidth(card);
+        });
+
+        const midInserted = inserted.filter((card) => !prefixInserted.includes(card));
+        const midLayouts = midInserted.map(captureCardLayout);
+        const outgoingLayouts = outgoing.map(captureCardLayout);
+        const canSlidePrefix = !!(scroller && prefixWidth > 0);
+        const prefixLayouts = canSlidePrefix ? [] : prefixInserted.map(captureCardLayout);
+
+        midLayouts.forEach(({ card }) => {
+            card.classList.add('cardbuilder-card-insert');
+            applyCardCollapsedSize(card);
+        });
+        prefixLayouts.forEach(({ card }) => {
+            card.classList.add('cardbuilder-card-insert');
+            applyCardCollapsedSize(card);
+        });
+        outgoingLayouts.forEach((layout) => {
+            layout.card.classList.add('cardbuilder-card-collapse');
+            applyCardExpandedSize(layout);
+        });
+        if (canSlidePrefix) {
+            prefixInserted.forEach((card) => {
+                card.classList.add('cardbuilder-card-insert');
+                card.style.opacity = '0';
+            });
+            setScrollerPosition(scroller, previousPosition + prefixWidth, false);
+        }
+
+        itemsContainer.offsetHeight;
+        itemsContainer.classList.add('cardbuilder-row-animating');
+
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                outgoingLayouts.forEach(({ card }) => applyCardCollapsedSize(card));
+                midLayouts.forEach((layout) => {
+                    layout.card.classList.add('is-in');
+                    applyCardExpandedSize(layout);
+                });
+                prefixLayouts.forEach((layout) => {
+                    layout.card.classList.add('is-in');
+                    applyCardExpandedSize(layout);
+                });
+                if (canSlidePrefix) {
+                    prefixInserted.forEach((card) => {
+                        card.classList.add('is-in');
+                        card.style.opacity = '1';
+                    });
+                    setScrollerPosition(scroller, previousPosition, true);
+                }
+
+                const animTarget = outgoing[0] || midInserted[0] || prefixInserted[0] || scroller || itemsContainer;
+                runAfterTransition(animTarget, 450, () => {
+                    outgoing.forEach((card) => card.remove());
+                    inserted.forEach(clearCardReconcileStyles);
+                    itemsContainer.classList.remove('cardbuilder-row-animating');
+                    if (scroller) scroller.style.transition = '';
+                    reindexSectionCards(itemsContainer);
+                    invalidateLastRowPadding(itemsContainer);
+                    patchCardsUserData(sectionElement, items);
+                    ensureCardBorders(sectionElement);
+                    updateScrollButtonStateForSection(sectionElement);
+                    if (typeof onComplete === 'function') {
+                        onComplete();
+                    }
+                });
+            });
+        });
+
+        return true;
+    }
+
+    function replaceItemsContainerContents(sectionElement, items, sectionConfig) {
+        const itemsContainer = sectionElement.querySelector('.itemsContainer');
+        if (!itemsContainer || !sectionConfig) return sectionElement;
+
+        const overflowCard = sectionConfig.overflowCard;
+        const cardFormat = sectionElement.getAttribute('data-card-format') || sectionConfig.cardFormat;
+        const normalizedFormat = (cardFormat || '').toLowerCase();
+        const layoutFromDom = itemsContainer.getAttribute('data-layout');
+        const layout = (layoutFromDom === 'grid' || layoutFromDom === 'row')
+            ? layoutFromDom
+            : resolveItemsLayout(sectionConfig);
+        const gapless = itemsContainer.getAttribute('data-gapless') === 'true'
+            || resolveUseGaplessCards(sectionConfig);
+
+        invalidateLastRowPadding(itemsContainer);
+
+        const fragment = document.createDocumentFragment();
+        if (normalizedFormat === 'button' || isButtonCardFormat(cardFormat)) {
+            items.forEach((item, index) => {
+                const button = createLibraryButtonElement(item);
+                button.setAttribute('data-index', String(index));
+                fragment.appendChild(button);
+            });
+        } else {
+            items.forEach((item, index) => {
+                const card = createJellyfinCardElement(item, overflowCard, cardFormat, item.cardFooter);
+                card.setAttribute('data-index', String(index));
+                fragment.appendChild(card);
+            });
+        }
+
+        itemsContainer.replaceChildren(fragment);
+
+        applyItemsLayoutState(sectionElement, layout, gapless);
+        ensureCardBorders(sectionElement);
+        attachSectionControlButtons(sectionConfig, sectionElement, items);
+        requestAnimationFrame(() => updateScrollButtonStateForSection(sectionElement));
+
+        return sectionElement;
+    }
+
+    function fadeReplaceRowItems(sectionElement, items, sectionConfig, onComplete) {
+        const itemsContainer = sectionElement.querySelector('.itemsContainer');
+        if (!itemsContainer) return false;
+
+        const finish = () => {
+            replaceItemsContainerContents(sectionElement, items, sectionConfig);
+            requestAnimationFrame(() => itemsContainer.classList.remove('is-hidden'));
+            if (typeof onComplete === 'function') {
+                onComplete();
+            }
+        };
+
+        if (isMobileLayout()) {
+            finish();
+            return true;
+        }
+
+        itemsContainer.classList.add('cardbuilder-items-fade');
+        itemsContainer.offsetHeight;
+        itemsContainer.classList.add('is-hidden');
+        runAfterTransition(itemsContainer, 320, finish);
+        return true;
+    }
+
+    function replaceSectionWithFreshCards(sectionElement, items, sectionConfig, dataItems, revealSectionsSequentially) {
+        let finalCardFormat = sectionConfig.cardFormat;
+        const skeletonCardFormat = sectionElement.getAttribute('data-card-format');
+        if (skeletonCardFormat) {
+            finalCardFormat = skeletonCardFormat;
+        }
+
+        if (sectionConfig.spotlight || sectionConfig.renderMode === 'Spotlight') {
+            const refreshed = refreshSpotlight(sectionElement, items, {
+                name: sectionConfig.name,
+                viewMoreUrl: sectionConfig.viewMoreUrl,
+                spotlightConfig: sectionConfig.spotlightConfig,
+                dataItems: Array.isArray(dataItems) ? dataItems : [],
+                keepCurrentSlide: true,
+                sectionConfig
+            });
+            ensureCardBorders(refreshed.content);
+            if (revealSectionsSequentially && refreshed.content.classList.contains('cardbuilder-section-reveal') && !refreshed.content.classList.contains('in-viewport')) {
+                observeSectionForReveal(refreshed.content);
+            }
+            return refreshed.content;
+        }
+
+        const content = createScrollableContainer(items, sectionConfig.name, sectionConfig.viewMoreUrl, sectionConfig.overflowCard, finalCardFormat, sectionConfig);
+        content.style.cssText = sectionElement.style.cssText;
+        content.className = sectionElement.className;
+        Array.from(sectionElement.attributes).forEach((attr) => {
+            content.setAttribute(attr.name, attr.value);
+        });
+
+        const oldItemsContainer = sectionElement.querySelector('.itemsContainer');
+        const layoutFromDom = oldItemsContainer?.getAttribute('data-layout');
+        const layout = (layoutFromDom === 'grid' || layoutFromDom === 'row')
+            ? layoutFromDom
+            : resolveItemsLayout(sectionConfig);
+        const gapless = oldItemsContainer
+            ? oldItemsContainer.getAttribute('data-gapless') === 'true'
+            : resolveUseGaplessCards(sectionConfig);
+        invalidateLastRowPadding(content.querySelector('.itemsContainer'));
+        attachSectionControlButtons(sectionConfig, content, items);
+        sectionElement.replaceWith(content);
+        applyItemsLayoutState(content, layout, gapless);
+        ensureCardBorders(content);
+        if (revealSectionsSequentially && content.classList.contains('cardbuilder-section-reveal') && !content.classList.contains('in-viewport')) {
+            observeSectionForReveal(content);
+        }
+        return content;
+    }
+
+    function fadeReplaceSpotlight(sectionElement, items, sectionConfig, dataItems, revealSectionsSequentially) {
+        sectionElement.classList.add('cardbuilder-items-fade');
+        sectionElement.offsetHeight;
+        sectionElement.classList.add('is-hidden');
+        runAfterTransition(sectionElement, 320, () => {
+            const content = replaceSectionWithFreshCards(sectionElement, items, sectionConfig, dataItems, revealSectionsSequentially);
+            markSectionEnhanced(content, sectionConfig);
+            content.classList.add('cardbuilder-items-fade', 'is-hidden');
+            requestAnimationFrame(() => content.classList.remove('is-hidden'));
+        });
+    }
+
+    function markSectionEnhanced(sectionElement, sectionConfig) {
+        if (!sectionElement) return;
+        sectionElement.dataset.enhanced = 'true';
+        if (typeof sectionConfig?._onSectionEnhanced === 'function') {
+            sectionConfig._onSectionEnhanced(sectionElement, sectionConfig);
+        }
+    }
+
+    function hasSectionDeferredData(result) {
+        if (!result) return false;
+        if (typeof result.ensureData === 'function') return true;
+        if (result.isStalePromise) return true;
+        return !!Object.getOwnPropertyDescriptor(result, 'dataPromise');
+    }
+
+    function getSectionDataPromise(result) {
+        if (!result) return null;
+        if (typeof result.ensureData === 'function') return result.ensureData();
+        const desc = Object.getOwnPropertyDescriptor(result, 'dataPromise');
+        if (desc?.get) return desc.get.call(result);
+        return result.dataPromise || null;
+    }
+
+    function setupSectionProgressiveEnhancement(sectionElement, section, { revealSectionsSequentially = false } = {}) {
+        if (!sectionElement || !section?.result) return;
+        if (!hasSectionDeferredData(section.result)) return;
+        if (sectionElement.dataset.enhanceScheduled === 'true') return;
+
+        sectionElement.dataset.enhanceScheduled = 'true';
+
+        const dataPromise = getSectionDataPromise(section.result);
+        if (!dataPromise) return;
+
+        section.result.isStalePromise?.then(isStale => {
+            if (isStale) {
+                sectionElement.dataset.refreshing = 'true';
+            }
+        });
+
+        dataPromise.then(result => {
+            sectionElement.dataset.refreshing = 'false';
+
+            const sectionConfig = section.config;
+            let items = result?.Items ?? result ?? [];
+            if (!Array.isArray(items)) items = [];
+
+            const dataItems = section.result?.data?.Items ?? section.result?.data ?? [];
+            const isSpotlight = sectionConfig.spotlight || sectionConfig.renderMode === 'Spotlight';
+            const isSkeleton = !!(sectionElement.querySelector('.skeleton-card, .skeleton-spotlight-item'));
+
+            if (items.length === 0) {
+                sectionElement.remove();
+                return;
+            }
+
+            if (!isSkeleton && isSpotlight) {
+                const staleIds = (Array.isArray(dataItems) ? dataItems : [])
+                    .map((item) => item?.Id)
+                    .filter(Boolean);
+                const paintedIds = staleIds.length
+                    ? staleIds
+                    : Array.from(sectionElement.querySelectorAll('.spotlight-item[data-id]:not(.skeleton-spotlight-item)'))
+                        .map((el) => el.getAttribute('data-id'))
+                        .filter(Boolean);
+                const freshIds = items.map((item) => item.Id).filter(Boolean);
+                const match = classifyIdSequence(paintedIds, freshIds);
+                if (match.type === 'perfect') {
+                    markSectionEnhanced(sectionElement, sectionConfig);
+                    return;
+                }
+                // Soft-replace without fading the section to black (avoids visible→black→image blink on load)
+                const spotlightContent = replaceSectionWithFreshCards(sectionElement, items, sectionConfig, dataItems, revealSectionsSequentially);
+                markSectionEnhanced(spotlightContent, sectionConfig);
+                return;
+            }
+
+            if (!isSkeleton && !isSpotlight) {
+                const paintedIds = getPaintedCardIds(sectionElement);
+                const freshIds = items.map((item) => item.Id).filter(Boolean);
+                const match = classifyIdSequence(paintedIds, freshIds);
+
+                if (match.type === 'perfect') {
+                    patchCardsUserData(sectionElement, items);
+                    markSectionEnhanced(sectionElement, sectionConfig);
+                    return;
+                }
+
+                const itemsContainer = sectionElement.querySelector('.itemsContainer');
+                const layoutFromDom = itemsContainer?.getAttribute('data-layout');
+                const layout = (layoutFromDom === 'grid' || layoutFromDom === 'row')
+                    ? layoutFromDom
+                    : resolveItemsLayout(sectionConfig);
+
+                if (match.type === 'reconcile' && layout === 'row') {
+                    reconcileRowItems(sectionElement, items, sectionConfig, () => {
+                        markSectionEnhanced(sectionElement, sectionConfig);
+                    });
+                    return;
+                }
+
+                const cardFormat = sectionElement.getAttribute('data-card-format') || sectionConfig.cardFormat;
+                if (isButtonCardFormat(cardFormat) && match.type === 'replace') {
+                    replaceItemsContainerContents(sectionElement, items, sectionConfig);
+                    markSectionEnhanced(sectionElement, sectionConfig);
+                    return;
+                }
+
+                fadeReplaceRowItems(sectionElement, items, sectionConfig, () => {
+                    markSectionEnhanced(sectionElement, sectionConfig);
+                });
+                return;
+            }
+
+            if (isSkeleton && isSpotlight) {
+                const spotlightContent = replaceSectionWithFreshCards(sectionElement, items, sectionConfig, dataItems, revealSectionsSequentially);
+                markSectionEnhanced(spotlightContent, sectionConfig);
+                return;
+            }
+
+            replaceItemsContainerContents(sectionElement, items, sectionConfig);
+            markSectionEnhanced(sectionElement, sectionConfig);
+        });
+    }
+
+    function initializeSectionEnhanceObserver(rootMargin = '30% 0px 30% 0px') {
+        if (typeof IntersectionObserver === 'undefined') {
+            return;
+        }
+
+        if (sectionEnhanceObserver && sectionEnhanceObserverRootMargin === rootMargin) {
+            return;
+        }
+
+        if (sectionEnhanceObserver) {
+            sectionEnhanceObserver.disconnect();
+        }
+
+        sectionEnhanceObserverRootMargin = rootMargin;
+        sectionEnhanceObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (!entry.isIntersecting) return;
+
+                const target = entry.target;
+                sectionEnhanceObserver.unobserve(target);
+
+                const pending = sectionEnhancePending.get(target);
+                if (!pending) return;
+
+                sectionEnhancePending.delete(target);
+                setupSectionProgressiveEnhancement(target, pending.section, pending.options);
+            });
+        }, {
+            threshold: 0,
+            rootMargin
+        });
+    }
+
+    function observeSectionForEnhance(sectionElement) {
+        if (!sectionElement || !sectionEnhancePending.has(sectionElement)) return;
+
+        initializeSectionEnhanceObserver(sectionEnhanceObserverRootMargin || '30% 0px 30% 0px');
+
+        if (sectionEnhanceObserver) {
+            sectionEnhanceObserver.observe(sectionElement);
+        } else {
+            const pending = sectionEnhancePending.get(sectionElement);
+            sectionEnhancePending.delete(sectionElement);
+            if (pending) {
+                setupSectionProgressiveEnhancement(sectionElement, pending.section, pending.options);
+            }
+        }
+    }
+
+    function scheduleSectionProgressiveEnhancement(sectionElement, section, options) {
+        const { enhanceOnVisible = false, enhanceRootMargin = '30% 0px 30% 0px', revealSectionsSequentially = false } = options;
+
+        if (!hasSectionDeferredData(section?.result)) {
+            return;
+        }
+
+        const enhanceOptions = { revealSectionsSequentially };
+
+        if (!enhanceOnVisible) {
+            setupSectionProgressiveEnhancement(sectionElement, section, enhanceOptions);
+            return;
+        }
+
+        if (typeof IntersectionObserver === 'undefined') {
+            setupSectionProgressiveEnhancement(sectionElement, section, enhanceOptions);
+            return;
+        }
+
+        sectionEnhanceObserverRootMargin = enhanceRootMargin;
+        sectionEnhancePending.set(sectionElement, { section, options: enhanceOptions });
+        observeSectionForEnhance(sectionElement);
     }
 
     // Progressive Section Reveal with IntersectionObserver
@@ -4569,10 +6969,11 @@
         }
     }
 
-    function initialize() {
-        if (!state.useEpisodeImages) {
-            state.useEpisodeImages = window.userHelper.useEpisodeImages();
+    async function initialize() {
+        if (window.userHelper?.waitForLogin) {
+            await window.userHelper.waitForLogin();
         }
+        startCardUserDataListener();
     }
 
     initialize();

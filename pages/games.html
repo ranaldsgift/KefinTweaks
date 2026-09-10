@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>KefinTweaks Games</title>
+		<style>
+			:root {
+				--kefin-games-bg: #1a1b1e;
+				--kefin-games-card: #25262b;
+				--kefin-games-text: #f1f3f5;
+				--kefin-games-muted: #a6a7ab;
+				--kefin-games-accent: #74c0fc;
+				--kefin-games-border: rgba(255, 255, 255, 0.08);
+			}
+			* {
+				box-sizing: border-box;
+			}
+			body {
+				margin: 0;
+				min-height: 100vh;
+				font-family:
+					system-ui,
+					-apple-system,
+					"Segoe UI",
+					Roboto,
+					sans-serif;
+				background: var(--kefin-games-bg);
+				color: var(--kefin-games-text);
+				padding: 2rem 1.25rem 3rem;
+			}
+			.kefin-games-wrap {
+				max-width: 40rem;
+				margin: 0 auto;
+			}
+			h1 {
+				margin: 0 0 0.35em;
+				font-size: 1.75rem;
+				font-weight: 700;
+				letter-spacing: 0.02em;
+			}
+			.kefin-games-lead {
+				margin: 0 0 1.75rem;
+				color: var(--kefin-games-muted);
+				font-size: 0.95rem;
+				line-height: 1.45;
+			}
+			.kefin-games-list {
+				list-style: none;
+				margin: 0;
+				padding: 0;
+				display: flex;
+				flex-direction: column;
+				gap: 0.85rem;
+			}
+			.kefin-games-list a {
+				display: block;
+				text-decoration: none;
+				color: inherit;
+				background: var(--kefin-games-card);
+				border: 1px solid var(--kefin-games-border);
+				border-radius: 12px;
+				padding: 1.1rem 1.25rem;
+				transition:
+					border-color 0.15s ease,
+					transform 0.15s ease;
+			}
+			.kefin-games-list a:hover,
+			.kefin-games-list a:focus-visible {
+				border-color: var(--kefin-games-accent);
+				outline: none;
+				transform: translateY(-1px);
+			}
+			.kefin-games-list strong {
+				display: block;
+				font-size: 1.1rem;
+				margin-bottom: 0.35rem;
+				color: var(--kefin-games-accent);
+			}
+			.kefin-games-list span {
+				display: block;
+				font-size: 0.9rem;
+				color: var(--kefin-games-muted);
+				line-height: 1.4;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="kefin-games-wrap">
+			<h1>Games</h1>
+			<p class="kefin-games-lead">Pick a game. Add more entries here when new games ship.</p>
+			<ul class="kefin-games-list">
+				<li>
+					<a class="kefin-games-link" href="#/movieLut">
+						<strong>Movie LUT Game</strong>
+						<span>Guess the movie from a color swatch made from still frames of the movie.</span>
+					</a>
+				</li>
+				<li>
+					<a class="kefin-games-link" href="#/3x3">
+						<strong>3x3 Game</strong>
+						<span>From a grid of 9 different movie backdrops, guess the most movies you can in 60 seconds.</span>
+					</a>
+				</li>
+			</ul>
+		</div>
+	</body>
+</html>

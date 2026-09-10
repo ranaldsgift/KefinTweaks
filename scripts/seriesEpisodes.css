@@ -1,3 +1,16 @@
 .nextUpSection {
-    display: none;
+	display: none;
+}
+
+.series-episodes-section .sectionTitleContainer,
+.series-episodes-section .emby-scroller {
+	padding-left: 0;
+}
+
+.detailSection:has(.series-episodes-section) {
+	overflow: hidden;
+}
+.series-episodes-section {
+	padding-left: 0 !important;
+	margin: 0 !important;
 }

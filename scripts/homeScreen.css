@@ -1,36 +1,22 @@
-@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@200..700&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Anton&family=Changa+One:ital@0;1&family=Exo:ital,wght@0,100..900;1,100..900&family=Orbitron:wght@400..900&family=Oswald:wght@200..700&family=Prata&family=Roboto:ital,wght@0,100..900;1,100..900&family=Unbounded:wght@200..900&family=VT323&display=swap");
 
 .sections.homeSectionsContainer {
-    display: flex;
-    flex-direction: column;
-    padding-bottom: 100px;
-    gap: 1rem;
-}
-
-body[data-seasonal-background="true"]:has(.homePage:not(.hide)) #reactRoot:has(.libraryPage:not(.hide) .pageTabContent.is-active[data-index="0"])>.backgroundContainer::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0%;
-    background: linear-gradient(rgba(0, 0, 0, 0.65), rgba(0, 0, 0, 0.85)), var(--seasonal-background-image);
-    background-position: center;
-    background-size: cover;
+	display: flex;
+	flex-direction: column;
+	padding-bottom: 100px;
+	gap: 1rem;
 }
 
 .snowverlay {
-    display: none;
+	display: none;
 }
 
-body[data-seasonal-animations="true"]:has(.homePage:not(.hide)) .snowverlay {
-    display: block;
-}
-
-body:has(.homePage:not(.hide)) [data-section-id] h2.sectionTitle,
-body:has(.homePage:not(.hide)) [data-section-id] .sectionTitleTextButton>.material-icons {
-    margin-bottom: 0 !important;
-    margin-top: 0 !important;
+.homePage [data-section-id] h2.sectionTitle,
+.homePage [data-section-id] .sectionTitleTextButton > .material-icons {
+	margin-bottom: 0 !important;
+	margin-top: 0 !important;
+	padding-bottom: 0 !important;
+	padding-top: 0 !important;
 }
 
 /* div#discovery-loading-indicator:not(.show)::before {
@@ -47,24 +33,24 @@ body:has(.homePage:not(.hide)) [data-section-id] .sectionTitleTextButton>.materi
 } */
 
 #indexPage[data-discovery-ready] div#discovery-loading-indicator:not(.show)::before {
-    content: 'Discover More';
+	content: "Discover More";
 }
 
 div#discovery-loading-indicator:not(.show)::after {
-    content: '\E313';
-    font-family: 'Material Icons';
-    position: absolute;
-    top: calc(50% + 0.4em);
-    left: 50%;
-    transform: translateX(-50%) translateY(-50%);
-    font-size: 1.5em;
-    color: #ffffff;
-    visibility: visible;
-    opacity: 1;
+	content: "\E313";
+	font-family: "Material Icons";
+	position: absolute;
+	top: calc(50% + 0.4em);
+	left: 50%;
+	transform: translateX(-50%) translateY(-50%);
+	font-size: 1.5em;
+	color: #ffffff;
+	visibility: visible;
+	opacity: 1;
 }
 
 [data-loading-discovery="true"] div#discovery-loading-indicator {
-    display: flex;
+	display: flex;
 }
 
 /* #indexPage[data-discovery-ready]:not([data-infinite-scroll='true']) div#discovery-loading-indicator {
@@ -72,66 +58,70 @@ div#discovery-loading-indicator:not(.show)::after {
 } */
 
 #indexPage:not([data-discovery-ready]) div#discovery-loading-indicator:not(.show)::after {
-    content: '';
+	content: "";
 }
 
 /* Ensure Editor's Choice Banner appears at top of home screen if enabled */
 .editorsChoiceContainer {
-    order: 1 !important;
+	order: 1 !important;
 }
 .spotlight-section {
-    width: calc(100% - (2 * max(env(safe-area-inset-left),3.3%)));
+	width: calc(100% - (2 * max(env(safe-area-inset-left), 3.3%)));
 }
 
-
 .load-more-discovery-btn {
-    display: block;
-    visibility: visible;
-    order: 99998 !important;
-    margin: 2em auto;
+	display: block;
+	visibility: visible;
+	order: 99998 !important;
+	margin: 2em auto;
 }
 
 .sections.loading-discovery .load-more-discovery-btn {
-    visibility: hidden !important;
+	visibility: hidden !important;
 }
 
 /* Discovery section loading indicator */
 .sections.loading-discovery .discovery-loading-indicator {
-    visibility: visible !important;
-    opacity: 1 !important;
+	visibility: visible !important;
+	opacity: 1 !important;
 }
 
-.discovery-loading-indicator, .load-more-discovery-btn {
-    height: 50px;
+.discovery-loading-indicator,
+.load-more-discovery-btn {
+	height: 50px;
 }
 
 .discovery-loading-indicator {
-    display: none;
-    opacity: 1;
-    flex-direction: column;
-    gap: 10px;
-    justify-content: center;
-    align-items: center;
-    border-radius: 8px;
-    font-size: 14px;
-    color: #666;
-    transition: opacity 0.3s ease;
-    position: relative;
-    justify-content: start;
+	display: none;
+	opacity: 1;
+	flex-direction: column;
+	gap: 10px;
+	justify-content: center;
+	align-items: center;
+	border-radius: 8px;
+	font-size: 14px;
+	color: #666;
+	transition: opacity 0.3s ease;
+	position: relative;
+	justify-content: start;
 }
 
 .discovery-loading-indicator .spinner {
-    width: 30px;
-    height: 30px;
-    border: 2px solid rgba(255,255,255,0.3);
-    border-top-color: var(--theme-primary-color, #3498db);
-    border-radius: 50%;
-    animation: discovery-spin 1s linear infinite;
+	width: 30px;
+	height: 30px;
+	border: 2px solid rgba(255, 255, 255, 0.3);
+	border-top-color: var(--theme-primary-color, #3498db);
+	border-radius: 50%;
+	animation: discovery-spin 1s linear infinite;
 }
 
 @keyframes discovery-spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+	0% {
+		transform: rotate(0deg);
+	}
+	100% {
+		transform: rotate(360deg);
+	}
 }
 
 /* Hide next up section if next up if KefinTweaks next up section is present */
@@ -152,124 +142,107 @@ div#discovery-loading-indicator:not(.show)::after {
 
 /* Hide scroll buttons on mobile and tablet layouts */
 @media (max-width: 768px) {
-    .emby-scrollbuttons {
-        display: none !important;
-    }
+	.emby-scrollbuttons {
+		display: none !important;
+	}
 }
 
 /* Hide scroll buttons on mobile using Jellyfin's layout classes */
 .layout-mobile .emby-scrollbuttons,
 .layout-tv .emby-scrollbuttons {
-    display: none !important;
+	display: none !important;
 }
 
 .load-more-discovery-btn {
-    display: block;
+	display: block;
 }
 
 .sections[data-loading-discovery="true"] .load-more-discovery-btn {
-    display: none !important;
+	display: none !important;
 }
 
 .sections[data-loading-discovery="true"] .discovery-loading-indicator {
-    display: flex !important;
-    opacity: 1 !important;
+	display: flex !important;
+	opacity: 1 !important;
 }
 
 .discovery-loading-indicator {
-    display: none;
-    opacity: 0;
-    flex-direction: column;
-    gap: 10px;
-    justify-content: center;
-    align-items: center;
-    padding: 20px;
-    border-radius: 8px;
-    font-size: 14px;
-    color: #666;
-    transition: opacity 0.3s ease;
-    position: relative;
-    justify-content: start; 
-    min-height: 200px;
+	display: none;
+	opacity: 0;
+	flex-direction: column;
+	gap: 10px;
+	justify-content: center;
+	align-items: center;
+	padding: 20px;
+	border-radius: 8px;
+	font-size: 14px;
+	color: #666;
+	transition: opacity 0.3s ease;
+	position: relative;
+	justify-content: start;
+	min-height: 200px;
 }
 
 .discovery-loading-indicator .spinner {
-    width: 30px;
-    height: 30px;
-    border: 2px solid rgba(255,255,255,0.3);
-    border-top-color: var(--theme-primary-color, #3498db);
-    border-radius: 50%;
-    animation: discovery-spin 1s linear infinite;
+	width: 30px;
+	height: 30px;
+	border: 2px solid rgba(255, 255, 255, 0.3);
+	border-top-color: var(--theme-primary-color, #3498db);
+	border-radius: 50%;
+	animation: discovery-spin 1s linear infinite;
 }
 
 @keyframes discovery-spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+	0% {
+		transform: rotate(0deg);
+	}
+	100% {
+		transform: rotate(360deg);
+	}
 }
 
 .homeSectionsContainer [data-section-id="popularTVNetworks"] .card .cardText {
-    visibility: hidden;
+	visibility: hidden;
 }
 
 /* .homeSectionsContainer:not(.kefinHomeSectionsContainer) {
     display: none !important;
 } */
 
-.pageTabContent:has(.kefinHomeSectionsContainer[data-kefin-home-screen]) .homeSectionsContainer:not([data-kefin-home-screen]) {
-    display: none !important;
+.homeSectionsContainer [data-section-id*="thematic-"] .card[data-type="Folder"] .cardScalable > a.cardImageContainer::before {
+	content: "";
+	position: absolute;
+	top: 0;
+	left: 0;
+	bottom: 0;
+	right: 0;
+	background: linear-gradient(#000000, rgb(0 0 0 / 0%) 50%);
+	box-shadow: inset 0px 0px 20px 5px black;
 }
 
-.homeSectionsContainer .card[data-type="Folder"] .cardScalable > a.cardImageContainer::after {
-  content: attr(aria-label);
-  font-family: 'Oswald';
-  font-size: 1.5rem;
-  line-height: 1.8rem;
-  max-width: calc(100% - 2rem);
-  white-space: pre-wrap;
-  text-align: left;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-transform: uppercase;
-  position: absolute;
-  top: 1rem;
-  left: 1rem;
-  background: none;
+.layout-mobile .homeSectionsContainer [data-section-id*="thematic-"] .card[data-type="Folder"] a.cardImageContainer::after {
+	top: 0.5rem;
+	left: 0.5rem;
+	font-size: 1.5rem !important;
+	line-height: 1.8rem !important;
 }
 
-.homeSectionsContainer .card[data-type="Folder"] .cardScalable > a.cardImageContainer::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  right: 0;
-  background: linear-gradient(#000000, rgb(0 0 0 / 0%) 50%);
-  box-shadow: inset 0px 0px 20px 5px black;
+/* .homeSectionsContainer [data-section-id*="thematic-"] .card[data-type="Folder"] .cardText {
+	display: none;
 }
 
-.layout-mobile .homeSectionsContainer .card[data-type="Folder"] a.cardImageContainer::after {
-    top: 0.5rem;
-    left: 0.5rem;
-    font-size: 1.5rem !important;
-    line-height: 1.8rem !important;
-}
-
-.homeSectionsContainer .card[data-type="Folder"] .cardText {
-    display: none;
-}
-
-[data-card-format="Square"] [data-type="Person"] .cardScalable, 
-[data-card-format="Square"] [data-type="Actor"] .cardScalable, 
-[data-card-format="Square"] [data-type="Writer"] .cardScalable, 
+[data-card-format="Square"] [data-type="Person"] .cardScalable,
+[data-card-format="Square"] [data-type="Actor"] .cardScalable,
+[data-card-format="Square"] [data-type="Writer"] .cardScalable,
 [data-card-format="Square"] [data-type="Director"] .cardScalable {
-    border-radius: 50% !important;
-    overflow: hidden;
+	border-radius: 50% !important;
+	overflow: hidden;
 }
 
 [data-card-format="Square"] [data-type="Actor"] .cardText {
-    display: flex;
-    justify-content: center;
-}
+	display: flex;
+	justify-content: center;
+} */
 
 .homeSectionsContainer .section0,
 .homeSectionsContainer .section1,
@@ -281,23 +254,47 @@ div#discovery-loading-indicator:not(.show)::after {
 .homeSectionsContainer .section7,
 .homeSectionsContainer .section8,
 .homeSectionsContainer .section9 {
-    display: none !important;
+	display: none !important;
 }
 
 .homeSectionsContainer .card[data-type="TvChannel"] a.cardImageContainer:not([style])::after {
-    content: attr(aria-label);
-    font-size: 2rem;
-    text-wrap: auto;
-    text-align: center;
+	content: attr(aria-label);
+	font-size: 2rem;
+	text-wrap: auto;
+	text-align: center;
 }
 
 .emby-scroller-container[data-section-id="liveTv-channels"] .itemsContainer {
-    gap: 4rem
+	gap: 4rem;
 }
 .layout-mobile .emby-scroller-container[data-section-id="liveTv-channels"] .itemsContainer {
-    gap: 2rem;
+	gap: 2rem;
 }
 
 [data-section-id="upcoming"] .missingIndicator {
-    display: none;
+	display: none;
 }
+
+.homeSectionsContainer .section9 + .custom-scroller-container {
+	margin-top: 1em;
+}
+
+/* .pageTabContent:has(.kefinHomeSectionsContainer[data-kefin-home-screen]) .homeSectionsContainer:not([data-kefin-home-screen]) {
+    display: none !important;
+}
+
+body[data-seasonal-background="true"]:has(.homePage:not(.hide)) #reactRoot:has(.libraryPage:not(.hide) .pageTabContent.is-active[data-index="0"])>.backgroundContainer::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0%;
+    background: linear-gradient(rgba(0, 0, 0, 0.65), rgba(0, 0, 0, 0.85)), var(--seasonal-background-image);
+    background-position: center;
+    background-size: cover;
+}
+
+body[data-seasonal-animations="true"]:has(.homePage:not(.hide)) .snowverlay {
+    display: block;
+} */

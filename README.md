@@ -19,9 +19,9 @@
 
 **KefinTweaks is a comprehensive collection of enhancements and customizations for Jellyfin, focused on, but not limited to, filling gaps in functionality based on the community's most desired [Feature Requests](https://features.jellyfin.org/?view=most-wanted). This includes things like a [Watchlist](#watchlist), a [customizable Home Screen](#enhanced-home-screen), an [improved search experience](#enhanced-search), and an [Appearance Manager](#skin-manager)**.
 
-While working on these scripts to meet my personal needs, I noticed that there was a lot of overlap between the functionality I desire and many of the requested features by the community so I thought it would be a good idea to share this for anyone who may be interested. 
+While working on these scripts to meet my personal needs, I noticed that there was a lot of overlap between the functionality I desire and many of the requested features by the community so I thought it would be a good idea to share this for anyone who may be interested.
 
-Since I began working on this in August 2025, the scope of the project has grown and changed drastically. This began as a small set of tweaks to enhance my own personal server, but has evolved into a robust set of features that aim to compliment and enhance the native Jellyfin experience in a way that feels like it *is* native functionality.
+Since I began working on this in August 2025, the scope of the project has grown and changed drastically. This began as a small set of tweaks to enhance my own personal server, but has evolved into a robust set of features that aim to compliment and enhance the native Jellyfin experience in a way that feels like it _is_ native functionality.
 
 In the future, we can hope that the majority of this plugin will become obsolete as we will see many of these changes implemented and included in the native Jellyfin experience, as the community has so long desired!
 
@@ -34,45 +34,45 @@ Note: The Slideshow at the top of the Home Screen in the video below is from the
 ## Table of Contents
 
 - [Installation](#installation)
-  - [Prerequisites](#prerequisites)
-  - [Setup Instructions](#setup-instructions)
+    - [Prerequisites](#prerequisites)
+    - [Setup Instructions](#setup-instructions)
 - [Configuration](#configuration)
 - [Features Overview](#features-overview)
-  - [Data Caching](#data-caching)
-  - [Community Requests Progress](#community-request-progress)
-    - [Feature Requests Completed](#-feature-requests-completed)
-    - [Feature Requests Planned](#-feature-requests-planned)
-  - [Core Features](#core-features)
-    - [Watchlist](#watchlist)
-      - [Watchlist Page](#watchlist-page)
-      - [Series Progress Page](#series-progress)
-      - [Movie History Page](#movie-history)
-      - [User Statistics Page](#statistics)
-      - [Export/Import](#exportimport)
-    - [Enhanced Home Screen](#enhanced-home-screen)
-    - [Enhanced Search](#enhanced-search)
-  - [UI Enhancements](#ui-enhancements)
-    - [Watchlist Support](#watchlist-support)
-    - [Skin Manager](#skin-manager)
-  - [UX Improvements](#ux-improvements)
-    - [Subtitle Search](#subtitle-search)
-    - [Remove from Continue Watching](#remove-from-continue-watching)
-    - [Collection Sorting](#collection-sorting)
-  - [Navigation Improvements](#navigation-improvements)
-    - [Header Tab Enhancements](#header-tab-enhancements)
-    - [Breadcrumb Navigation](#breadcrumb-navigation)
-    - [Custom Menu Integration](#custom-menu-integration)
-    - [Playlist Screen Improvement](#playlist-screen-improvement)
-    - [Flatten Single Season Shows](#flatten-single-season-shows)
-    - [Collections on Movie/Series Details page](#collections-on-movieseries-details-page)
-  - [System Improvements](#system-improvements)
-    - [Performance & Stability](#performance--stability)
-    - [Branding & Customization](#branding--customization)
+    - [Data Caching](#data-caching)
+    - [Community Requests Progress](#community-request-progress)
+        - [Feature Requests Completed](#-feature-requests-completed)
+        - [Feature Requests Planned](#-feature-requests-planned)
+    - [Core Features](#core-features)
+        - [Watchlist](#watchlist)
+            - [Watchlist Page](#watchlist-page)
+            - [Series Progress Page](#series-progress)
+            - [Movie History Page](#movie-history)
+            - [User Statistics Page](#statistics)
+            - [Export/Import](#exportimport)
+        - [Enhanced Home Screen](#enhanced-home-screen)
+        - [Enhanced Search](#enhanced-search)
+    - [UI Enhancements](#ui-enhancements)
+        - [Watchlist Support](#watchlist-support)
+        - [Skin Manager](#skin-manager)
+    - [UX Improvements](#ux-improvements)
+        - [Subtitle Search](#subtitle-search)
+        - [Remove from Continue Watching](#remove-from-continue-watching)
+        - [Collection Sorting](#collection-sorting)
+    - [Navigation Improvements](#navigation-improvements)
+        - [Header Tab Enhancements](#header-tab-enhancements)
+        - [Breadcrumb Navigation](#breadcrumb-navigation)
+        - [Custom Menu Integration](#custom-menu-integration)
+        - [Playlist Screen Improvement](#playlist-screen-improvement)
+        - [Flatten Single Season Shows](#flatten-single-season-shows)
+        - [Collections on Movie/Series Details page](#collections-on-movieseries-details-page)
+    - [System Improvements](#system-improvements)
+        - [Performance & Stability](#performance--stability)
+        - [Branding & Customization](#branding--customization)
 - [Script Details](#script-details)
-  - [Dependency Scripts](#dependency-scripts)
-  - [Feature Scripts](#feature-scripts)
-  - [Auto-Inject Dependencies](#auto-inject-dependencies)
-  - [Info For Developers](#info-for-developers)
+    - [Dependency Scripts](#dependency-scripts)
+    - [Feature Scripts](#feature-scripts)
+    - [Auto-Inject Dependencies](#auto-inject-dependencies)
+    - [Info For Developers](#info-for-developers)
 - [Client Support](#client-support)
 - [Changes to default Jellyfin functionality](#changes-to-default-jellyfin-functionality)
 - [Design Philosophy](#design-philosophy)
@@ -82,12 +82,13 @@ Note: The Slideshow at the top of the Home Screen in the video below is from the
 - [Support](#support)
 - [FAQ](#faq)
 - [Roadmap](#roadmap)
-  - [Planned Features](#planned-features)
-  - [Version History](#version-history)
+    - [Planned Features](#planned-features)
+    - [Version History](#version-history)
 
 ## Installation
 
 ### Prerequisites
+
 - Jellyfin 10.10.7 or earlier (10.11.X is untested and "unsupported" but may be mostly functional)
 - [JS Injector](https://github.com/n00bcodr/Jellyfin-JavaScript-Injector) plugin installed and configured
 - [File Transformation Plugin](https://github.com/IAmParadox27/jellyfin-plugin-file-transformation) plugin is recommended to avoid file permission issues when injecting scripts with JS Injector
@@ -95,7 +96,7 @@ Note: The Slideshow at the top of the Home Screen in the video below is from the
 
 ### Setup Instructions
 
-0. **Install the Prerequisites listed above**  
+0. **Install the Prerequisites listed above**
 1. **Add a new script to your JS Injector Plugin**
 2. **Copy the code below, paste it into the new script, save your changes and refresh the page**
 
@@ -136,7 +137,7 @@ All configuration options for KefinTweaks can be managed directly from the UI.
 
 - **Feature Toggle**: Toggle individual KefinTweaks features on or off
 - **Home Screen Configuration**: Configure custom sections, discovery features, and seasonal content
-- **Search Configuration**: Enable/disable Jellyseerr integration
+- **Search Configuration**: Enable/disable Seerr integration (requires JellyfinEnhanced plugin)
 - **Skin Configuration**: Manage available skins, set default skins, and enable/disable specific skins
 - **Theme Configuration**: Add custom themes available to all users
 - **Exclusive Elsewhere Configuration**: Configure branding behavior
@@ -161,10 +162,12 @@ All configuration options for KefinTweaks can be managed directly from the UI.
 ### Automatic Setup
 
 On first load, KefinTweaks automatically:
+
 - Creates the `KefinTweaks-Config` script in the JavaScript Injector plugin with default settings
 - Ensures the Watchlist tab exists in the CustomTabs plugin with the correct HTML structure
 
 These tasks only run for administrator users and happen automatically in the background.
+
 <hr style="background: #b4c5fb !important;">
 
 ## Uninstallation
@@ -178,8 +181,6 @@ These tasks only run for administrator users and happen automatically in the bac
 <br/>  
 <hr style="background: #b4c5fb !important;">
 
-
-
 ## Features Overview
 
 KefinTweaks provides a modular system of enhancements that can be individually enabled or disabled based on your needs. Each script is designed to work independently while sharing common utilities and dependencies.
@@ -190,21 +191,22 @@ As mentioned above, most of the functionality included in KefinTweaks are featur
 
 One thing that I feel is worth pointing out is the way in which some of the data needed by KefinTweaks is handled. For most of the features, data is grabbed on demand as normal, same as any existing Jellyfin functionality. However there are specific features, or subsets of features which do use local device caching in order to either improve performance, or simply because it is not feasible to fetch the data each time. In the future if this ever becomes a plugin, the caching can be more intelligent and done on the server.
 
-The features in KefinTweaks which use local data caching are listed below, along with accompanying explanations for why they are being cached. Everything is cached by default for 24h unless it is specified otherwise. 
-- Home Screen  
-  - **Genres** [24h]:  
-  Genres are cached simply to reduce API calls to the server. This is not an expensive API call, but under most circumstances the results will be the same even across longer periods of time.
-  - **Top People** [7d]:  
-  In order to populate the "Top People" in your movie library, we fetch the Person data for every movie in your library. We build a list of all the People who appear in at least X number of items based on their type (Actor/Director/Writer). This is an expensive operation, and is longer as the size of your library grows.
+The features in KefinTweaks which use local data caching are listed below, along with accompanying explanations for why they are being cached. Everything is cached by default for 24h unless it is specified otherwise.
+
+- Home Screen
+    - **Genres** [24h]:  
+      Genres are cached simply to reduce API calls to the server. This is not an expensive API call, but under most circumstances the results will be the same even across longer periods of time.
+    - **Top People** [7d]:  
+      In order to populate the "Top People" in your movie library, we fetch the Person data for every movie in your library. We build a list of all the People who appear in at least X number of items based on their type (Actor/Director/Writer). This is an expensive operation, and is longer as the size of your library grows.
 - Watchlist
-  - **Watchlist Items** [5m]:  
-  These items are only cached after they are fetched on first page load. This means every time you refresh the page we fetch this data from the server and then in most situations will simply re-use that data until it expires 5 minutes later, or when the user manually refreshes the page.
-  - **Series Progress and Movie History** [24h]:  
-  These are both more expensive operations, especially if you have watched a very high number of Movies or Shows. It's not practical to fetch this data on demand so we cache it to improve UX.
-- Collections on Details Page  
-  - **Collections** [1h]:  
-  These items are only cached after they are fetched on first page load. Sadly I know no way to retreive a list of Collections that an Item is a child of from the API directly. The Ancestors endpoint only returns the physical ancestors of an item. In order to be able to populate the "Included In" section, we fetch the children from every Collection in your library and add the Item ID of each child to the cache.
-  <hr style="background: #b4c5fb !important;">
+    - **Watchlist Items** [5m]:  
+      These items are only cached after they are fetched on first page load. This means every time you refresh the page we fetch this data from the server and then in most situations will simply re-use that data until it expires 5 minutes later, or when the user manually refreshes the page.
+    - **Series Progress and Movie History** [24h]:  
+      These are both more expensive operations, especially if you have watched a very high number of Movies or Shows. It's not practical to fetch this data on demand so we cache it to improve UX.
+- Collections on Details Page
+    - **Collections** [1h]:  
+    These items are only cached after they are fetched on first page load. Sadly I know no way to retreive a list of Collections that an Item is a child of from the API directly. The Ancestors endpoint only returns the physical ancestors of an item. In order to be able to populate the "Included In" section, we fetch the children from every Collection in your library and add the Item ID of each child to the cache.
+      <hr style="background: #b4c5fb !important;">
 
 ## Community Request Progress
 
@@ -230,43 +232,49 @@ The features in KefinTweaks which use local data caching are listed below, along
 - 🚧 [Keep original title option](https://features.jellyfin.org/posts/32/keep-original-title-option)
 - 🚧 [Search by tag/genre](https://features.jellyfin.org/posts/276/search-by-tag-genre)
 - 🚧 [Add drag and drop to library order](https://features.jellyfin.org/posts/3509/add-drag-and-drop-to-libray-order)
-<hr style="background: #b4c5fb !important;">
+  <hr style="background: #b4c5fb !important;">
 
 ### Core Features
 
 ## **Watchlist**
-### **Watchlist Page**:  
-Tired of forgetting everything you wanted to watch? Add movies, series, seasons, and episodes to your Watchlist!  
+
+### **Watchlist Page**:
+
+Tired of forgetting everything you wanted to watch? Add movies, series, seasons, and episodes to your Watchlist!
 
 <div align="center">
   <img src="pages/images/watchlist.png" alt="watchlist" style="max-width: 100%; height: auto;"/>
 </div>  
-<br/>  
+<br/>
 
-### **Series Progress**:  
-An overview of every series you've ever started watching with functionality to filter, sort and mark items as watched.  
+### **Series Progress**:
+
+An overview of every series you've ever started watching with functionality to filter, sort and mark items as watched.
 
 <div align="center">
   <img src="pages/images/progress.png" alt="progress" style="max-width: 100%; height: auto;"/>
 </div>  
-<br/>  
+<br/>
 
-### **Movie History**:  
-An overview of every movie you've ever watched with functionality to filter, sort and mark items as favorites.  
+### **Movie History**:
+
+An overview of every movie you've ever watched with functionality to filter, sort and mark items as favorites.
 
 <div align="center">
   <img src="pages/images/history.png" alt="history" style="max-width: 100%; height: auto;"/>
 </div>  
-<br/>  
+<br/>
 
-### **Statistics**:  
-A summary of your watched items by the numbers. See how many movies, shows or episodes you have watched.  
+### **Statistics**:
+
+A summary of your watched items by the numbers. See how many movies, shows or episodes you have watched.
 
 <div align="center">
   <img src="pages/images/statistics.png" alt="statistics" style="max-width: 100%; height: auto;"/>
 </div>
 
-### **Export/Import/Sync**:  
+### **Export/Import/Sync**:
+
 Export your Watchlist to JSON which can later be imported using the Watchlist Import feature. You can use this feature to make bulk changes to your Watchlist if you need to. Additionally, you can Sync your Watchlist to any Playlist of your choice.
 
 <table align="center" style="width: 100%;">
@@ -279,54 +287,55 @@ Export your Watchlist to JSON which can later be imported using the Watchlist Im
     <td style="width: 50%;"><img src="pages/images/watchlist-import.png" width="1000"/></td>
   </tr>
 </table>
-<br/>  
+<br/>
 
 - **Auto-Remove**:  
-Automatically removes watched items from your watchlist when playback completes.  
+  Automatically removes watched items from your watchlist when playback completes.
 
 - **Real-time Updates**:  
-Cached watchlist updates when toggling watchlist status from card overlays  
-<hr style="background: #b4c5fb !important;">
-
+Cached watchlist updates when toggling watchlist status from card overlays
+  <hr style="background: #b4c5fb !important;">
 
 #### **Enhanced Home Screen**
+
 - **Custom Sections**:  
-Add playlist or collection-based sections to your home screen  
+  Add playlist or collection-based sections to your home screen
 
 - **New & Trending**:  
-Creates sections for movies and episodes released in the last 7 days (trending sections incomplete)  
+  Creates sections for movies and episodes released in the last 7 days (trending sections incomplete)
 
 - **Infinite Discovery Sections**:  
-Load discovery sections based on items you've watched and favorited, as well as from genres or top people in your library  
+  Load discovery sections based on items you've watched and favorited, as well as from genres or top people in your library
 
 - **HSS Support**:  
-Full compatibility with [Home Screen Sections](https://github.com/IAmParadox27/jellyfin-plugin-home-sections) plugin by [IAmParadox27](https://github.com/IAmParadox27/)  
+  Full compatibility with [Home Screen Sections](https://github.com/IAmParadox27/jellyfin-plugin-home-sections) plugin by [IAmParadox27](https://github.com/IAmParadox27/)
 
 - **Seasonal Content**:  
-Seasonally-themed sections (Halloween, Christmas, etc.)  
+  Seasonally-themed sections (Halloween, Christmas, etc.)
 
 <div align="center">
   <img src="pages/images/seasonalsection.png" alt="homescreen" style="max-width: 100%; height: auto;"/>
 </div>  
-<br/>  
+<br/>
 
 - **Watchlist Integration**:  
-Dedicated watchlist section on home screen  
+  Dedicated watchlist section on home screen
 
 <div align="center">
   <img src="pages/images/homescreen.png" alt="homescreen" style="max-width: 100%; height: auto;"/>
 </div>  
-<br/>  
+<br/>
 
 #### **Enhanced Search**
+
 - **Performance Improvements**:  
-Defaults to searching in Movies/TV/People as most searches are for these items. Options to search specific categories or all categories like the default Jellyfin search functionality.  
+  Defaults to searching in Movies/TV/People as most searches are for these items. Options to search specific categories or all categories like the default Jellyfin search functionality.
 
 - **Jellyseerr Support**:  
-If you have [JellyfinEnhanced](https://github.com/n00bcodr/Jellyfin-Enhanced) installed, the Jellyseerr search results will appear in the KefinTweaks enhanced search. There is also a button that lets users search specifically for Requests.
+  If you have [JellyfinEnhanced](https://github.com/n00bcodr/Jellyfin-Enhanced) installed, the Jellyseerr search results will appear in the KefinTweaks enhanced search. There is also a button that lets users search specifically for Requests.
 
 - **Meilisearch Support**:  
-Zero-config support for searching with the [Meilisearch](https://github.com/arnesacnussem/jellyfin-plugin-meilisearch) plugin  
+  Zero-config support for searching with the [Meilisearch](https://github.com/arnesacnussem/jellyfin-plugin-meilisearch) plugin
 
 <div align="center">
   <img src="pages/images/search.png" alt="search" style="max-width: 100%; height: auto;"/>
@@ -337,15 +346,15 @@ Zero-config support for searching with the [Meilisearch](https://github.com/arne
 ### UI Enhancements
 
 #### **Watchlist Support**
+
 - **Watchlist Toggle**:  
-Watchlist toggle button added to all item card overlays  
+  Watchlist toggle button added to all item card overlays
 
 <div align="center">
   <img src="pages/images/watchlistoverlay.png" alt="watchlistoverlay" style="max-width: 100%; height: auto;"/>
 </div>  
 <br/>  
 <hr style="background: #b4c5fb !important;">
-
 
 #### **Skin Manager**
 
@@ -361,74 +370,84 @@ The Skin Manager adds the functionality for users to change the appearance of th
     <td style="width: 65%;"><img src="pages/images/appearanceusersettings.png" width="1000"/></td>
   </tr>
 </table>
-<br/>  
+<br/>
 
 - **Skins**  
-Select from a list of pre-defined Skins created by other Jellyfin community members. You may specify additional custom skins in the configuration options.
+  Select from a list of pre-defined Skins created by other Jellyfin community members. You may specify additional custom skins in the configuration options.
 
 - **Color Schemes**  
-Certain Skins either support or require a color scheme. This lets you change the UI colors within an individual Skin. These options are automatically available for the Skins which support them.
+  Certain Skins either support or require a color scheme. This lets you change the UI colors within an individual Skin. These options are automatically available for the Skins which support them.
 
 - **Optional CSS Modules**  
 KefinTweaks also includes optional CSS modules from supported Skins, and even adds some of these as Global options for users to take advantage of with any Skin.
-<hr style="background: #b4c5fb !important;">
+  <hr style="background: #b4c5fb !important;">
 
 ### UX Improvements
 
-#### **Subtitle Search**:  
-Search and download subtitles directly from the video OSD  
+#### **Subtitle Search**:
+
+Search and download subtitles directly from the video OSD
 
 <div align="center">
   <img src="pages/images/subtitlesearch.png" alt="subtitlesearch" style="max-width: 100%; height: auto;"/>
 </div>  
-<br/>  
+<br/>
 
-#### **Remove from Continue Watching**:  
-Adds a card overlay button to remove items from Continue Watching for all resumable items  
+#### **Remove from Continue Watching**:
+
+Adds a card overlay button to remove items from Continue Watching for all resumable items
 
 <div align="center">
   <img src="pages/images/continuewatching.png" alt="continuewatching" style="max-width: 100%; height: auto;"/>
 </div>  
-<br/>  
+<br/>
 
 #### **Collection Sorting**:
+
 Adds the ability to sort collection items on the Collection page. Supports sorting by Title, Release Date, Date Added, Community Rating, Critic Rating.
+
 <hr style="background: #b4c5fb !important;">
 
 ### Navigation Improvements
 
-#### **Header Tab Enhancements**:  
-Improved tab navigation and functionality, supports linking to specific tabs  
+#### **Header Tab Enhancements**:
 
-#### **Breadcrumb Navigation**:  
+Improved tab navigation and functionality, supports linking to specific tabs
+
+#### **Breadcrumb Navigation**:
+
 Clear navigation paths for Movies, Series, Seasons, Episodes, Music Artists, Albums and Songs
 
 <div align="center">
   <img src="pages/images/breadcrumbs.png" alt="breadcrumbs" style="max-width: 100%; height: auto;"/>
 </div>  
-<br/>  
+<br/>
 
-#### **Custom Menu Integration**:  
-Add custom menu links to the side navigation drawer menu  
+#### **Custom Menu Integration**:
+
+Add custom menu links to the side navigation drawer menu
 
 <div align="center">
   <img src="pages/images/custommenu.png" alt="custommenu" style="max-width: 100%; height: auto;"/>
 </div>  
-<br/>  
+<br/>
 
-#### **Playlist Screen Improvement**:  
-Updates the default playlist functionality to include a play button to start playback and make clicking an item go to the item detail page  
+#### **Playlist Screen Improvement**:
 
-#### **Episodes on the Series Page**:  
+Updates the default playlist functionality to include a play button to start playback and make clicking an item go to the item detail page
+
+#### **Episodes on the Series Page**:
+
 Adds an Episodes section on the Series page which displays the episodes from the season with the Next Up item. Users can quickly switch between seasons to browse other episodes. Includes the option to "Flatten Single Season Shows" which will hide the Seasons container when only one season is present.
 
 <div align="center">
   <img src="https://i.imgur.com/ttP9cGT.png" alt="series-episodes" style="max-width: 100%; height: auto;"/>
 </div>  
-<br/>  
+<br/>
 
-#### **Collections on Movie/Series Details page**:  
-This shows an "Included In" section on the Item Details page which displays any Collections that the item is a part of.  
+#### **Collections on Movie/Series Details page**:
+
+This shows an "Included In" section on the Item Details page which displays any Collections that the item is a part of.
 
 <div align="center">
   <img src="pages/images/itemdetailscollections.png" alt="itemdetailscollections" style="max-width: 100%; height: auto;"/>
@@ -436,69 +455,70 @@ This shows an "Included In" section on the Item Details page which displays any 
 <br/>  
 <hr style="background: #b4c5fb !important;">
 
-
 ### System Improvements
 
 #### **Performance & Stability**
+
 - **Background Leak Fix**:  
-    Resolves an issue that causes backgrounds to be added to the DOM endlesslly when a tab is not focused and Backdrop images are enabled  
+   Resolves an issue that causes backgrounds to be added to the DOM endlesslly when a tab is not focused and Backdrop images are enabled
 
 - **Infinite Scroll**:  
-    Adds infinite scrolling to the Movies and TV library pages. Loads batches of 100 items at a time and supports filtering and sorting.  
+   Adds infinite scrolling to the Movies and TV library pages. Loads batches of 100 items at a time and supports filtering and sorting.
 
 - **LocalStorage Caching**:  
-    Local caching for data related to Watchlist, Series Progress, Movie History and Top People  
+   Local caching for data related to Watchlist, Series Progress, Movie History and Top People
 
 - **Dashboard Button Fix**:  
-    Fix to handle navigating back from the dashboard page to the homescreen instead of the "new tab" page of a browser  
+   Fix to handle navigating back from the dashboard page to the homescreen instead of the "new tab" page of a browser
 
 #### **Branding & Customization**
+
 - **Exclusive Elsewhere**:  
-Custom branding for items which aren't available on any external streaming providers. Requires [JellyfinEnhanced](https://github.com/n00bcodr/Jellyfin-Enhanced).  
+  Custom branding for items which aren't available on any external streaming providers. Requires [JellyfinEnhanced](https://github.com/n00bcodr/Jellyfin-Enhanced).
 
 - **Ratings and Comments**:  
-Coming soon...requires the [Updoot](https://github.com/BobHasNoSoul/jellyfin-updoot) backend script  
-<hr style="background: #b4c5fb !important;">
-
+Coming soon...requires the [Updoot](https://github.com/BobHasNoSoul/jellyfin-updoot) backend script
+  <hr style="background: #b4c5fb !important;">
 
 ## Script Details
 
 ### Dependency Scripts
 
-| Script | Description |
-|--------|-------------|
-| `utils.js` | Page view management and common utilities |
-| `skinConfig.js` | Default skin configuration for KefinTweaks |
-| `apiHelper.js` | API helper functions for common Jellyfin operations |
-| `cardBuilder.js` | Core card building functionality (required by other scripts) |
-| `localStorageCache.js` | localStorage-based caching layer with 24-hour TTL and manual refresh |
-| `indexedDBCache.js` | IndexedDB-based caching layer for large datasets with TTL support |
-| `modal.js` | Generic modal system for Jellyfin-style dialogs |
-| `toaster.js` | Toast notification system using Jellyfin's existing toast functionality |
+| Script                 | Description                                                             |
+| ---------------------- | ----------------------------------------------------------------------- |
+| `utils.js`             | Page view management and common utilities                               |
+| `skinConfig.js`        | Default skin configuration for KefinTweaks                              |
+| `apiHelper.js`         | API helper functions for common Jellyfin operations                     |
+| `cardBuilder.js`       | Core card building functionality (required by other scripts)            |
+| `localStorageCache.js` | localStorage-based caching layer with 24-hour TTL and manual refresh    |
+| `indexedDBCache.js`    | IndexedDB-based caching layer for large datasets with TTL support       |
+| `modal.js`             | Generic modal system for Jellyfin-style dialogs                         |
+| `toaster.js`           | Toast notification system using Jellyfin's existing toast functionality |
 
 ### Feature Scripts
 
-| Script | Description | Dependencies |
-|--------|-------------|--------------|
-| `skinManager.js` | Skin selection and management (loads with priority) | `utils`, `skinConfigLegacyDefaults`, `skinConfig`, `modal` |
-| `watchlist.js` | Adds watchlist functionality throughout Jellyfin interface | `cardBuilder`, `localStorageCache`, `modal`, `utils` |
-| `homeScreen.js` | Adds custom home screen sections | `cardBuilder`, `localStorageCache`, `utils` |
-| `search.js` | Enhanced search functionality | `cardBuilder`, `utils` |
-| `headerTabs.js` | Header tab improvements | None |
-| `customMenuLinks.js` | Load and add custom menu links from configuration | `utils` |
-| `exclusiveElsewhere.js` | Modifies the behavior of the Jellyfin Enhanced Elsewhere functionality to add custom branding when items are not available on streaming services | None |
-| `updoot.js` | Upvote functionality provided by https://github.com/BobHasNoSoul/jellyfin-updoot | None |
-| `backdropLeakFix.js` | Fixes issue that causes backdrop images to be continuously added to the page if the tab isn't focused | None |
-| `dashboardButtonFix.js` | Fixes the dashboard button to redirect to the home page when the back button is clicked and there is no history to go back to | None |
-| `infiniteScroll.js` | Adds infinite scroll functionality to media library pages | `cardBuilder` |
-| `removeContinue.js` | Adds remove from continue watching functionality to cards with data-position-ticks | None |
-| `subtitleSearch.js` | Adds subtitle search functionality to the video OSD, allowing users to search and download subtitles from remote sources | `toaster` |
-| `breadcrumbs.js` | Adds breadcrumb navigation to item detail pages for Movies, Series, Seasons, Episodes, Music Artists, and Music Albums | `utils` |
-| `playlist.js` | Modifies playlist view page behavior to navigate to item details instead of playing, adds play button to playlist items, and adds sorting functionality | `cardBuilder`, `utils`, `modal` |
-| `itemDetailsCollections.js` | Adds related collections to item details pages showing which collections contain the current item | `indexedDBCache`, `utils`, `cardBuilder` |
-| `seriesEpisodes.js` | Displays episodes directly on series page with season selection. Works for both single and multi-season shows when enabled. | `cardBuilder`, `utils` |
-| `seriesInfo.js` | Adds series and season information (seasons count, episodes count, end time) to details pages | `utils` |
-| `collections.js` | Adds sorting functionality to collection pages | `utils`, `modal` |
+| Script                      | Description                                                                                                                                             | Dependencies                                               |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `skinManager.js`            | Skin selection and management (loads with priority)                                                                                                     | `utils`, `skinConfigLegacyDefaults`, `skinConfig`, `modal` |
+| `watchlist.js`              | Adds watchlist functionality throughout Jellyfin interface                                                                                              | `cardBuilder`, `localStorageCache`, `modal`, `utils`       |
+| `homeScreen.js`             | Adds custom home screen sections                                                                                                                        | `cardBuilder`, `localStorageCache`, `utils`                |
+| `search.js`                 | Enhanced search functionality                                                                                                                           | `cardBuilder`, `utils`                                     |
+| `headerTabs.js`             | Header tab improvements                                                                                                                                 | None                                                       |
+| `customMenuLinks.js`        | Load and add custom menu links from configuration                                                                                                       | `utils`                                                    |
+| `exclusiveElsewhere.js`     | Modifies the behavior of the Jellyfin Enhanced Elsewhere functionality to add custom branding when items are not available on streaming services        | None                                                       |
+| `updoot.js`                 | Upvote functionality provided by https://github.com/BobHasNoSoul/jellyfin-updoot                                                                        | None                                                       |
+| `backdropLeakFix.js`        | Fixes issue that causes backdrop images to be continuously added to the page if the tab isn't focused                                                   | None                                                       |
+| `dashboardButtonFix.js`     | Fixes the dashboard button to redirect to the home page when the back button is clicked and there is no history to go back to                           | None                                                       |
+| `infiniteScroll.js`         | Adds infinite scroll functionality to media library pages                                                                                               | `cardBuilder`                                              |
+| `removeContinue.js`         | Adds remove from continue watching functionality to cards with data-position-ticks                                                                      | None                                                       |
+| `subtitleSearch.js`         | Adds subtitle search functionality to the video OSD, allowing users to search and download subtitles from remote sources                                | `toaster`                                                  |
+| `breadcrumbs.js`            | Adds breadcrumb navigation to item detail pages for Movies, Series, Seasons, Episodes, Music Artists, and Music Albums                                  | `utils`                                                    |
+| `playlist.js`               | Modifies playlist view page behavior to navigate to item details instead of playing, adds play button to playlist items, and adds sorting functionality | `cardBuilder`, `utils`, `modal`                            |
+| `itemDetailsCollections.js` | Adds related collections to item details pages showing which collections contain the current item                                                       | `indexedDBCache`, `utils`, `cardBuilder`                   |
+| `seriesEpisodes.js`         | Displays episodes directly on series page with season selection. Works for both single and multi-season shows when enabled.                             | `cardBuilder`, `utils`                                     |
+| `seriesInfo.js`             | Adds series and season information (seasons count, episodes count, end time) to details pages                                                           | `utils`                                                    |
+| `collections.js`            | Adds sorting functionality to collection pages                                                                                                          | `utils`, `modal`                                           |
+
 <br>
 
 ### Auto-Inject Dependencies
@@ -507,7 +527,7 @@ KefinTweaks automatically enables required dependencies when you enable a script
 
 - Enabling `watchlist` automatically enables `cardBuilder`, `localStorageCache`, `modal`, and `utils`
 
-This ensures all scripts have their required dependencies without manual configuration.  
+This ensures all scripts have their required dependencies without manual configuration.
 
 ### Info for Developers
 
@@ -521,7 +541,8 @@ The KefinTweaks Watchlist leverages the existing Jellyfin Item UserData field: "
 - Add a Watchlist toggle button to all card overlays which toggles the UserData Likes value
 - Add a listener for PlaybackStopped to check if a Watchlisted item has been watched and automatically remove it from the Watchlist
 
-Even if you only implement the first bullet point and add a section for Watchlist items, KefinTweaks will automatically handle Watchlist syncing whenever the user connects with a KefinTweaks supported client.  
+Even if you only implement the first bullet point and add a section for Watchlist items, KefinTweaks will automatically handle Watchlist syncing whenever the user connects with a KefinTweaks supported client.
+
 <hr style="background: #b4c5fb !important;">
 
 ## Client Support
@@ -538,10 +559,11 @@ Here is a list of known supported clients:
 - [Jellyfin for Tizen](https://github.com/jellyfin/jellyfin-tizen)
 
 These third party clients support the same Watchlist as KefinTweaks:
+
 - [AFinity by MakD](https://github.com/MakD/AFinity)
 - [Streamyfin](https://github.com/streamyfin/streamyfin)
 - [Pelagica](https://github.com/KartoffelChipss/pelagica)
-<hr style="background: #b4c5fb !important;">
+  <hr style="background: #b4c5fb !important;">
 
 ## Changes to default Jellyfin functionality
 
@@ -565,29 +587,28 @@ A few things to note about KefinTweaks functionality in general and how it inter
 ### What functionality is modified?
 
 - Infinite Scroll for Library Pages
-  - Pagination controls are hidden in favor of infinite scrolling
+    - Pagination controls are hidden in favor of infinite scrolling
 - Playlist Page UX
-  - Clicking playlist items navigates to the item page instead of playing the item
-  - A play button is added to each item on the Playlist page to allow the user to play the item directly
-  - The Playlist Play button now resumes the Playlist by default instead of playing it from the beginning
-  - A new button is added to play the Playlist from the beginning
+    - Clicking playlist items navigates to the item page instead of playing the item
+    - A play button is added to each item on the Playlist page to allow the user to play the item directly
+    - The Playlist Play button now resumes the Playlist by default instead of playing it from the beginning
+    - A new button is added to play the Playlist from the beginning
 - Episodes of Series Page
-  - Episodes from the Season of the Next Up episode are displayed in a section with the Next Up item being focused
-  - The default Jellyfin "Next Up" section is hidden in favor of the above
-  - With the Flatten Single Season Shows enabled, the normal Seasons section is hidden for shows with only 1 season
+    - Episodes from the Season of the Next Up episode are displayed in a section with the Next Up item being focused
+    - The default Jellyfin "Next Up" section is hidden in favor of the above
+    - With the Flatten Single Season Shows enabled, the normal Seasons section is hidden for shows with only 1 season
 - Background Leak Fix
-  - This removes extra backdrops from the DOM
-  - It fixes an issue which causes Jellyfin to endless add backdrop items to the DOM if the Jellyfin browser tab is not focused
+    - This removes extra backdrops from the DOM
+    - It fixes an issue which causes Jellyfin to endless add backdrop items to the DOM if the Jellyfin browser tab is not focused
 
-  
 ### What functionality is overridden?
 
 - Search
-  - The default Jellyfin search is hidden in favor of the KefinTweaks search
-  - KefinTweaks does not block default Jellyfin search requests, but they will only be triggered when manually navigating to the search page with a searchTerm in the url. In this circumstance, the duplicate search results are hidden.
+    - The default Jellyfin search is hidden in favor of the KefinTweaks search
+    - KefinTweaks does not block default Jellyfin search requests, but they will only be triggered when manually navigating to the search page with a searchTerm in the url. In this circumstance, the duplicate search results are hidden.
 - Dashboard Button Fix
-  - This fix prevents the Back button in the Dashboad from navigating back to the "new tab" page in your browser
-<hr style="background: #b4c5fb !important;">
+    - This fix prevents the Back button in the Dashboad from navigating back to the "new tab" page in your browser
+      <hr style="background: #b4c5fb !important;">
 
 ## Design Philosophy
 
@@ -596,6 +617,7 @@ The general design philosophy here is to utilize as much pre-existing Jellyfin f
 The only real Plugin dependency that KefinTweaks has is JS Injector which is being used to both load the KefinTweaks scripts, and save configuration data on the server. Loading the scripts without JS Injector is very simple, but without another way of storing configuration data on the server, JS Injector is absolutely required if you wish to override any of the default configuration options in the UI.
 
 The main goal of this project is to push the limits of what is possible through a "front end plugin". All of the code in this project is executed by the client. This is quite unusual in terms of the typical Jellyfin plugin, but I hope it may be inspiring for other future creations down the road. I would also be very happy if the changes included here helped push forward the progress to get these changes implemented in the core Jellyfin project so that everyone can take advantage of them without needing a third party plugin.
+
 <hr style="background: #b4c5fb !important;">
 
 ## AI Disclaimer
@@ -608,10 +630,9 @@ As it stands right now, and how I expect to proceed going forward, is to act in 
 
 The journey so far has been quite enjoyable. The scale of KefinTweaks has expanded a lot over time, so I do certainly have my concerns about the sustainability of this approach, but I plan to continue on like this unless I hit a roadblock. I hope that this choice will not deter you from trying this plugin, but I did want to make the use of AI clear as I understand that it is a hot issue in the industry and around the globe. My personal view is that AI should be used responsibly as a tool, just like any other tool. I think that AI has no place in replacing artists and other creative work that humans carry out.
 
-
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.  
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgments
 
@@ -619,48 +640,73 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **[n00bcodr](https://github.com/n00bcodr)**: For JellyfinEnhanced, the JS Injector Plugin and moral support
 - **[IAmParadox27](https://github.com/IAmParadox27)**: For the Custom Tabs Plugin
 - **[BobHasNoSoul](https://github.com/BobHasNoSoul)**: For the jellyfin-updoot functionality
-- **[The Jellyfin Community](https://discord.gg/v7P9CAvCKZhttps://discord.gg/v7P9CAvCKZ)**: For sharing knowledge and providing a welcoming environment to ask questions and learn 
+- **[The Jellyfin Community](https://discord.gg/v7P9CAvCKZhttps://discord.gg/v7P9CAvCKZ)**: For sharing knowledge and providing a welcoming environment to ask questions and learn
 - **[movie-monk-b0t](https://github.com/movie-monk-b0t)**: For the IMDb Top 250 JSON data
-- **[joshmcrty](https://github.com/joshmcrty)**: For the [Flurry](https://github.com/joshmcrty/Flurry) jQuery plugin
+- **[freefrontend.com](https://freefrontend.com/css-frames/)**: For the custom card border styles and ideas.
+  https://freefrontend.com/css-frames/
 
 ## FAQ
 
-> ### I saved the KefinTweaks Plugin script in JS Injector but I don't see KefinTweaks in the Dashboard menu  
+> ### I saved the KefinTweaks Plugin script in JS Injector but I don't see KefinTweaks in the Dashboard menu
 
 You must complete the installation by clicking the KefinTweaks plugin and selecting the installation source (either GitHub or local) from the KefinTweaks plugin card at the very bottom of your Plugins page:
 
 <div align="center">
   <img src="pages\images\faq\pending.png" alt="jsinjector publicjs" style="max-width: 100%; height: auto;"/>
-</div>  <br/>  
+</div>  <br/>
 
+> ### KefinTweaks Plugin never appears in the Plugins page even though I saved the KefinTweaks Plugin script in JS Injector
 
-> ### KefinTweaks Plugin never appears in the Plugins page even though I saved the KefinTweaks Plugin script in JS Injector  
+Ensure `JavaScriptInjector\public.js` is loaded by the client:
 
-1. Ensure `JavaScriptInjector\public.js` is loaded by the client:
-  - Open DevTools (right-click page > inspect)
-  - Click Sources tab
-<div align="center">
-  <img src="pages\images\faq\publicjs.png" alt="jsinjector publicjs" style="max-width: 100%; height: auto;"/>
-</div> 
+- Open DevTools (right-click page > inspect)
+- Click Sources tab
+- Verify that `JavaScriptInjector\public.js` is present:
+  <div align="center">
+    <img src="pages\images\faq\publicjs.png" alt="jsinjector publicjs" style="max-width: 100%; height: auto;"/>
+  </div>
+
+If you don't see the public.js from JS Injector, please ensure that you have [File Transformation plugin](https://github.com/IAmParadox27/jellyfin-plugin-file-transformation) installed.
+
+If you do see the public.js from JS Injector, this may be an issue related to the browser cache. Follow the instructions below to ensure your browser cache is up to date.
+
+> ### My Watchlist Tab is empty
+
+If you see the tab button for Watchlist, but clicking it brings you to an empty page, this is almost certainly due to a caching issue. Please follow the instructions below to ensure your browser cache is up to date.
+
+> ### How do I clear my client cache?
+
+You may sometimes end up in a situation where the jellyfin-web client is not correctly reflecting your KefinTweaks configuration. To ensure KefinTweaks is delivering its scripts based on your current configuration, you may need to perform a "hard refresh" which will bypass the cache:
+
+- Use "Ctrl+F5" or "Ctrl+Shift+F5" to refresh the page, or:
+- Open Devtools (right-click page > inspect)
+- Click the Network tab
+- Check the "Disable Cache" checkbox
+- Refresh your page while keeping the Devtools window open
+  <div align="center">
+    <img src="pages\images\faq\disablecache.png" alt="jsinjector publicjs" style="max-width: 100%; height: auto;"/>
+  </div>
 
 ## Support
 
 - **Issues**:  
-KefinTweaks is not maintained by the Jellyfin team, and as a result you are encouraged to seek support from me directly. Sadly, there is no place suitable for discussion of plugins built by community members or fan-made projects in the official Jellyfin Discord, so please visit the [Jellyfin Community Discord](https://discord.gg/v7P9CAvCKZhttps://discord.gg/v7P9CAvCKZ) to find me (username: HighImKevin) and other users who would be happy to help you out. Please also feel free to report bugs and request features from the Issues page.  
+  KefinTweaks is not maintained by the Jellyfin team, and as a result you are encouraged to seek support from me directly. Sadly, there is no place suitable for discussion of plugins built by community members or fan-made projects in the official Jellyfin Discord, so please visit the [Jellyfin Community Discord](https://discord.gg/v7P9CAvCKZhttps://discord.gg/v7P9CAvCKZ) to find me (username: HighImKevin) and other users who would be happy to help you out. Please also feel free to report bugs and request features from the Issues page.
 
 - **Documentation**:  
-This README and the inline comments in kefinTweaks.js and the other scripts is the only real documentation available at this time  
-<hr style="background: #b4c5fb !important;">
+This README and the inline comments in kefinTweaks.js and the other scripts is the only real documentation available at this time
+  <hr style="background: #b4c5fb !important;">
 
 ## Roadmap
 
 ### Planned Features
-- **Jellyfin 10.11 Support**  
+
+- **Jellyfin 10.11 Support**
 - **Additional options for User configuration in the Jellyfin UI**
 
 <hr style="background: #b4c5fb !important;">
 
 ### Version History
+
 - **v0.4.0**: New Features: Proper Install Flow, Watchlist->Playlist Sync, Series Info+, Series Page Episodes, Christmas Seasonal Home Screen
 - **v0.3.5**: Critical bug fix
 - **v0.3.4**: Improved handling of Latest/Development branches for KefinTweaks installation. Improved collection caching.
