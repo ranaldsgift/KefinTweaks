@@ -4861,7 +4861,7 @@
     }
 
     // Load user config script after a short delay to ensure this script is fully initialized
-    setTimeout(loadUserConfigurationScript, 100);
+    //setTimeout(loadUserConfigurationScript, 100);
 
     runStartupDefaultSectionSync().catch(err => ERR('Startup default section sync failed:', err));
     
