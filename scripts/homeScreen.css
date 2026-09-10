@@ -244,16 +244,16 @@ div#discovery-loading-indicator:not(.show)::after {
 	justify-content: center;
 } */
 
-.homeSectionsContainer .section0,
-.homeSectionsContainer .section1,
-.homeSectionsContainer .section2,
-.homeSectionsContainer .section3,
-.homeSectionsContainer .section4,
-.homeSectionsContainer .section5,
-.homeSectionsContainer .section6,
-.homeSectionsContainer .section7,
-.homeSectionsContainer .section8,
-.homeSectionsContainer .section9 {
+.homeSectionsContainer .section0:not([data-page]),
+.homeSectionsContainer .section1:not([data-page]),
+.homeSectionsContainer .section2:not([data-page]),
+.homeSectionsContainer .section3:not([data-page]),
+.homeSectionsContainer .section4:not([data-page]),
+.homeSectionsContainer .section5:not([data-page]),
+.homeSectionsContainer .section6:not([data-page]),
+.homeSectionsContainer .section7:not([data-page]),
+.homeSectionsContainer .section8:not([data-page]),
+.homeSectionsContainer .section9:not([data-page]) {
 	display: none !important;
 }
 
