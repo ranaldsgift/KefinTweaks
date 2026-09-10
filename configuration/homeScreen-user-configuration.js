@@ -1599,6 +1599,37 @@
     }
 
     /**
+     * Wait until admin homeScreen-configuration has registered getSections/getConfig.
+     * Injector loads deps in parallel, so prefs can open before that API exists.
+     */
+    function waitForHomeScreenSectionsApi(timeoutMs = 15000, intervalMs = 100) {
+        return new Promise((resolve) => {
+            if (typeof window.KefinHomeScreen?.getSections === 'function'
+                && typeof window.KefinHomeScreen?.getConfig === 'function') {
+                resolve(true);
+                return;
+            }
+            const start = Date.now();
+            const timer = setInterval(() => {
+                if (typeof window.KefinHomeScreen?.getSections === 'function'
+                    && typeof window.KefinHomeScreen?.getConfig === 'function') {
+                    clearInterval(timer);
+                    resolve(true);
+                    return;
+                }
+                if (Date.now() - start >= timeoutMs) {
+                    clearInterval(timer);
+                    resolve(false);
+                }
+            }, intervalMs);
+        });
+    }
+
+    function delay(ms) {
+        return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    /**
      * Render user home sections editor
      */
     async function renderUserHomeSectionsEditor(container) {
@@ -1608,14 +1639,18 @@
         }
 
         try {
-            // Check dependencies
-            if (!window.KefinHomeScreen || !window.KefinHomeScreen.getSections) {
+            container.innerHTML = '<div class="listItemBodyText secondary">Loading home sections…</div>';
+
+            const apiReady = await waitForHomeScreenSectionsApi();
+            if (!apiReady) {
                 ERR('KefinHomeScreen.getSections not available');
+                container.innerHTML = '<div class="listItemBodyText secondary">Error loading editor. Please refresh the page.</div>';
                 return;
             }
 
             if (!window.KefinTweaksUI || !window.KefinTweaksUI.renderHomeSectionsOrderEditor) {
                 ERR('KefinTweaksUI.renderHomeSectionsOrderEditor not available');
+                container.innerHTML = '<div class="listItemBodyText secondary">Error loading editor. Please refresh the page.</div>';
                 return;
             }
 
@@ -1624,7 +1659,7 @@
             let allSections = (userConfig.sections || []).filter((s) => {
                 if (s.userConfigurable === false) return false;
                 if (s.type === 'discovery' || s.discoveryEnabled === true) return false;
-                // Keep hidden sections only when currently enabled (e.g. merge CW+Next Up)
+                // Keep hidden sections only when currently enabled
                 if (s.hidden === true && s.enabled === false) return false;
                 return true;
             });
@@ -1802,26 +1837,28 @@
         }
 
         window.KefinTweaksUtils.onViewPage(async (view, element, hash) => {
-            // Check if we're on the mypreferenceshome page
             LOG('Preferences home page detected');
 
-            const form = document.querySelector('.libraryPage:not(.hide) .homeScreenSettingsContainer > form');
-            if (form && form.firstChild) {
-                // Check if editor already rendered
-                if (form.querySelector('#kefin-user-home-sections-editor')) {
-                    return;
-                }
-
-                // Create container for editor
-                const editorContainer = document.createElement('div');
-                editorContainer.id = 'kefin-user-home-sections-editor';
-
-                // Insert as last child of the form
-                form.appendChild(editorContainer);
-
-                // Render editor
-                await renderUserHomeSectionsEditor(editorContainer);
+            let form = null;
+            for (let attempt = 0; attempt < 20; attempt++) {
+                form = document.querySelector('.libraryPage:not(.hide) .homeScreenSettingsContainer > form');
+                if (form && form.firstChild) break;
+                await delay(150);
             }
+
+            if (!form || !form.firstChild) {
+                WARN('Home settings form not ready');
+                return;
+            }
+
+            if (form.querySelector('#kefin-user-home-sections-editor')) {
+                return;
+            }
+
+            const editorContainer = document.createElement('div');
+            editorContainer.id = 'kefin-user-home-sections-editor';
+            form.appendChild(editorContainer);
+            await renderUserHomeSectionsEditor(editorContainer);
         }, {
             pages: ['mypreferenceshome', 'userpreferences']
         });

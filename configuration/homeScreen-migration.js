@@ -49,7 +49,6 @@
                 DISCOVERY_SECTION_GROUPS: JSON.parse(JSON.stringify(defaults.DISCOVERY_SECTION_GROUPS || [])),
                 CUSTOM_SECTION_GROUPS: [],
                 REMOVE_CONFLICTING_SECTIONS: legacyHomeScreen.removeConflictingSections !== false,
-                MERGE_NEXT_UP: false,
                 DISCOVERY_SETTINGS: JSON.parse(JSON.stringify(defaults.DISCOVERY_SETTINGS || {})),
                 SEASONAL_THEME_SETTINGS: JSON.parse(JSON.stringify(defaults.SEASONAL_THEME_SETTINGS || {}))
             };

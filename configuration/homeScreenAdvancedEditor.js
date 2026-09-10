@@ -963,7 +963,9 @@
             hideWatched: inferHideWatched(section),
             hideName: section.hideName === true,
             userEnabledByDefault: section.enabled !== false,
-            userConfigurable: section.hidden !== true,
+            userConfigurable: section.userConfigurable !== undefined
+                ? section.userConfigurable !== false
+                : section.hidden !== true,
             groupSelect: groupSelection.groupSelect,
             groupNew: groupSelection.groupNew,
             queries: (section.queries?.length ? section.queries : [createDefaultQuery()]).map(q => ({ ...q })),

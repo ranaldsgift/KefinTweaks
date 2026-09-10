@@ -75,7 +75,6 @@
                     name: 'Continue Watching',
                     jellyfinId: 'resume',
                     enabled: false,
-                    hidden: false,
                     order: 10,
                     cardFormat: 'Thumb',
                     ttl: CACHE_CONFIG.FORCE_REFRESH_TTL,
@@ -99,7 +98,6 @@
                     name: 'Next Up',
                     jellyfinId: 'nextup',
                     enabled: false,
-                    hidden: false,
                     order: 11,
                     cardFormat: 'Thumb',
                     ttl: CACHE_CONFIG.FORCE_REFRESH_TTL,
@@ -122,9 +120,8 @@
                     id: 'continueWatchingAndNextUp',
                     name: 'Continue Watching and Next Up',
                     jellyfinId: 'resume',
-                    enabled: false, // Disabled by default - only used when merge setting is enabled
+                    enabled: false,
                     order: 10,
-                    hidden: true,
                     cardFormat: 'Thumb',
                     ttl: CACHE_CONFIG.FORCE_REFRESH_TTL,
                     sortBy: 'DatePlayed',      // Used to sort merged results from both queries
@@ -161,7 +158,6 @@
                     name: 'Continue Listening',
                     jellyfinId: 'resumeaudio',
                     enabled: false,
-                    hidden: false,
                     order: 10,
                     cardFormat: 'Square',
                     ttl: CACHE_CONFIG.FORCE_REFRESH_TTL,
@@ -185,7 +181,6 @@
                     name: 'Continue Reading',
                     jellyfinId: 'resumebook',
                     enabled: false,
-                    hidden: false,
                     order: 10,
                     cardFormat: 'Poster',
                     ttl: CACHE_CONFIG.FORCE_REFRESH_TTL,
@@ -1542,7 +1537,6 @@
         DISCOVERY_SECTION_GROUPS: KEFINTWEAKS_DISCOVERY_SECTION_GROUPS,
         CUSTOM_SECTION_GROUPS: [], // Empty by default - user-created/imported sections
         REMOVE_CONFLICTING_SECTIONS: true,
-        MERGE_NEXT_UP: false,
         HOME_SETTINGS: HOME_SETTINGS,
         USER_HOME_SCREEN_SETTINGS: USER_HOME_SCREEN_SETTINGS,
         DISCOVERY_SETTINGS: DISCOVERY_SETTINGS,
@@ -1558,7 +1552,6 @@
         DISCOVERY_SECTION_GROUPS: KEFINTWEAKS_DISCOVERY_SECTION_GROUPS, // modified by user configuration
         CUSTOM_SECTION_GROUPS: [], // Empty by default - user-created/imported sections // modified by user configuration
         REMOVE_CONFLICTING_SECTIONS: true,
-        MERGE_NEXT_UP: false,
         HOME_SETTINGS: HOME_SETTINGS,
         DISCOVERY_SETTINGS: DISCOVERY_SETTINGS,
         SEASONAL_THEME_SETTINGS: SEASONAL_THEME_SETTINGS,

@@ -155,6 +155,30 @@
         return flattened;
     }
 
+    const CONTINUE_WATCHING_SECTION_IDS = new Set([
+        'continueWatching',
+        'nextUp',
+        'continueWatchingAndNextUp'
+    ]);
+
+    /**
+     * Clear MERGE_NEXT_UP-era hidden flags so CW / Next Up / combined are independent sections.
+     */
+    function normalizeContinueWatchingVisibility(config) {
+        if (!config) return;
+        const groupKeys = ['HOME_SECTION_GROUPS', 'SEASONAL_SECTION_GROUPS', 'DISCOVERY_SECTION_GROUPS', 'CUSTOM_SECTION_GROUPS'];
+        groupKeys.forEach((key) => {
+            (config[key] || []).forEach((group) => {
+                (group.sections || []).forEach((section) => {
+                    if (section?.id && CONTINUE_WATCHING_SECTION_IDS.has(section.id)) {
+                        section.hidden = false;
+                    }
+                });
+            });
+        });
+        delete config.MERGE_NEXT_UP;
+    }
+
     /**
      * Collect discovery-enabled sections from custom groups, stamping pageNumber
      * per group (1..N among discovery sections only, in group order).
@@ -927,9 +951,10 @@
                 CACHE: { ...defaults.CACHE, ...(existingConfig.CACHE || {}) },
                 SPOTLIGHT_SETTINGS: { ...defaults.SPOTLIGHT_SETTINGS, ...(existingConfig.SPOTLIGHT_SETTINGS || {}) },
                 HOME_SETTINGS: { ...defaults.HOME_SETTINGS, ...(existingConfig.HOME_SETTINGS || {}) },
-                USER_HOME_SCREEN_SETTINGS: { ...defaults.USER_HOME_SCREEN_SETTINGS, ...(existingConfig.USER_HOME_SCREEN_SETTINGS || {}) },
-                MERGE_NEXT_UP: existingConfig.MERGE_NEXT_UP ?? defaults.MERGE_NEXT_UP ?? false
+                USER_HOME_SCREEN_SETTINGS: { ...defaults.USER_HOME_SCREEN_SETTINGS, ...(existingConfig.USER_HOME_SCREEN_SETTINGS || {}) }
             };
+
+            normalizeContinueWatchingVisibility(mergedConfig);
 
             // Add ENABLED_NORMAL_SECTIONS and ENABLED_DISCOVERY_SECTIONS
             // ENABLED_NORMAL_SECTIONS is all enabled sections from HOME_SECTION_GROUPS, SEASONAL_SECTION_GROUPS, and CUSTOM_SECTION_GROUPS that aren't discovery sections
@@ -1522,9 +1547,10 @@
                 USER_HOME_SCREEN_SETTINGS: {
                     ...(savedHomeScreenConfig.USER_HOME_SCREEN_SETTINGS || {}),
                     ...(config.USER_HOME_SCREEN_SETTINGS || {})
-                },
-                MERGE_NEXT_UP: config.MERGE_NEXT_UP !== undefined ? config.MERGE_NEXT_UP : (savedHomeScreenConfig.MERGE_NEXT_UP !== undefined ? savedHomeScreenConfig.MERGE_NEXT_UP : false)
+                }
             };
+
+            normalizeContinueWatchingVisibility(mergedHomeScreenConfig);
 
             // Empty values (= blank CustomPrefs segments) must not persist to JS Injector
             omitEmptyPropsFromGroups(mergedHomeScreenConfig.HOME_SECTION_GROUPS);
@@ -1760,33 +1786,9 @@
     function buildSectionContentHTML(sectionType) {
         // Always use currentConfig as source of truth
         if (!currentConfig) return '<div class="listItemBodyText secondary">No configuration loaded.</div>';
-        
-        const mergeNextUp = currentConfig.MERGE_NEXT_UP || false;
-        
-        // Filter groups based on mergeNextUp setting
-        const getFilteredGroups = (groups) => {
-            if (mergeNextUp) {
-                // Filter out groups containing nextUp or continueWatching sections when merged
-                return groups.map(group => {
-                    const filteredSections = (group.sections || []).filter(s => 
-                        s.id !== 'nextUp' && s.id !== 'continueWatching'
-                    );
-                    return { ...group, sections: filteredSections };
-                }).filter(group => group.sections.length > 0);
-            } else {
-                // Filter out continueWatchingAndNextUp section
-                return groups.map(group => {
-                    const filteredSections = (group.sections || []).filter(s => 
-                        s.id !== 'continueWatchingAndNextUp'
-                    );
-                    return { ...group, sections: filteredSections };
-                }).filter(group => group.sections.length > 0);
-            }
-        };
 
         switch (sectionType) {
             case 'home': {
-                //const homeGroups = getFilteredGroups(currentConfig.HOME_SECTION_GROUPS || []);
                 const homeGroups = currentConfig.HOME_SECTION_GROUPS || [];
                 
                 return `
@@ -2228,8 +2230,7 @@
             CACHE: currentConfig?.CACHE,
             SPOTLIGHT_SETTINGS: currentConfig?.SPOTLIGHT_SETTINGS,
             HOME_SETTINGS: currentConfig?.HOME_SETTINGS,
-            USER_HOME_SCREEN_SETTINGS: currentConfig?.USER_HOME_SCREEN_SETTINGS,
-            MERGE_NEXT_UP: currentConfig?.MERGE_NEXT_UP
+            USER_HOME_SCREEN_SETTINGS: currentConfig?.USER_HOME_SCREEN_SETTINGS
         };
     }
 
@@ -2784,82 +2785,6 @@
 
         // Attach initial section row listeners
         attachSectionRowListeners(dialog);
-
-        // Merge Next Up toggle - update currentConfig immediately and refresh sections tab
-        // Use event delegation to prevent stacking listeners when switching tabs
-        /* dialog.addEventListener('click', async (e) => {
-            const btn = e.target.closest('#merge-next-up');
-            if (!btn) return;
-            currentConfig.MERGE_NEXT_UP = btn.checked;
-
-            // Hide continue watching and next up sections if merge next up is enabled
-            const continueWatchingGroup = currentConfig.HOME_SECTION_GROUPS.find(g => g.name === 'Continue Watching');
-            if (continueWatchingGroup) {
-                continueWatchingGroup.sections = continueWatchingGroup.sections.map(s => {
-                    if (s.id === 'continueWatchingAndNextUp') {
-                        s.enabled = currentConfig.MERGE_NEXT_UP;
-                        s.hidden = !currentConfig.MERGE_NEXT_UP;
-                    } else {
-                        s.enabled = !currentConfig.MERGE_NEXT_UP;
-                        s.hidden = currentConfig.MERGE_NEXT_UP;
-                    }
-                    return s;
-                });
-                
-                // Update continueWatchingGroup in currentConfig
-                currentConfig.HOME_SECTION_GROUPS = currentConfig.HOME_SECTION_GROUPS.map(g => {
-                    if (g.name === 'Continue Watching') {
-                        return continueWatchingGroup;
-                    }
-                    return g;
-                });
-            }
-
-            await saveConfig(currentConfig);
-            refreshMainModal();
-        }); */
-
-        /* const mergeNextUpCheckbox = dialog.querySelector('#merge-next-up');
-        if (mergeNextUpCheckbox) {
-            mergeNextUpCheckbox.addEventListener('change', async () => {
-                currentConfig.MERGE_NEXT_UP = mergeNextUpCheckbox.checked;
-
-                // Hide continue watching and next up sections if merge next up is enabled
-                const continueWatchingGroup = currentConfig.HOME_SECTION_GROUPS.find(g => g.name === 'Continue Watching');
-                if (continueWatchingGroup) {
-                    continueWatchingGroup.sections = continueWatchingGroup.sections.map(s => {
-                        if (s.id === 'continueWatchingAndNextUp') {
-                            s.enabled = currentConfig.MERGE_NEXT_UP;
-                            s.hidden = !currentConfig.MERGE_NEXT_UP;
-                        } else {
-                            s.enabled = !currentConfig.MERGE_NEXT_UP;
-                            s.hidden = currentConfig.MERGE_NEXT_UP;
-                        }
-                        return s;
-                    });
-                    
-                    // Update continueWatchingGroup in currentConfig
-                    currentConfig.HOME_SECTION_GROUPS = currentConfig.HOME_SECTION_GROUPS.map(g => {
-                        if (g.name === 'Continue Watching') {
-                            return continueWatchingGroup;
-                        }
-                        return g;
-                    });
-                }
-
-                await saveConfig(currentConfig);
-                // Refresh sections tab if it's currently visible
-                const sectionsTab = dialog.querySelector('#tab-sections');
-                if (sectionsTab && sectionsTab.style.display !== 'none') {
-                    const contentContainer = dialog.querySelector('#section-content');
-                    if (contentContainer) {
-                        const activeNavBtn = dialog.querySelector('.section-type-nav-btn.active');
-                        const activeType = activeNavBtn ? activeNavBtn.dataset.sectionType : 'home';
-                        contentContainer.innerHTML = buildSectionContentHTML(activeType);
-                    }
-                }
-            });
-        } */
         
         // Group toggle-all buttons
         // Use event delegation to prevent stacking listeners when switching tabs
@@ -3459,39 +3384,8 @@
                     const checkbox = document.getElementById(checkboxId);
                     if (checkbox) {
                         checkbox.checked = !checkbox.checked;
-                        // Trigger change event for any listeners (like merge-next-up)
                         checkbox.dispatchEvent(new Event('change', { bubbles: true }));
                         updateToggleSliderUI(btn, checkbox.checked);
-
-                        if (checkboxId === 'merge-next-up') {
-                            currentConfig.MERGE_NEXT_UP = checkbox.checked;
-                
-                            // Hide continue watching and next up sections if merge next up is enabled
-                            const continueWatchingGroup = currentConfig.HOME_SECTION_GROUPS.find(g => g.name === 'Continue Watching');
-                            if (continueWatchingGroup) {
-                                continueWatchingGroup.sections = continueWatchingGroup.sections.map(s => {
-                                    if (s.id === 'continueWatchingAndNextUp') {
-                                        s.enabled = currentConfig.MERGE_NEXT_UP;
-                                        s.hidden = !currentConfig.MERGE_NEXT_UP;
-                                    } else {
-                                        s.enabled = !currentConfig.MERGE_NEXT_UP;
-                                        s.hidden = currentConfig.MERGE_NEXT_UP;
-                                    }
-                                    return s;
-                                });
-                                
-                                // Update continueWatchingGroup in currentConfig
-                                currentConfig.HOME_SECTION_GROUPS = currentConfig.HOME_SECTION_GROUPS.map(g => {
-                                    if (g.name === 'Continue Watching') {
-                                        return continueWatchingGroup;
-                                    }
-                                    return g;
-                                });
-                            }
-                
-                            await saveConfig(currentConfig);
-                            refreshMainModal();
-                        }
                     }
                 } else {
                     // Fallback: just toggle the visual state

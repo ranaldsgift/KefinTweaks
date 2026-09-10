@@ -737,32 +737,6 @@
             });
         }
 
-        // Handle MergeNextUp setting - check if continueWatchingAndNextUp should be enabled
-        const mergeNextUp = await getMergeNextUpSetting();
-        if (mergeNextUp) {
-            // Find and disable nextUp and continueWatching sections when merged
-            const nextUpIndex = merged.findIndex(s => s.id === 'nextUp');
-            const continueWatchingIndex = merged.findIndex(s => s.id === 'continueWatching');
-            if (nextUpIndex !== -1) {
-                merged[nextUpIndex].enabled = false;
-            }
-            if (continueWatchingIndex !== -1) {
-                merged[continueWatchingIndex].enabled = false;
-            }
-            // Enable the merged section
-            const mergedIndex = merged.findIndex(s => s.id === 'continueWatchingAndNextUp');
-            if (mergedIndex !== -1) {
-                merged[mergedIndex].enabled = true;
-                LOG('MergeNextUp enabled: Using continueWatchingAndNextUp section');
-            }
-        } else {
-            // Disable merged section if merge is not enabled
-            const mergedIndex = merged.findIndex(s => s.id === 'continueWatchingAndNextUp');
-            if (mergedIndex !== -1) {
-                merged[mergedIndex].enabled = false;
-            }
-        }
-
         // Filter seasonal sections based on date
         const filteredMerged = merged.filter(section => {
             if (section.startDate && section.endDate) {
@@ -1135,7 +1109,6 @@
             let performanceDuration;
 
             const performanceTimes = [];
-            const mergeNextUp = await getMergeNextUpSetting();
 
             for (const sectionConfig of sortedSections) {
                 const loopStartTime = performance.now();
@@ -1155,19 +1128,6 @@
 
                 if (existingSection) {
                     LOG(`Section already rendered: ${sectionConfig.id}`);
-                    continue;
-                }
-                
-                // Check merge setting for continueWatchingAndNextUp
-                if (sectionConfig.id === 'continueWatchingAndNextUp' && !mergeNextUp) {
-                    LOG(`Skipping continueWatchingAndNextUp: merge not enabled`);
-                    continue;
-                }
-                
-                // Skip individual sections when merge is enabled
-                if (mergeNextUp && 
-                    (sectionConfig.id === 'continueWatching' || sectionConfig.id === 'nextUp')) {
-                    LOG(`Skipping ${sectionConfig.id}: merge enabled, using continueWatchingAndNextUp`);
                     continue;
                 }
                 
@@ -1250,15 +1210,6 @@
         // Use format: Tues Jan 4
         const options = { weekday: 'short', month: 'short', day: 'numeric' };
         return date.toLocaleDateString('en-US', options);
-    }
-
-    async function getMergeNextUpSetting() {
-        const config = await window.KefinHomeScreen.getConfig();
-        const mergeNextUp = config.MERGE_NEXT_UP;
-        if (mergeNextUp !== undefined) {
-            return mergeNextUp;
-        }
-        return false;
     }
 
     let _displayPreferencesPromise = null;
