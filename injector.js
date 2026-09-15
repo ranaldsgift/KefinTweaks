@@ -1190,7 +1190,9 @@
         console.log('[KefinTweaks Injector] Jellyfin major version:', majorVersion ?? 'unknown');
 
         const config = window.KefinTweaksConfig || {};
-        const root = Loader.normalizeRoot(config.kefinTweaksRoot || '');
+        const root = Loader.getResolvedKefinRoot
+            ? Loader.getResolvedKefinRoot(config)
+            : Loader.normalizeRoot(config.kefinTweaksRoot || '');
 
         try {
             const plan = Loader.buildLoadPlan(config, majorVersion, {

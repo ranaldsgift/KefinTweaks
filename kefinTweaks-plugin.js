@@ -205,7 +205,8 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             let injectorScriptContent = null;
             try {
                 const rootRaw = config.kefinTweaksRoot || '';
-                const root = rootRaw.endsWith('/') ? rootRaw : rootRaw + '/';
+                const resolvedRaw = config.kefinTweaksRootResolved || rootRaw;
+                const root = resolvedRaw.endsWith('/') ? resolvedRaw : resolvedRaw + '/';
                 if (root && root !== '/') {
                     await loadKefinTweaksLoaderFromRoot(root);
                     const Loader = window.KefinTweaksLoader;
@@ -217,8 +218,11 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                         } catch (e) {
                             console.warn('[KefinTweaks Installer] Could not resolve Jellyfin major for injector bake:', e);
                         }
+                        const planRoot = Loader.getResolvedKefinRoot
+                            ? Loader.getResolvedKefinRoot(config)
+                            : root;
                         const plan = Loader.buildLoadPlan(config, major, {
-                            root,
+                            root: planRoot,
                             configOnly: config.enabled === false
                         });
                         injectorScriptContent = Loader.buildInjectorScript(plan);
@@ -334,8 +338,20 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         }
 
         try {
-            const root = rootRaw.endsWith('/') ? rootRaw : rootRaw + '/';
-            await loadKefinTweaksLoaderFromRoot(root);
+            const normalize = (r) => {
+                if (!r || typeof r !== 'string') return '';
+                return r.endsWith('/') ? r : r + '/';
+            };
+
+            const expected = normalize(await resolveRootVersion(rootRaw));
+            const current = normalize(config.kefinTweaksRootResolved || '');
+            if (!current || current !== expected) {
+                config.kefinTweaksRootResolved = expected;
+                console.log('[KefinTweaks Installer] Updated kefinTweaksRootResolved:', current || '(none)', '->', expected);
+            }
+
+            const loadRoot = normalize(config.kefinTweaksRootResolved || rootRaw);
+            await loadKefinTweaksLoaderFromRoot(loadRoot);
             const Loader = window.KefinTweaksLoader;
             if (!Loader) {
                 return { ok: false, reason: 'KefinTweaksLoader unavailable' };
@@ -349,8 +365,9 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                 console.warn('[KefinTweaks Installer] Could not resolve Jellyfin major for auto-create:', e);
             }
 
+            const resolvedRoot = Loader.getResolvedKefinRoot(config);
             const plan = Loader.buildLoadPlan(config, major, {
-                root,
+                root: resolvedRoot,
                 configOnly: config.enabled === false
             });
             const injectorScriptContent = Loader.buildInjectorScript(plan);
@@ -898,6 +915,10 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                 }
 
                 const kefinTweaksRoot = buildKefinTweaksRootUrl(sourceType, source);
+                const kefinTweaksRootResolvedRaw = await resolveRootVersion(kefinTweaksRoot);
+                const kefinTweaksRootResolved = kefinTweaksRootResolvedRaw.endsWith('/')
+                    ? kefinTweaksRootResolvedRaw
+                    : kefinTweaksRootResolvedRaw + '/';
                 
                 // Load default config from the selected root
                 let defaultConfig;
@@ -908,6 +929,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                     // Create minimal config if loading fails
                     defaultConfig = {
                         kefinTweaksRoot: kefinTweaksRoot,
+                        kefinTweaksRootResolved: kefinTweaksRootResolved,
                         enabled: true,
                         scripts: {},
                         exclusiveElsewhere: {},
@@ -929,6 +951,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                     kefinTweaksRoot: kefinTweaksRoot,
                     ...(currentConfig || {}),
                     kefinTweaksRoot: kefinTweaksRoot, // Ensure root is updated
+                    kefinTweaksRootResolved: kefinTweaksRootResolved,
                     enabled: enabledState // Update enabled state
                 };
 

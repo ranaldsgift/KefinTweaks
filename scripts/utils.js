@@ -2213,9 +2213,10 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
             // Build / refresh KefinTweaks-injector preload entry (same POST)
             let injectorScriptContent = null;
             try {
-                const root = (configToSave.kefinTweaksRoot || '').endsWith('/')
-                    ? configToSave.kefinTweaksRoot
-                    : (configToSave.kefinTweaksRoot || '') + '/';
+                const resolvedOrSymbolic = configToSave.kefinTweaksRootResolved || configToSave.kefinTweaksRoot || '';
+                const root = resolvedOrSymbolic.endsWith('/')
+                    ? resolvedOrSymbolic
+                    : resolvedOrSymbolic + '/';
                 if (root && root !== '/') {
                     if (!window.KefinTweaksLoader) {
                         await new Promise((resolve, reject) => {
@@ -2237,8 +2238,11 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
                     if (Loader) {
                         Loader.ensureKefinTweaksApi(Loader.SCRIPT_DEFINITIONS);
                         const major = await window.KefinTweaks.getJellyfinMajorVersion();
+                        const planRoot = Loader.getResolvedKefinRoot
+                            ? Loader.getResolvedKefinRoot(configToSave)
+                            : root;
                         const plan = Loader.buildLoadPlan(configToSave, major, {
-                            root,
+                            root: planRoot,
                             configOnly: configToSave.enabled === false
                         });
                         injectorScriptContent = Loader.buildInjectorScript(plan);

@@ -641,6 +641,14 @@
         return root.endsWith('/') ? root : root + '/';
     }
 
+    /**
+     * Prefer kefinTweaksRootResolved (commit SHA / verified URL); fall back to symbolic kefinTweaksRoot.
+     */
+    function getResolvedKefinRoot(config) {
+        const cfg = config || {};
+        return normalizeRoot(cfg.kefinTweaksRootResolved || cfg.kefinTweaksRoot || '');
+    }
+
     function resolveAssetUrl(root, relativePath) {
         if (!relativePath) return null;
         if (/^https?:\/\//i.test(relativePath)) return relativePath;
@@ -677,26 +685,29 @@
     function expandScriptToAssets(scriptDef, root, urlSuffix, thirdParty) {
         const assets = [];
         const suffix = urlSuffix || '';
+        const pushRel = (kind, relativePath, name) => {
+            if (!relativePath) return;
+            if (/^https?:\/\//i.test(relativePath)) {
+                assets.push({ kind: kind, url: relativePath, name: name });
+                return;
+            }
+            const url = resolveAssetUrl(root, relativePath);
+            if (!url) return;
+            assets.push({
+                kind: kind,
+                url: url + suffix,
+                path: relativePath,
+                name: name
+            });
+        };
         for (const tpName of scriptDef.thirdParty || []) {
             const tp = thirdParty[tpName];
             if (!tp) continue;
-            (tp.css || []).forEach((css) => {
-                const url = resolveAssetUrl(root, css);
-                if (url) assets.push({ kind: 'css', url: url + (/^https?:/i.test(css) ? '' : suffix), name: tpName });
-            });
-            (tp.js || []).forEach((js) => {
-                const url = resolveAssetUrl(root, js);
-                if (url) assets.push({ kind: 'js', url: url + (/^https?:/i.test(js) ? '' : suffix), name: tpName });
-            });
+            (tp.css || []).forEach((css) => pushRel('css', css, tpName));
+            (tp.js || []).forEach((js) => pushRel('js', js, tpName));
         }
-        if (scriptDef.css) {
-            const url = resolveAssetUrl(root, scriptDef.css);
-            if (url) assets.push({ kind: 'css', url: url + suffix, name: scriptDef.name });
-        }
-        if (scriptDef.script) {
-            const url = resolveAssetUrl(root, scriptDef.script);
-            if (url) assets.push({ kind: 'js', url: url + suffix, name: scriptDef.name });
-        }
+        if (scriptDef.css) pushRel('css', scriptDef.css, scriptDef.name);
+        if (scriptDef.script) pushRel('js', scriptDef.script, scriptDef.name);
         return assets;
     }
 
@@ -742,7 +753,11 @@
 
     function buildLoadPlan(config, majorVersion, options) {
         options = options || {};
-        const root = normalizeRoot(options.root || (config && config.kefinTweaksRoot) || '');
+        const root = normalizeRoot(
+            options.root
+            || getResolvedKefinRoot(config)
+            || ''
+        );
         if (!root) throw new Error('kefinTweaksRoot is required to build load plan');
         const urlSuffix = options.urlSuffix || '';
         const byName = definitionsByName();
@@ -764,7 +779,7 @@
         const seen = new Set();
         const pushAssets = (list) => {
             list.forEach((a) => {
-                const key = a.kind + '|' + a.url;
+                const key = a.kind + '|' + (a.url || a.path || '');
                 if (seen.has(key)) return;
                 seen.add(key);
                 assets.push(a);
@@ -778,8 +793,18 @@
         });
 
         pushAssets([
-            { kind: 'css', url: resolveAssetUrl(root, CONFIGURATION_FILES.css) + urlSuffix, name: 'configuration' },
-            { kind: 'js', url: resolveAssetUrl(root, CONFIGURATION_FILES.script) + urlSuffix, name: 'configuration' }
+            {
+                kind: 'css',
+                url: resolveAssetUrl(root, CONFIGURATION_FILES.css) + urlSuffix,
+                path: CONFIGURATION_FILES.css,
+                name: 'configuration'
+            },
+            {
+                kind: 'js',
+                url: resolveAssetUrl(root, CONFIGURATION_FILES.script) + urlSuffix,
+                path: CONFIGURATION_FILES.script,
+                name: 'configuration'
+            }
         ]);
 
         const stamp = [
@@ -907,7 +932,22 @@
     }
 
     function buildInjectorScript(loadPlan) {
-        const assetsJson = JSON.stringify(loadPlan.assets || []);
+        // Bake relative paths (and absolute http urls); join with resolved root at runtime
+        const bakeAssets = (loadPlan.assets || []).map((a) => {
+            if (!a) return null;
+            if (a.url && /^https?:\/\//i.test(a.url) && !a.path) {
+                return { kind: a.kind, url: a.url, name: a.name };
+            }
+            if (a.path) {
+                return { kind: a.kind, path: a.path, name: a.name };
+            }
+            if (a.url) {
+                return { kind: a.kind, url: a.url, name: a.name };
+            }
+            return null;
+        }).filter(Boolean);
+
+        const assetsJson = JSON.stringify(bakeAssets);
         const defsJson = JSON.stringify(loadPlan.definitions || SCRIPT_DEFINITIONS);
         const stamp = loadPlan.stamp || '';
         const stampJson = JSON.stringify(stamp);
@@ -916,11 +956,22 @@
             '// kefinTweaksInjectorStamp=' + stamp,
             '(function () {',
             '  if (window.KefinTweaksScriptsPreloaded) return;',
-            '  var root = (window.KefinTweaksConfig && window.KefinTweaksConfig.kefinTweaksRoot) || \'\';',
-            '  var isExperimental = /@experimental(\\/|$)/i.test(String(root));',
-            '  var isOfficialCdn = /cdn\\.jsdelivr\\.net\\/gh\\/ranaldsgift\\/KefinTweaks@/i.test(String(root));',
-            '  if (!String(root).trim()) return;',
+            '  var cfg = window.KefinTweaksConfig || {};',
+            '  if (cfg.enabled !== true) return;',
+            '  var symbolicRoot = cfg.kefinTweaksRoot || \'\';',
+            '  var isExperimental = /@experimental(\\/|$)/i.test(String(symbolicRoot));',
+            '  var isOfficialCdn = /cdn\\.jsdelivr\\.net\\/gh\\/ranaldsgift\\/KefinTweaks@/i.test(String(symbolicRoot));',
+            '  if (!String(symbolicRoot).trim()) return;',
             '  if (!isExperimental && isOfficialCdn) return;',
+            '  var resolvedRoot = String(cfg.kefinTweaksRootResolved || cfg.kefinTweaksRoot || \'\').trim();',
+            '  if (!resolvedRoot) return;',
+            '  if (resolvedRoot.charAt(resolvedRoot.length - 1) !== \'/\') resolvedRoot += \'/\';',
+            '  function joinAssetUrl(relativePath) {',
+            '    if (!relativePath) return null;',
+            '    if (/^https?:\\/\\//i.test(relativePath)) return relativePath;',
+            '    var base = resolvedRoot + \'scripts/\';',
+            '    try { return new URL(relativePath, base).href; } catch (e) { return base + relativePath; }',
+            '  }',
             '  window.KefinTweaksScriptsPreloaded = true;',
             '  window.KefinTweaksInjectorStamp = ' + stampJson + ';',
             '  var SCRIPT_DEFINITIONS_BAKED = ' + defsJson + ';',
@@ -972,18 +1023,20 @@
             '  var assets = ' + assetsJson + ';',
             '  for (var i = 0; i < assets.length; i++) {',
             '    var a = assets[i];',
-            '    if (!a || !a.url) continue;',
+            '    if (!a) continue;',
+            '    var href = a.url || joinAssetUrl(a.path);',
+            '    if (!href) continue;',
             '    if (a.kind === \'css\') {',
-            '      if (document.querySelector(\'link[href="\' + a.url + \'"]\')) continue;',
+            '      if (document.querySelector(\'link[href="\' + href + \'"]\')) continue;',
             '      var l = document.createElement(\'link\');',
             '      l.rel = \'stylesheet\';',
             '      l.type = \'text/css\';',
-            '      l.href = a.url;',
+            '      l.href = href;',
             '      document.head.appendChild(l);',
             '    } else {',
-            '      if (document.querySelector(\'script[src="\' + a.url + \'"]\')) continue;',
+            '      if (document.querySelector(\'script[src="\' + href + \'"]\')) continue;',
             '      var s = document.createElement(\'script\');',
-            '      s.src = a.url;',
+            '      s.src = href;',
             '      s.async = false;',
             '      document.head.appendChild(s);',
             '    }',
@@ -1183,6 +1236,7 @@
         isScriptCompatible: isScriptCompatible,
         mergeEnabledScripts: mergeEnabledScripts,
         normalizeRoot: normalizeRoot,
+        getResolvedKefinRoot: getResolvedKefinRoot,
         resolveAssetUrl: resolveAssetUrl,
         buildLoadPlan: buildLoadPlan,
         buildInjectorScript: buildInjectorScript,
