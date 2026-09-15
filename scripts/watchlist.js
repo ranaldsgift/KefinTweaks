@@ -2310,25 +2310,17 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			LOG('Statistics tab already initialized or fetching');
 			return;
 		}
-		
-		// Statistics depends on progress and history data
-		if (!tabStates.progress.isDataFetched || !tabStates.history.isDataFetched) {
-			LOG('Statistics tab waiting for progress and history data');
-			return;
-		}
-		
+
 		LOG('Initializing statistics tab');
 		tabStates.statistics.isFetching = true;
-		
-		try {
-			// Statistics are calculated from existing cache data
-			tabStates.statistics.isDataFetched = true;
-			tabStates.statistics.isFetching = false;
 
+		try {
 			await renderStatisticsContent();
+			tabStates.statistics.isDataFetched = true;
 			LOG('Statistics tab initialization complete');
 		} catch (err) {
 			ERR('Error initializing statistics tab:', err);
+		} finally {
 			tabStates.statistics.isFetching = false;
 		}
 	}
@@ -5670,40 +5662,29 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 
 	async function renderStatisticsContent() {
 		LOG('Rendering Statistics content');
-		
+
+		const watchlistSection = getWatchlistSection();
+		const statisticsTab = watchlistSection ? watchlistSection.querySelector('div[data-tab="statistics"]') : null;
+		if (!statisticsTab) return;
+
 		try {
-			// Check if both data sources are fully loaded
-			const progressDataReady = progressCache.allDataLoaded;
-			const historyDataReady = movieCache.allDataLoaded;
-			
-			const watchlistSection = getWatchlistSection();
-			const statisticsTab = watchlistSection ? watchlistSection.querySelector('div[data-tab="statistics"]') : null;
-			
-			if (!statisticsTab) return;
-			
-			if (!progressDataReady || !historyDataReady) {
-				// Set data-ready="false" to show loading container
-				statisticsTab.setAttribute('data-ready', 'false');
-				return;
-			}
-			
-			// Both data sources are ready, set data-ready="true" to show content
-			statisticsTab.setAttribute('data-ready', 'true');
-			
-			// Both data sources are ready, proceed with statistics rendering
-			// Ensure we have all progress data loaded
-			await fetchAllProgressData(true);
-			
-			// Update statistics with all progress data
+			statisticsTab.setAttribute('data-ready', 'false');
+
+			await Promise.all([
+				fetchAllProgressData(true),
+				fetchWatchedMovies(true)
+			]);
+
+			tabStates.progress.isDataFetched = true;
+			tabStates.history.isDataFetched = true;
+
 			await updateProgressStatistics(progressCache.data);
-			
+			statisticsTab.setAttribute('data-ready', 'true');
+
 			LOG('Statistics content rendered successfully');
 		} catch (err) {
 			ERR('Error rendering statistics content:', err);
-			// Set data-ready="false" on error
-			if (statisticsTab) {
-				statisticsTab.setAttribute('data-ready', 'false');
-			}
+			statisticsTab.setAttribute('data-ready', 'false');
 		}
 	}
 
