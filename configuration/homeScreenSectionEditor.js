@@ -11,11 +11,13 @@
 
     const QUERY_WIZARD_STEPS = ['type', 'parent', 'query', 'settings', 'appearance', 'confirm'];
     const CUSTOM_WIZARD_STEPS = ['type', 'customItems', 'settings', 'appearance', 'confirm'];
+    const EXTERNAL_WIZARD_STEPS = ['type', 'externalList', 'settings', 'appearance', 'confirm'];
     const WIZARD_STEP_LABELS = {
         type: 'Type',
         parent: 'Selection',
         query: 'Query',
         customItems: 'Create Items',
+        externalList: 'External List',
         appearance: 'Appearance',
         settings: 'Settings',
         confirm: 'Confirm'
@@ -26,6 +28,13 @@
         label: 'Custom Item Section',
         description: 'Show items with custom images, links and names. These items can link to existing Jellyfin pages or to external websites. Use this to link your other services, share client download locations, provide help information, etc.',
         icon: 'widgets'
+    };
+
+    const EXTERNAL_TYPE = {
+        type: 'External',
+        label: 'External List Section',
+        description: 'Match an MDBList (or compatible) URL against your Jellyfin library by IMDb/TMDB provider IDs. Requires an MDBList API key in Home Screen General settings.',
+        icon: 'link'
     };
 
     const CUSTOM_IMAGE_FIELDS = [
@@ -77,11 +86,17 @@
     // --- Wizard parent data (live Jellyfin API) ---
 
     function getWizardSteps(state) {
-        return state?.parentType === 'Custom' ? CUSTOM_WIZARD_STEPS : QUERY_WIZARD_STEPS;
+        if (state?.parentType === 'Custom') return CUSTOM_WIZARD_STEPS;
+        if (state?.parentType === 'External') return EXTERNAL_WIZARD_STEPS;
+        return QUERY_WIZARD_STEPS;
     }
 
     function isCustomType(state) {
         return state?.parentType === 'Custom';
+    }
+
+    function isExternalType(state) {
+        return state?.parentType === 'External';
     }
 
     function getStepIndex(step, state) {
@@ -250,6 +265,9 @@
                 break;
             case 'customItems':
                 collectCustomItemsFromForm(root, wizardState);
+                break;
+            case 'externalList':
+                collectExternalListFromForm(root, wizardState);
                 break;
             case 'appearance':
                 collectAppearanceStepFromForm(root, wizardState);
@@ -1093,6 +1111,12 @@
                 }))
             });
         }
+        if (isExternalType(wizardState)) {
+            return JSON.stringify({
+                parentType: 'External',
+                externalListUrls: wizardState.externalListUrls || []
+            });
+        }
         const parents = wizardState.parents || [];
         return JSON.stringify({
             parentType: wizardState.parentType,
@@ -1372,6 +1396,12 @@
         `;
     }
 
+    function collectExternalListFromForm(root, wizardState) {
+        const inputs = root.querySelectorAll('[id^="hsse-external-list-url-"]');
+        wizardState.externalListUrls = Array.from(inputs).map((el) => (el.value || '').trim()).filter(Boolean);
+        if (!wizardState.externalListUrls.length) wizardState.externalListUrls = [''];
+    }
+
     function collectSettingsFromForm(root, wizardState) {
         const nameEl = root.querySelector('#hsse-wizard-sectionName');
         const groupSelect = root.querySelector('#hsse-wizard-sectionGroup');
@@ -1410,19 +1440,23 @@
 
     function renderConfirmOverview(wizardState, config) {
         const isCustom = isCustomType(wizardState);
-        const meta = isCustom ? CUSTOM_TYPE : PARENT_TYPES.find(t => t.type === wizardState.parentType);
+        const isExternal = isExternalType(wizardState);
+        const meta = isCustom ? CUSTOM_TYPE
+            : (isExternal ? EXTERNAL_TYPE : PARENT_TYPES.find(t => t.type === wizardState.parentType));
         const parents = wizardState.parents || [];
         const selectionLabel = isCustom
             ? ((wizardState.customItems || []).map(i => i.name?.trim()).filter(Boolean).join(', ') || '—')
-            : (parents.length ? parents.map(p => p.name).join(', ') : '—');
+            : (isExternal
+                ? ((wizardState.externalListUrls || []).filter(Boolean).join(', ') || '—')
+                : (parents.length ? parents.map(p => p.name).join(', ') : '—'));
         const rows = [
             ['Section Name', wizardState.sectionName || '—'],
             ['Section Group', resolveGroupName(wizardState, config)],
             ['Based On', meta?.label || wizardState.parentType || '—'],
-            [isCustom ? 'Items' : 'Selection', selectionLabel]
+            [isCustom ? 'Items' : (isExternal ? 'List URLs' : 'Selection'), selectionLabel]
         ];
 
-        if (!isCustom) {
+        if (!isCustom && !isExternal) {
             rows.push(
                 ['Item Types', wizardState.includeItemTypes.length ? formatItemTypesLabel(wizardState.includeItemTypes) : 'All types'],
                 ['Sort By', wizardState.sortBy === 'Default' ? 'Default' : `${humanizeLabel(wizardState.sortBy)} (${wizardState.sortOrder})`],
@@ -1525,6 +1559,39 @@
                 renderMode: renderMode || 'Normal',
                 cardFormat: renderMode === 'Spotlight' ? undefined : (cardFormat || 'Poster'),
                 items,
+                queries: []
+            };
+
+            applySectionVisibilityToSection(section, wizardState, baseSection);
+
+            const targetGroup = resolveGroupName(wizardState, wizardState._config);
+            if (targetGroup) {
+                section._targetGroupName = targetGroup;
+            }
+
+            if (renderMode === 'Spotlight' || renderMode === 'Random') {
+                section.spotlightConfig = {
+                    spotlightLayout: spotlightLayout || 'Border',
+                    spotlightSize: spotlightSize || 'normal',
+                    tileCount: Math.max(1, Math.min(3, parseInt(tileCount, 10) || 1)),
+                    panAnimation: panAnimation !== false
+                };
+            }
+
+            return section;
+        }
+
+        if (parentType === 'External') {
+            const urls = (wizardState.externalListUrls || []).map((u) => String(u || '').trim()).filter(Boolean);
+            const section = {
+                ...baseSection,
+                id: baseSection.id,
+                name: sectionName || 'External List',
+                enabled: true,
+                isCustom: true,
+                renderMode: renderMode || 'Normal',
+                cardFormat: renderMode === 'Spotlight' ? undefined : (cardFormat || 'Poster'),
+                externalListUrls: urls,
                 queries: []
             };
 
@@ -1820,6 +1887,27 @@
         `;
     }
 
+    function renderExternalListHTML(wizardState) {
+        const urls = Array.isArray(wizardState.externalListUrls) && wizardState.externalListUrls.length
+            ? wizardState.externalListUrls
+            : [''];
+        const apiKey = window.LibraryCacheUtils?.getLibraryCacheSettings?.()?.mdblistApiKey
+            || window.KefinHomeConfig2?.LIBRARY_CACHE?.mdblistApiKey
+            || '';
+        const warn = !String(apiKey || '').trim()
+            ? `<p class="listItemBodyText secondary" style="color: var(--error-color, #e57373);">MDBList API key is not configured. Add it under Home Screen → General settings before using External Lists.</p>`
+            : '';
+        return `
+            <div class="hsse-section-block">
+                <div class="listItemBodyText hsse-section-label">External List URLs</div>
+                <p class="listItemBodyText secondary hsse-field-hint">Paste one or more MDBList URLs. Matched against your library by IMDb/TMDB ids.</p>
+                ${warn}
+                ${urls.map((url, index) => hsseBuildTextInput(`hsse-external-list-url-${index}`, url || '', `List URL ${index + 1}`, 'url', 'https://mdblist.com/...')).join('')}
+                <button type="button" class="emby-button raised" data-hsse-action="wizard-add-external-list-url" style="margin-top: 0.75em;">Add URL</button>
+            </div>
+        `;
+    }
+
     function renderWizardBodyHTML(wizardState, config) {
         const step = wizardState.step;
 
@@ -1842,12 +1930,23 @@
                             <div class="listItemBodyText secondary hsse-type-desc">${escapeHtml(CUSTOM_TYPE.description)}</div>
                         </div>
                     </button>
+                    <button type="button" class="hsse-type-card hsse-type-card-span${wizardState.parentType === 'External' ? ' hsse-active' : ''}" data-hsse-action="wizard-select-type" data-type="External">
+                        ${renderMaterialIcon(EXTERNAL_TYPE.icon, 'hsse-type-icon')}
+                        <div>
+                            <div class="listItemBodyText hsse-type-label">${escapeHtml(EXTERNAL_TYPE.label)}</div>
+                            <div class="listItemBodyText secondary hsse-type-desc">${escapeHtml(EXTERNAL_TYPE.description)}</div>
+                        </div>
+                    </button>
                 </div>
             `;
         }
 
         if (step === 'customItems') {
             return renderCustomItemsHTML(wizardState);
+        }
+
+        if (step === 'externalList') {
+            return renderExternalListHTML(wizardState);
         }
 
         if (step === 'parent') {
@@ -1960,6 +2059,7 @@
                 return `Choose a ${meta?.label?.toLowerCase() || 'item'}`;
             }
             if (wizardState.step === 'customItems') return 'Create Items';
+            if (wizardState.step === 'externalList') return 'External List';
             return 'Create a Home Screen Section';
         }
         return 'Create a Section';
@@ -3748,6 +3848,7 @@
             parentListError: null,
             personSearchResults: [],
             customItems: [],
+            externalListUrls: [''],
             customItemAdditionalExpanded: {},
             customItemEditorIndex: null,
             includeItemTypes: [],
@@ -4116,17 +4217,35 @@
                         if (selected === 'Custom') {
                             wizardState.customItems = [createBlankCustomItem()];
                             wizardState.customItemEditorIndex = null;
+                            wizardState.externalListUrls = [''];
                             advanceToStep(root, 'customItems');
+                        } else if (selected === 'External') {
+                            wizardState.customItems = [];
+                            wizardState.externalListUrls = wizardState.externalListUrls?.length
+                                ? wizardState.externalListUrls
+                                : [''];
+                            advanceToStep(root, 'externalList');
                         } else {
                             wizardState.customItems = [];
+                            wizardState.externalListUrls = [''];
                             advanceToStep(root, 'parent');
                         }
                     } else if (selected === 'Custom') {
                         wizardState.customItemEditorIndex = null;
                         advanceToStep(root, 'customItems');
+                    } else if (selected === 'External') {
+                        advanceToStep(root, 'externalList');
                     } else {
                         advanceToStep(root, 'parent');
                     }
+                    break;
+                }
+
+                case 'wizard-add-external-list-url': {
+                    collectExternalListFromForm(root, wizardState);
+                    if (!Array.isArray(wizardState.externalListUrls)) wizardState.externalListUrls = [''];
+                    wizardState.externalListUrls.push('');
+                    refreshModal(root);
                     break;
                 }
 
@@ -4295,6 +4414,14 @@
                         if (!hasValidCustomItems(wizardState.customItems)) break;
                         if (!wizardState.sectionName?.trim()) {
                             wizardState.sectionName = 'Custom Section';
+                        }
+                    }
+                    if (wizardState.step === 'externalList') {
+                        const urls = (wizardState.externalListUrls || []).map((u) => String(u || '').trim()).filter(Boolean);
+                        if (!urls.length) break;
+                        wizardState.externalListUrls = urls;
+                        if (!wizardState.sectionName?.trim()) {
+                            wizardState.sectionName = 'External List';
                         }
                     }
                     if (wizardState.step === 'settings' && wizardState.sectionVisibility === 'seasonal') {

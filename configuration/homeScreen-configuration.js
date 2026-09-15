@@ -43,6 +43,10 @@
             on: 'Allows users to create pinned sections on their Home Screen from library items by adding a "Pin To Home" button in the item context menu.',
             off: 'Users cannot pin items to their Home Screen.'
         },
+        'userHome-pairNativeHomeSections': {
+            on: 'Sections with a matching Native Jellyfin section are automatically kept in sync with your KefinTweaks Home Screen.',
+            off: 'KefinTweaks will disable all native Jellyfin home screen sections in the native Jellyfin User Preferences. When pairing is disabled, the official Jellyfin Android TV and Roku clients will have no sections rendered on the home screen. You should only disable this when you do not use either of those clients. Disabling will have a performance benefit when loading the home screen.'
+        },
         'home-fadeInSections': {
             on: 'Sections will be hidden when they are rendered and will fade up and in as they enter the window when you scroll.',
             off: 'Sections will be rendered normally without any fade in animation.'
@@ -62,6 +66,10 @@
         'home-ensureThumbsForPopularTVNetworks': {
             on: 'Only Studios with a valid image will be rendered in Popular Studios sections.',
             off: 'Studios without any image may be rendered in Popular Studios sections. You can enable the Optional CSS Module "Studio Thumbnails" to overlay a background with the Studio Name on items without an image.'
+        },
+        'home-loadPeopleEpisodeData': {
+            on: 'Loads all Person appearances from all episodes in your library. This data takes much longer to cache than just the Movies/Series level data.',
+            off: 'Person appearance data is limited to only Movies and Series.'
         }
     };
 
@@ -71,8 +79,8 @@
             off: 'No Discovery Sections will be generated.'
         },
         'discovery-infiniteScroll': {
-            on: 'Discovery Sections will render automatically when the user scrolls near the bottom of the page.',
-            off: 'Discovery Sections will only be rendered when the user presses the "Load More" button.'
+            on: 'Discovery Sections will render automatically when the user scrolls near the bottom of the page (one group per scroll; scroll again for more).',
+            off: 'Show “Discover More” at the bottom. Scroll again while at the bottom to load the next discovery group.'
         },
         'discovery-renderSpotlightAboveMatching': {
             on: 'Top Rated Genre/Studio and regular Genre/Studio sections will appear next to each other',
@@ -113,7 +121,43 @@
     let currentGlobalSettingsSubTab = 'general'; // Track active sub-tab in Global Settings (general, spotlight, discovery, cache)
     let globalSettingsSaveTimer = null;
     const UPDATE_ALL_CONFIRM_MODAL_ID = 'kefin-homescreen-config-update-all-confirm';
+    const RESTORE_DEFAULTS_MODAL_ID = 'kefin-homescreen-config-restore-defaults';
     const COMMUNITY_IMPORT_MODAL_ID = 'kefin-homescreen-community-import';
+    const MAX_PEOPLE_COUNT_OPTIONS = [100, 250, 500, 1000, 2500, 5000];
+    const RESTORE_RETAIN_TOGGLE_DESCRIPTIONS = {
+        'restore-retain-status': {
+            on: 'Current Default Status and User Configuration values will be unchanged.',
+            off: 'Default Status and User Configuration will be restored to their defaults.'
+        },
+        'restore-retain-name-caption': {
+            on: 'Current Section Name and Caption values will be unchanged.',
+            off: 'Section Name and Caption will be restored to their defaults.'
+        },
+        'restore-retain-appearance': {
+            on: 'Current Section Appearance settings will be unchanged.',
+            off: 'Section Appearance settings will be restored to their defaults.'
+        },
+        'restore-retain-advanced': {
+            on: 'Current Section Advanced Options will be unchanged.',
+            off: 'Section Advanced Options will be restored to their defaults.'
+        },
+        'restore-retain-customs': {
+            on: 'Current Custom Sections will be unchanged.',
+            off: 'All custom sections will be removed.'
+        }
+    };
+    const RESTORE_APPEARANCE_KEYS = [
+        'renderMode', 'cardFormat', 'spotlight', 'spotlightConfig',
+        'borderStyle', 'borderColor',
+        'hideCardTitles', 'cardTitleVisibility',
+        'cardTitlePosition', 'cardTitleCapitalization', 'cardTitleFontFamily',
+        'cardTitleFontSize', 'cardTitleColor',
+        'itemsLayout', 'useGaplessCards', 'sectionCssClass', 'hideName'
+    ];
+    const RESTORE_ADVANCED_KEYS = [
+        'ttl', 'sortBy', 'sortOrder', 'sortOrderDirection',
+        'minimumItems', 'itemLimit', 'flattenSeries', 'limitBeforeSort', 'hideWatched'
+    ];
     const TTL_UNIT_OPTIONS = [
         { value: 'seconds', ms: 1000 },
         { value: 'minutes', ms: 60000 },
@@ -155,28 +199,31 @@
         return flattened;
     }
 
-    const CONTINUE_WATCHING_SECTION_IDS = new Set([
-        'continueWatching',
-        'nextUp',
-        'continueWatchingAndNextUp'
-    ]);
+    const POPULAR_STUDIO_SECTION_IDS = new Set(['popularTVStudios', 'popularMovieStudios', 'popularStudios']);
 
     /**
-     * Clear MERGE_NEXT_UP-era hidden flags so CW / Next Up / combined are independent sections.
+     * Sync HOME_SETTINGS.ensureThumbsForPopularTVNetworks onto popular studio section queryOptions.
+     * When on: ImageTypes ['Thumb'] (API + postProcessItems filter). When off: remove ImageTypes.
      */
-    function normalizeContinueWatchingVisibility(config) {
+    function syncEnsureThumbsOnPopularStudios(config) {
         if (!config) return;
-        const groupKeys = ['HOME_SECTION_GROUPS', 'SEASONAL_SECTION_GROUPS', 'DISCOVERY_SECTION_GROUPS', 'CUSTOM_SECTION_GROUPS'];
-        groupKeys.forEach((key) => {
-            (config[key] || []).forEach((group) => {
-                (group.sections || []).forEach((section) => {
-                    if (section?.id && CONTINUE_WATCHING_SECTION_IDS.has(section.id)) {
-                        section.hidden = false;
+        const ensureThumbs = config.HOME_SETTINGS?.ensureThumbsForPopularTVNetworks === true;
+        const groupKeys = ['HOME_SECTION_GROUPS', 'SEASONAL_SECTION_GROUPS', 'CUSTOM_SECTION_GROUPS', 'DISCOVERY_SECTION_GROUPS'];
+        for (const key of groupKeys) {
+            const sections = flattenSectionGroups(config[key] || []);
+            for (const section of sections) {
+                if (!section || !POPULAR_STUDIO_SECTION_IDS.has(section.id) || !Array.isArray(section.queries)) continue;
+                for (const query of section.queries) {
+                    if (!query) continue;
+                    if (ensureThumbs) {
+                        query.queryOptions = { ...(query.queryOptions || {}), ImageTypes: ['Thumb'] };
+                    } else if (query.queryOptions && Object.prototype.hasOwnProperty.call(query.queryOptions, 'ImageTypes')) {
+                        const { ImageTypes, ...rest } = query.queryOptions;
+                        query.queryOptions = rest;
                     }
-                });
-            });
-        });
-        delete config.MERGE_NEXT_UP;
+                }
+            }
+        }
     }
 
     /**
@@ -951,10 +998,19 @@
                 CACHE: { ...defaults.CACHE, ...(existingConfig.CACHE || {}) },
                 SPOTLIGHT_SETTINGS: { ...defaults.SPOTLIGHT_SETTINGS, ...(existingConfig.SPOTLIGHT_SETTINGS || {}) },
                 HOME_SETTINGS: { ...defaults.HOME_SETTINGS, ...(existingConfig.HOME_SETTINGS || {}) },
-                USER_HOME_SCREEN_SETTINGS: { ...defaults.USER_HOME_SCREEN_SETTINGS, ...(existingConfig.USER_HOME_SCREEN_SETTINGS || {}) }
+                USER_HOME_SCREEN_SETTINGS: { ...defaults.USER_HOME_SCREEN_SETTINGS, ...(existingConfig.USER_HOME_SCREEN_SETTINGS || {}) },
+                LIBRARY_CACHE: { ...defaults.LIBRARY_CACHE, ...(existingConfig.LIBRARY_CACHE || {}) }
             };
 
-            normalizeContinueWatchingVisibility(mergedConfig);
+            // Soft-migrate legacy DISCOVERY_SETTINGS.minPeopleAppearances → HOME_SETTINGS mins
+            const existingHome = existingConfig.HOME_SETTINGS || {};
+            const legacyPeopleMin = existingConfig.DISCOVERY_SETTINGS?.minPeopleAppearances;
+            if (legacyPeopleMin != null && existingHome.minPeopleAppearancesTotal == null) {
+                mergedConfig.HOME_SETTINGS.minPeopleAppearancesTotal = legacyPeopleMin;
+                mergedConfig.HOME_SETTINGS.minPeopleAppearancesMovies = legacyPeopleMin;
+                mergedConfig.HOME_SETTINGS.minPeopleAppearancesSeries = legacyPeopleMin;
+                mergedConfig.HOME_SETTINGS.minPeopleAppearancesEpisodes = legacyPeopleMin;
+            }
 
             // Add ENABLED_NORMAL_SECTIONS and ENABLED_DISCOVERY_SECTIONS
             // ENABLED_NORMAL_SECTIONS is all enabled sections from HOME_SECTION_GROUPS, SEASONAL_SECTION_GROUPS, and CUSTOM_SECTION_GROUPS that aren't discovery sections
@@ -1547,10 +1603,12 @@
                 USER_HOME_SCREEN_SETTINGS: {
                     ...(savedHomeScreenConfig.USER_HOME_SCREEN_SETTINGS || {}),
                     ...(config.USER_HOME_SCREEN_SETTINGS || {})
+                },
+                LIBRARY_CACHE: {
+                    ...(savedHomeScreenConfig.LIBRARY_CACHE || {}),
+                    ...(config.LIBRARY_CACHE || {})
                 }
             };
-
-            normalizeContinueWatchingVisibility(mergedHomeScreenConfig);
 
             // Empty values (= blank CustomPrefs segments) must not persist to JS Injector
             omitEmptyPropsFromGroups(mergedHomeScreenConfig.HOME_SECTION_GROUPS);
@@ -1761,7 +1819,7 @@
         const sectionTypes = [...new Set(sections.map(s => s.sectionType))];
         
         return `
-            <div class="section-group" data-group-id="${groupId}" data-group-name="${group.name || 'Unnamed Group'}" style="margin-bottom: 1.5em; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 1em;">
+            <div class="section-group" data-group-id="${groupId}" data-group-name="${group.name || 'Unnamed Group'}" style="margin-bottom: 1.5em;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75em;">
                     <div>
                         <input type="text" class="listItemBodyText editable-group-name" data-group-id="${groupId}" value="${(group.name || 'Unnamed Group').replace(/"/g, '&quot;')}" size="${Math.max((group.name || 'Unnamed Group').length, 15)}" style="font-weight: 500; font-size: 1.1em; cursor: text; padding: 0.25em 0.5em; border-radius: 3px; transition: background-color 0.2s; border: none; outline: none; background: transparent; font-family: inherit; color: inherit;" onmouseover="this.style.backgroundColor='rgba(255,255,255,0.05)'" onmouseout="this.style.backgroundColor='transparent'" onfocus="this.style.backgroundColor='rgba(255,255,255,0.1)'" onblur="this.style.backgroundColor='transparent'" oninput="this.size=Math.max(this.value.length,15)" />
@@ -1870,6 +1928,10 @@
                     <button type="button" class="emby-button raised hsc-toolbar-update-btn" title="Save and apply these settings to all users.">
                         <span class="material-icons" style="margin-right: 0.35em; font-size: 1.1em; vertical-align: middle;">sync</span>
                         <span>Update</span>
+                    </button>
+                    <button type="button" class="emby-button raised hsc-toolbar-restore-defaults-btn" title="Restore default Home Screen sections">
+                        <span class="material-icons" style="margin-right: 0.35em; font-size: 1.1em; vertical-align: middle;">restart_alt</span>
+                        <span>Restore Defaults</span>
                     </button>
                 </div>
 
@@ -1984,18 +2046,48 @@
         const seasonal = currentConfig.SEASONAL_THEME_SETTINGS || {};
         const homeSettings = currentConfig.HOME_SETTINGS || {};
         const userHomeScreen = currentConfig.USER_HOME_SCREEN_SETTINGS || {};
+        const libraryCache = currentConfig.LIBRARY_CACHE || {};
         const D = GENERAL_TOGGLE_DESCRIPTIONS;
+        const maxPeopleCount = homeSettings.maxPeopleCount ?? 500;
+        const maxPeopleOptions = MAX_PEOPLE_COUNT_OPTIONS.map((n) => ({ value: String(n), label: String(n) }));
+        const settingsGroupStyle = 'margin-bottom: 1.5em; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 1em;';
         return `
             <div class="hsc-settings-grid hsc-settings-grid-2">
                 ${hscToggleCard('userHome-inlineConfigure', userHomeScreen.inlineConfigure !== false, 'Inline Section Configuration', D)}
                 ${hscToggleCard('userHome-pinning', userHomeScreen.pinning !== false, 'Pin To Home', D)}
+                <div class="hsc-settings-span-2">
+                    ${hscToggleCard('userHome-pairNativeHomeSections', userHomeScreen.pairNativeHomeSections !== false, 'Pair Home Sections to Native Jellyfin User Preferences', D)}
+                </div>
                 ${hscToggleCard('home-fadeInSections', homeSettings.fadeInSections === true, 'Fade In Sections', D)}
-                ${hscToggleCard('home-showStaleDataBeforeRefresh', homeSettings.SHOW_STALE_DATA_BEFORE_REFRESH === true, 'Show Stale Items', D)}
+                ${hscToggleCard('home-showStaleDataBeforeRefresh', homeSettings.showStaleDataBeforeRefresh === true, 'Show Stale Items', D)}
                 ${hscToggleCard('seasonal-enableSeasonalAnimations', seasonal.enableSeasonalAnimations !== false, 'Seasonal Animations', D)}
                 ${hscToggleCard('seasonal-enableSeasonalBackground', seasonal.enableSeasonalBackground !== false, 'Seasonal Backgrounds', D)}
                 <div class="hsc-settings-span-2">
                     ${hscToggleCard('home-ensureThumbsForPopularTVNetworks', homeSettings.ensureThumbsForPopularTVNetworks === true, 'Require Studio Thumbs', D)}
                 </div>
+            </div>
+            <div class="hsc-settings-group" style="${settingsGroupStyle}">
+                <div class="listItemBodyText" style="font-weight: 500; font-size: 1.1em;">Top People</div>
+                <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-top: 0.25em; margin-bottom: 0.75em;">
+                    Sections related to Top People from your library will use these values to determine which People qualify as "Top People". If a Person meets any of the minimum criteria listed below, they will be considered a Top Person. Top People will be sorted based on their total number of appearances, caching only the Top X number of people based on the Maximum Person Count.
+                </div>
+                <div class="hsc-settings-span-2" style="margin-bottom: 0.75em;">
+                    ${hscToggleCard('home-loadPeopleEpisodeData', homeSettings.loadPeopleEpisodeData === true, 'Load Episode Data for People', D)}
+                </div>
+                <div class="hsc-settings-grid hsc-settings-grid-2">
+                    ${buildTextInput('home-minPeopleAppearancesTotal', homeSettings.minPeopleAppearancesTotal ?? 10, 'Minimum Total Appearances', 'number')}
+                    ${buildTextInput('home-minPeopleAppearancesMovies', homeSettings.minPeopleAppearancesMovies ?? 10, 'Minimum Movies Appearances', 'number')}
+                    ${buildTextInput('home-minPeopleAppearancesSeries', homeSettings.minPeopleAppearancesSeries ?? 10, 'Minimum Series Appearances', 'number')}
+                    ${buildTextInput('home-minPeopleAppearancesEpisodes', homeSettings.minPeopleAppearancesEpisodes ?? 10, 'Minimum Episodes Appearances', 'number')}
+                    ${buildSelect('home-maxPeopleCount', maxPeopleOptions, String(maxPeopleCount), 'Maximum Person Count')}
+                </div>
+            </div>
+            <div class="hsc-settings-group" style="${settingsGroupStyle}">
+                <div class="listItemBodyText" style="font-weight: 500; font-size: 1.1em;">External Integrations</div>
+                <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-top: 0.25em; margin-bottom: 0.75em;">
+                    Enter your personal API keys for the services below to enable support for home sections based on external lists.
+                </div>
+                ${buildTextInput('libraryCache-mdblistApiKey', libraryCache.mdblistApiKey || '', 'MDBList API Key', 'password', 'Required for External List sections')}
             </div>
         `;
     }
@@ -2021,8 +2113,8 @@
                     ${hscToggleCard('discovery-randomizeOrder', discovery.randomizeOrder === true, 'Randomize Order', D)}
                     ${hscToggleCard('discovery-fadeInSections', discovery.fadeInSections === true, 'Fade In Sections', D)}
                     ${buildTextInput('discovery-spotlightDiscoveryChance', discovery.spotlightDiscoveryChance ?? 0.5, 'Spotlight Discovery Chance (0-1)', 'number')}
-                    ${buildTextInput('discovery-minPeopleAppearances', discovery.minPeopleAppearances || 10, 'Top Person Appearance Count', 'number')}
                     ${buildTextInput('discovery-minGenreMovieCount', discovery.minGenreMovieCount || 50, 'Genre Movie Count', 'number')}
+                    ${buildTextInput('discovery-minGenreSeriesCount', discovery.minGenreSeriesCount || 10, 'Genre Series Count', 'number')}
                 </div>
             </div>
         `;
@@ -2149,8 +2241,8 @@
                 ...(currentConfig.DISCOVERY_SETTINGS || {}),
                 enabled: root.querySelector('#discovery-enabled')?.checked !== false,
                 infiniteScroll: root.querySelector('#discovery-infiniteScroll')?.checked !== false,
-                minPeopleAppearances: parseInt(root.querySelector('#discovery-minPeopleAppearances')?.value || '10', 10),
                 minGenreMovieCount: parseInt(root.querySelector('#discovery-minGenreMovieCount')?.value || '50', 10),
+                minGenreSeriesCount: parseInt(root.querySelector('#discovery-minGenreSeriesCount')?.value || '10', 10),
                 spotlightDiscoveryChance: parseFloat(root.querySelector('#discovery-spotlightDiscoveryChance')?.value || '0.5'),
                 renderSpotlightAboveMatching: root.querySelector('#discovery-renderSpotlightAboveMatching')?.checked === true,
                 randomizeOrder: root.querySelector('#discovery-randomizeOrder')?.checked === true,
@@ -2160,7 +2252,11 @@
 
         if (root.querySelector('#seasonal-enableSeasonalAnimations')
             || root.querySelector('#home-fadeInSections')
-            || root.querySelector('#userHome-inlineConfigure')) {
+            || root.querySelector('#userHome-inlineConfigure')
+            || root.querySelector('#libraryCache-mdblistApiKey')
+            || root.querySelector('#home-minPeopleAppearancesTotal')
+            || root.querySelector('#home-loadPeopleEpisodeData')) {
+            const prevLoadPeopleEpisodeData = currentConfig.HOME_SETTINGS?.loadPeopleEpisodeData === true;
             currentConfig.SEASONAL_THEME_SETTINGS = {
                 ...(currentConfig.SEASONAL_THEME_SETTINGS || {}),
                 enableSeasonalAnimations: root.querySelector('#seasonal-enableSeasonalAnimations')?.checked !== false,
@@ -2176,13 +2272,32 @@
                 ...(currentConfig.HOME_SETTINGS || {}),
                 fadeInSections: root.querySelector('#home-fadeInSections')?.checked === true,
                 ensureThumbsForPopularTVNetworks: root.querySelector('#home-ensureThumbsForPopularTVNetworks')?.checked === true,
-                SHOW_STALE_DATA_BEFORE_REFRESH: root.querySelector('#home-showStaleDataBeforeRefresh')?.checked === true
+                showStaleDataBeforeRefresh: root.querySelector('#home-showStaleDataBeforeRefresh')?.checked === true,
+                minPeopleAppearancesTotal: parseInt(root.querySelector('#home-minPeopleAppearancesTotal')?.value || '10', 10),
+                minPeopleAppearancesMovies: parseInt(root.querySelector('#home-minPeopleAppearancesMovies')?.value || '10', 10),
+                minPeopleAppearancesSeries: parseInt(root.querySelector('#home-minPeopleAppearancesSeries')?.value || '10', 10),
+                minPeopleAppearancesEpisodes: parseInt(root.querySelector('#home-minPeopleAppearancesEpisodes')?.value || '10', 10),
+                maxPeopleCount: parseInt(root.querySelector('#home-maxPeopleCount')?.value || '500', 10),
+                loadPeopleEpisodeData: root.querySelector('#home-loadPeopleEpisodeData')?.checked === true
             };
+            syncEnsureThumbsOnPopularStudios(currentConfig);
             currentConfig.USER_HOME_SCREEN_SETTINGS = {
                 ...(currentConfig.USER_HOME_SCREEN_SETTINGS || {}),
                 inlineConfigure: root.querySelector('#userHome-inlineConfigure')?.checked !== false,
-                pinning: root.querySelector('#userHome-pinning')?.checked !== false
+                pinning: root.querySelector('#userHome-pinning')?.checked !== false,
+                pairNativeHomeSections: root.querySelector('#userHome-pairNativeHomeSections')?.checked !== false
             };
+            if (root.querySelector('#libraryCache-mdblistApiKey')) {
+                currentConfig.LIBRARY_CACHE = {
+                    ...(currentConfig.LIBRARY_CACHE || {}),
+                    mdblistApiKey: root.querySelector('#libraryCache-mdblistApiKey')?.value || ''
+                };
+            }
+
+            const nextLoadEpisodes = currentConfig.HOME_SETTINGS.loadPeopleEpisodeData === true;
+            if (prevLoadPeopleEpisodeData !== nextLoadEpisodes && window.PeopleCache?.invalidate) {
+                window.PeopleCache.invalidate();
+            }
         }
 
         if (root.querySelector('#cache-DEFAULT_TTL-preset') || root.querySelector('#cache-VERY_SHORT_TTL')) {
@@ -2230,7 +2345,8 @@
             CACHE: currentConfig?.CACHE,
             SPOTLIGHT_SETTINGS: currentConfig?.SPOTLIGHT_SETTINGS,
             HOME_SETTINGS: currentConfig?.HOME_SETTINGS,
-            USER_HOME_SCREEN_SETTINGS: currentConfig?.USER_HOME_SCREEN_SETTINGS
+            USER_HOME_SCREEN_SETTINGS: currentConfig?.USER_HOME_SCREEN_SETTINGS,
+            LIBRARY_CACHE: currentConfig?.LIBRARY_CACHE
         };
     }
 
@@ -2718,6 +2834,200 @@
         await saveConfig(currentConfig);
     }
 
+    function buildSectionIdMapFromGroups(...groupLists) {
+        const map = new Map();
+        groupLists.forEach((groups) => {
+            flattenSectionGroups(groups).forEach((section) => {
+                if (section?.id) map.set(section.id, section);
+            });
+        });
+        return map;
+    }
+
+    function copyRetainKeys(target, source, keys) {
+        if (!target || !source) return;
+        keys.forEach((key) => {
+            if (Object.prototype.hasOwnProperty.call(source, key)) {
+                target[key] = JSON.parse(JSON.stringify(source[key]));
+            }
+        });
+    }
+
+    function copyQueryAgeFields(target, source) {
+        if (!target || !source) return;
+        const srcQuery = source.queries?.[0];
+        if (!srcQuery || !Array.isArray(target.queries) || !target.queries[0]) return;
+        if (Object.prototype.hasOwnProperty.call(srcQuery, 'minAge')) {
+            target.queries[0].minAge = srcQuery.minAge;
+        }
+        if (Object.prototype.hasOwnProperty.call(srcQuery, 'maxAge')) {
+            target.queries[0].maxAge = srcQuery.maxAge;
+        }
+    }
+
+    function applyRetainOptionsToGroups(groups, priorById, options) {
+        (groups || []).forEach((group) => {
+            (group.sections || []).forEach((section) => {
+                const prior = priorById.get(section.id);
+                if (!prior) return;
+                if (options.retainStatus) {
+                    if (Object.prototype.hasOwnProperty.call(prior, 'enabled')) {
+                        section.enabled = prior.enabled;
+                    }
+                    if (Object.prototype.hasOwnProperty.call(prior, 'userConfigurable')) {
+                        section.userConfigurable = prior.userConfigurable;
+                    }
+                }
+                if (options.retainNameCaption) {
+                    copyRetainKeys(section, prior, ['name', 'caption']);
+                }
+                if (options.retainAppearance) {
+                    copyRetainKeys(section, prior, RESTORE_APPEARANCE_KEYS);
+                }
+                if (options.retainAdvanced) {
+                    copyRetainKeys(section, prior, RESTORE_ADVANCED_KEYS);
+                    copyQueryAgeFields(section, prior);
+                }
+            });
+        });
+    }
+
+    function stampGroupSectionTypes(groups, sectionType) {
+        (groups || []).forEach((group) => {
+            (group.sections || []).forEach((section) => {
+                section.type = sectionType;
+            });
+        });
+    }
+
+    async function applyRestoreDefaults(options) {
+        const defaults = window.KefinHomeConfig2;
+        if (!defaults || !currentConfig) {
+            throw new Error('Home Screen defaults are not available.');
+        }
+
+        const priorById = buildSectionIdMapFromGroups(
+            currentConfig.HOME_SECTION_GROUPS,
+            currentConfig.SEASONAL_SECTION_GROUPS,
+            currentConfig.DISCOVERY_SECTION_GROUPS
+        );
+
+        const homeGroups = JSON.parse(JSON.stringify(defaults.HOME_SECTION_GROUPS || []));
+        const seasonalGroups = JSON.parse(JSON.stringify(defaults.SEASONAL_SECTION_GROUPS || []));
+        const discoveryGroups = JSON.parse(JSON.stringify(defaults.DISCOVERY_SECTION_GROUPS || []));
+
+        stampGroupSectionTypes(homeGroups, 'home');
+        stampGroupSectionTypes(seasonalGroups, 'seasonal');
+        stampGroupSectionTypes(discoveryGroups, 'discovery');
+
+        applyRetainOptionsToGroups(homeGroups, priorById, options);
+        applyRetainOptionsToGroups(seasonalGroups, priorById, options);
+        applyRetainOptionsToGroups(discoveryGroups, priorById, options);
+
+        currentConfig.HOME_SECTION_GROUPS = homeGroups;
+        currentConfig.SEASONAL_SECTION_GROUPS = seasonalGroups;
+        currentConfig.DISCOVERY_SECTION_GROUPS = discoveryGroups;
+        if (!options.retainCustoms) {
+            currentConfig.CUSTOM_SECTION_GROUPS = [];
+        }
+
+        // Pre-sync so saveConfig merge does not reintroduce removed sections
+        if (!window.KefinTweaksConfig) window.KefinTweaksConfig = {};
+        if (!window.KefinTweaksConfig.homeScreenConfig) window.KefinTweaksConfig.homeScreenConfig = {};
+        const saved = window.KefinTweaksConfig.homeScreenConfig;
+        saved.HOME_SECTION_GROUPS = JSON.parse(JSON.stringify(homeGroups));
+        saved.SEASONAL_SECTION_GROUPS = JSON.parse(JSON.stringify(seasonalGroups));
+        saved.DISCOVERY_SECTION_GROUPS = JSON.parse(JSON.stringify(discoveryGroups));
+        if (!options.retainCustoms) {
+            saved.CUSTOM_SECTION_GROUPS = [];
+        }
+
+        await saveConfig(currentConfig);
+        refreshMainModal();
+        showToast('Home Screen defaults restored');
+    }
+
+    function confirmAndRestoreDefaults() {
+        if (!window.ModalSystem) {
+            ERR('ModalSystem not available for restore defaults');
+            return;
+        }
+        if (window.ModalSystem.isOpen(RESTORE_DEFAULTS_MODAL_ID)) {
+            window.ModalSystem.close(RESTORE_DEFAULTS_MODAL_ID);
+        }
+
+        const D = RESTORE_RETAIN_TOGGLE_DESCRIPTIONS;
+        const content = document.createElement('div');
+        content.innerHTML = `
+            <div class="listItemBodyText" style="line-height: 1.5; margin-bottom: 1em;">
+                Restoring Defaults for KefinTweaks Home Screen will update the existing Home Screen configuration.
+            </div>
+            <div class="hsc-settings-grid hsc-settings-grid-2">
+                ${hscToggleCard('restore-retain-status', true, 'Retain Section Status', D)}
+                ${hscToggleCard('restore-retain-name-caption', true, 'Retain Section Name and Caption', D)}
+                ${hscToggleCard('restore-retain-appearance', true, 'Retain Section Appearance', D)}
+                ${hscToggleCard('restore-retain-advanced', true, 'Retain Section Advanced Options', D)}
+                <div class="hsc-settings-span-2">
+                    ${hscToggleCard('restore-retain-customs', true, 'Retain Custom Sections', D)}
+                </div>
+            </div>
+        `;
+
+        const footer = document.createElement('div');
+        footer.style.display = 'flex';
+        footer.style.gap = '0.5em';
+        footer.style.justifyContent = 'flex-end';
+        footer.innerHTML = `
+            <button type="button" class="emby-button raised" id="hsc-restore-defaults-cancel">Cancel</button>
+            <button type="button" class="emby-button raised block button-submit" id="hsc-restore-defaults-confirm">Restore Defaults</button>
+        `;
+
+        window.ModalSystem.create({
+            id: RESTORE_DEFAULTS_MODAL_ID,
+            title: 'Restore Defaults',
+            content,
+            footer,
+            closeOnBackdrop: true,
+            closeOnEscape: true,
+            showCloseButton: true,
+            fixedSize: true,
+            onOpen: (modal) => {
+                const root = modal.dialogContent || content;
+                window.KefinTweaksUI?.bindToggleCards?.(root);
+                updateHscToggleCardHints(root, RESTORE_RETAIN_TOGGLE_DESCRIPTIONS);
+                root.addEventListener('change', (e) => {
+                    if (e.target?.matches?.('input[type="checkbox"][id^="restore-retain-"]')) {
+                        updateHscToggleCardHints(root, RESTORE_RETAIN_TOGGLE_DESCRIPTIONS);
+                    }
+                });
+
+                modal.dialogFooter?.querySelector('#hsc-restore-defaults-cancel')?.addEventListener('click', () => {
+                    window.ModalSystem.close(RESTORE_DEFAULTS_MODAL_ID);
+                });
+                modal.dialogFooter?.querySelector('#hsc-restore-defaults-confirm')?.addEventListener('click', async () => {
+                    const confirmBtn = modal.dialogFooter.querySelector('#hsc-restore-defaults-confirm');
+                    if (confirmBtn) confirmBtn.disabled = true;
+                    try {
+                        const options = {
+                            retainStatus: root.querySelector('#restore-retain-status')?.checked !== false,
+                            retainNameCaption: root.querySelector('#restore-retain-name-caption')?.checked !== false,
+                            retainAppearance: root.querySelector('#restore-retain-appearance')?.checked !== false,
+                            retainAdvanced: root.querySelector('#restore-retain-advanced')?.checked !== false,
+                            retainCustoms: root.querySelector('#restore-retain-customs')?.checked !== false
+                        };
+                        await applyRestoreDefaults(options);
+                        window.ModalSystem.close(RESTORE_DEFAULTS_MODAL_ID);
+                    } catch (e) {
+                        ERR('Error restoring Home Screen defaults:', e);
+                        showToast('Error restoring defaults');
+                    } finally {
+                        if (confirmBtn) confirmBtn.disabled = false;
+                    }
+                });
+            }
+        });
+    }
+
     function confirmAndUpdateAllUsers() {
         if (!window.ModalSystem) {
             ERR('ModalSystem not available for update confirmation');
@@ -2965,6 +3275,10 @@
             }
             if (e.target.closest('.hsc-toolbar-update-btn')) {
                 confirmAndUpdateAllUsers();
+                return;
+            }
+            if (e.target.closest('.hsc-toolbar-restore-defaults-btn')) {
+                confirmAndRestoreDefaults();
             }
         });
         /* dialog.querySelectorAll('.section-type-nav-btn').forEach(btn => {
@@ -4412,6 +4726,18 @@
         }
 
         const queries = section.queries || [];
+        if (Array.isArray(section.externalListUrls) && section.externalListUrls.length > 0) {
+            if (!window.KefinExternalList?.resolveExternalListItems) {
+                throw new Error('External list module not available for preview');
+            }
+            const listResult = await window.KefinExternalList.resolveExternalListItems(section);
+            const items = listResult?.Items || [];
+            const processed = window.cardBuilder.postProcessItems
+                ? window.cardBuilder.postProcessItems(section, items)
+                : items;
+            return { items: processed, limit: processed.length };
+        }
+
         if (section.items?.length) {
             const kefinTweaksRoot = window.KefinTweaksConfig?.kefinTweaksRoot || '';
             const serverId = ApiClient.serverId();

@@ -57,7 +57,58 @@
             sections: [],
             pinnedLists: [],
             pinnedParents: []
+            // pairNativeHomeSections omitted until user dirties the field
         };
+    }
+
+    function getServerPairNativeHomeSectionsDefault() {
+        const settings = window.KefinHomeScreen?.getConfig?.()?.USER_HOME_SCREEN_SETTINGS
+            || window.KefinHomeConfig2?.USER_HOME_SCREEN_SETTINGS
+            || {};
+        return settings.pairNativeHomeSections !== false;
+    }
+
+    /**
+     * Effective pair-native setting: user override if present, else server default.
+     */
+    function resolvePairNativeHomeSections(homeScreen) {
+        if (homeScreen && typeof homeScreen.pairNativeHomeSections === 'boolean') {
+            return homeScreen.pairNativeHomeSections;
+        }
+        return getServerPairNativeHomeSectionsDefault();
+    }
+
+    /**
+     * Disable all native Jellyfin home section slots (homesection0–9 = none).
+     */
+    function disableAllNativeHomeSections(customPrefs, { syncUi = false } = {}) {
+        const prefs = customPrefs || {};
+        let changed = false;
+        for (let i = 0; i <= 9; i++) {
+            const key = `homesection${i}`;
+            const prev = prefs[key];
+            const prevNorm = (!prev || prev === '') ? 'none' : String(prev).toLowerCase();
+            if (prevNorm !== 'none' || prefs[key] !== 'none') {
+                prefs[key] = 'none';
+                if (prevNorm !== 'none' || prev !== 'none') changed = true;
+            }
+        }
+        if (syncUi) {
+            for (let i = 0; i <= 9; i++) {
+                setNativeHomeSectionSelect(findNativeHomeSectionSelect(i + 1), 'none');
+            }
+        }
+        if (changed) {
+            LOG('Disabled all Jellyfin homesectionN (pair native off)');
+        }
+        return { slots: Array(10).fill('none'), changed };
+    }
+
+    function syncNativeHomeSectionsFromKefin(sections, customPrefs, homeScreen, { syncUi = false } = {}) {
+        if (resolvePairNativeHomeSections(homeScreen)) {
+            return enableJellyfinSectionsFromKefin(sections, customPrefs, { syncUi });
+        }
+        return disableAllNativeHomeSections(customPrefs, { syncUi });
     }
 
     function slugifyPinnedName(name) {
@@ -524,11 +575,15 @@
         if (parsed) {
             const hs = parsed?.homeScreen || (Array.isArray(parsed?.sections) ? parsed : null);
             if (hs) {
-                return {
+                const result = {
                     sections: Array.isArray(hs.sections) ? [...hs.sections] : [],
                     pinnedLists: Array.isArray(hs.pinnedLists) ? [...hs.pinnedLists] : [],
                     pinnedParents: Array.isArray(hs.pinnedParents) ? [...hs.pinnedParents] : []
                 };
+                if (typeof hs.pairNativeHomeSections === 'boolean') {
+                    result.pairNativeHomeSections = hs.pairNativeHomeSections;
+                }
+                return result;
             }
         }
         return migrateLegacyKefinHomeScreen(customPrefs);
@@ -839,7 +894,7 @@
         sections = sections.filter((section) => section.enabled || section.userConfigurable === true || section.userConfigurable === undefined);
         sections = deduplicateHomeScreenSections(sections);
 
-        const jellyfinSync = enableJellyfinSectionsFromKefin(sections, customPrefs, { syncUi: true });
+        const jellyfinSync = syncNativeHomeSectionsFromKefin(sections, customPrefs, homeScreen, { syncUi: true });
         if (jellyfinSync.changed && displayPrefs && !sanitizePersistInFlight) {
             sanitizePersistInFlight = true;
             try {
@@ -1544,8 +1599,12 @@
 
     /**
      * Save user preferences to display preferences
+     * @param {Array} sections
+     * @param {{ pairNativeHomeSections?: boolean|null }} [options]
+     *   pairNativeHomeSections: true/false to set override; null/undefined to leave unchanged;
+     *   pass 'default' symbol via omitOverride to clear dirty override
      */
-    async function saveUserPreferences(sections) {
+    async function saveUserPreferences(sections, options = {}) {
         try {
             if (!window.userHelper || !window.userHelper.getUserDisplayPreferences || !window.userHelper.updateDisplayPreferences) {
                 ERR('userHelper not available');
@@ -1574,6 +1633,21 @@
                 mergeEditorSectionsIntoHomeScreen(existingHomeScreen, sections, serverSectionsById)
             ).homeScreen;
 
+            // Preserve or update dirty-only pairNativeHomeSections
+            if (Object.prototype.hasOwnProperty.call(options, 'pairNativeHomeSections')) {
+                const serverDefault = getServerPairNativeHomeSectionsDefault();
+                const next = options.pairNativeHomeSections;
+                if (next === null || next === undefined) {
+                    delete homeScreen.pairNativeHomeSections;
+                } else if (next === serverDefault) {
+                    delete homeScreen.pairNativeHomeSections;
+                } else {
+                    homeScreen.pairNativeHomeSections = next === true;
+                }
+            } else if (typeof existingHomeScreen.pairNativeHomeSections === 'boolean') {
+                homeScreen.pairNativeHomeSections = existingHomeScreen.pairNativeHomeSections;
+            }
+
             const kefin = typeof window.userHelper?.parseKefinTweaks === 'function'
                 ? window.userHelper.parseKefinTweaks(customPrefs)
                 : {};
@@ -1582,7 +1656,7 @@
             customPrefs.kefinHomeScreen = JSON.stringify(homeScreenToLegacyArray(homeScreen));
 
             // Rewrite Jellyfin homesectionN (+ native selects) from enabled Kefin sections
-            enableJellyfinSectionsFromKefin(sections, customPrefs, { syncUi: true });
+            syncNativeHomeSectionsFromKefin(sections, customPrefs, homeScreen, { syncUi: true });
 
             // Save
             const success = await window.userHelper.updateDisplayPreferences(displayPrefs);
@@ -1679,6 +1753,20 @@
                 showUpDownButtons: true
             });
 
+            const serverPairDefault = getServerPairNativeHomeSectionsDefault();
+            const effectivePair = resolvePairNativeHomeSections(userConfig.homeScreen);
+            const pairDescOn = 'Do NOT enable this if you use the official Jellyfin for Roku or Android TV clients. When this is enabled, your Home Screen on those clients will be empty and you will need to go to your User Settings to re-enable sections.';
+            const pairDescOff = 'Do NOT enable this if you use the official Jellyfin for Roku or Android TV clients. When this is enabled, your Home Screen on those clients will be empty and you will need to go to your User Settings to re-enable sections.';
+            const pairToggleHTML = typeof window.KefinTweaksUI?.buildToggleCard === 'function'
+                ? window.KefinTweaksUI.buildToggleCard(
+                    'kefin-user-pair-native-home-sections',
+                    !effectivePair,
+                    'Improve Home Screen Performance',
+                    !effectivePair ? pairDescOn : pairDescOff,
+                    { hintKey: 'pairNativeHomeSections' }
+                )
+                : '';
+
             container.innerHTML = `
                 <div class="verticalSection verticalSection-extrabottompadding">
                     <div class="sectionTitleContainer" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5em;">
@@ -1688,8 +1776,50 @@
                         </button>
                     </div>
                     ${editorHTML}
+                    ${pairToggleHTML ? `
+                        <div class="verticalSection" style="margin-top: 1.5em;" id="kefin-user-pair-native-wrap">
+                            ${pairToggleHTML}
+                        </div>
+                    ` : ''}
                 </div>
             `;
+
+            // Pair-native toggle: dirty-only persist (INVERTED UI: on in UI means flag == false)
+            const pairCheckbox = container.querySelector('#kefin-user-pair-native-home-sections');
+            const pairCard = pairCheckbox?.closest('.kefin-toggle-card');
+            if (pairCheckbox && pairCard) {
+                const pairSwitch = pairCard.querySelector('.kefin-toggle-switch, .toggle-slider, button');
+                // When the toggle appears "on" in the UI, the flag is actually false (inverse)
+                const updatePairDesc = (checked) => {
+                    // checked (UI "on") means flag === false
+                    const desc = pairCard.querySelector('.kefin-toggle-card-desc');
+                    if (desc) desc.textContent = checked ? pairDescOn : pairDescOff;
+                };
+                const onPairToggle = async () => {
+                    // checked (UI 'on') means flag should be false
+                    const flagValue = !pairCheckbox.checked;
+                    updatePairDesc(pairCheckbox.checked);
+                    if (typeof window.KefinTweaksUI?.updateToggleSwitchUI === 'function' && pairSwitch) {
+                        window.KefinTweaksUI.updateToggleSwitchUI(pairSwitch, pairCheckbox.checked);
+                    }
+                    // For persistence: (flagValue === serverPairDefault) ? null : flagValue
+                    await saveUserPreferences(allSections, {
+                        pairNativeHomeSections: flagValue === serverPairDefault ? null : flagValue
+                    });
+                };
+                pairSwitch?.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    pairCheckbox.checked = !pairCheckbox.checked;
+                    onPairToggle();
+                });
+                pairCheckbox.addEventListener('change', onPairToggle);
+
+                // On initial render, enforce the correct description and checked value
+                // (in case render logic needs to set checked/unchecked based on flag)
+                // (Optional: If not already being handled by upstream render logic)
+                //pairCheckbox.checked = !effectivePair;
+                updatePairDesc(pairCheckbox.checked);
+            }
 
             // Restore Defaults: confirm then clear kefinHomeScreen and re-render
             const restoreBtn = container.querySelector('.kefin-restore-defaults-btn');
@@ -1906,6 +2036,9 @@
         homeScreenToLegacyArray,
         getConfig,
         enableJellyfinSectionsFromKefin,
+        syncNativeHomeSectionsFromKefin,
+        resolvePairNativeHomeSections,
+        getServerPairNativeHomeSectionsDefault,
         buildHomesectionSlotsFromKefin,
         resolveSectionJellyfinId,
         updateUserHomeScreenConfiguration,

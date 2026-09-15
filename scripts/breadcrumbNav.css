@@ -3,6 +3,12 @@
 	display: none;
 }
 
+.MuiToolbar-root:has(.kefinTweaks-breadcrumbs-wrapper) {
+	display: grid;
+	grid-template-columns: auto 1fr auto;
+	grid-template-rows: 1fr auto;
+}
+
 @media (min-width: 768px) {
 	.kefinTweaks-breadcrumbs-wrapper {
 		display: block;
@@ -15,6 +21,11 @@
 		border-radius: 0.5em;
 	}
 
+	.MuiToolbar-root .kefinTweaks-breadcrumbs-wrapper:hover {
+		background: transparent;
+		border-radius: 0;
+	}
+
 	.kefinTweaks-breadcrumbs {
 		color: rgba(255, 255, 255, 0.8);
 		font-size: 1.17em;
@@ -25,6 +36,16 @@
 		border-radius: 4px;
 		word-wrap: break-word;
 		display: inline-block;
+	}
+
+	.MuiToolbar-root .kefinTweaks-breadcrumbs,
+	.kefinTweaks-breadcrumbs-wrapper--modern .kefinTweaks-breadcrumbs {
+		font-size: 1em;
+		padding: 0px 12px 8px;
+	}
+
+	.MuiToolbar-root .kefinTweaks-popover {
+		margin-top: 20px;
 	}
 
 	.kefinTweaks-popover-container {

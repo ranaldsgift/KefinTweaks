@@ -569,7 +569,7 @@
                     enabled: true,
                     order: 72,
                     cardFormat: 'Thumb',
-                    ttl: CACHE_CONFIG.LONG_TTL,
+                    ttl: CACHE_CONFIG.STATIC_TTL,
                     itemLimit: 20,
                     sortBy: 'Random',
                     limitBeforeSort: true,
@@ -593,7 +593,7 @@
                     enabled: true,
                     order: 72,
                     cardFormat: 'Thumb',
-                    ttl: CACHE_CONFIG.LONG_TTL,
+                    ttl: CACHE_CONFIG.STATIC_TTL,
                     itemLimit: 20,
                     sortBy: 'Random',
                     limitBeforeSort: true,
@@ -617,7 +617,7 @@
                     enabled: false,
                     order: 72,
                     cardFormat: 'Thumb',
-                    ttl: CACHE_CONFIG.LONG_TTL,
+                    ttl: CACHE_CONFIG.STATIC_TTL,
                     itemLimit: 20,
                     sortBy: 'Random',
                     limitBeforeSort: true,
@@ -680,7 +680,7 @@
                     enabled: true,
                     order: 71,
                     cardFormat: 'Poster',
-                    ttl: CACHE_CONFIG.DEFAULT_TTL,
+                    ttl: CACHE_CONFIG.FORCE_REFRESH_TTL,
                     userConfigurable: true,
                     queries: [
                         {
@@ -1240,9 +1240,9 @@
         }
     ];
 
-    // Discovery Templates
-    // These use "Dynamic" types where 'source' is determined at runtime
-    // Organized into groups
+    const DISCOVERY_CONTENT_FIELDS = 'PrimaryImageAspectRatio,DateCreated,Overview,Taglines,ProductionYear,RecursiveItemCount,ChildCount,UserData';
+
+    // Discovery Templates — discoverySourceQuery picks the entity; queries load content
     const KEFINTWEAKS_DISCOVERY_SECTION_GROUPS = [
         // Genre Movies Group
         {
@@ -1253,30 +1253,55 @@
                     id: 'genreMovies',
                     type: 'discovery',
                     discoveryType: 'Genre',
-                    source: 'Dynamic', // Will be filled with a random Genre ID/Name
+                    discoveryItemType: 'Movie',
+                    discoverySourceQuery: {
+                        path: '/Genres',
+                        queryOptions: { IncludeItemTypes: ['Movie'], Limit: 0 }
+                    },
                     name: '{Genre} Movies',
                     enabled: true,
                     userConfigurable: true,
                     itemLimit: 20,
                     sortOrder: 'Random',
                     cardFormat: 'Poster',
-                    includeItemTypes: ['Movie'],
-                    ttl: CACHE_CONFIG.DISCOVERY_TTL
+                    ttl: CACHE_CONFIG.DISCOVERY_TTL,
+                    queries: [{
+                        queryOptions: {
+                            Recursive: true,
+                            IncludeItemTypes: ['Movie'],
+                            SortBy: 'Random',
+                            Limit: 20,
+                            Fields: DISCOVERY_CONTENT_FIELDS
+                        }
+                    }]
                 },
                 {
                     id: 'spotlightGenre',
                     type: 'discovery',
                     discoveryType: 'Genre',
-                    source: 'Dynamic',
+                    discoveryItemType: 'Movie',
+                    discoverySourceQuery: {
+                        path: '/Genres',
+                        queryOptions: { IncludeItemTypes: ['Movie'], Limit: 0 }
+                    },
                     name: 'Top Rated {Genre}',
                     enabled: true,
                     userConfigurable: true,
                     itemLimit: 20,
                     sortOrder: 'CommunityRating',
                     sortOrderDirection: 'Descending',
-                    includeItemTypes: ['Movie'],
-                    renderMode: 'Spotlight', // Replaces 'type: spotlight-genre' with attribute
-                    ttl: CACHE_CONFIG.DISCOVERY_TTL
+                    renderMode: 'Spotlight',
+                    ttl: CACHE_CONFIG.DISCOVERY_TTL,
+                    queries: [{
+                        queryOptions: {
+                            Recursive: true,
+                            IncludeItemTypes: ['Movie'],
+                            SortBy: 'CommunityRating',
+                            SortOrder: 'Descending',
+                            Limit: 20,
+                            Fields: DISCOVERY_CONTENT_FIELDS
+                        }
+                    }]
                 }
             ]
         },
@@ -1289,46 +1314,82 @@
                     id: 'directedByTopDirector',
                     type: 'discovery',
                     discoveryType: 'Person',
-                    source: 'Dynamic', // Random Director ID
-                    personType: 'Director', // Extra metadata for dynamic logic
+                    discoveryPersonType: 'Director',
+                    discoveryItemType: 'Movie',
+                    discoverySourceQuery: {
+                        dataSource: 'PeopleCache.getTopDirectors',
+                        queryOptions: { ItemType: 'Movie', Limit: 100 }
+                    },
                     name: 'Directed by {Person}',
                     enabled: true,
                     userConfigurable: true,
                     itemLimit: 20,
                     sortOrder: 'Random',
                     cardFormat: 'Poster',
-                    includeItemTypes: ['Movie'],
-                    ttl: CACHE_CONFIG.DISCOVERY_TTL
+                    ttl: CACHE_CONFIG.DISCOVERY_TTL,
+                    queries: [{
+                        queryOptions: {
+                            Recursive: true,
+                            IncludeItemTypes: ['Movie'],
+                            SortBy: 'Random',
+                            Limit: 20,
+                            Fields: DISCOVERY_CONTENT_FIELDS
+                        }
+                    }]
                 },
                 {
                     id: 'writtenByTopWriter',
                     type: 'discovery',
                     discoveryType: 'Person',
-                    source: 'Dynamic', // Random Writer ID
-                    personType: 'Writer',
+                    discoveryPersonType: 'Writer',
+                    discoveryItemType: 'Movie',
+                    discoverySourceQuery: {
+                        dataSource: 'PeopleCache.getTopWriters',
+                        queryOptions: { ItemType: 'Movie', Limit: 100 }
+                    },
                     name: 'Written by {Person}',
                     enabled: true,
                     userConfigurable: true,
                     itemLimit: 20,
                     sortOrder: 'Random',
                     cardFormat: 'Poster',
-                    includeItemTypes: ['Movie'],
-                    ttl: CACHE_CONFIG.DISCOVERY_TTL
+                    ttl: CACHE_CONFIG.DISCOVERY_TTL,
+                    queries: [{
+                        queryOptions: {
+                            Recursive: true,
+                            IncludeItemTypes: ['Movie'],
+                            SortBy: 'Random',
+                            Limit: 20,
+                            Fields: DISCOVERY_CONTENT_FIELDS
+                        }
+                    }]
                 },
                 {
                     id: 'starringTopActor',
                     type: 'discovery',
                     discoveryType: 'Person',
-                    source: 'Dynamic', // Random Actor ID
-                    personType: 'Actor',
+                    discoveryPersonType: 'Actor',
+                    discoveryItemType: 'Movie',
+                    discoverySourceQuery: {
+                        dataSource: 'PeopleCache.getTopActors',
+                        queryOptions: { ItemType: 'Movie', Limit: 100 }
+                    },
                     name: 'Starring {Person}',
                     enabled: true,
                     userConfigurable: true,
                     itemLimit: 20,
                     sortOrder: 'Random',
                     cardFormat: 'Poster',
-                    includeItemTypes: ['Movie'],
-                    ttl: CACHE_CONFIG.DISCOVERY_TTL
+                    ttl: CACHE_CONFIG.DISCOVERY_TTL,
+                    queries: [{
+                        queryOptions: {
+                            Recursive: true,
+                            IncludeItemTypes: ['Movie'],
+                            SortBy: 'Random',
+                            Limit: 20,
+                            Fields: DISCOVERY_CONTENT_FIELDS
+                        }
+                    }]
                 }
             ]
         },
@@ -1341,9 +1402,20 @@
                     id: 'starringActorRecentlyWatched',
                     type: 'discovery',
                     discoveryType: 'Person',
-                    source: 'Dynamic', // Actor from Recently Watched
-                    personType: 'Actor',
-                    sourceType: 'watched-recent', // Hint for source generator
+                    discoveryPersonType: 'Actor',
+                    discoveryItemType: 'Movie',
+                    discoverySourceQuery: {
+                        path: '/Items',
+                        queryOptions: {
+                            IncludeItemTypes: ['Movie'],
+                            Recursive: true,
+                            Filters: 'IsPlayed',
+                            Fields: 'UserData,People',
+                            SortBy: 'DatePlayed',
+                            SortOrder: 'Descending',
+                            Limit: 5
+                        }
+                    },
                     name: 'Starring {Person}',
                     caption: 'because you recently watched {Title}',
                     enabled: true,
@@ -1351,16 +1423,35 @@
                     itemLimit: 20,
                     sortOrder: 'Random',
                     cardFormat: 'Poster',
-                    includeItemTypes: ['Movie'],
-                    ttl: CACHE_CONFIG.DISCOVERY_TTL
+                    ttl: CACHE_CONFIG.DISCOVERY_TTL,
+                    queries: [{
+                        queryOptions: {
+                            Recursive: true,
+                            IncludeItemTypes: ['Movie'],
+                            SortBy: 'Random',
+                            Limit: 20,
+                            Fields: DISCOVERY_CONTENT_FIELDS
+                        }
+                    }]
                 },
                 {
                     id: 'directedByDirectorRecentlyWatched',
                     type: 'discovery',
                     discoveryType: 'Person',
-                    source: 'Dynamic', // Director from Recently Watched
-                    personType: 'Director',
-                    sourceType: 'watched-recent',
+                    discoveryPersonType: 'Director',
+                    discoveryItemType: 'Movie',
+                    discoverySourceQuery: {
+                        path: '/Items',
+                        queryOptions: {
+                            IncludeItemTypes: ['Movie'],
+                            Recursive: true,
+                            Filters: 'IsPlayed',
+                            Fields: 'UserData,People',
+                            SortBy: 'DatePlayed',
+                            SortOrder: 'Descending',
+                            Limit: 5
+                        }
+                    },
                     name: 'Directed by {Person}',
                     caption: 'because you recently watched {Title}',
                     enabled: true,
@@ -1368,16 +1459,35 @@
                     itemLimit: 20,
                     sortOrder: 'Random',
                     cardFormat: 'Poster',
-                    includeItemTypes: ['Movie'],
-                    ttl: CACHE_CONFIG.DISCOVERY_TTL
+                    ttl: CACHE_CONFIG.DISCOVERY_TTL,
+                    queries: [{
+                        queryOptions: {
+                            Recursive: true,
+                            IncludeItemTypes: ['Movie'],
+                            SortBy: 'Random',
+                            Limit: 20,
+                            Fields: DISCOVERY_CONTENT_FIELDS
+                        }
+                    }]
                 },
                 {
                     id: 'writtenByWriterRecentlyWatched',
                     type: 'discovery',
                     discoveryType: 'Person',
-                    source: 'Dynamic',
-                    personType: 'Writer',
-                    sourceType: 'watched-recent',
+                    discoveryPersonType: 'Writer',
+                    discoveryItemType: 'Movie',
+                    discoverySourceQuery: {
+                        path: '/Items',
+                        queryOptions: {
+                            IncludeItemTypes: ['Movie'],
+                            Recursive: true,
+                            Filters: 'IsPlayed',
+                            Fields: 'UserData,People',
+                            SortBy: 'DatePlayed',
+                            SortOrder: 'Descending',
+                            Limit: 5
+                        }
+                    },
                     name: 'Written by {Person}',
                     caption: 'because you recently watched {Title}',
                     enabled: true,
@@ -1385,8 +1495,16 @@
                     itemLimit: 20,
                     sortOrder: 'Random',
                     cardFormat: 'Poster',
-                    includeItemTypes: ['Movie'],
-                    ttl: CACHE_CONFIG.DISCOVERY_TTL
+                    ttl: CACHE_CONFIG.DISCOVERY_TTL,
+                    queries: [{
+                        queryOptions: {
+                            Recursive: true,
+                            IncludeItemTypes: ['Movie'],
+                            SortBy: 'Random',
+                            Limit: 20,
+                            Fields: DISCOVERY_CONTENT_FIELDS
+                        }
+                    }]
                 }
             ]
         },
@@ -1399,30 +1517,63 @@
                     id: 'becauseYouWatched',
                     type: 'discovery',
                     discoveryType: 'Similar',
-                    source: 'Dynamic', // Random Watched Item ID
-                    sourceType: 'watched',
+                    discoveryItemType: 'Movie',
+                    discoverySourceQuery: {
+                        path: '/Items',
+                        queryOptions: {
+                            IncludeItemTypes: ['Movie'],
+                            Recursive: true,
+                            Filters: 'IsPlayed',
+                            Fields: 'UserData,People',
+                            SortBy: 'Random',
+                            Limit: 20
+                        }
+                    },
                     name: 'Because you watched {Title}',
                     enabled: true,
                     userConfigurable: true,
                     itemLimit: 20,
-                    sortOrder: 'Random', // Typically 'Similarity' but usually returned sorted by API
-                    includeItemTypes: ['Movie'],
-                    ttl: CACHE_CONFIG.DISCOVERY_TTL
+                    sortOrder: 'Random',
+                    ttl: CACHE_CONFIG.DISCOVERY_TTL,
+                    queries: [{
+                        queryOptions: {
+                            IncludeItemTypes: ['Movie'],
+                            Limit: 20,
+                            Fields: DISCOVERY_CONTENT_FIELDS
+                        }
+                    }]
                 },
                 {
                     id: 'becauseYouRecentlyWatched',
                     type: 'discovery',
                     discoveryType: 'Similar',
-                    source: 'Dynamic', // Random Recently Watched ID
-                    sourceType: 'watched-recent',
+                    discoveryItemType: 'Movie',
+                    discoverySourceQuery: {
+                        path: '/Items',
+                        queryOptions: {
+                            IncludeItemTypes: ['Movie'],
+                            Recursive: true,
+                            Filters: 'IsPlayed',
+                            Fields: 'UserData,People',
+                            SortBy: 'DatePlayed',
+                            SortOrder: 'Descending',
+                            Limit: 5
+                        }
+                    },
                     name: 'Because you recently watched {Title}',
                     enabled: true,
                     userConfigurable: true,
                     itemLimit: 20,
                     sortOrder: 'Random',
                     cardFormat: 'Poster',
-                    includeItemTypes: ['Movie'],
-                    ttl: CACHE_CONFIG.DISCOVERY_TTL
+                    ttl: CACHE_CONFIG.DISCOVERY_TTL,
+                    queries: [{
+                        queryOptions: {
+                            IncludeItemTypes: ['Movie'],
+                            Limit: 20,
+                            Fields: DISCOVERY_CONTENT_FIELDS
+                        }
+                    }]
                 }
             ]
         },
@@ -1435,16 +1586,32 @@
                     id: 'becauseYouLiked',
                     type: 'discovery',
                     discoveryType: 'Similar',
-                    source: 'Dynamic', // Random Favorite Item ID
-                    sourceType: 'liked',
+                    discoveryItemType: 'Movie',
+                    discoverySourceQuery: {
+                        path: '/Items',
+                        queryOptions: {
+                            IncludeItemTypes: ['Movie'],
+                            Recursive: true,
+                            Filters: 'IsFavorite',
+                            SortBy: 'Random',
+                            Limit: 20,
+                            Fields: 'UserData,People'
+                        }
+                    },
                     name: 'Because you liked {Title}',
                     enabled: true,
                     userConfigurable: true,
                     itemLimit: 20,
                     sortOrder: 'Random',
                     cardFormat: 'Poster',
-                    includeItemTypes: ['Movie'],
-                    ttl: CACHE_CONFIG.DISCOVERY_TTL
+                    ttl: CACHE_CONFIG.DISCOVERY_TTL,
+                    queries: [{
+                        queryOptions: {
+                            IncludeItemTypes: ['Movie'],
+                            Limit: 20,
+                            Fields: DISCOVERY_CONTENT_FIELDS
+                        }
+                    }]
                 }
             ]
         },
@@ -1457,30 +1624,65 @@
                     id: 'studioShows',
                     type: 'discovery',
                     discoveryType: 'Studio',
-                    source: 'Dynamic', // Random Studio ID
+                    discoveryItemType: 'Series',
+                    discoverySourceQuery: {
+                        path: '/Studios',
+                        queryOptions: {
+                            IncludeItemTypes: ['Series'],
+                            SortBy: 'ChildCount',
+                            SortOrder: 'Descending',
+                            Limit: 0
+                        }
+                    },
                     name: 'Shows from {Studio}',
                     enabled: true,
                     userConfigurable: true,
                     itemLimit: 20,
                     sortOrder: 'Random',
                     cardFormat: 'Poster',
-                    includeItemTypes: ['Series'],
-                    ttl: CACHE_CONFIG.DISCOVERY_TTL
+                    ttl: CACHE_CONFIG.DISCOVERY_TTL,
+                    queries: [{
+                        queryOptions: {
+                            Recursive: true,
+                            IncludeItemTypes: ['Series'],
+                            SortBy: 'Random',
+                            Limit: 20,
+                            Fields: DISCOVERY_CONTENT_FIELDS
+                        }
+                    }]
                 },
                 {
                     id: 'spotlightNetwork',
                     type: 'discovery',
                     discoveryType: 'Studio',
-                    source: 'Dynamic',
+                    discoveryItemType: 'Series',
+                    discoverySourceQuery: {
+                        path: '/Studios',
+                        queryOptions: {
+                            IncludeItemTypes: ['Series'],
+                            SortBy: 'ChildCount',
+                            SortOrder: 'Descending',
+                            Limit: 0
+                        }
+                    },
                     name: 'Top Rated from {Studio}',
                     enabled: true,
                     userConfigurable: true,
                     itemLimit: 20,
                     sortOrder: 'CommunityRating',
                     sortOrderDirection: 'Descending',
-                    includeItemTypes: ['Series'],
                     renderMode: 'Spotlight',
-                    ttl: CACHE_CONFIG.DISCOVERY_TTL
+                    ttl: CACHE_CONFIG.DISCOVERY_TTL,
+                    queries: [{
+                        queryOptions: {
+                            Recursive: true,
+                            IncludeItemTypes: ['Series'],
+                            SortBy: 'CommunityRating',
+                            SortOrder: 'Descending',
+                            Limit: 20,
+                            Fields: DISCOVERY_CONTENT_FIELDS
+                        }
+                    }]
                 }
             ]
         },
@@ -1493,14 +1695,464 @@
                     id: 'collections',
                     type: 'discovery',
                     discoveryType: 'Collection',
-                    source: 'Dynamic',
+                    discoveryItemType: 'Movie',
+                    minimumItems: 3,
+                    discoverySourceQuery: {
+                        path: '/Items',
+                        queryOptions: {
+                            IncludeItemTypes: ['BoxSet'],
+                            Recursive: true,
+                            Fields: 'RecursiveItemCount,ChildCount,TotalRecordCount',
+                            Limit: 500,
+                            SortBy: 'TotalRecordCount'
+                        }
+                    },
                     name: '{Collection}',
                     enabled: true,
                     userConfigurable: true,
                     itemLimit: 20,
-                    sortOrder: 'Random', // Order within the collection
-                    includeItemTypes: ['Movie', 'Series'],
-                    ttl: CACHE_CONFIG.DISCOVERY_TTL
+                    sortOrder: 'Random',
+                    ttl: CACHE_CONFIG.DISCOVERY_TTL,
+                    queries: [{
+                        queryOptions: {
+                            Recursive: true,
+                            IncludeItemTypes: ['Movie', 'Series'],
+                            SortBy: 'Random',
+                            Limit: 20,
+                            Fields: DISCOVERY_CONTENT_FIELDS
+                        }
+                    }]
+                }
+            ]
+        },
+        // Genre Series Group
+        {
+            id: 'discovery-genre-series',
+            name: 'Genre Series',
+            sections: [
+                {
+                    id: 'genreSeries',
+                    type: 'discovery',
+                    discoveryType: 'Genre',
+                    discoveryItemType: 'Series',
+                    discoverySourceQuery: {
+                        path: '/Genres',
+                        queryOptions: { IncludeItemTypes: ['Series'], Limit: 0 }
+                    },
+                    name: '{Genre} Series',
+                    enabled: true,
+                    userConfigurable: true,
+                    itemLimit: 20,
+                    sortOrder: 'Random',
+                    cardFormat: 'Poster',
+                    ttl: CACHE_CONFIG.DISCOVERY_TTL,
+                    queries: [{
+                        queryOptions: {
+                            Recursive: true,
+                            IncludeItemTypes: ['Series'],
+                            SortBy: 'Random',
+                            Limit: 20,
+                            Fields: DISCOVERY_CONTENT_FIELDS
+                        }
+                    }]
+                },
+                {
+                    id: 'spotlightGenreSeries',
+                    type: 'discovery',
+                    discoveryType: 'Genre',
+                    discoveryItemType: 'Series',
+                    discoverySourceQuery: {
+                        path: '/Genres',
+                        queryOptions: { IncludeItemTypes: ['Series'], Limit: 0 }
+                    },
+                    name: 'Top Rated {Genre} Series',
+                    enabled: true,
+                    userConfigurable: true,
+                    itemLimit: 20,
+                    sortOrder: 'CommunityRating',
+                    sortOrderDirection: 'Descending',
+                    renderMode: 'Spotlight',
+                    ttl: CACHE_CONFIG.DISCOVERY_TTL,
+                    queries: [{
+                        queryOptions: {
+                            Recursive: true,
+                            IncludeItemTypes: ['Series'],
+                            SortBy: 'CommunityRating',
+                            SortOrder: 'Descending',
+                            Limit: 20,
+                            Fields: DISCOVERY_CONTENT_FIELDS
+                        }
+                    }]
+                }
+            ]
+        },
+        // Series Similar / Watchlist Group
+        {
+            id: 'discovery-series-similar',
+            name: 'Series Similar',
+            sections: [
+                {
+                    id: 'becauseYouWatchedSeries',
+                    type: 'discovery',
+                    discoveryType: 'Similar',
+                    discoveryItemType: 'Series',
+                    discoverySourceQuery: {
+                        path: '/Items',
+                        queryOptions: {
+                            IncludeItemTypes: ['Episode'],
+                            Recursive: true,
+                            Filters: 'IsPlayed',
+                            Fields: 'UserData,People',
+                            SortBy: 'Random',
+                            Limit: 20
+                        }
+                    },
+                    name: 'Because you watched {Title}',
+                    enabled: true,
+                    userConfigurable: true,
+                    itemLimit: 20,
+                    sortOrder: 'Random',
+                    ttl: CACHE_CONFIG.DISCOVERY_TTL,
+                    queries: [{
+                        queryOptions: {
+                            IncludeItemTypes: ['Series'],
+                            Limit: 20,
+                            Fields: DISCOVERY_CONTENT_FIELDS
+                        }
+                    }]
+                },
+                {
+                    id: 'becauseYouRecentlyWatchedSeries',
+                    type: 'discovery',
+                    discoveryType: 'Similar',
+                    discoveryItemType: 'Series',
+                    discoverySourceQuery: {
+                        path: '/Items',
+                        queryOptions: {
+                            IncludeItemTypes: ['Episode'],
+                            Recursive: true,
+                            Filters: 'IsPlayed',
+                            Fields: 'UserData,People',
+                            SortBy: 'DatePlayed',
+                            SortOrder: 'Descending',
+                            Limit: 5
+                        }
+                    },
+                    name: 'Because you recently watched {Title}',
+                    enabled: true,
+                    userConfigurable: true,
+                    itemLimit: 20,
+                    sortOrder: 'Random',
+                    cardFormat: 'Poster',
+                    ttl: CACHE_CONFIG.DISCOVERY_TTL,
+                    queries: [{
+                        queryOptions: {
+                            IncludeItemTypes: ['Series'],
+                            Limit: 20,
+                            Fields: DISCOVERY_CONTENT_FIELDS
+                        }
+                    }]
+                },
+                {
+                    id: 'becauseYouLikedSeries',
+                    type: 'discovery',
+                    discoveryType: 'Watchlist',
+                    discoveryItemType: 'Series',
+                    discoverySourceQuery: {
+                        path: '/Items',
+                        queryOptions: {
+                            IncludeItemTypes: ['Episode'],
+                            Recursive: true,
+                            Filters: 'Likes',
+                            SortBy: 'Random',
+                            Limit: 20,
+                            Fields: 'UserData,People'
+                        }
+                    },
+                    name: 'Because you liked {Title}',
+                    enabled: true,
+                    userConfigurable: true,
+                    itemLimit: 20,
+                    sortOrder: 'Random',
+                    cardFormat: 'Poster',
+                    ttl: CACHE_CONFIG.DISCOVERY_TTL,
+                    queries: [{
+                        queryOptions: {
+                            IncludeItemTypes: ['Series'],
+                            Limit: 20,
+                            Fields: DISCOVERY_CONTENT_FIELDS
+                        }
+                    }]
+                },
+                {
+                    id: 'becauseYouFinishedSeries',
+                    type: 'discovery',
+                    discoveryType: 'Similar',
+                    discoveryItemType: 'Series',
+                    discoverySourceQuery: {
+                        dataSource: 'SeriesCache.getCompletedSeries',
+                        queryOptions: { Limit: 5, SortBy: 'Random' }
+                    },
+                    name: 'Because you finished {Title}',
+                    enabled: true,
+                    userConfigurable: true,
+                    itemLimit: 20,
+                    sortOrder: 'Random',
+                    cardFormat: 'Poster',
+                    ttl: CACHE_CONFIG.DISCOVERY_TTL,
+                    queries: [{
+                        queryOptions: {
+                            IncludeItemTypes: ['Series'],
+                            Limit: 20,
+                            Fields: DISCOVERY_CONTENT_FIELDS
+                        }
+                    }]
+                }
+            ]
+        },
+        // Series People Group
+        {
+            id: 'discovery-people-series',
+            name: 'People Series',
+            sections: [
+                {
+                    id: 'directedByTopDirectorSeries',
+                    type: 'discovery',
+                    discoveryType: 'Person',
+                    discoveryPersonType: 'Director',
+                    discoveryItemType: 'Series',
+                    discoverySourceQuery: {
+                        dataSource: 'PeopleCache.getTopDirectors',
+                        queryOptions: { ItemType: 'Series', Limit: 100 }
+                    },
+                    name: 'Directed by {Person}',
+                    enabled: true,
+                    userConfigurable: true,
+                    itemLimit: 20,
+                    sortOrder: 'Random',
+                    cardFormat: 'Thumb',
+                    ttl: CACHE_CONFIG.DISCOVERY_TTL,
+                    queries: [{
+                        queryOptions: {
+                            Recursive: true,
+                            IncludeItemTypes: ['Episode'],
+                            SortBy: 'Random',
+                            Limit: 20,
+                            Fields: DISCOVERY_CONTENT_FIELDS
+                        }
+                    }]
+                },
+                {
+                    id: 'writtenByTopWriterSeries',
+                    type: 'discovery',
+                    discoveryType: 'Person',
+                    discoveryPersonType: 'Writer',
+                    discoveryItemType: 'Series',
+                    discoverySourceQuery: {
+                        dataSource: 'PeopleCache.getTopWriters',
+                        queryOptions: { ItemType: 'Series', Limit: 100 }
+                    },
+                    name: 'Written by {Person}',
+                    enabled: true,
+                    userConfigurable: true,
+                    itemLimit: 20,
+                    sortOrder: 'Random',
+                    cardFormat: 'Thumb',
+                    ttl: CACHE_CONFIG.DISCOVERY_TTL,
+                    queries: [{
+                        queryOptions: {
+                            Recursive: true,
+                            IncludeItemTypes: ['Episode'],
+                            SortBy: 'Random',
+                            Limit: 20,
+                            Fields: DISCOVERY_CONTENT_FIELDS
+                        }
+                    }]
+                },
+                {
+                    id: 'starringTopActorSeries',
+                    type: 'discovery',
+                    discoveryType: 'Person',
+                    discoveryPersonType: 'Actor',
+                    discoveryItemType: 'Series',
+                    discoverySourceQuery: {
+                        dataSource: 'PeopleCache.getTopActors',
+                        queryOptions: { ItemType: 'Series', Limit: 100 }
+                    },
+                    name: 'Starring {Person}',
+                    enabled: true,
+                    userConfigurable: true,
+                    itemLimit: 20,
+                    sortOrder: 'Random',
+                    cardFormat: 'Poster',
+                    ttl: CACHE_CONFIG.DISCOVERY_TTL,
+                    queries: [{
+                        queryOptions: {
+                            Recursive: true,
+                            IncludeItemTypes: ['Series'],
+                            SortBy: 'Random',
+                            Limit: 20,
+                            Fields: DISCOVERY_CONTENT_FIELDS
+                        }
+                    }]
+                }
+            ]
+        },
+        // Recently Watched People Series Group
+        {
+            id: 'discovery-recently-watched-people-series',
+            name: 'Recently Watched People Series',
+            sections: [
+                {
+                    id: 'starringActorRecentlyWatchedSeries',
+                    type: 'discovery',
+                    discoveryType: 'Person',
+                    discoveryPersonType: 'Actor',
+                    discoveryItemType: 'Series',
+                    discoverySourceQuery: {
+                        path: '/Items',
+                        queryOptions: {
+                            IncludeItemTypes: ['Episode'],
+                            Recursive: true,
+                            Filters: 'IsPlayed',
+                            Fields: 'UserData,People',
+                            SortBy: 'DatePlayed',
+                            SortOrder: 'Descending',
+                            Limit: 5
+                        }
+                    },
+                    name: 'Starring {Person}',
+                    caption: 'because you recently watched {Title}',
+                    enabled: true,
+                    userConfigurable: true,
+                    itemLimit: 20,
+                    sortOrder: 'Random',
+                    cardFormat: 'Poster',
+                    ttl: CACHE_CONFIG.DISCOVERY_TTL,
+                    queries: [{
+                        queryOptions: {
+                            Recursive: true,
+                            IncludeItemTypes: ['Series'],
+                            SortBy: 'Random',
+                            Limit: 20,
+                            Fields: DISCOVERY_CONTENT_FIELDS
+                        }
+                    }]
+                },
+                {
+                    id: 'directedByDirectorRecentlyWatchedSeries',
+                    type: 'discovery',
+                    discoveryType: 'Person',
+                    discoveryPersonType: 'Director',
+                    discoveryItemType: 'Series',
+                    discoverySourceQuery: {
+                        path: '/Items',
+                        queryOptions: {
+                            IncludeItemTypes: ['Episode'],
+                            Recursive: true,
+                            Filters: 'IsPlayed',
+                            Fields: 'UserData,People',
+                            SortBy: 'DatePlayed',
+                            SortOrder: 'Descending',
+                            Limit: 5
+                        }
+                    },
+                    name: 'Directed by {Person}',
+                    caption: 'because you recently watched {Title}',
+                    enabled: true,
+                    userConfigurable: true,
+                    itemLimit: 20,
+                    sortOrder: 'Random',
+                    cardFormat: 'Thumb',
+                    ttl: CACHE_CONFIG.DISCOVERY_TTL,
+                    queries: [{
+                        queryOptions: {
+                            Recursive: true,
+                            IncludeItemTypes: ['Episode'],
+                            SortBy: 'Random',
+                            Limit: 20,
+                            Fields: DISCOVERY_CONTENT_FIELDS
+                        }
+                    }]
+                },
+                {
+                    id: 'writtenByWriterRecentlyWatchedSeries',
+                    type: 'discovery',
+                    discoveryType: 'Person',
+                    discoveryPersonType: 'Writer',
+                    discoveryItemType: 'Series',
+                    discoverySourceQuery: {
+                        path: '/Items',
+                        queryOptions: {
+                            IncludeItemTypes: ['Episode'],
+                            Recursive: true,
+                            Filters: 'IsPlayed',
+                            Fields: 'UserData,People',
+                            SortBy: 'DatePlayed',
+                            SortOrder: 'Descending',
+                            Limit: 5
+                        }
+                    },
+                    name: 'Written by {Person}',
+                    caption: 'because you recently watched {Title}',
+                    enabled: true,
+                    userConfigurable: true,
+                    itemLimit: 20,
+                    sortOrder: 'Random',
+                    cardFormat: 'Thumb',
+                    ttl: CACHE_CONFIG.DISCOVERY_TTL,
+                    queries: [{
+                        queryOptions: {
+                            Recursive: true,
+                            IncludeItemTypes: ['Episode'],
+                            SortBy: 'Random',
+                            Limit: 20,
+                            Fields: DISCOVERY_CONTENT_FIELDS
+                        }
+                    }]
+                }
+            ]
+        },
+        // Guest Star Group
+        {
+            id: 'discovery-guest-star',
+            name: 'Guest Star',
+            sections: [
+                {
+                    id: 'guestStarringBecauseYouRecentlyWatched',
+                    type: 'discovery',
+                    discoveryType: 'Person',
+                    discoveryPersonType: 'GuestStar',
+                    discoveryItemType: 'Series',
+                    discoverySourceQuery: {
+                        path: '/Items',
+                        queryOptions: {
+                            IncludeItemTypes: ['Episode'],
+                            Recursive: true,
+                            Filters: 'IsPlayed',
+                            Fields: 'UserData,People',
+                            SortBy: 'DatePlayed',
+                            SortOrder: 'Descending',
+                            Limit: 5
+                        }
+                    },
+                    name: 'Guest starring {Person}',
+                    caption: 'because you recently watched {Title}',
+                    enabled: true,
+                    userConfigurable: true,
+                    itemLimit: 20,
+                    sortOrder: 'Random',
+                    cardFormat: 'Thumb',
+                    ttl: CACHE_CONFIG.DISCOVERY_TTL,
+                    queries: [{
+                        queryOptions: {
+                            Recursive: true,
+                            IncludeItemTypes: ['Episode'],
+                            SortBy: 'Random',
+                            Limit: 20,
+                            Fields: DISCOVERY_CONTENT_FIELDS
+                        }
+                    }]
                 }
             ]
         }
@@ -1508,16 +2160,16 @@
 
     const DISCOVERY_SETTINGS = {
         enabled: true,
-        infiniteScroll: true,
-        minPeopleAppearances: 10,
+        infiniteScroll: false,
         minGenreMovieCount: 50,
+        minGenreSeriesCount: 10,
         defaultItemLimit: 16,
         defaultSortOrder: "Random",
         defaultCardFormat: "Poster",
         spotlightDiscoveryChance: 0.5,
         renderSpotlightAboveMatching: false,
         randomizeOrder: false,
-        fadeInSections: false,
+        fadeInSections: true,
     }
 
     const SEASONAL_THEME_SETTINGS = {
@@ -1547,12 +2199,19 @@
         minimumSeriesForPopularTVNetworks: 10,
         fadeInSections: false,
         ensureThumbsForPopularTVNetworks: false,
-        SHOW_STALE_DATA_BEFORE_REFRESH: false,
+        showStaleDataBeforeRefresh: true,
+        minPeopleAppearancesTotal: 10,
+        minPeopleAppearancesMovies: 10,
+        minPeopleAppearancesSeries: 10,
+        minPeopleAppearancesEpisodes: 10,
+        maxPeopleCount: 1000,
+        loadPeopleEpisodeData: false,
     }
 
     const USER_HOME_SCREEN_SETTINGS = {
         inlineConfigure: true,
-        pinning: true
+        pinning: true,
+        pairNativeHomeSections: true
     }
 
     const SPOTLIGHT_SETTINGS = {
@@ -1571,12 +2230,17 @@
         SEASONAL_SECTION_GROUPS: KEFINTWEAKS_SEASONAL_SECTION_GROUPS,
         DISCOVERY_SECTION_GROUPS: KEFINTWEAKS_DISCOVERY_SECTION_GROUPS,
         CUSTOM_SECTION_GROUPS: [], // Empty by default - user-created/imported sections
-        REMOVE_CONFLICTING_SECTIONS: true,
         HOME_SETTINGS: HOME_SETTINGS,
         USER_HOME_SCREEN_SETTINGS: USER_HOME_SCREEN_SETTINGS,
         DISCOVERY_SETTINGS: DISCOVERY_SETTINGS,
         SEASONAL_THEME_SETTINGS: SEASONAL_THEME_SETTINGS,
-        SPOTLIGHT_SETTINGS: SPOTLIGHT_SETTINGS
+        SPOTLIGHT_SETTINGS: SPOTLIGHT_SETTINGS,
+        LIBRARY_CACHE: {
+            movieChunkSize: 1000,
+            seriesChunkSize: 1000,
+            mdblistApiKey: '',
+            CACHE_TTL: 14 * 24 * 60 * 60 * 1000
+        }
     };
 
     /*

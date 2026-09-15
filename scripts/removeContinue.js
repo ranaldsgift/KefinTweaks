@@ -78,7 +78,7 @@
         
         // Only add button to cards with data-positionticks (in progress items)
         const positionTicks = card.getAttribute('data-positionticks');
-        if (!positionTicks) {
+        if (!positionTicks || positionTicks === '0') {
             return; // Not a continue watching item, skip
         }
         

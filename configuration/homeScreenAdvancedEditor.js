@@ -625,7 +625,7 @@
     function getCachePresets() {
         const cache = window.KefinHomeConfig2?.CACHE || window.KefinHomeConfig2?.CACHE_CONFIG || {};
         return [
-            { key: 'FORCE_REFRESH', label: 'Force Refresh', ms: cache.FORCE_REFRESH_TTL ?? 0 },
+            { key: 'FORCE_REFRESH', label: 'No Cache', ms: cache.FORCE_REFRESH_TTL ?? 0 },
             { key: 'VERY_SHORT', label: 'Very Short (1 min)', ms: cache.VERY_SHORT_TTL ?? 60000 },
             { key: 'SHORT', label: 'Short (5 min)', ms: cache.SHORT_TTL ?? 300000 },
             { key: 'DEFAULT', label: 'Default (1 hour)', ms: cache.DEFAULT_TTL ?? 3600000 },
@@ -637,6 +637,9 @@
     }
 
     function inferItemSource(section) {
+        if (Array.isArray(section?.externalListUrls) && section.externalListUrls.length > 0) {
+            return 'external';
+        }
         if (section?.items?.length > 0 && (!section.queries?.length || section.queries.length === 0)) {
             return 'custom';
         }
@@ -951,6 +954,7 @@
             startDate: section.startDate || '',
             endDate: section.endDate || '',
             order: section.order != null ? String(section.order) : '',
+            caption: section.caption || '',
             renderMode,
             cardFormat: section.cardFormat || 'Poster',
             useRandomQuery: section.useRandomQuery === true,
@@ -970,6 +974,9 @@
             groupNew: groupSelection.groupNew,
             queries: (section.queries?.length ? section.queries : [createDefaultQuery()]).map(q => ({ ...q })),
             customItems: customEditor ? customEditor.staticItemsToDrafts(section.items) : [],
+            externalListUrls: Array.isArray(section.externalListUrls) && section.externalListUrls.length
+                ? section.externalListUrls.slice()
+                : [''],
             customItemEditorIndex: null,
             customItemAdditionalExpanded: {},
             ttlPreset: ttlMatch.preset,
@@ -987,6 +994,7 @@
         if (!root || !state) return;
 
         const nameEl = root.querySelector('#section-name');
+        const captionEl = root.querySelector('#section-caption');
         const groupEl = root.querySelector('#section-group');
         const groupNewEl = root.querySelector('#section-group-new');
         const visibilityEl = root.querySelector('#hsae-section-visibility');
@@ -1001,6 +1009,7 @@
         const sortOrderEl = root.querySelector('#section-sortOrder');
 
         if (nameEl) state.sectionName = nameEl.value;
+        if (captionEl) state.caption = captionEl.value;
         if (groupEl) state.groupSelect = groupEl.value;
         if (groupNewEl) state.groupNew = groupNewEl.value;
         if (visibilityEl) state.sectionVisibility = visibilityEl.value;
@@ -1056,6 +1065,12 @@
         const customEditor = getCustomItemsEditor();
         if (customEditor && state.itemSource === 'custom') {
             customEditor.collectCustomItemsFromForm(root, state, customEditor.getCustomItemsOptions());
+        }
+
+        if (state.itemSource === 'external') {
+            const urlInputs = root.querySelectorAll('[id^="hsae-external-list-url-"]');
+            state.externalListUrls = Array.from(urlInputs).map((el) => (el.value || '').trim()).filter(Boolean);
+            if (!state.externalListUrls.length) state.externalListUrls = [''];
         }
 
         if (state.itemSource === 'jellyfin') {
@@ -1354,6 +1369,7 @@
         const endpointDisplay = sourceType === 'jellyfin' || sourceType === 'static' ? 'block' : 'none';
         const jellyfinDisplay = sourceType === 'jellyfin' ? 'block' : 'none';
         const staticDisplay = sourceType === 'static' ? 'block' : 'none';
+        const sortExtrasDisplay = sourceType === 'jellyfin' || sourceType === 'static' ? 'block' : 'none';
         const staticItems = getQueryStaticItems(query);
 
         const parentSelection = getQueryParentSelection(query);
@@ -1396,17 +1412,17 @@
                         </div>
                     </div>
 
-                    <div class="hsae-field-grid hsae-query-row-sort${sourceType === 'static' ? ' hsae-field-grid-2' : ''}">
+                    <div class="hsae-field-grid hsae-query-row-sort">
                         <div class="hsae-query-sort-by" data-hsae-profiles="full normal dateCutoffs">
                             ${buildSelect(`query-${index}-SortBy`, toSortBySelectOptions(SORT_ORDERS), queryOptions.SortBy || '', 'Sort By')}
                         </div>
                         <div class="hsae-query-sort-order" data-hsae-profiles="full normal dateCutoffs">
                             ${buildSelect(`query-${index}-SortOrder`, SORT_ORDER_DIRECTIONS, queryOptions.SortOrder || '', 'Sort Order')}
                         </div>
-                        <div class="hsae-query-limit hsae-query-jellyfin-only" data-hsae-profiles="full minimal postProcessing normal dateCutoffs" style="display:${jellyfinDisplay};">
+                        <div class="hsae-query-limit hsae-query-sort-extras" data-hsae-profiles="full minimal postProcessing normal dateCutoffs" style="display:${sortExtrasDisplay};">
                             ${buildTextInput(`query-${index}-Limit`, queryOptions.Limit ?? '', 'Limit', 'number', '', { min: 0, step: 1 })}
                         </div>
-                        <div class="hsae-query-search hsae-query-jellyfin-only" data-hsae-profiles="full" style="display:${jellyfinDisplay};">
+                        <div class="hsae-query-search hsae-query-sort-extras" data-hsae-profiles="full" style="display:${sortExtrasDisplay};">
                             ${buildTextInput(`query-${index}-SearchTerm`, queryOptions.SearchTerm || '', 'Search Term')}
                         </div>
                     </div>
@@ -1507,13 +1523,15 @@
                     <div class="listItemBodyText secondary hsae-group-desc">General configuration for this section</div>
                 </div>
                 <div class="hsae-card">
-                    <div class="hsae-inline-row">
+                    <div class="hsae-field-grid hsae-field-grid-2 hsae-basic-name-caption">
                         ${buildTextInput('section-name', section.name || state.sectionName || '', 'Section Name')}
-                        <div data-hsae-profiles="full">
-                            ${buildSelect('section-group', groupOptions, selectedGroup, 'Section Group')}
-                            <div id="section-group-new-container" class="hsae-group-new" style="display:${selectedGroup === 'New...' ? 'block' : 'none'};">
-                                ${buildTextInput('section-group-new', state.groupNew || '', 'New Group Name')}
-                            </div>
+                        ${buildTextInput('section-caption', section.caption || state.caption || '', 'Caption', 'text', 'Displayed below the Section Name.')}
+                    </div>
+
+                    <div class="hsae-basic-group-row" data-hsae-profiles="full">
+                        ${buildSelect('section-group', groupOptions, selectedGroup, 'Section Group')}
+                        <div id="section-group-new-container" class="hsae-group-new" style="display:${selectedGroup === 'New...' ? 'block' : 'none'};">
+                            ${buildTextInput('section-group-new', state.groupNew || '', 'New Group Name')}
                         </div>
                     </div>
 
@@ -1606,7 +1624,45 @@
                             <div class="listItemBodyText secondary hsae-source-desc">${escapeHtml(CUSTOM_SOURCE_DESC)}</div>
                         </div>
                     </button>
+                    <button type="button" class="hsae-source-card${itemSource === 'external' ? ' hsae-active' : ''}" data-hsae-action="set-item-source" data-item-source="external">
+                        <div class="hsae-source-card-text">
+                            <div class="listItemBodyText hsae-source-title">
+                                <span class="material-icons hsae-source-icon">link</span>
+                                External List
+                            </div>
+                            <div class="listItemBodyText secondary hsae-source-desc">Match an MDBList (or compatible) URL against your Jellyfin library by provider IDs</div>
+                        </div>
+                    </button>
                 </div>
+            </section>
+        `;
+    }
+
+    function buildExternalListHTML(state) {
+        const { buildTextInput } = getApi();
+        const urls = Array.isArray(state.externalListUrls) && state.externalListUrls.length
+            ? state.externalListUrls
+            : [''];
+        const apiKey = window.LibraryCacheUtils?.getLibraryCacheSettings?.()?.mdblistApiKey
+            || window.KefinHomeConfig2?.LIBRARY_CACHE?.mdblistApiKey
+            || '';
+        const warn = !String(apiKey || '').trim()
+            ? `<div class="listItemBodyText secondary" style="color: var(--error-color, #e57373); margin-bottom: 0.75em;">MDBList API key is not configured. Add it under Home Screen → General settings before using External Lists.</div>`
+            : '';
+        const rows = urls.map((url, index) => `
+            <div class="hsae-external-list-row" data-external-index="${index}" style="margin-bottom: 0.75em;">
+                ${buildTextInput(`hsae-external-list-url-${index}`, url || '', `List URL ${index + 1}`, 'url', 'https://mdblist.com/...')}
+            </div>
+        `).join('');
+        return `
+            <section class="hsae-group hsae-external-list-group" data-hsae-profiles="full">
+                <div class="hsae-group-header">
+                    <div class="listItemBodyText hsae-group-title">External List URLs</div>
+                    <div class="listItemBodyText secondary hsae-group-desc">Items from these lists are matched to your Jellyfin library by IMDb/TMDB ids</div>
+                </div>
+                ${warn}
+                <div class="hsae-external-list-rows">${rows}</div>
+                <button type="button" class="emby-button raised" data-hsae-action="add-external-list-url" style="margin-top: 0.75em;">Add URL</button>
             </section>
         `;
     }
@@ -1790,6 +1846,7 @@
             itemSource: inferItemSource(draft),
             queries: draft?.queries,
             items: draft?.items,
+            externalListUrls: draft?.externalListUrls,
             hideWatched: Array.isArray(draft?.queries)
                 && draft.queries.length > 0
                 && draft.queries.every(q => q?.queryOptions?.IsUnplayed === true)
@@ -2157,6 +2214,7 @@
             ${buildItemSourceHTML(state)}
             ${buildQueriesHTML(state)}
             ${buildCustomItemsHTML(state)}
+            ${buildExternalListHTML(state)}
             ${buildAdvancedOptionsHTML(state)}
         `;
     }
@@ -2349,6 +2407,9 @@
         const userConfigChecked = dialog.querySelector('#hsae-user-configurable')?.checked === true;
 
         section.name = dialog.querySelector('#section-name')?.value || '';
+        const captionVal = dialog.querySelector('#section-caption')?.value?.trim() || '';
+        if (captionVal) section.caption = captionVal;
+        else section.caption = '';
         section.enabled = userEnabledChecked;
         section.userConfigurable = userConfigChecked;
 
@@ -2402,8 +2463,16 @@
                 section.items = [];
             }
             section.queries = [];
+            delete section.externalListUrls;
+        } else if (itemSource === 'external') {
+            delete section.items;
+            section.queries = [];
+            const urlInputs = dialog.querySelectorAll('[id^="hsae-external-list-url-"]');
+            const urls = Array.from(urlInputs).map((el) => (el.value || '').trim()).filter(Boolean);
+            section.externalListUrls = urls;
         } else {
             delete section.items;
+            delete section.externalListUrls;
             const queryEditors = dialog.querySelectorAll('.query-editor');
             if (queryEditors.length > 0) {
                 section.queries = Array.from(queryEditors).map(editor => {
@@ -2563,6 +2632,7 @@
         const cacheWrap = editor.querySelector('.hsae-cache-wrap');
         const jellyfinOnlyBlocks = editor.querySelectorAll('.hsae-query-jellyfin-only');
         const staticOnlyBlocks = editor.querySelectorAll('.hsae-query-static-only');
+        const sortExtrasBlocks = editor.querySelectorAll('.hsae-query-sort-extras');
 
         const updateSourceVisibility = () => {
             const sourceType = sourceSelect?.value || 'jellyfin';
@@ -2577,6 +2647,9 @@
             });
             staticOnlyBlocks.forEach(block => {
                 block.style.display = sourceType === 'static' ? '' : 'none';
+            });
+            sortExtrasBlocks.forEach(block => {
+                block.style.display = sourceType === 'jellyfin' || sourceType === 'static' ? '' : 'none';
             });
         };
 
@@ -3193,17 +3266,29 @@
             const newSource = actionEl.dataset.itemSource;
             if (!newSource || state.itemSource === newSource) return;
 
-            // Keep both queries and customItems in memory while switching;
+            // Keep sources in memory while switching;
             // collectData clears the inactive source only on save/preview.
             collectStateFromForm(root, state);
             state.itemSource = newSource;
             if (newSource === 'custom') {
                 const customEditor = getCustomItemsEditor();
                 if (customEditor) customEditor.ensureCustomItemsInitialized(state);
+            } else if (newSource === 'external') {
+                if (!Array.isArray(state.externalListUrls) || !state.externalListUrls.length) {
+                    state.externalListUrls = [''];
+                }
             } else {
                 state.queries = state.queries?.length ? state.queries : [createDefaultQuery()];
             }
             refreshEditorBody(modalInstance);
+            return;
+        }
+
+        if (action === 'add-external-list-url') {
+            collectStateFromForm(root, state);
+            if (!Array.isArray(state.externalListUrls)) state.externalListUrls = [''];
+            state.externalListUrls.push('');
+            refreshEditorBody(modalInstance, { skipCollect: true });
             return;
         }
 

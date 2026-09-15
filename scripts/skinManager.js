@@ -20,60 +20,15 @@
     const THEME_STORAGE_KEY = 'kefinTweaks_selectedTheme';
     const COLOR_SCHEMES_STORAGE_KEY = 'kefinTweaks_selectedColorScheme';
     
-    // Cached server version for synchronous access
+    // Cached server version for synchronous access — prefer window.KefinTweaks
     let cachedServerVersion = null;
 
-    function getMajorServerVersion(version) {
-        const versionParts = version.split('.');
-
-        if (versionParts[0] !== '10') {
-            const majorVersion = parseInt(versionParts[0], 10);
-            return majorVersion;
-        }
-
-        if (versionParts.length >= 2) {
-            const majorVersion = parseInt(versionParts[1], 10);
-            if (!isNaN(majorVersion)) {
-                return majorVersion;
-            }
-        }
-        return null;
-    }
-    
-    /**
-     * Get the current major server version from ApiClient
-     * Polls every 500ms for up to 5 seconds in the background if not immediately available
-     * @returns {number|null} The major version number (e.g., 10 for "10.10.X", 11 for "10.11.X"), or null if unavailable
-     */
     async function getCurrentMajorServerVersion() {
-        try {            
-            // If we have a cached value, return it
-            if (cachedServerVersion !== null) {
+        try {
+            if (window.KefinTweaks?.getJellyfinMajorVersion) {
+                cachedServerVersion = await window.KefinTweaks.getJellyfinMajorVersion();
                 return cachedServerVersion;
             }
-
-            if (!window.ApiClient || !window.ApiClient._appName || !window.ApiClient._appVersion) {
-                return null;
-            }
-
-            if (window.ApiClient._appName === 'Jellyfin Web' && window.ApiClient._appVersion) {
-                cachedServerVersion = getMajorServerVersion(window.ApiClient._appVersion);
-                return cachedServerVersion;
-            }
-
-            // Check the server version instead of app version
-            if (!window.ApiClient._serverVersion) {
-                // Wait 10s to see if it becomes ready, check every 500ms
-                const startTime = Date.now();
-                while (Date.now() - startTime < 10000) {
-                    if (window.ApiClient._serverVersion) {
-                        break;
-                    }
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                }
-            }
-
-            cachedServerVersion = getMajorServerVersion(window.ApiClient._serverVersion);
             return cachedServerVersion;
         } catch (error) {
             WARN('Error getting server version:', error);

@@ -2174,13 +2174,13 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 					if (activeContent) activeContent.style.display = 'block';
 
 					if (pageTab === 'progress') {
-						renderProgressContent();
+						initProgressTab().then(() => renderProgressContent()).catch((err) => ERR('Progress tab init failed:', err));
 					} else if (pageTab === 'watchlist') {
 						renderWatchlistContent();
 					} else if (pageTab === 'history') {
-						renderHistoryContent();
+						initHistoryTab().then(() => renderHistoryContent()).catch((err) => ERR('History tab init failed:', err));
 					} else if (pageTab === 'statistics') {
-						renderStatisticsContent();
+						initStatisticsTab().then(() => renderStatisticsContent()).catch((err) => ERR('Statistics tab init failed:', err));
 					}
 				}
 			}
@@ -2333,21 +2333,45 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		}
 	}
 
-	// Initialize all tabs with proper dependencies
+	// Initialize tabs lazily — only the active/default tab; progress/history on demand
 	async function initializeAllTabs() {
 		LOG('Starting tab initialization');
-		
-		// Independent tabs can run in parallel
-		const watchlistPromise = initWatchlistTab();
-		
-		// Dependent tabs: progress and history first, then statistics
-		const progressPromise = initProgressTab();
-		const historyPromise = initHistoryTab();
-		
-		// Wait for progress and history, then init statistics
-		await Promise.all([watchlistPromise, progressPromise, historyPromise]);
-		await initStatisticsTab();
-		LOG('All tabs initialized');
+		const params = getUrlParams();
+		const pageTab = params.pageTab || 'watchlist';
+
+		await initWatchlistTab();
+
+		if (pageTab === 'progress') {
+			await initProgressTab();
+		} else if (pageTab === 'history') {
+			await initHistoryTab();
+		} else if (pageTab === 'statistics') {
+			await initStatisticsTab();
+		}
+
+		LOG('Tab initialization complete (active:', pageTab, ')');
+	}
+
+	/** Run async work over items with a fixed concurrency limit. */
+	async function mapWithConcurrency(items, concurrency, mapper) {
+		const list = Array.isArray(items) ? items : [];
+		const limit = Math.max(1, Number(concurrency) || 1);
+		const results = new Array(list.length);
+		let nextIndex = 0;
+
+		async function worker() {
+			while (nextIndex < list.length) {
+				const i = nextIndex++;
+				results[i] = await mapper(list[i], i);
+			}
+		}
+
+		const workers = [];
+		for (let w = 0; w < Math.min(limit, list.length); w++) {
+			workers.push(worker());
+		}
+		await Promise.all(workers);
+		return results;
 	}
 
 	function sortInProgressSeries(series) {
@@ -2462,14 +2486,11 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			LOG(`Found ${inProgressSeries.length} series with PlayedPercentage > 0`);
 
 
-			LOG(`Fetching progress data for all ${inProgressSeries.length} series`);
+			LOG(`Fetching progress data for ${inProgressSeries.length} series (concurrency 4)`);
 
-			// Fetch progress data for all series in parallel
-			const progressData = await Promise.all(
-				inProgressSeries.map(async (seriesItem) => {
-					return await fetchSeriesProgressWithMissingEpisodes(seriesItem, userId, serverUrl, token);
-				})
-			);
+			const progressData = await mapWithConcurrency(inProgressSeries, 4, async (seriesItem) => {
+				return await fetchSeriesProgressWithMissingEpisodes(seriesItem, userId, serverUrl, token);
+			});
 
 			// Filter out series with no valid progress data
 			const validProgressData = progressData.filter(data => data !== null);
@@ -3018,6 +3039,84 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		{ type: 'Video', key: 'homevideos', label: 'Home Videos' }
 	];
 
+	const WATCHLIST_SUPPORTED_TYPES = WATCHLIST_SECTION_TYPES.map(({ type }) => type);
+	const WATCHLIST_SUPPORTED_TYPES_CSV = WATCHLIST_SUPPORTED_TYPES.join(',');
+
+	/** Session Id set for overlay button state only (not Watchlist tab rendering). */
+	const watchlistLikedIds = new Set();
+	let watchlistLikedIdsLoaded = false;
+	let watchlistLikedIdsLoadPromise = null;
+
+	function isWatchlistSupportedType(itemType) {
+		return WATCHLIST_SUPPORTED_TYPES.includes(itemType);
+	}
+
+	function isItemInLikedIdCache(itemId) {
+		return !!itemId && watchlistLikedIds.has(itemId);
+	}
+
+	function setLikedIdInCache(itemId, isLiked) {
+		if (!itemId) return;
+		if (isLiked) watchlistLikedIds.add(itemId);
+		else watchlistLikedIds.delete(itemId);
+	}
+
+	function mergeLikedIdsFromItems(items) {
+		const list = Array.isArray(items) ? items : (items?.Items || []);
+		list.forEach((item) => {
+			if (item?.Id) watchlistLikedIds.add(item.Id);
+		});
+	}
+
+	function applyWatchlistButtonActiveState(button, isActive) {
+		if (!button) return;
+		button.dataset.active = isActive ? 'true' : 'false';
+		button.title = isActive ? 'Remove from Watchlist' : 'Add to Watchlist';
+	}
+
+	function syncOverlayWatchlistButtons() {
+		document.querySelectorAll('.watchlist-button[data-id]').forEach((button) => {
+			const itemId = button.getAttribute('data-id');
+			applyWatchlistButtonActiveState(button, isItemInLikedIdCache(itemId));
+		});
+	}
+
+	async function loadWatchlistLikedIdsBaseline() {
+		if (watchlistLikedIdsLoaded) return watchlistLikedIds;
+		if (watchlistLikedIdsLoadPromise) return watchlistLikedIdsLoadPromise;
+
+		watchlistLikedIdsLoadPromise = (async () => {
+			try {
+				if (window.userHelper?.waitForLogin) {
+					await window.userHelper.waitForLogin();
+				}
+				const apiHelper = window.apiHelper;
+				if (!apiHelper?.getWatchlistItems) {
+					WARN('apiHelper.getWatchlistItems unavailable; liked Id cache empty');
+					return watchlistLikedIds;
+				}
+				const result = await apiHelper.getWatchlistItems({
+					IncludeItemTypes: WATCHLIST_SUPPORTED_TYPES_CSV,
+					Fields: 'Id',
+					Limit: 10000
+				}, true);
+				watchlistLikedIds.clear();
+				mergeLikedIdsFromItems(result);
+				watchlistLikedIdsLoaded = true;
+				LOG(`Loaded watchlist liked Id cache: ${watchlistLikedIds.size} items`);
+				syncOverlayWatchlistButtons();
+				processExistingOverlayContainers();
+			} catch (err) {
+				ERR('Failed to load watchlist liked Id baseline:', err);
+			} finally {
+				watchlistLikedIdsLoadPromise = null;
+			}
+			return watchlistLikedIds;
+		})();
+
+		return watchlistLikedIdsLoadPromise;
+	}
+
 	let watchlistRenderGeneration = 0;
 
 	function resetWatchlistItemsByType() {
@@ -3170,7 +3269,9 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			const items = await section.result.ensureData();
 			const list = Array.isArray(items) ? items : (items?.Items || []);
 			watchlistItemsByType[section.itemType] = list;
+			mergeLikedIdsFromItems(list);
 		}));
+		syncOverlayWatchlistButtons();
 
 		if (generation !== watchlistRenderGeneration) return;
 
@@ -4676,6 +4777,9 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		// Clear query cache + in-memory index
 		await invalidateAllWatchlistQueries();
 		resetWatchlistItemsByType();
+		watchlistLikedIds.clear();
+		watchlistLikedIdsLoaded = true;
+		syncOverlayWatchlistButtons();
 
 		// Refresh watchlist
 		await initWatchlistTab(true);
@@ -4687,6 +4791,9 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	async function updateWatchlistCacheOnToggle(itemId, itemType, isAdded) {
 		try {
 			LOG(`Watchlist membership changed for ${itemType} ${itemId} (added=${isAdded}); refreshing progressive sections`);
+			setLikedIdInCache(itemId, isAdded === true);
+			syncOverlayWatchlistButtons();
+
 			if (itemType) {
 				await window.apiHelper?.invalidateWatchlistQueries?.({ IncludeItemTypes: itemType });
 			} else {
@@ -5206,6 +5313,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 					LOG(`Found ${playedItems.length} played items in ${type} section`);
 					for (const item of playedItems) {
 						await ApiClient.updateUserItemRating(ApiClient.getCurrentUserId(), item.Id, 'false');
+						setLikedIdInCache(item.Id, false);
 						removedCount++;
 					}
 				}
@@ -5213,6 +5321,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 
 			if (removedCount > 0) {
 				LOG(`Sync complete: removed ${removedCount} played items from watchlist; refreshing`);
+				syncOverlayWatchlistButtons();
 				await invalidateAllWatchlistQueries();
 				await renderWatchlistProgressive(true);
 			} else {
@@ -6598,15 +6707,15 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		
 		updateUrlParams(activeTab, currentPage, currentSort, currentSortDirection, currentMovieSort, currentMovieSortDirection);
 		
-		// Render content based on active tab
+		// Render content based on active tab (lazy-init progress/history/statistics)
 		if (activeTab === 'progress') {
-			renderProgressContent();
+			initProgressTab().then(() => renderProgressContent()).catch((err) => ERR('Progress tab init failed:', err));
 		} else if (activeTab === 'watchlist') {
 			renderWatchlistContent();
 		} else if (activeTab === 'history') {
-			renderHistoryContent();
+			initHistoryTab().then(() => renderHistoryContent()).catch((err) => ERR('History tab init failed:', err));
 		} else if (activeTab === 'statistics') {
-			renderStatisticsContent();
+			initStatisticsTab().then(() => renderStatisticsContent()).catch((err) => ERR('Statistics tab init failed:', err));
 		}
 		
 		LOG(`Switched to ${activeTab} tab`);
@@ -7277,14 +7386,17 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		let watchlistUrl = '#/watchlist';
 
 		// Major version of Jellyfin
-		const jellyfinVersion = window.KefinTweaks.getJellyfinMajorVersion() ?? null;
+		const jellyfinVersion = await window.KefinTweaks.getJellyfinMajorVersion();
+		const isModernUI = document.querySelector('.MuiBox-root') !== null;
 
 		// If watchlist tab index is null or undefined, add to top navigation
-		if (watchlistTabIndex === null || watchlistTabIndex === undefined || jellyfinVersion >= 12) {
+		if (watchlistTabIndex === null || watchlistTabIndex === undefined || isModernUI) {
 			options.topNavigation = 'main';
 		} else {
 			watchlistUrl = `#/home?tab=${watchlistTabIndex}`;
 		}
+
+		window.KefinTweaksUtils._watchlistUrl = watchlistUrl;
 
 		window.KefinTweaksUtils.addCustomMenuLink(
 			'Watchlist',
@@ -7335,129 +7447,84 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 
 	// Function to add watchlist button to a card overlay container
 	function addWatchlistButton(overlayContainer) {
-		// Check if watchlist button already exists
-		if (overlayContainer && overlayContainer.querySelector('.watchlist-button')) {
-			return;
-		}
-		
-		// Find the card parent to get the item ID
+		if (!overlayContainer) return;
+
 		const card = overlayContainer.closest('.card');
 		if (!card) {
 			WARN('Could not find card parent for overlay container');
 			return;
 		}
-		
+
 		const itemId = card.getAttribute('data-id');
 		if (!itemId) {
 			WARN('Could not find data-id on card element');
 			return;
 		}
-		
-		// Check if card has data-type attribute - if not, don't add watchlist button
+
 		const itemType = card.getAttribute('data-type');
 		if (!itemType) {
 			LOG('Card has no data-type, skipping watchlist button');
 			return;
 		}
-		
-		// Find the .cardOverlayButton-br container
+
+		if (!isWatchlistSupportedType(itemType)) {
+			return;
+		}
+
+		if (!ApiClient._loggedIn) {
+			LOG('User is not logged in, skipping watchlist button');
+			return;
+		}
+
 		const buttonContainer = overlayContainer.querySelector('.cardOverlayButton-br');
 		if (!buttonContainer) {
 			WARN('Could not find .cardOverlayButton-br container');
 			return;
 		}
-		
-		// Create watchlist button
-		const watchlistButton = document.createElement('button');
-		watchlistButton.type = 'button';
-		watchlistButton.className = 'watchlist-button cardOverlayButton cardOverlayButton-hover itemAction paper-icon-button-light emby-button button-flat';
-		watchlistButton.setAttribute('data-action', 'none');
-		watchlistButton.setAttribute('data-id', itemId);
-		watchlistButton.setAttribute('data-active', 'false');
-		watchlistButton.title = 'Add to Watchlist';
-		
-		// Create the bookmark icon
-		const watchlistIcon = document.createElement('span');
-		watchlistIcon.className = 'material-icons cardOverlayButtonIcon cardOverlayButtonIcon-hover watchlist';
-		watchlistIcon.setAttribute('aria-hidden', 'true');
-		
-		watchlistButton.appendChild(watchlistIcon);
-		
-		// Add click event listener
-		watchlistButton.addEventListener('click', async (e) => {
-			e.preventDefault();
-			e.stopPropagation();
-			
-			// Toggle watchlist status
-			const newRating = watchlistButton.dataset.active === 'false' ? 'true' : 'false';
-			await ApiClient.updateUserItemRating(ApiClient.getCurrentUserId(), itemId, newRating);
-			watchlistButton.dataset.active = newRating;
-			
-			// Update icon and title based on state
-			const isActive = watchlistButton.dataset.active === 'true';
-			// Icon state is handled by CSS class, no need to change textContent
-			watchlistButton.title = isActive ? 'Remove from Watchlist' : 'Add to Watchlist';
-			
-			// Update watchlist cache immediately
-			await updateWatchlistCacheOnToggle(itemId, itemType, isActive);
-		});
-		
-		// Check if item type is supported for watchlist
-		if (itemType !== "Movie" && itemType !== "Series" && itemType !== "Season" && itemType !== "Episode" && itemType !== "BoxSet" && itemType !== "Playlist" && itemType !== "Video") {
-			return;
-		}
 
-        if (!ApiClient._loggedIn) {
-			LOG('User is not logged in, skipping watchlist button');
-			return;
-		}
-		
-		// Check item's current watchlist status from cache only (no server fetch)
-		// Map itemType to section name
-		let sectionName;
-		switch (itemType) {
-			case 'Movie':
-				sectionName = 'movies';
-				break;
-			case 'Series':
-				sectionName = 'series';
-				break;
-			case 'Season':
-				sectionName = 'seasons';
-				break;
-			case 'Episode':
-				sectionName = 'episodes';
-				break;
-			case 'BoxSet':
-				sectionName = 'boxsets';
-				break;
-			case 'Playlist':
-				sectionName = 'playlists';
-				break;
-			case 'Video':
-				sectionName = 'homevideos';
-				break;
-			default:
-				// Unknown type, skip check
-				break;
-		}
-		
-		if (sectionName && itemType) {
-			let isInWatchlist = (watchlistItemsByType[itemType] || []).some(item => item.Id === itemId);
+		let watchlistButton = overlayContainer.querySelector('.watchlist-button');
+		const createdNew = !watchlistButton;
 
-			// Set button state if item is in watchlist
-			if (isInWatchlist) {
-				watchlistButton.dataset.active = 'true';
-				watchlistButton.title = 'Remove from Watchlist';
+		if (createdNew) {
+			watchlistButton = document.createElement('button');
+			watchlistButton.type = 'button';
+			watchlistButton.className = 'watchlist-button cardOverlayButton cardOverlayButton-hover itemAction paper-icon-button-light emby-button button-flat';
+			watchlistButton.setAttribute('data-action', 'none');
+			watchlistButton.setAttribute('data-id', itemId);
+
+			const watchlistIcon = document.createElement('span');
+			watchlistIcon.className = 'material-icons cardOverlayButtonIcon cardOverlayButtonIcon-hover watchlist';
+			watchlistIcon.setAttribute('aria-hidden', 'true');
+			watchlistButton.appendChild(watchlistIcon);
+
+			const playStateButton = buttonContainer.querySelector('button[is="emby-playstatebutton"]')
+				|| buttonContainer.querySelector('button:has([data-testid="CheckIcon"])');
+			if (playStateButton) {
+				buttonContainer.insertBefore(watchlistButton, playStateButton);
+			} else {
+				buttonContainer.appendChild(watchlistButton);
 			}
-		}
-		
-		// Add the watchlist button to the button container, right before the play state button if it exists
-		const playStateButton = buttonContainer.querySelector('button[is="emby-playstatebutton"]');
-		if (playStateButton) {
-			buttonContainer.insertBefore(watchlistButton, playStateButton);
 		} else {
-			buttonContainer.appendChild(watchlistButton);
+			watchlistButton.setAttribute('data-id', itemId);
+		}
+
+		// Prefer liked-Id cache once loaded; until then keep cardBuilder UserData.Likes state
+		if (watchlistLikedIdsLoaded || createdNew) {
+			applyWatchlistButtonActiveState(watchlistButton, isItemInLikedIdCache(itemId));
+		}
+
+		if (watchlistButton.dataset.watchlistBound !== 'true') {
+			watchlistButton.dataset.watchlistBound = 'true';
+			watchlistButton.addEventListener('click', async (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+
+				const newRating = watchlistButton.dataset.active === 'false' ? 'true' : 'false';
+				await ApiClient.updateUserItemRating(ApiClient.getCurrentUserId(), itemId, newRating);
+				const isActive = newRating === 'true';
+				applyWatchlistButtonActiveState(watchlistButton, isActive);
+				await updateWatchlistCacheOnToggle(itemId, itemType, isActive);
+			});
 		}
 	}
 
@@ -7517,6 +7584,17 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 
 	// Initialize the observer
 	setupWatchlistButtonObserver();
+
+	// Baseline liked-Id cache for overlay button state (one query after login)
+	loadWatchlistLikedIdsBaseline();
+
+	// Expose helpers so cardBuilder can keep overlay buttons / Set aligned on UserData.Likes
+	window.KefinWatchlistLikedIds = {
+		has: isItemInLikedIdCache,
+		set: setLikedIdInCache,
+		syncOverlayButtons: syncOverlayWatchlistButtons,
+		isSupportedType: isWatchlistSupportedType
+	};
 
 	/************ Item Detail Page Observer ************/
 

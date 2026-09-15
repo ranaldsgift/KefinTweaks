@@ -32,6 +32,10 @@ interface HomeScreenSection {
 	userConfigurable?: boolean; // Whether users can toggle/reorder this section
 	useGaplessCards?: boolean; // When true, remove gaps between cards (row or grid)
 
+	// Loads items from an external URL and loads matches from that list from your Jellyfin library
+	// Currently supports: mdblist.com only
+	externalListUrls?: string[];
+
 	// Multi-Query (only used when queries.length > 1)
 	sortBy?: string; // Field to sort merged results by (e.g., 'DatePlayed', 'DateCreated')
 	sortOrder?: "Ascending" | "Descending"; // Sort direction for merged results
@@ -62,7 +66,13 @@ interface HomeScreenSection {
 	isCustom?: boolean;
 	/** How a discovery section resolves dynamically: Person, Genre, Studio, Similar, Collection, … */
 	discoveryType?: string;
+	discoveryItemType?: string;
+	discoveryPersonType?: string;
 	source?: string;
+
+	/** Pool query used to resolve a dynamic discovery entity (optional on non-discovery sections). */
+	discoverySourceQuery?: Query;
+
 	/** Runtime stamp for custom discovery paging (1..N per custom group); not a persisted admin field. */
 	pageNumber?: number;
 

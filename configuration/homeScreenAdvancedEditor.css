@@ -129,17 +129,20 @@
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+:is([data-modal-id="kefin-homescreen-section-editor"], [data-modal-id="kefin-homescreen-section-create-flow"]) .hsae-basic-group-row {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: 0.75em;
+	margin-top: 0.85em;
+	margin-bottom: 0.85em;
+}
+
 :is([data-modal-id="kefin-homescreen-section-editor"], [data-modal-id="kefin-homescreen-section-create-flow"]) .hsae-field-grid-4 {
 	grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 :is([data-modal-id="kefin-homescreen-section-editor"], [data-modal-id="kefin-homescreen-section-create-flow"]) .hsae-query-row-sort {
 	grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-:is([data-modal-id="kefin-homescreen-section-editor"], [data-modal-id="kefin-homescreen-section-create-flow"])
-	.hsae-query-row-sort.hsae-field-grid-2 {
-	grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 :is([data-modal-id="kefin-homescreen-section-editor"], [data-modal-id="kefin-homescreen-section-create-flow"]) .hsae-seasonal-dates {
@@ -1589,11 +1592,18 @@
 }
 
 /* Item source — show only the panel matching the active source (profile rules still gate custom items on non-full profiles) */
-.hsae-root[data-item-source="jellyfin"] .hsae-custom-items-group {
+.hsae-root[data-item-source="jellyfin"] .hsae-custom-items-group,
+.hsae-root[data-item-source="jellyfin"] .hsae-external-list-group {
 	display: none !important;
 }
 
-.hsae-root[data-item-source="custom"] .hsae-queries-group {
+.hsae-root[data-item-source="custom"] .hsae-queries-group,
+.hsae-root[data-item-source="custom"] .hsae-external-list-group {
+	display: none !important;
+}
+
+.hsae-root[data-item-source="external"] .hsae-queries-group,
+.hsae-root[data-item-source="external"] .hsae-custom-items-group {
 	display: none !important;
 }
 

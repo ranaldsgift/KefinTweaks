@@ -810,6 +810,16 @@
     function postProcessItems(sectionConfig, itemsData) {
         let processed = itemsData?.Items || itemsData || [];
 
+        //Check if imageTypes is used in the query to ensure only items with these image types are included
+        const imageTypes = sectionConfig.queries?.[0]?.queryOptions?.ImageTypes;
+        if (imageTypes && Array.isArray(imageTypes)) {
+            // Filter out items which do not have any of the image types
+            processed = processed.filter(item => {
+                const itemImageTypes = imageTypes.filter(imageType => item.ImageTags?.[imageType] || (imageType === 'Backdrop' && item.BackdropImageTags?.[0]));
+                return itemImageTypes.length > 0;
+            });
+        }
+
         // When ParentId is on the query (e.g. Popular Genres per library), assign it to each item for genre card links
         const queryParentId = sectionConfig.queries?.[0]?.ParentId;
         if (queryParentId && Array.isArray(processed)) {
@@ -1348,6 +1358,8 @@
         if (sectionConfig.spotlight || sectionConfig.renderMode === 'Spotlight') {
             const spotlightSettings = { ...(sectionConfig.spotlightConfig || {}) };
             if (activeViewMoreUrl) spotlightSettings.viewMoreUrl = activeViewMoreUrl;
+            spotlightSettings.discoveryPending = sectionConfig.discoveryPending === true;
+            spotlightSettings.caption = sectionConfig.caption;
             skeleton = createSkeletonSpotlightSection(displayTitle, spotlightSettings);
         } else {
             skeleton = createProgressivelyEnhancedScrollableContainer(
@@ -1744,11 +1756,30 @@
         });
     }
 
+    function updateCardWatchlistButtons(itemId, userData) {
+        if (!itemId || !userData || !('Likes' in userData)) return;
+
+        const isLiked = userData.Likes === true;
+        const likedHelper = window.KefinWatchlistLikedIds;
+        if (likedHelper?.set) {
+            likedHelper.set(itemId, isLiked);
+        }
+
+        const escapedId = typeof CSS !== 'undefined' && CSS.escape
+            ? CSS.escape(itemId)
+            : itemId.replace(/["\\]/g, '\\$&');
+        document.querySelectorAll(`.watchlist-button[data-id="${escapedId}"]`).forEach((button) => {
+            button.dataset.active = isLiked ? 'true' : 'false';
+            button.title = isLiked ? 'Remove from Watchlist' : 'Add to Watchlist';
+        });
+    }
+
     function applyUserDataEntriesToCards(entries, userId) {
         if (!isPrimaryUserDataChange(userId)) return;
         entries.forEach((entry) => {
             if (entry?.ItemId) {
                 updateCardResumeAttributes(entry.ItemId, entry);
+                updateCardWatchlistButtons(entry.ItemId, entry);
             }
         });
     }
@@ -2018,7 +2049,7 @@
                 // If the section has items, it is a static query
                 const isStaticQuery = Array.isArray(sectionConfig.items) && sectionConfig.items.length > 0;
                     
-                const renderCachedData = isStaticQuery || (!section.result?.isStale && !isRandomQuerySort) || (showStaleDataBeforeRefresh && (!isRandomQuerySort || sectionConfig.renderMode === 'Spotlight'));
+                const renderCachedData = (isStaticQuery || (!section.result?.isStale && !isRandomQuerySort) || (showStaleDataBeforeRefresh && (!isRandomQuerySort || sectionConfig.renderMode === 'Spotlight'))) && dataItems.length > 0;
 
                 // Paint cached cards when valid, or when stale display is opted in
                 if (renderCachedData) {
@@ -2070,6 +2101,8 @@
                     if (getActiveViewMoreUrl(sectionConfig)) {
                         spotlightSettings.viewMoreUrl = getActiveViewMoreUrl(sectionConfig);
                     }
+                    spotlightSettings.discoveryPending = sectionConfig.discoveryPending === true;
+                    spotlightSettings.caption = sectionConfig.caption;
                     sectionElement = createSkeletonSpotlightSection(getSectionTitleForMultiQuery(sectionConfig), spotlightSettings);
                 } else {
                     sectionElement = createProgressivelyEnhancedScrollableContainer(getSectionTitleForMultiQuery(sectionConfig), getActiveViewMoreUrl(sectionConfig), finalCardFormat, sectionConfig.overflowCard, sectionConfig);
@@ -2118,7 +2151,15 @@
                 }    
             }
 
-            container.appendChild(fragment);
+            // Append one section per frame so scroll/compositor get frames between paints.
+            // Build already happened in the fragment; only the container append is paced.
+            const sectionNodes = Array.from(fragment.childNodes);
+            for (let i = 0; i < sectionNodes.length; i++) {
+                container.appendChild(sectionNodes[i]);
+                if (i + 1 < sectionNodes.length) {
+                    await new Promise((resolve) => requestAnimationFrame(resolve));
+                }
+            }
             syncAttachedGridTilesLayouts(container);
 
             // Update the scroll buttons for all scrollable containers
@@ -2527,14 +2568,274 @@
         if (!canvas || !blurhashString) return false;
         const w = canvas.width || 20;
         const h = canvas.height || 20;
-        const pixels = blurhashDecode(blurhashString, w, h);
+        const cacheKey = blurhashCacheKey(blurhashString, w, h);
+        let pixels = blurhashCacheGet(cacheKey);
+        if (!pixels) {
+            pixels = blurhashDecode(blurhashString, w, h);
+            if (pixels) blurhashCacheSet(cacheKey, pixels);
+        }
         if (!pixels) return false;
+        return applyBlurhashPixelsToCanvas(canvas, pixels);
+    }
+
+    // --- Deferred blurhash: cache + worker + near-viewport filler ---
+    const BLURHASH_CACHE_MAX = 200;
+    const blurhashPixelCache = new Map();
+    let blurhashFillObserver = null;
+    let blurhashWorker = null;
+    let blurhashWorkerReqId = 0;
+    const blurhashWorkerPending = new Map();
+    const blurhashIdleQueue = [];
+    let blurhashIdleScheduled = false;
+
+    function blurhashCacheKey(blurhash, width, height) {
+        return blurhash + '|' + width + 'x' + height;
+    }
+
+    function blurhashCacheGet(key) {
+        if (!blurhashPixelCache.has(key)) return null;
+        const val = blurhashPixelCache.get(key);
+        blurhashPixelCache.delete(key);
+        blurhashPixelCache.set(key, val);
+        return val;
+    }
+
+    function blurhashCacheSet(key, pixels) {
+        if (blurhashPixelCache.has(key)) blurhashPixelCache.delete(key);
+        blurhashPixelCache.set(key, pixels);
+        while (blurhashPixelCache.size > BLURHASH_CACHE_MAX) {
+            const oldest = blurhashPixelCache.keys().next().value;
+            blurhashPixelCache.delete(oldest);
+        }
+    }
+
+    function shouldSkipBlurhashDecode() {
+        try {
+            if (navigator.connection && navigator.connection.saveData === true) return true;
+        } catch (e) { /* ignore */ }
+        try {
+            if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return true;
+        } catch (e) { /* ignore */ }
+        return false;
+    }
+
+    function getBlurhashFillRootMargin() {
+        return isMobileLayout() ? '120px' : '200px';
+    }
+
+    /**
+     * Put pixels on canvas and show blurhash until the real image loads.
+     * @returns {boolean}
+     */
+    function applyBlurhashPixelsToCanvas(canvas, pixels) {
+        if (!canvas || !pixels || !canvas.isConnected) return false;
+        const w = canvas.width || 20;
+        const h = canvas.height || 20;
         const ctx = canvas.getContext('2d');
         if (!ctx) return false;
+
         const imageData = ctx.createImageData(w, h);
         imageData.data.set(pixels);
         ctx.putImageData(imageData, 0, 0);
+        canvas.removeAttribute('data-blurhash-pending');
+
+        const cardImageContainer = canvas.nextElementSibling;
+        const imageAlreadyLoaded = cardImageContainer
+            && cardImageContainer.classList
+            && cardImageContainer.classList.contains('lazy-loaded');
+
+        if (imageAlreadyLoaded) {
+            canvas.classList.add('lazy-hidden');
+            return true;
+        }
+
+        canvas.classList.remove('lazy-hidden');
+        if (cardImageContainer && cardImageContainer.classList.contains('cardImageContainer')) {
+            cardImageContainer.classList.add('lazy-hidden');
+        }
         return true;
+    }
+
+    function getBlurhashWorkerSource() {
+        return [
+            'const BLURHASH_B83 = ' + JSON.stringify(BLURHASH_B83) + ';',
+            blurhashDecode83.toString(),
+            blurhashSignPow.toString(),
+            blurhashLinearToSrgb.toString(),
+            blurhashSrgbToLinear.toString(),
+            blurhashDecode.toString(),
+            'self.onmessage = function(e) {',
+            '  var data = e.data || {};',
+            '  var id = data.id;',
+            '  try {',
+            '    var pixels = blurhashDecode(data.blurhash, data.width || 20, data.height || 20);',
+            '    if (!pixels) { self.postMessage({ id: id, ok: false }); return; }',
+            '    self.postMessage({ id: id, ok: true, pixels: pixels.buffer }, [pixels.buffer]);',
+            '  } catch (err) {',
+            '    self.postMessage({ id: id, ok: false, error: String(err && err.message || err) });',
+            '  }',
+            '};'
+        ].join('\n');
+    }
+
+    function ensureBlurhashWorker() {
+        if (blurhashWorker) return blurhashWorker;
+        if (typeof Worker === 'undefined') return null;
+        try {
+            const blob = new Blob([getBlurhashWorkerSource()], { type: 'application/javascript' });
+            const url = URL.createObjectURL(blob);
+            const worker = new Worker(url);
+            worker.onmessage = (e) => {
+                const data = e.data || {};
+                const pending = blurhashWorkerPending.get(data.id);
+                blurhashWorkerPending.delete(data.id);
+                if (!pending) return;
+                if (!data.ok || !data.pixels) {
+                    pending.reject(new Error(data.error || 'Blurhash worker decode failed'));
+                    return;
+                }
+                pending.resolve(new Uint8ClampedArray(data.pixels));
+            };
+            worker.onerror = (err) => {
+                console.warn('[KefinTweaks CardBuilder] Blurhash worker error:', err);
+                blurhashWorkerPending.forEach((p) => p.reject(err));
+                blurhashWorkerPending.clear();
+                try { worker.terminate(); } catch (e) { /* ignore */ }
+                try { URL.revokeObjectURL(url); } catch (e) { /* ignore */ }
+                blurhashWorker = null;
+            };
+            blurhashWorker = worker;
+            return worker;
+        } catch (e) {
+            console.warn('[KefinTweaks CardBuilder] Could not create blurhash worker:', e);
+            return null;
+        }
+    }
+
+    function decodeBlurhashInWorker(blurhash, width, height) {
+        return new Promise((resolve, reject) => {
+            const worker = ensureBlurhashWorker();
+            if (!worker) {
+                reject(new Error('Blurhash worker unavailable'));
+                return;
+            }
+            const id = ++blurhashWorkerReqId;
+            blurhashWorkerPending.set(id, { resolve, reject });
+            try {
+                worker.postMessage({ id, blurhash, width, height });
+            } catch (e) {
+                blurhashWorkerPending.delete(id);
+                reject(e);
+            }
+        });
+    }
+
+    function scheduleIdleBlurhashDrain() {
+        if (blurhashIdleScheduled) return;
+        blurhashIdleScheduled = true;
+        const run = (deadline) => {
+            blurhashIdleScheduled = false;
+            let n = 0;
+            while (blurhashIdleQueue.length && n < 4) {
+                if (deadline && typeof deadline.timeRemaining === 'function' && deadline.timeRemaining() <= 0 && n > 0) {
+                    break;
+                }
+                const job = blurhashIdleQueue.shift();
+                n++;
+                if (!job || !job.canvas || !job.canvas.isConnected) continue;
+                if (!job.canvas.hasAttribute('data-blurhash-pending')) continue;
+                const cacheKey = blurhashCacheKey(job.blurhash, job.w, job.h);
+                let pixels = blurhashCacheGet(cacheKey);
+                if (!pixels) {
+                    pixels = blurhashDecode(job.blurhash, job.w, job.h);
+                    if (pixels) blurhashCacheSet(cacheKey, pixels);
+                }
+                if (pixels) applyBlurhashPixelsToCanvas(job.canvas, pixels);
+                else job.canvas.removeAttribute('data-blurhash-pending');
+            }
+            if (blurhashIdleQueue.length) scheduleIdleBlurhashDrain();
+        };
+        if (typeof requestIdleCallback === 'function') {
+            requestIdleCallback(run, { timeout: 500 });
+        } else {
+            requestAnimationFrame(() => run({ timeRemaining: () => 5 }));
+        }
+    }
+
+    function enqueueIdleBlurhashDecode(canvas, blurhash, width, height) {
+        blurhashIdleQueue.push({ canvas, blurhash, w: width, h: height });
+        scheduleIdleBlurhashDrain();
+    }
+
+    async function fillBlurhashCanvas(canvas) {
+        if (!canvas || !canvas.isConnected) return;
+        const blurhash = canvas.getAttribute('data-blurhash-pending');
+        if (!blurhash) return;
+        if (shouldSkipBlurhashDecode()) {
+            canvas.removeAttribute('data-blurhash-pending');
+            canvas.classList.add('lazy-hidden');
+            return;
+        }
+
+        const w = canvas.width || 20;
+        const h = canvas.height || 20;
+        const cacheKey = blurhashCacheKey(blurhash, w, h);
+        const cached = blurhashCacheGet(cacheKey);
+        if (cached) {
+            applyBlurhashPixelsToCanvas(canvas, cached);
+            return;
+        }
+
+        try {
+            const pixels = await decodeBlurhashInWorker(blurhash, w, h);
+            if (!canvas.isConnected || canvas.getAttribute('data-blurhash-pending') !== blurhash) return;
+            blurhashCacheSet(cacheKey, pixels);
+            applyBlurhashPixelsToCanvas(canvas, pixels);
+        } catch (e) {
+            enqueueIdleBlurhashDecode(canvas, blurhash, w, h);
+        }
+    }
+
+    function observeBlurhashCanvas(canvas) {
+        if (!canvas || !canvas.hasAttribute('data-blurhash-pending')) return;
+        if (shouldSkipBlurhashDecode()) {
+            canvas.removeAttribute('data-blurhash-pending');
+            canvas.classList.add('lazy-hidden');
+            return;
+        }
+        initBlurhashFillObserver();
+        if (blurhashFillObserver) {
+            blurhashFillObserver.observe(canvas);
+        } else {
+            fillBlurhashCanvas(canvas);
+        }
+    }
+
+    function initBlurhashFillObserver() {
+        if (blurhashFillObserver) return;
+        if (typeof IntersectionObserver === 'undefined') return;
+
+        blurhashFillObserver = new IntersectionObserver((entries) => {
+            entries.forEach((entry) => {
+                if (!entry.isIntersecting) return;
+                const canvas = entry.target;
+                blurhashFillObserver.unobserve(canvas);
+                fillBlurhashCanvas(canvas);
+            });
+        }, {
+            threshold: 0,
+            rootMargin: getBlurhashFillRootMargin()
+        });
+    }
+
+    function observePendingBlurhashInNode(node) {
+        if (!node || node.nodeType !== 1) return;
+        if (node.matches && node.matches('canvas.blurhash-canvas[data-blurhash-pending]')) {
+            observeBlurhashCanvas(node);
+        }
+        if (node.querySelectorAll) {
+            node.querySelectorAll('canvas.blurhash-canvas[data-blurhash-pending]').forEach(observeBlurhashCanvas);
+        }
     }
 
     /**
@@ -3022,20 +3323,24 @@
         const blurhashStr = !item.imageUrl ? getBlurhashForCard(item, cardFormat) : null;
         if (!blurhashStr || cardFormat === 'logo' || cardFormat === 'clear art' || cardFormat === 'disc') {
             blurhashCanvas.classList.add('lazy-hidden');
+        } else if (shouldSkipBlurhashDecode()) {
+            // Skip CPU decode; keep default chrome / lazy image path only
+            blurhashCanvas.classList.add('lazy-hidden');
         } else {
-            // Draw blurhash immediately so placeholder is visible ASAP (canvas is behind cardImageContainer)
-            if (!drawBlurhashToCanvas(blurhashCanvas, blurhashStr)) {
-                blurhashCanvas.classList.add('lazy-hidden');
-            } else {
-                // Hide the image container so the blurhash canvas shows until the real image loads
-                cardImageContainer.classList.add('lazy-hidden');
-            }
+            // Defer decode off the construction path — near-viewport filler paints later
+            blurhashCanvas.classList.add('lazy-hidden');
+            blurhashCanvas.setAttribute('data-blurhash-pending', blurhashStr);
         }
 
         if (imageUrl) {
             // Use data-src for lazy loading instead of immediate backgroundImage
             cardImageContainer.setAttribute('data-src', imageUrl);
-            if (blurhashStr) cardImageContainer.setAttribute('data-blurhash', blurhashStr);
+            if (blurhashStr
+                && cardFormat !== 'logo'
+                && cardFormat !== 'clear art'
+                && cardFormat !== 'disc') {
+                cardImageContainer.setAttribute('data-blurhash', blurhashStr);
+            }
             // Add lazy class for styling/selection
             cardImageContainer.classList.add('lazy');
         }
@@ -3154,6 +3459,25 @@
             const buttonContainer = document.createElement('div');
             buttonContainer.className = 'cardOverlayButton-br flex';
 
+            // Watchlist button (active state from UserData.Likes; click bound by watchlist.js)
+            const watchlistSupportedTypes = ['Movie', 'Series', 'Season', 'Episode', 'BoxSet', 'Playlist', 'Video'];
+            if (watchlistSupportedTypes.includes(itemType)) {
+                const isLiked = item.UserData?.Likes === true;
+                const watchlistButton = document.createElement('button');
+                watchlistButton.type = 'button';
+                watchlistButton.className = 'watchlist-button cardOverlayButton cardOverlayButton-hover itemAction paper-icon-button-light emby-button button-flat';
+                watchlistButton.setAttribute('data-action', 'none');
+                watchlistButton.setAttribute('data-id', itemId);
+                watchlistButton.setAttribute('data-active', isLiked ? 'true' : 'false');
+                watchlistButton.title = isLiked ? 'Remove from Watchlist' : 'Add to Watchlist';
+
+                const watchlistIcon = document.createElement('span');
+                watchlistIcon.className = 'material-icons cardOverlayButtonIcon cardOverlayButtonIcon-hover watchlist';
+                watchlistIcon.setAttribute('aria-hidden', 'true');
+                watchlistButton.appendChild(watchlistIcon);
+                buttonContainer.appendChild(watchlistButton);
+            }
+
             // Watched button
             const watchedButton = document.createElement('button');
             watchedButton.setAttribute('is', 'emby-playstatebutton');
@@ -3203,7 +3527,9 @@
 
             buttonContainer.appendChild(moreButton);
 
-            cardOverlayContainer.appendChild(playButton);
+            if (item.Type !== 'CollectionFolder' && item.Type !== 'Folder' && item.Type !== 'UserView') {
+                cardOverlayContainer.appendChild(playButton);
+            }
             cardOverlayContainer.appendChild(buttonContainer);
         }
 
@@ -5256,6 +5582,52 @@
         return raw > 0 ? raw : 16;
     }
 
+    const SKELETON_ONE_LINE_ITEM_TYPES = new Set([
+        'Book', 'Genre', 'CollectionFolder', 'BoxSet', 'Playlist', 'Folder', 'Studio'
+    ]);
+
+    const SKELETON_CUSTOM_FOOTER_SECTION_IDS = new Set([
+        'upcoming', 'recentlyReleased.movies', 'recentlyReleased.episodes'
+    ]);
+
+    function sectionUsesCustomFooterText(sectionConfig) {
+        if (!sectionConfig) return false;
+        if (SKELETON_CUSTOM_FOOTER_SECTION_IDS.has(sectionConfig.id)) return true;
+        if (Array.isArray(sectionConfig.items) && sectionConfig.items.some(
+            (item) => item?.CustomFooterText || item?.cardFooter
+        )) {
+            return true;
+        }
+        return false;
+    }
+
+    function inferSkeletonItemType(sectionConfig) {
+        if (!sectionConfig) return null;
+        const query = sectionConfig.queries?.[0];
+        const path = typeof query?.path === 'string' ? query.path : '';
+        if (path.includes('/Studios')) return 'Studio';
+        if (path.includes('/Genres')) return 'Genre';
+
+        let includeTypes = query?.queryOptions?.IncludeItemTypes;
+        if (typeof includeTypes === 'string') {
+            includeTypes = includeTypes.split(',').map((t) => t.trim()).filter(Boolean);
+        }
+        if (!Array.isArray(includeTypes) || includeTypes.length === 0) return null;
+        if (includeTypes.length === 1) return includeTypes[0];
+        if (includeTypes.every((t) => SKELETON_ONE_LINE_ITEM_TYPES.has(t))) {
+            return includeTypes[0];
+        }
+        return null;
+    }
+
+    function getSkeletonFooterLineCount(sectionConfig) {
+        if (sectionConfig?.hideCardFooter === true) return 0;
+        if (sectionUsesCustomFooterText(sectionConfig)) return 3;
+        const itemType = inferSkeletonItemType(sectionConfig);
+        if (itemType && SKELETON_ONE_LINE_ITEM_TYPES.has(itemType)) return 1;
+        return 2;
+    }
+
     function createScrollerElement() {
         const scroller = document.createElement('div');
         const isMobile = isMobileLayout();
@@ -5582,9 +5954,10 @@
         return null;
     }
 
-    function appendSectionTitleContent(sectionTitleContainer, { title, caption, captionUrl, viewMoreUrl }) {
+    function appendSectionTitleContent(sectionTitleContainer, { title, caption, captionUrl, viewMoreUrl, discoveryPending }) {
         const captionText = caption && String(caption).trim();
         const hasCaption = !!captionText;
+        const useSkeletonTitle = discoveryPending === true;
         let parent = sectionTitleContainer;
 
         if (hasCaption) {
@@ -5594,7 +5967,15 @@
             parent = wrapper;
         }
 
-        if (viewMoreUrl) {
+        if (useSkeletonTitle) {
+            const titleText = document.createElement('h2');
+            titleText.className = 'sectionTitle sectionTitle-cards';
+            const skeletonTitle = document.createElement('span');
+            skeletonTitle.className = 'skeleton-text-line skeleton-section-title';
+            skeletonTitle.setAttribute('aria-hidden', 'true');
+            titleText.appendChild(skeletonTitle);
+            parent.appendChild(titleText);
+        } else if (viewMoreUrl) {
             const titleLink = document.createElement('a');
             titleLink.className = 'sectionTitle-link button-flat button-flat-mini sectionTitleTextButton emby-button';
             titleLink.style.cssText = 'text-decoration: none; cursor: pointer; display: flex; align-items: center;';
@@ -5628,7 +6009,14 @@
 
         if (hasCaption) {
             let captionEl;
-            if (captionUrl) {
+            if (useSkeletonTitle) {
+                captionEl = document.createElement('span');
+                captionEl.className = 'sectionTitle sectionCaption';
+                const skeletonCaption = document.createElement('span');
+                skeletonCaption.className = 'skeleton-text-line skeleton-section-caption';
+                skeletonCaption.setAttribute('aria-hidden', 'true');
+                captionEl.appendChild(skeletonCaption);
+            } else if (captionUrl) {
                 captionEl = document.createElement('a');
                 captionEl.className = 'sectionTitle sectionCaption button-flat button-flat-mini sectionTitleTextButton emby-button';
                 if (typeof captionUrl === 'function') {
@@ -5639,11 +6027,12 @@
                 } else {
                     captionEl.href = captionUrl;
                 }
+                captionEl.textContent = captionText;
             } else {
                 captionEl = document.createElement('span');
                 captionEl.className = 'sectionTitle sectionCaption';
+                captionEl.textContent = captionText;
             }
-            captionEl.textContent = captionText;
             parent.appendChild(captionEl);
         }
     }
@@ -5722,25 +6111,30 @@
 
     /**
      * Creates a skeleton card element for loading states
-     * @param {string} cardFormat - Card format: 'portrait', 'backdrop', 'thumb', or 'square'
+     * @param {string} cardFormat - Card format: 'portrait', 'backdrop', 'thumb', 'square', 'logo', 'clear art', 'disc', 'banner', etc.
      * @param {boolean} overflowCard - Use overflow card classes
+     * @param {Object|null} sectionConfig - Section config used to infer footer line count
      * @returns {HTMLElement} - Skeleton card element
      */
-    function createSkeletonCard(cardFormat = null, overflowCard = false) {
+    function createSkeletonCard(cardFormat = null, overflowCard = false, sectionConfig = null) {
         const card = document.createElement('div');
         
-        // Determine card classes based on format
+        // Determine card classes based on format (must match createJellyfinCardElement)
         let cardClass, padderClass;
         cardFormat = cardFormat?.toLowerCase() || 'portrait';
         
-        if (cardFormat === 'backdrop' || cardFormat === 'thumb' || cardFormat === 'series thumb') {
+        if (cardFormat === 'backdrop' || cardFormat === 'thumb' || cardFormat === 'series thumb'
+            || cardFormat === 'logo' || cardFormat === 'clear art') {
             cardClass = overflowCard ? 'overflowBackdropCard' : 'backdropCard';
             padderClass = 'cardPadder-backdrop';
-        } else if (cardFormat === 'square') {
+        } else if (cardFormat === 'square' || cardFormat === 'disc') {
             cardClass = overflowCard ? 'overflowSquareCard' : 'squareCard';
             padderClass = 'cardPadder-square';
+        } else if (cardFormat === 'banner') {
+            cardClass = overflowCard ? 'overflowBannerCard' : 'bannerCard';
+            padderClass = 'cardPadder-banner';
         } else {
-            // portrait (default)
+            // portrait / poster / series poster (default)
             cardClass = overflowCard ? 'overflowPortraitCard' : 'portraitCard';
             padderClass = 'cardPadder-portrait';
         }
@@ -5760,6 +6154,32 @@
         
         cardScalable.appendChild(cardPadder);
         cardBox.appendChild(cardScalable);
+
+        const footerLineCount = getSkeletonFooterLineCount(sectionConfig);
+        if (footerLineCount > 0) {
+            const cardTextStack = document.createElement('div');
+            cardTextStack.className = 'cardTextStack';
+
+            const lineWidths = ['70%', '55%', '40%'];
+            for (let lineIndex = 0; lineIndex < footerLineCount; lineIndex++) {
+                const isFirst = lineIndex === 0;
+                const cardText = document.createElement('div');
+                cardText.className = isFirst
+                    ? 'cardText cardTextCentered cardText-first'
+                    : 'cardText cardTextCentered cardText-secondary';
+
+                const bdi = document.createElement('bdi');
+                const skeletonLine = document.createElement('span');
+                skeletonLine.className = 'skeleton-text-line';
+                skeletonLine.style.width = lineWidths[lineIndex] || '40%';
+                bdi.appendChild(skeletonLine);
+                cardText.appendChild(bdi);
+                cardTextStack.appendChild(cardText);
+            }
+
+            cardBox.appendChild(cardTextStack);
+        }
+
         card.appendChild(cardBox);
         
         return card;
@@ -5773,9 +6193,18 @@
      * @returns {HTMLElement} - Skeleton spotlight container
      */
     function createSkeletonSpotlightSection(title, options = {}) {
-        const { viewMoreUrl = null, spotlightLayout, spotlightSize, fullScreen } = options;
+        const {
+            viewMoreUrl = null,
+            spotlightLayout,
+            spotlightSize,
+            fullScreen,
+            discoveryPending = false,
+            caption = null
+        } = options;
         const layout = spotlightLayout ?? (fullScreen === true ? 'Borderless' : 'Border');
         const size = spotlightSize ?? (fullScreen === true ? 'full' : 'normal');
+        const captionText = caption && String(caption).trim();
+        const useSkeletonTitle = discoveryPending === true;
 
         // Create main container (same structure as real spotlight)
         const container = document.createElement('div');
@@ -5792,9 +6221,16 @@
         {
             const sectionTitleContainer = document.createElement('div');
             sectionTitleContainer.className = 'spotlight-section-title-container';
-            if (title) {
+            if (useSkeletonTitle || title) {
                 let sectionTitleEl;
-                if (viewMoreUrl) {
+                if (useSkeletonTitle) {
+                    sectionTitleEl = document.createElement('div');
+                    sectionTitleEl.className = 'emby-tab-button emby-tab-button-active emby-button-foreground';
+                    const skeletonTitle = document.createElement('span');
+                    skeletonTitle.className = 'skeleton-text-line skeleton-section-title';
+                    skeletonTitle.setAttribute('aria-hidden', 'true');
+                    sectionTitleEl.appendChild(skeletonTitle);
+                } else if (viewMoreUrl) {
                     const titleLink = document.createElement('a');
                     titleLink.className = 'emby-tab-button emby-tab-button-active emby-button-foreground';
                     titleLink.textContent = title;
@@ -5819,9 +6255,19 @@
                     sectionTitleEl.textContent = title;
                 }
                 const sectionTitleWrapper = document.createElement('div');
-                sectionTitleWrapper.className = `spotlight-section-title ${viewMoreUrl ? '' : 'spotlight-title-link '}headerTabs sectionTabs`;
+                sectionTitleWrapper.className = `spotlight-section-title ${(!useSkeletonTitle && viewMoreUrl) ? '' : 'spotlight-title-link '}headerTabs sectionTabs`;
                 sectionTitleWrapper.appendChild(sectionTitleEl);
                 sectionTitleContainer.appendChild(sectionTitleWrapper);
+
+                if (useSkeletonTitle && captionText) {
+                    const captionEl = document.createElement('span');
+                    captionEl.className = 'sectionTitle sectionCaption';
+                    const skeletonCaption = document.createElement('span');
+                    skeletonCaption.className = 'skeleton-text-line skeleton-section-caption';
+                    skeletonCaption.setAttribute('aria-hidden', 'true');
+                    captionEl.appendChild(skeletonCaption);
+                    sectionTitleContainer.appendChild(captionEl);
+                }
             }
             bannerContainer.appendChild(sectionTitleContainer);
         }
@@ -5865,11 +6311,13 @@
         const sectionTitleContainer = document.createElement('div');
         sectionTitleContainer.className = 'sectionTitleContainer sectionTitleContainer-cards padded-left';
 
+        const discoveryPending = sectionConfig?.discoveryPending === true;
         appendSectionTitleContent(sectionTitleContainer, {
             title,
             caption: getSectionCaption(sectionConfig),
             captionUrl: getSectionCaptionUrl(sectionConfig),
-            viewMoreUrl
+            viewMoreUrl: discoveryPending ? null : viewMoreUrl,
+            discoveryPending
         });
 
         ensureSectionControlsMount(sectionTitleContainer);
@@ -5879,7 +6327,7 @@
 
         const skeletonCount = getSectionSkeletonCount(sectionConfig);
         for (let i = 0; i < skeletonCount; i++) {
-            const skeletonCard = createSkeletonCard(cardFormat, overflowCard);
+            const skeletonCard = createSkeletonCard(cardFormat, overflowCard, sectionConfig);
             skeletonCard.setAttribute('data-index', i);
             itemsContainer.appendChild(skeletonCard);
         }
@@ -5961,10 +6409,13 @@
      */
     function initLazyImageObserver() {
         if (lazyImageObserver) return; // Already initialized
+
+        // Mobile: tighter prefetch so image downloads don't stampede during discovery paint
+        const rootMargin = isMobileLayout() ? '300px' : '800px';
         
         const observerOptions = {
             threshold: 0.1, // Trigger when 10% of element is visible
-            rootMargin: '800px' // Start loading well before element enters viewport to avoid grey flash
+            rootMargin
         };
         
         lazyImageObserver = new IntersectionObserver((entries) => {
@@ -5987,6 +6438,7 @@
                     const canvas = cardImageContainer.previousElementSibling;
                     if (canvas && canvas.tagName === 'CANVAS' && canvas.classList.contains('blurhash-canvas')) {
                         canvas.classList.add('lazy-hidden');
+                        canvas.removeAttribute('data-blurhash-pending');
                     }
                     lazyImageObserver.unobserve(cardImageContainer);
                 };
@@ -5999,6 +6451,7 @@
                     const canvas = cardImageContainer.previousElementSibling;
                     if (canvas && canvas.tagName === 'CANVAS' && canvas.classList.contains('blurhash-canvas')) {
                         canvas.classList.add('lazy-hidden');
+                        canvas.removeAttribute('data-blurhash-pending');
                     }
                     lazyImageObserver.unobserve(cardImageContainer);
                 };
@@ -6036,6 +6489,8 @@
                             lazyImageObserver.observe(img);
                         });
                     }
+
+                    observePendingBlurhashInNode(node);
                 });
             });
         });
@@ -6112,11 +6567,14 @@
         
         initLazyImageObserver();
         initLazyMutationObserver();
+        initBlurhashFillObserver();
         
         const existingLazyImages = document.querySelectorAll('.cardImageContainer[data-src]');
         existingLazyImages.forEach(img => {
             lazyImageObserver.observe(img);
         });
+
+        document.querySelectorAll('canvas.blurhash-canvas[data-blurhash-pending]').forEach(observeBlurhashCanvas);
         
         if (document.body) {
             lazyMutationObserver.observe(document.body, {
@@ -6772,9 +7230,17 @@
             const dataItems = section.result?.data?.Items ?? section.result?.data ?? [];
             const isSpotlight = sectionConfig.spotlight || sectionConfig.renderMode === 'Spotlight';
             const isSkeleton = !!(sectionElement.querySelector('.skeleton-card, .skeleton-spotlight-item'));
+            const hasSkeletonTitle = !!sectionElement.querySelector('.skeleton-section-title');
 
             if (items.length === 0) {
                 sectionElement.remove();
+                return;
+            }
+
+            // Discovery pending (and any skeleton with placeholder title) needs a full rebuild for title/viewMore/caption
+            if (isSkeleton && (isSpotlight || hasSkeletonTitle)) {
+                const content = replaceSectionWithFreshCards(sectionElement, items, sectionConfig, dataItems, revealSectionsSequentially);
+                markSectionEnhanced(content, sectionConfig);
                 return;
             }
 

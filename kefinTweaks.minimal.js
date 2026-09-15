@@ -352,7 +352,8 @@ window.KefinTweaksConfig = {
                 },
                 "starringActorRecentlyWatched": {
                     "enabled": true,
-                    "name": "Starring [Actor] because you recently watched [Movie]",
+                    "name": "Starring {Person}",
+                    "caption": "because you recently watched {Title}",
                     "itemLimit": 16,
                     "sortOrder": "Random",
                     "sortOrderDirection": "Ascending",
@@ -360,7 +361,8 @@ window.KefinTweaksConfig = {
                 },
                 "directedByDirectorRecentlyWatched": {
                     "enabled": true,
-                    "name": "Directed by [Director] because you recently watched [Movie]",
+                    "name": "Directed by {Person}",
+                    "caption": "because you recently watched {Title}",
                     "itemLimit": 16,
                     "sortOrder": "Random",
                     "sortOrderDirection": "Ascending",
@@ -368,7 +370,8 @@ window.KefinTweaksConfig = {
                 },
                 "writtenByWriterRecentlyWatched": {
                     "enabled": true,
-                    "name": "Written by [Writer] because you recently watched [Movie]",
+                    "name": "Written by {Person}",
+                    "caption": "because you recently watched {Title}",
                     "itemLimit": 16,
                     "sortOrder": "Random",
                     "sortOrderDirection": "Ascending",

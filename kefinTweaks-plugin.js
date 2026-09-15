@@ -186,7 +186,7 @@
         });
     }
 
-    // Save configuration to JavaScript Injector
+    // Save configuration to JavaScript Injector (Config + KefinTweaks-injector preload)
     async function saveConfigToJavaScriptInjector(config) {
         try {
             const pluginId = await findJavaScriptInjectorPlugin();
@@ -202,19 +202,53 @@
 
 window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
 
-            const existingScriptIndex = injectorConfig.CustomJavaScripts.findIndex(
-                script => script.Name === 'KefinTweaks-Config'
-            );
+            let injectorScriptContent = null;
+            try {
+                const rootRaw = config.kefinTweaksRoot || '';
+                const root = rootRaw.endsWith('/') ? rootRaw : rootRaw + '/';
+                if (root && root !== '/') {
+                    await loadKefinTweaksLoaderFromRoot(root);
+                    const Loader = window.KefinTweaksLoader;
+                    if (Loader) {
+                        Loader.ensureKefinTweaksApi(Loader.SCRIPT_DEFINITIONS);
+                        let major = null;
+                        try {
+                            major = await window.KefinTweaks.getJellyfinMajorVersion();
+                        } catch (e) {
+                            console.warn('[KefinTweaks Installer] Could not resolve Jellyfin major for injector bake:', e);
+                        }
+                        const plan = Loader.buildLoadPlan(config, major, {
+                            root,
+                            configOnly: config.enabled === false
+                        });
+                        injectorScriptContent = Loader.buildInjectorScript(plan);
+                        console.log('[KefinTweaks Installer] Built KefinTweaks-injector with', plan.assets.length, 'assets');
+                    }
+                }
+            } catch (e) {
+                console.warn('[KefinTweaks Installer] Failed to build KefinTweaks-injector:', e);
+            }
 
-            if (existingScriptIndex !== -1) {
-                injectorConfig.CustomJavaScripts[existingScriptIndex].Script = scriptContent;
+            if (window.KefinTweaksLoader) {
+                injectorConfig.CustomJavaScripts = window.KefinTweaksLoader.upsertInjectorEntries(
+                    injectorConfig.CustomJavaScripts,
+                    { configScriptContent: scriptContent, injectorScriptContent }
+                );
             } else {
-                injectorConfig.CustomJavaScripts.push({
-                    Name: 'KefinTweaks-Config',
-                    Script: scriptContent,
-                    Enabled: true,
-                    RequiresAuthentication: false
-                });
+                const existingScriptIndex = injectorConfig.CustomJavaScripts.findIndex(
+                    script => script.Name === 'KefinTweaks-Config'
+                );
+                if (existingScriptIndex !== -1) {
+                    injectorConfig.CustomJavaScripts[existingScriptIndex].Script = scriptContent;
+                    injectorConfig.CustomJavaScripts[existingScriptIndex].Enabled = true;
+                } else {
+                    injectorConfig.CustomJavaScripts.push({
+                        Name: 'KefinTweaks-Config',
+                        Script: scriptContent,
+                        Enabled: true,
+                        RequiresAuthentication: false
+                    });
+                }
             }
 
             const server = ApiClient._serverAddress;
@@ -237,6 +271,144 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             console.error('[KefinTweaks Installer] Error saving config:', error);
             throw error;
         }
+    }
+
+    function loadKefinTweaksLoaderFromRoot(root) {
+        const normalized = root.endsWith('/') ? root : root + '/';
+        const url = `${normalized}scripts/kefinTweaks-loader.js`;
+        if (window.KefinTweaksLoader) return Promise.resolve(window.KefinTweaksLoader);
+        return new Promise((resolve, reject) => {
+            const existing = document.querySelector(`script[src="${url}"]`);
+            if (existing) {
+                const start = Date.now();
+                const wait = () => {
+                    if (window.KefinTweaksLoader) return resolve(window.KefinTweaksLoader);
+                    if (Date.now() - start > 15000) return reject(new Error('Timed out waiting for KefinTweaksLoader'));
+                    setTimeout(wait, 50);
+                };
+                return wait();
+            }
+            const script = document.createElement('script');
+            script.src = url;
+            script.async = false;
+            script.onload = () => resolve(window.KefinTweaksLoader);
+            script.onerror = () => reject(new Error('Failed to load ' + url));
+            document.head.appendChild(script);
+        });
+    }
+
+    function isLoggedInForInjectorWrite() {
+        try {
+            return !!(window.ApiClient
+                && window.ApiClient._loggedIn
+                && typeof window.ApiClient.accessToken === 'function'
+                && window.ApiClient.accessToken()
+                && window.ApiClient._serverAddress);
+        } catch (e) {
+            return false;
+        }
+    }
+
+    async function waitForLoginForInjectorWrite(maxWaitMs = 10000, checkInterval = 250) {
+        if (isLoggedInForInjectorWrite()) return true;
+        const start = Date.now();
+        while (Date.now() - start < maxWaitMs) {
+            await new Promise((r) => setTimeout(r, checkInterval));
+            if (isLoggedInForInjectorWrite()) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Create/update KefinTweaks-injector (and Config) in JS Injector when missing.
+     * @returns {Promise<{ ok: boolean, plan?: object, reason?: string }>}
+     */
+    async function ensureKefinTweaksInjectorEntry(config) {
+        const rootRaw = config?.kefinTweaksRoot || '';
+        if (!rootRaw) {
+            return { ok: false, reason: 'kefinTweaksRoot not configured' };
+        }
+
+        if (!isLoggedInForInjectorWrite()) {
+            return { ok: false, reason: 'not logged in' };
+        }
+
+        try {
+            const root = rootRaw.endsWith('/') ? rootRaw : rootRaw + '/';
+            await loadKefinTweaksLoaderFromRoot(root);
+            const Loader = window.KefinTweaksLoader;
+            if (!Loader) {
+                return { ok: false, reason: 'KefinTweaksLoader unavailable' };
+            }
+
+            Loader.ensureKefinTweaksApi(Loader.SCRIPT_DEFINITIONS);
+            let major = null;
+            try {
+                major = await window.KefinTweaks.getJellyfinMajorVersion();
+            } catch (e) {
+                console.warn('[KefinTweaks Installer] Could not resolve Jellyfin major for auto-create:', e);
+            }
+
+            const plan = Loader.buildLoadPlan(config, major, {
+                root,
+                configOnly: config.enabled === false
+            });
+            const injectorScriptContent = Loader.buildInjectorScript(plan);
+            const configScriptContent = `// KefinTweaks Configuration
+// This file is automatically generated by KefinTweaks Installer
+// Do not edit manually unless you know what you're doing
+
+window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
+
+            const pluginId = await findJavaScriptInjectorPlugin();
+            if (!pluginId) {
+                return { ok: false, reason: 'JavaScript Injector plugin not found' };
+            }
+            const injectorConfig = await getJavaScriptInjectorConfig(pluginId);
+            if (!injectorConfig) {
+                return { ok: false, reason: 'Could not read JS Injector configuration' };
+            }
+            if (!injectorConfig.CustomJavaScripts) {
+                injectorConfig.CustomJavaScripts = [];
+            }
+
+            injectorConfig.CustomJavaScripts = Loader.upsertInjectorEntries(
+                injectorConfig.CustomJavaScripts,
+                { configScriptContent, injectorScriptContent }
+            );
+
+            const server = ApiClient._serverAddress;
+            const response = await fetch(`${server}/Plugins/${pluginId}/Configuration`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': getAuthHeader(),
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(injectorConfig)
+            });
+
+            if (!response.ok) {
+                return {
+                    ok: false,
+                    reason: `POST failed HTTP ${response.status}: ${response.statusText}`
+                };
+            }
+
+            console.log('[KefinTweaks Installer] Auto-created KefinTweaks-injector with', plan.assets.length, 'assets');
+            return { ok: true, plan };
+        } catch (err) {
+            console.warn('[KefinTweaks Installer] ensureKefinTweaksInjectorEntry failed:', err);
+            return { ok: false, reason: err?.message || String(err) };
+        }
+    }
+
+    function hasEnabledKefinInjectorEntry(customJavaScripts) {
+        if (window.KefinTweaksLoader?.hasEnabledInjectorEntry) {
+            return window.KefinTweaksLoader.hasEnabledInjectorEntry(customJavaScripts);
+        }
+        return (customJavaScripts || []).some(
+            (s) => s.Name === 'KefinTweaks-injector' && s.Enabled !== false
+        );
     }
 
     const LATEST_RELEASE_NAME = 'Latest';
@@ -805,7 +977,20 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                     versionDisplay = sourceInfo.version;
                 }
                 
-                // Load injector.js from the configured root
+                // Always load live injector.js for plan apply + stamp sync (baked preload may be stale)
+                let hasPreload = false;
+                try {
+                    const pluginId = await findJavaScriptInjectorPlugin();
+                    const injCfg = await getJavaScriptInjectorConfig(pluginId);
+                    hasPreload = (injCfg.CustomJavaScripts || []).some(
+                        (s) => s.Name === 'KefinTweaks-injector' && s.Enabled !== false
+                    );
+                } catch (e) {
+                    console.warn('[KefinTweaks Installer] Could not verify KefinTweaks-injector after save:', e);
+                }
+                if (hasPreload) {
+                    console.log('[KefinTweaks Installer] KefinTweaks-injector saved; still loading injector.js for live plan + sync');
+                }
                 await loadInjectorFromRoot(kefinTweaksRoot);
                 
                 // Show success modal
@@ -883,6 +1068,17 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                 injectorConfig.CustomJavaScripts[configScriptIndex].Name = `KefinTweaks-Config-Backup-${timestamp}`;
                 injectorConfig.CustomJavaScripts[configScriptIndex].Enabled = false;
                 console.log('[KefinTweaks Installer] Renamed KefinTweaks-Config to backup and disabled it');
+            }
+
+            // Also disable/rename KefinTweaks-injector preload entry
+            const injectorScriptIndex = injectorConfig.CustomJavaScripts.findIndex(
+                script => script.Name === 'KefinTweaks-injector'
+            );
+            if (injectorScriptIndex !== -1) {
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+                injectorConfig.CustomJavaScripts[injectorScriptIndex].Name = `KefinTweaks-injector-Backup-${timestamp}`;
+                injectorConfig.CustomJavaScripts[injectorScriptIndex].Enabled = false;
+                console.log('[KefinTweaks Installer] Renamed KefinTweaks-injector to backup and disabled it');
             }
 
             // Step 2: Find and disable installer script
@@ -1625,7 +1821,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         });
     }
 
-    // Check if config exists and load injector.js if ready
+    // Check if config exists; auto-create KefinTweaks-injector when missing; always load live injector.js
     async function checkAndLoadInjector() {
         try {
             const config = await getKefinTweaksConfig();
@@ -1633,12 +1829,53 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
 
             // Before injector/utils: hide fallback page chrome for custom routes
             injectCustomPageStyles(config);
-            
-            if (root && root !== '') {
-                await loadInjectorFromRoot(root);
-            } else {
+
+            if (!root || root === '') {
                 console.log('[KefinTweaks Installer] kefinTweaksRoot not configured. Please configure via the Plugins page.');
+                return;
             }
+
+            // Plugin config GET/POST needs a session; wait briefly so admin first-load can auto-create
+            await waitForLoginForInjectorWrite();
+
+            let injectorConfig = null;
+            try {
+                const pluginId = await findJavaScriptInjectorPlugin();
+                if (pluginId) {
+                    injectorConfig = await getJavaScriptInjectorConfig(pluginId);
+                }
+            } catch (e) {
+                console.warn('[KefinTweaks Installer] Could not read JS Injector config:', e);
+            }
+
+            const hasPreload = !!(injectorConfig && hasEnabledKefinInjectorEntry(injectorConfig.CustomJavaScripts));
+            if (hasPreload) {
+                console.log('[KefinTweaks Installer] KefinTweaks-injector present; still loading injector.js for live plan + sync');
+            } else {
+                // Entry missing: try to create + apply assets now (admin/logged-in)
+                const ensured = await ensureKefinTweaksInjectorEntry(config);
+                if (ensured.ok && ensured.plan) {
+                    window.KefinTweaksScriptsPreloaded = true;
+                    if (window.KefinTweaksLoader) {
+                        window.KefinTweaksLoader.ensureKefinTweaksApi(window.KefinTweaksLoader.SCRIPT_DEFINITIONS);
+                        window.KefinTweaksLoader.applyAssetsToDocument(ensured.plan.assets);
+                    }
+                    try {
+                        document.dispatchEvent(new CustomEvent('kefinTweaksLoaded', {
+                            detail: {
+                                stamp: ensured.plan.stamp,
+                                timestamp: new Date().toISOString(),
+                                autoCreated: true
+                            }
+                        }));
+                    } catch (e) { /* ignore */ }
+                    console.log('[KefinTweaks Installer] Applied KefinTweaks-injector assets after auto-create');
+                } else {
+                    console.log('[KefinTweaks Installer] KefinTweaks-injector not available (' + (ensured.reason || 'unknown') + '); loading injector.js');
+                }
+            }
+
+            await loadInjectorFromRoot(root);
         } catch (error) {
             console.error('[KefinTweaks Installer] Error checking config:', error);
         }

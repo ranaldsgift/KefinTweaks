@@ -41,20 +41,17 @@
         renderedSections: new Set(),
         renderedDiscoveryIds: {
             genres: new Set(),
-            networks: new Set(),
+            genresSeries: new Set(),
+            seriesStudios: new Set(),
+            seriesStudiosTopRated: new Set(),
             collections: new Set(),
-            studios: new Set(),
             people: new Set(),
-            actors: new Set(),
-            directors: new Set(),
-            writers: new Set(),
-            watchedMovies: new Set(),
-            likedMovies: new Set(),
+            similar: new Set(),
+            watchlist: new Set(),
             customDiscoverySections: new Set()
         },
         currentDiscoveryGenre: null,
         currentDiscoveryStudio: null,
-        cachedFavorites: null,
         isPeopleCacheComplete: false,
         discoveryGroupIndex: 0,
         isRenderingDiscovery: false,
@@ -64,15 +61,34 @@
         discoverySectionOrder: 100000000,
         discoverySectionsRemain: true,
         ensuringDiscoveryBuffer: false,
+        discoveryNeedsMoreScroll: false,
+        discoveryMode: null, // 'infinite' | 'chevron'
         infiniteScrollHandler: null,
+        discoveryWheelHandler: null,
+        discoveryTouchStartHandler: null,
+        discoveryTouchMoveHandler: null,
+        discoveryScrollDebounceTimer: null,
         userDisplayPreferences: null,
         firstDiscoveryBuffer: null,
-        getDisplayPrefernces: fetchDisplayPreferences,
+        getDisplayPrefernces: null,
         kefinNextUp: false,
         kefinContinueWatching: false,
         kefinLatestMedia: false,
-        jellyfinOrders: {}
+        jellyfinOrders: {},
+        homePaintedEventFired: false
     };
+
+    async function fetchDisplayPreferences() {
+        if (!window.userHelper?.getUserDisplayPreferences) {
+            WARN('userHelper.getUserDisplayPreferences unavailable');
+            return null;
+        }
+        const { promise, cached } = await window.userHelper.getUserDisplayPreferences({ cacheOnly: true });
+        const prefs = cached || await promise;
+        state.userDisplayPreferences = prefs;
+        return prefs;
+    }
+    state.getDisplayPrefernces = fetchDisplayPreferences;
 
     const performanceTimer = {
         loadTimeStart: null,
@@ -98,14 +114,16 @@
 
     // Create loading indicator element
     function createDiscoveryLoadingIndicator(container) {
-        let loadingDiv = document.querySelector('.homePage:not(.hide) #discovery-loading-indicator');
+        let loadingDiv = document.querySelector('.homePage:not(.hide) #discovery-loading-indicator')
+            || document.querySelector('.libraryPage:not(.hide) #discovery-loading-indicator');
         if (loadingDiv) {
             return loadingDiv;
         }
 
         // Prefer the provided container, but fall back to the standard sections container
         if (!container) {
-            container = document.querySelector('.homePage:not(.hide) #homeTab .sections');
+            container = document.querySelector('.homePage:not(.hide) #homeTab .sections')
+                || document.querySelector('.libraryPage:not(.hide) .homeSectionsContainer');
         }
 
         if (!container) {
@@ -125,6 +143,97 @@
         LOG('Created discovery loading indicator inside sections container');
         
         return loadingDiv;
+    }
+
+    function getDiscoveryHomePageEl() {
+        return document.querySelector('#indexPage')
+            || document.querySelector('.homePage:not(.hide)')
+            || document.querySelector('.libraryPage:not(.hide)');
+    }
+
+    function setDiscoveryPageAttrs({ ready = false, infinite = false, exhausted = false } = {}) {
+        const page = getDiscoveryHomePageEl();
+        if (!page) return;
+        if (ready) page.dataset.discoveryReady = 'true';
+        else delete page.dataset.discoveryReady;
+        if (infinite) page.dataset.infiniteScroll = 'true';
+        else delete page.dataset.infiniteScroll;
+        if (exhausted) page.dataset.discoveryExhausted = 'true';
+        else delete page.dataset.discoveryExhausted;
+    }
+
+    function showDiscoveryLoadingIndicator() {
+        const loadingIndicator = createDiscoveryLoadingIndicator(
+            document.querySelector('.libraryPage:not(.hide) .homeSectionsContainer')
+        );
+        if (!loadingIndicator) return;
+        loadingIndicator.classList.add('show');
+        loadingIndicator.style.visibility = 'visible';
+        loadingIndicator.style.display = 'flex';
+    }
+
+    function hideDiscoveryLoadingIndicator() {
+        const loadingIndicator = document.querySelector('.libraryPage:not(.hide) #discovery-loading-indicator');
+        if (!loadingIndicator) return;
+        loadingIndicator.classList.remove('show');
+        // Chevron / exhausted idle UI is shown via data-discovery-ready CSS
+        if (state.discoveryMode === 'chevron' || state.discoverySectionsRemain === false) {
+            loadingIndicator.style.visibility = '';
+            loadingIndicator.style.display = '';
+        } else {
+            loadingIndicator.style.visibility = 'hidden';
+            loadingIndicator.style.display = 'none';
+        }
+    }
+
+    function isDiscoveryHomeContext() {
+        const currentView = window.KefinTweaksUtils?.getCurrentView();
+        const isHomePage = currentView === 'home' || currentView === 'home.html';
+        if (!isHomePage) return false;
+        const activeTab = document.querySelector('.headerTabs .emby-tab-button-active');
+        if (!activeTab || activeTab.getAttribute('data-index') !== '0') return false;
+        return true;
+    }
+
+    function removeDiscoveryScrollListeners() {
+        if (state.discoveryScrollDebounceTimer) {
+            clearTimeout(state.discoveryScrollDebounceTimer);
+            state.discoveryScrollDebounceTimer = null;
+        }
+        if (state.infiniteScrollHandler) {
+            window.removeEventListener('scroll', state.infiniteScrollHandler);
+            state.infiniteScrollHandler = null;
+        }
+        if (state.discoveryWheelHandler) {
+            window.removeEventListener('wheel', state.discoveryWheelHandler);
+            state.discoveryWheelHandler = null;
+        }
+        if (state.discoveryTouchStartHandler) {
+            window.removeEventListener('touchstart', state.discoveryTouchStartHandler);
+            state.discoveryTouchStartHandler = null;
+        }
+        if (state.discoveryTouchMoveHandler) {
+            window.removeEventListener('touchmove', state.discoveryTouchMoveHandler);
+            state.discoveryTouchMoveHandler = null;
+        }
+        const container = document.querySelector('.libraryPage:not(.hide) .homeSectionsContainer');
+        if (container) delete container.dataset.discoveryHandler;
+    }
+
+    function markDiscoveryExhausted() {
+        state.discoverySectionsRemain = false;
+        state.discoveryBuffer = null;
+        removeDiscoveryScrollListeners();
+        setDiscoveryPageAttrs({ ready: true, infinite: false, exhausted: true });
+        const loadingIndicator = createDiscoveryLoadingIndicator(
+            document.querySelector('.libraryPage:not(.hide) .homeSectionsContainer')
+        );
+        if (loadingIndicator) {
+            loadingIndicator.classList.remove('show');
+            loadingIndicator.style.visibility = '';
+            loadingIndicator.style.display = '';
+        }
+        LOG('Discovery exhausted — No More Content to Discover');
     }
 
     // Legacy helper kept for compatibility – no longer used in the main flow
@@ -858,11 +967,12 @@
                 if (section.enabled && section.discoveryEnabled) {
                     const legacyPage = section.pageNumber == null ? 1 : Number(section.pageNumber);
                     if (legacyPage !== page) return;
-                    if (state.renderedDiscoveryIds.customDiscoverySections.has(section.id)) {
+                    const customDedupe = window.sectionHelper?.getDiscoveryState?.()?.renderedDiscoveryIds?.customDiscoverySections;
+                    if (customDedupe?.has(section.id)) {
                         return;
                     }
                     mergedSections.push(section);
-                    state.renderedDiscoveryIds.customDiscoverySections.add(section.id);
+                    customDedupe?.add(section.id);
                 }
             });
         }
@@ -1161,7 +1271,7 @@
         }
 
         const homeConfig = await window.KefinHomeScreen.getConfig();
-        const showStaleDataBeforeRefresh = homeConfig?.HOME_SETTINGS?.SHOW_STALE_DATA_BEFORE_REFRESH === true;
+        const showStaleDataBeforeRefresh = homeConfig?.HOME_SETTINGS?.showStaleDataBeforeRefresh === true;
 
         const targetContainer = container;
 
@@ -1175,52 +1285,17 @@
         const renderDuration = renderEndTime - renderStartTime;
         LOG(`Home Screen v3 Render progressive sections initialization time: ${renderDuration.toFixed(2)}ms`);
 
+        // Allow deferred library-cache crawls to start (movies/series/people scheduleBootstrap)
+        if (!state.homePaintedEventFired) {
+            state.homePaintedEventFired = true;
+            try {
+                document.dispatchEvent(new CustomEvent('kefinTweaksHomePainted'));
+            } catch (_) { /* ignore */ }
+        }
+
         // Check if target container is homeSectionsContainer
         if (!targetContainer.classList.contains('homeSectionsContainer')) {
             targetContainer.dataset.sectionsPrerendered = 'true';
-        }
-    }
-
-    function flattenSeriesEpisodes(items) {
-        if (!items || items.length === 0) return items;
-
-        // Keep only the first item in the array for any given series
-        const seriesMap = new Map();
-        items.forEach(item => {
-            if (item.Type !== 'Episode') {
-                return;
-            }
-
-            if (seriesMap.has(item.SeriesId)) {
-                return;
-            }
-
-            seriesMap.set(item.SeriesId, item);
-        });
-        
-        return Array.from(seriesMap.values());
-    }
-
-    function formatAirDate(premiereDate) {
-        if (!premiereDate) return '';
-
-        // Ignore timezone offset
-        const date = new Date(premiereDate.replace('Z', ''));
-
-        // Use format: Tues Jan 4
-        const options = { weekday: 'short', month: 'short', day: 'numeric' };
-        return date.toLocaleDateString('en-US', options);
-    }
-
-    let _displayPreferencesPromise = null;
-
-    async function fetchDisplayPreferences() {
-        try {
-            const { promise, cached } = await window.userHelper.getUserDisplayPreferences();
-            return await promise;
-        } catch (e) {
-            ERR('Failed to fetch display preferences:', e);
-            return null;
         }
     }
 
@@ -1229,698 +1304,32 @@
         return userConfig?.recentlyAddedInLibrary && Object.keys(userConfig.recentlyAddedInLibrary).length > 0;
     }
 
-    /**
-     * Refactored: Load section for rendering using queries array
-     */
     async function loadSectionForRendering(sectionConfig) {
-        LOG(`Loading Section for Rendering: ${sectionConfig.id} (${sectionConfig.name})`);  
-
-        const loadSectionTimerStart = performance.now();
-
-        // Prepare section (template replacements, view more URL, etc.)
-        const viewMoreUrl = await resolveViewMoreUrl(sectionConfig);
-        const cardFormat = resolveCardFormat(sectionConfig);
-        const sectionName = fillTemplate(sectionConfig.name, sectionConfig.metadata);
-/*         const viewMoreUrl = '';
-        const cardFormat = '';
-        const sectionName = ''; */
-
-        sectionConfig.overflowCard = true;
-        
-        if (viewMoreUrl) {
-            sectionConfig.viewMoreUrl = viewMoreUrl;
-        }
-        if (cardFormat) {
-            sectionConfig.cardFormat = cardFormat;
-        }
-        if (sectionName) {
-            sectionConfig.name = sectionName;
-        }
-
-        // Check renderMode first (preferred), fallback to spotlight boolean for backward compatibility
-        const shouldRenderSpotlight = sectionConfig.renderMode === 'Spotlight' || sectionConfig.renderMode === 'Random' || sectionConfig.spotlight === true;
-        if (shouldRenderSpotlight) {
-            const spotlightConfig = { ...window.KefinHomeScreen.getConfig().SPOTLIGHT_SETTINGS, ...sectionConfig.spotlightConfig };
-            sectionConfig.spotlightConfig = spotlightConfig;
-            // Set renderMode if not already set (for backward compatibility)
-            if (!sectionConfig.renderMode && sectionConfig.spotlight) {
-                sectionConfig.renderMode = 'Spotlight';
-            }
-        }
-
-        // Static items: normalize and return immediately (no queries, no dataPromise)
-        if (sectionConfig.items && sectionConfig.items.length > 0) {
-            const kefinTweaksRoot = window.KefinTweaksConfig?.kefinTweaksRoot || '';
-            const serverId = ApiClient.serverId();
-            const normalizeTemplate = (value) => (value || '')
-                .replace(/\$\{kefinTweaksRoot\}/g, kefinTweaksRoot)
-                .replace(/\$\{serverId\}/g, serverId);
-
-            const normalizedItems = sectionConfig.items.map((item, index) => {
-                const posterUrl = normalizeTemplate(item.posterUrl);
-                const thumbUrl = normalizeTemplate(item.thumbUrl);
-                const squareUrl = normalizeTemplate(item.squareUrl);
-                const imageUrl = normalizeTemplate(item.imageUrl);
-                const cardUrl = normalizeTemplate(item.cardUrl);
-                const backdropUrl = normalizeTemplate(item.backdropUrl);
-                const bannerUrl = normalizeTemplate(item.bannerUrl);
-                const logoUrl = normalizeTemplate(item.logoUrl);
-
-                return {
-                    Name: item.Name,
-                    Id: item.Id || 'static-' + sectionConfig.id + '-' + index,
-                    Type: item.Type || 'Folder',
-                    posterUrl: posterUrl,
-                    thumbUrl: thumbUrl,
-                    squareUrl: squareUrl,
-                    imageUrl: imageUrl,
-                    cardUrl: cardUrl,
-                    backdropUrl: backdropUrl,
-                    bannerUrl: bannerUrl,
-                    logoUrl: logoUrl,
-                    CustomFooterText: item.cardFooter || undefined
-                };
-            });
-            const loadSectionTimerEnd = performance.now();
-            const loadSectionDuration = loadSectionTimerEnd - loadSectionTimerStart;
-            LOG(`Section ${sectionConfig.id} (static items) loaded for rendering in time: ${loadSectionDuration.toFixed(2)}ms`);
-            let postProcessedItems = normalizedItems;
-            if (window.cardBuilder.postProcessItems) {
-                postProcessedItems = window.cardBuilder.postProcessItems(sectionConfig, normalizedItems);
-            }
-
-            return {
-                config: sectionConfig,
-                result: { data: postProcessedItems }
-            };
-        }
-
-        // Ensure queries array exists when section has no static items
-        if (!sectionConfig.queries || !Array.isArray(sectionConfig.queries) || sectionConfig.queries.length === 0) {
-            WARN(`Section ${sectionConfig.id} has no queries array and no static items`);
-            return null;
-        }
-
-        const userId = ApiClient.getCurrentUserId();
-        const serverUrl = ApiClient.serverAddress();
-        const results = [];
-
-        const resolveQueries = window.cardBuilder?.resolveQueriesToLoad;
-        const queriesToLoad = typeof resolveQueries === 'function'
-            ? resolveQueries(sectionConfig, { initialize: true })
-            : (() => {
-                if (sectionConfig.queries.length > 1 && sectionConfig.useRandomQuery === true) {
-                    const randomIndex = Math.floor(Math.random() * sectionConfig.queries.length);
-                    LOG(`Section ${sectionConfig.id}: useRandomQuery — selected query index ${randomIndex}`);
-                    return [sectionConfig.queries[randomIndex]];
-                }
-                return sectionConfig.queries;
-            })();
-
-        if (sectionConfig.useMultiQueryPicker === true && sectionConfig.queries.length > 1) {
-            const index = sectionConfig._selectedQueryIndex;
-            LOG(`Section ${sectionConfig.id}: useMultiQueryPicker — selected query index ${index}`);
-        } else if (queriesToLoad.length === 1 && sectionConfig.queries.length > 1 && sectionConfig.useRandomQuery === true) {
-            const index = sectionConfig.queries.indexOf(queriesToLoad[0]);
-            LOG(`Section ${sectionConfig.id}: useRandomQuery — selected query index ${index}`);
-        }
-
-        // Process each query in the queries array
-        for (const query of queriesToLoad) {
-            let queryResult;
-            
-            if (query.dataSource) {
-                // Handle cache-based data sources
-                queryResult = await ApiHelper.fetchFromDataSource(query.dataSource, query.queryOptions || {});
-            } else {
-                // Build and execute query
-                const queryUrl = ApiHelper.buildQueryFromSection(query, userId, serverUrl, sectionConfig.renderMode === 'Spotlight', { sectionType: sectionConfig.type });
-                
-                if (typeof queryUrl === 'string') {
-                    // Standard query
-                    let sectionTtl = Config.CACHE.DEFAULT_TTL;
-                    if (Number(sectionConfig.ttl) >= 0) {
-                        sectionTtl = Number(sectionConfig.ttl);
-                    }
-
-                    queryResult = await ApiHelper.getQuery(queryUrl, {
-                        useCache: true,
-                        ttl: sectionTtl
-                    });
-                } else {
-                    WARN(`Invalid query URL for section ${sectionConfig.id}`);
-                    continue;
-                }
-            }
-            
-            results.push(queryResult);
-        }
-
-        // If multiple queries, merge results using section-level sortBy/sortOrder
-        if (results.length > 1) {
-            const loadSectionTimerEnd = performance.now();
-            const loadSectionDuration = loadSectionTimerEnd - loadSectionTimerStart;
-            LOG(`Section ${sectionConfig.id} loaded for rendering in time: ${loadSectionDuration.toFixed(2)}ms`);
-            return ApiHelper.mergeMultiQueryResults(results, sectionConfig);
-        }
-
-        const loadSectionTimerEnd = performance.now();
-        const loadSectionDuration = loadSectionTimerEnd - loadSectionTimerStart;
-        LOG(`Section ${sectionConfig.id} loaded for rendering in time: ${loadSectionDuration.toFixed(2)}ms`);
-
-        const postProcess = (sectionConfig, items) => {
-            let postProcessedItems = items;
-            if (window.cardBuilder.postProcessItems) {
-                postProcessedItems = window.cardBuilder.postProcessItems(sectionConfig, items);
-            }
-            return sortItemsByConfiguredIds(sectionConfig, postProcessedItems);
-        };
-
-        const queryResult = results[0];
-        let mappedDataPromise = null;
-        const ensureData = () => {
-            if (!mappedDataPromise) {
-                const raw = typeof queryResult.ensureData === 'function'
-                    ? queryResult.ensureData()
-                    : queryResult.dataPromise;
-                mappedDataPromise = Promise.resolve(raw).then((data) => postProcess(sectionConfig, data));
-            }
-            return mappedDataPromise;
-        };
-
-        const result = {
-            data: postProcess(sectionConfig, queryResult.data),
-            isStale: queryResult.isStale === true,
-            isStalePromise: queryResult.isStalePromise,
-            ensureData
-        };
-        Object.defineProperty(result, 'dataPromise', {
-            configurable: true,
-            enumerable: true,
-            get() {
-                return ensureData();
-            }
-        });
-        
-        // Single query result
-        return {
-            config: sectionConfig,
-            queryUrl: null,
-            result
-        };
+        return window.sectionHelper.loadSectionForRendering(sectionConfig);
     }
 
-    /**
-     * Jellyfin /Items?Ids= does not reliably return items in request order.
-     * When queryOptions.Ids is set, re-sort the item list to match that sequence.
-     */
-    function sortItemsByConfiguredIds(sectionConfig, items) {
-        const list = Array.isArray(items) ? items : (items?.Items || []);
-        if (!Array.isArray(list) || list.length === 0) return items;
-
-        const rawIds = sectionConfig?.queries?.[0]?.queryOptions?.Ids;
-        if (!rawIds) return items;
-
-        const ids = Array.isArray(rawIds)
-            ? rawIds.filter(Boolean)
-            : String(rawIds).split(',').map((s) => s.trim()).filter(Boolean);
-        if (!ids.length) return items;
-
-        const order = new Map(ids.map((id, i) => [String(id), i]));
-        const sorted = [...list].sort((a, b) => {
-            const ai = order.has(String(a?.Id)) ? order.get(String(a.Id)) : 1e9;
-            const bi = order.has(String(b?.Id)) ? order.get(String(b.Id)) : 1e9;
-            return ai - bi;
-        });
-
-        if (Array.isArray(items)) return sorted;
-        if (items && typeof items === 'object' && Array.isArray(items.Items)) {
-            return { ...items, Items: sorted };
-        }
-        return sorted;
-    }
-
-    function deduplicateItems(items) {
-        const deduplicated = [];
-        const ids = new Set();
-        for (const item of items) {
-            if (!item.ProviderIds) {
-                deduplicated.push(item);
-                continue;
-            }
-
-            if (item.ProviderIds.Imdb && ids.has(item.ProviderIds.Imdb)) continue;
-            if (item.ProviderIds.Tmdb && ids.has(item.ProviderIds.Tmdb)) continue;
-            if (item.ProviderIds.Tvdb && ids.has(item.ProviderIds.Tvdb)) continue;
-
-            deduplicated.push(item);
-            ids.add(item.ProviderIds.Imdb);
-            ids.add(item.ProviderIds.Tmdb);
-            ids.add(item.ProviderIds.Tvdb);
-        }
-        return deduplicated;
-    }
-
-    let _getWatchlistUrlPromise = null;
-
-    async function getWatchlistUrl() {
-        return '#/watchlist';
-    }
-
-    /**
-     * Updated: Resolve view more URL from queryOptions
-     */
-    async function resolveViewMoreUrl(sectionConfig) {
-        if (sectionConfig.viewMoreUrl) return sectionConfig.viewMoreUrl;
-
-        const { id } = sectionConfig;
-
-        // Handle specific section IDs
-        if (id === 'continueWatching') {
-            return `#/tv.html?collectionType=tvshows&tab=1&serverId=${ApiClient.serverId()}`;
-        }
-
-        if (id === 'popularTVNetworks') {
-            return `#/tv.html?collectionType=tvshows&tab=4&serverId=${ApiClient.serverId()}`;
-        }
-        
-        if (id === 'upcoming' || id === 'recentlyReleased.episodes') {
-             return `#/tv.html?collectionType=tvshows&tab=2&serverId=${ApiClient.serverId()}`;
-        }
-
-        if (id === 'nextUp') {
-            return `#/list.html?type=nextup&serverId=${ApiClient.serverId()}`;
-        }
-
-        if (id === 'watchlist') {
-            return await getWatchlistUrl();
-        }
-
-        if (id === 'watchAgain') {
-            const watchlistUrl = await getWatchlistUrl();
-
-            if (watchlistUrl) { 
-                return `${watchlistUrl}?pageTab=history`;
-            }
-            return null;
-        }
-
-        // Infer from queries array
-        if (sectionConfig.queries && sectionConfig.queries.length > 0) {
-            const firstQuery = sectionConfig.queries[0];
-            const queryOptions = firstQuery.queryOptions || {};
-            const serverId = window.ApiClient ? window.ApiClient.serverId() : '';
-
-            // Check for Tags
-            if (queryOptions.Tags) {
-                return `#/list.html?type=tag&tag=${encodeURIComponent(queryOptions.Tags)}&serverId=${serverId}`;
-            }
-
-            // Check for Genres
-            if (queryOptions.Genres) {
-                let genreId = queryOptions.Genres;
-                if (typeof genreId === 'string' && !genreId.match(/^\d+$/)) {
-                    const id = await ApiHelper.getGenreId(genreId);
-                    if (id) {
-                        genreId = id;
-                    }
-                }
-                return `#/list.html?genreId=${genreId}&serverId=${serverId}`;
-            }
-
-            // Check for GenreIds
-            if (queryOptions.GenreIds) {
-                return `#/list.html?genreId=${queryOptions.GenreIds.join(',')}&serverId=${serverId}`;
-            }
-
-            // Check for PersonIds
-            if (queryOptions.PersonIds) {
-                return `#/details?id=${queryOptions.PersonIds.join(',')}&serverId=${serverId}`;
-            }
-
-            // Check for StudioIds
-            if (queryOptions.StudioIds) {
-                return `#/list.html?studioId=${queryOptions.StudioIds.join(',')}&serverId=${serverId}`;
-            }
-
-            // Check for Studios
-/*             if (queryOptions.Studios) {
-                return `#/list.html?studioId=${queryOptions.Studios}&serverId=${serverId}`;
-            } */
-
-            // Check for ParentId
-            if (queryOptions.ParentId) {
-                if (sectionConfig.discoveryType === 'Collection' || sectionConfig.discoveryType === 'Playlist') {
-                    return `#/details?id=${queryOptions.ParentId}&serverId=${serverId}`;
-                }
-
-                return `#/list.html?parentId=${queryOptions.ParentId}&serverId=${serverId}`;
-            }
-
-            // Check for custom path
-            if (firstQuery.path) {
-                // Derive URL from path if possible
-                if (firstQuery.path.includes('NextUp')) {
-                    return `#/tv.html?collectionType=tvshows&tab=1`;
-                }
-                if (firstQuery.path.includes('Upcoming')) {
-                    return `#/tv.html?collectionType=tvshows&tab=2`;
-                }
-                // If query path is Items/itemid/Similar then return the details page for the item
-                if (firstQuery.path.includes('Similar')) {
-                    const itemId = firstQuery.path.split('/')[2];
-                    return `#/details?id=${itemId}&serverId=${serverId}`;
-                }
-            }
-        }
-        
-        return null;
-    }
-
-    function postProcessItems(sectionConfig, itemsData) {
-        let processed = itemsData?.Items || itemsData || [];
-                 
-        // Flatten Series Episodes
-        if (sectionConfig.flattenSeries === true) {
-            processed = flattenSeriesEpisodes(processed);
-        }
-
-        if (sectionConfig.id === 'upcoming') {
-            // Remove items which aired before today
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            processed = processed.filter(item => {
-                if (!item.PremiereDate || item.LocationType !== 'Virtual')
-                    return false;
-                const premiereDate = new Date(item.PremiereDate);
-                premiereDate.setHours(0, 0, 0, 0);
-                return premiereDate >= today;
-            });
-        }
-
-        // Add Custom Secondary Text for Recently Released Movies
-        if (sectionConfig.id === 'recentlyReleased.movies' || sectionConfig.id === 'upcoming' || sectionConfig.id === 'recentlyReleased.episodes') {
-            processed.forEach(item => {
-                if (item.PremiereDate) {
-                    item.CustomFooterText = formatAirDate(item.PremiereDate);
-                }
-            });
-        }
-
-        // Apply local limits for non-API sources
-        if (sectionConfig.itemLimit) {
-            processed = processed.slice(0, sectionConfig.itemLimit);
-        }
-
-        // Deduplicate items based on ProviderIds. Look for match imdb, tmdb or tvdb ids
-        processed = deduplicateItems(processed);
-
-        return processed;
-    }
-    
-    function resolveCardFormat(sectionConfig) {
-        return sectionConfig.cardFormat || 'Poster';
-    }
-
-    /**
-     * Logic to determine the "Source" for dynamic sections
-     * Returns { id, name, metadata: {} }
-     */
-    async function resolveDynamicSource(config) {
-        switch (config.discoveryType) {
-            case 'Genre':
-                const genre = await getRandomGenre();
-                return genre ? { id: genre.Id, name: genre.Name, metadata: { Genre: genre.Name } } : null;
-
-            case 'Person':
-                if (config.sourceType && config.sourceType.includes('watched')) {
-                    const result = await getRandomPersonFromHistory(config.personType, config.sourceType);
-                    if (!result) return null;
-                    
-                    return {
-                        id: result.person.id,
-                        name: result.person.name,
-                        excludeItemId: result.sourceItem.Id,
-                        metadata: {
-                            Person: result.person.name,
-                            Actor: result.person.name,
-                            Director: result.person.name,
-                            Writer: result.person.name,
-                            Title: result.sourceItem.Name,
-                            Movie: result.sourceItem.Name
-                        }
-                    };
-                }
-                
-                const person = await getRandomPerson(config.personType);
-                return person ? { 
-                    id: person.Id, 
-                    name: person.Name || person.name, 
-                    metadata: { 
-                        Person: person.Name || person.name,
-                        Actor: person.Name || person.name,
-                        Director: person.Name || person.name,
-                        Writer: person.Name || person.name
-                    } 
-                } : null;
-                
-            case 'Studio':
-                const networks = await StudiosCache.getPopularTVNetworks(); // getPopularTVNetworks();
-                if (!networks || !networks.length) return null;
-                const network = networks[Math.floor(Math.random() * networks.length)];
-                return { id: network.Id, name: network.Name, metadata: { Studio: network.Name } };
-                
-            case 'Similar':
-                if (config.sourceType === 'watched') {
-                    const m = getRandomWatchedMovie();
-                    return m ? { 
-                        id: m.Id,
-                        metadata: { 
-                            Title: m.Name,
-                            Movie: m.Name
-                        } 
-                    } : null;
-                }
-                if (config.sourceType === 'liked') {
-                    const m = await getRandomFavoriteMovie();
-                    return m ? {
-                        id: m.Id,
-                        metadata: {
-                            Title: m.Name,
-                            Movie: m.Name
-                        }
-                    } : null;
-                }
-                if (config.sourceType === 'watched-recent') {
-                     const m = getRandomWatchedMovie();
-                     return m ? { 
-                        id: m.Id, 
-                        metadata: { 
-                            Title: m.Name,
-                            Movie: m.Name 
-                        } 
-                    } : null;
-                }
-                return null;
-                
-            case 'Collection':
-                 const selectedCollection = await getRandomCollectionForDiscovery(config.minimumItems || 3);
-                 if (!selectedCollection) return null;
-                 
-                 return {
-                     id: selectedCollection.Id,
-                     name: selectedCollection.Name,
-                     metadata: { Collection: selectedCollection.Name, "Collection Name": selectedCollection.Name }
-                 };
-        }
-        
-        return null;
-    }
-
-    function fillTemplate(template, data) {
-        if (!data || !template) return template;
-
-        // Support both {Key} and [Key] formats, allowing spaces in keys
-        return template.replace(/\{([^}]+)\}|\[([^\]]+)\]/g, (match, key1, key2) => {
-            const key = key1 || key2;
-            return data[key] || match;
-        });
-    }
-
-    /**
-     * Resolves a dynamic discovery template into a concrete section config with queries.
-     * Returns null when no source could be resolved (e.g. no eligible genre/person left).
-     * @param {Object} template - Discovery section template
-     * @param {Object} [options]
-     * @param {boolean} [options.pairSpotlight] - Reuse the paired spotlight source (home render behaviour)
-     * @param {boolean} [options.resolveViewMore] - Resolve the "view more" URL (may issue extra requests)
-     */
     async function buildDiscoverySectionInstance(template, options = {}) {
-        const pairSpotlight = options.pairSpotlight !== false;
-        const resolveViewMore = options.resolveViewMore !== false;
-
-        const instanceConfig = {
-            ...template,
-            id: `${template.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            type: 'discovery',
-        };
-        if (!instanceConfig.discoveryType && template.type
-            && !['home', 'seasonal', 'discovery'].includes(String(template.type).toLowerCase())) {
-            instanceConfig.discoveryType = template.type;
-        }
-
-        const dynamicResult = await resolveDynamicSource(instanceConfig);
-        if (!dynamicResult) return null;
-
-        instanceConfig.source = dynamicResult.id || dynamicResult.name;
-        instanceConfig.metadata = dynamicResult.metadata;
-        instanceConfig.excludeItemId = dynamicResult.excludeItemId;
-
-        if (pairSpotlight && getDiscoverySettings().renderSpotlightAboveMatching) {
-            const configId = instanceConfig.id.split('-')[0];
-
-            if (configId === 'genreMovies' || configId === 'spotlightGenre') {
-                if (state.currentDiscoveryGenre) {
-                    instanceConfig.source = state.currentDiscoveryGenre.id;
-                    dynamicResult.metadata = state.currentDiscoveryGenre.metadata;
-                    state.currentDiscoveryGenre = null;
-                }
-                else {
-                    state.currentDiscoveryGenre = dynamicResult;
-                }
-            }
-            if (configId === 'studioShows' || configId === 'spotlightNetwork') {
-                if (state.currentDiscoveryStudio) {
-                    instanceConfig.source = state.currentDiscoveryStudio.id;
-                    dynamicResult.metadata = state.currentDiscoveryStudio.metadata;
-                    state.currentDiscoveryStudio = null;
-                }
-                else {
-                    state.currentDiscoveryStudio = dynamicResult;
-                }
-            }
-        }
-
-        // Create queries array with proper queryOptions
-        const queryOptions = {
-            Recursive: 'true',
-            Limit: instanceConfig.itemLimit || 20
-        };
-
-        // Add IncludeItemTypes if specified
-        if (instanceConfig.includeItemTypes && instanceConfig.includeItemTypes.length) {
-            queryOptions.IncludeItemTypes = instanceConfig.includeItemTypes;
-        }
-
-        // Add SortBy and SortOrder if specified
-        if (instanceConfig.sortOrder) {
-            queryOptions.SortBy = instanceConfig.sortOrder;
-        }
-        if (instanceConfig.sortOrderDirection) {
-            queryOptions.SortOrder = instanceConfig.sortOrderDirection;
-        }
-
-        // Handle discoveryType-specific query options
-        const resolvedSource = instanceConfig.source;
-        const discoveryKind = instanceConfig.discoveryType || instanceConfig.type;
-        if (discoveryKind === 'Similar') {
-            // Similar type uses custom path
-            instanceConfig.queries = [{
-                path: `/Items/${resolvedSource}/Similar`,
-                queryOptions: {
-                    Limit: instanceConfig.itemLimit || 20,
-                    Fields: 'PrimaryImageAspectRatio,DateCreated,Overview,Taglines,ProductionYear,RecursiveItemCount,ChildCount,UserData'
-                }
-            }];
-        } else {
-            // Standard query types
-            switch (discoveryKind) {
-                case 'Genre':
-                    if (resolvedSource && resolvedSource.match(/^[a-f0-9]{32}$/)) {
-                        queryOptions.GenreIds = [resolvedSource];
-                    } else if (resolvedSource) {
-                        queryOptions.Genres = resolvedSource;
-                    }
-                    break;
-                case 'Tag':
-                    if (resolvedSource) {
-                        queryOptions.Tags = resolvedSource;
-                    }
-                    break;
-                case 'Person':
-                    if (resolvedSource) {
-                        queryOptions.PersonIds = [resolvedSource];
-                    }
-                    if (instanceConfig.excludeItemId) {
-                        queryOptions.ExcludeItemIds = Array.isArray(instanceConfig.excludeItemId)
-                            ? instanceConfig.excludeItemId
-                            : [instanceConfig.excludeItemId];
-                    }
-                    break;
-                case 'Studio':
-                    if (resolvedSource && resolvedSource.match(/^[a-f0-9]{32}$/)) {
-                        queryOptions.StudioIds = [resolvedSource];
-                    } else if (resolvedSource) {
-                        queryOptions.Studios = resolvedSource;
-                    }
-                    break;
-                case 'Collection':
-                case 'Parent':
-                    if (resolvedSource) {
-                        queryOptions.ParentId = resolvedSource;
-                    }
-                    break;
-            }
-
-            // Add spotlight fields if needed
-            if (instanceConfig.spotlight || instanceConfig.renderMode === 'Spotlight') {
-                queryOptions.Fields = 'PrimaryImageAspectRatio,DateCreated,Overview,Taglines,ProductionYear,RecursiveItemCount,ChildCount,UserData,People,Genres,ParentBackdropImageTags,Studios';
-
-                const spotlightConfig = instanceConfig.spotlightConfig || {};
-                const adminSpotlightConfig = window.KefinHomeScreen.getConfig()?.SPOTLIGHT_SETTINGS || {};
-
-                instanceConfig.spotlightConfig = { ...adminSpotlightConfig, ...spotlightConfig };
-            } else {
-                queryOptions.Fields = 'PrimaryImageAspectRatio,DateCreated,Overview,Taglines,ProductionYear,RecursiveItemCount,ChildCount,UserData';
-            }
-
-            instanceConfig.queries = [{
-                queryOptions: queryOptions
-            }];
-        }
-
-        instanceConfig.name = fillTemplate(instanceConfig.name, dynamicResult.metadata);
-        if (instanceConfig.caption) {
-            instanceConfig.caption = fillTemplate(instanceConfig.caption, dynamicResult.metadata);
-            if (dynamicResult.excludeItemId) {
-                instanceConfig.captionUrl = `#/details?id=${dynamicResult.excludeItemId}&serverId=${ApiClient.serverId()}`;
-            }
-        }
-        instanceConfig.cardFormat = resolveCardFormat(instanceConfig);
-        if (resolveViewMore) {
-            instanceConfig.viewMoreUrl = await resolveViewMoreUrl(instanceConfig);
-        }
-
-        return instanceConfig;
+        return window.sectionHelper.buildDiscoverySectionInstance(template, options);
     }
 
     function disconnectDiscoveryInteraction() {
-        // If we are using infinite scroll, disconnect the scroll event listener
-        if (state.infiniteScrollHandler) {
-            window.removeEventListener('scroll', state.infiniteScrollHandler);
-            state.infiniteScrollHandler = null;
-        } else {
-            const loadMoreButton = document.querySelector('.libraryPage:not(.hide) .load-more-discovery-btn');
-            if (loadMoreButton) {
-                loadMoreButton.remove();
-            }
+        removeDiscoveryScrollListeners();
+
+        const loadMoreButton = document.querySelector('.libraryPage:not(.hide) .load-more-discovery-btn');
+        if (loadMoreButton) {
+            loadMoreButton.remove();
         }
 
-        // Remove the discovery loading indicator
-        const loadingIndicator = document.querySelector('.libraryPage:not(.hide) #discovery-loading-indicator');
-        if (loadingIndicator) {
-            loadingIndicator.remove();
+        // Remove the discovery loading indicator (exhausted path keeps it via markDiscoveryExhausted)
+        if (state.discoverySectionsRemain !== false) {
+            const loadingIndicator = document.querySelector('.libraryPage:not(.hide) #discovery-loading-indicator');
+            if (loadingIndicator) {
+                loadingIndicator.remove();
+            }
+            setDiscoveryPageAttrs({ ready: false, infinite: false, exhausted: false });
         }
+
+        state.discoveryMode = null;
     }
 
     /**
@@ -1935,40 +1344,52 @@
                 await new Promise(resolve => setTimeout(resolve, 100));
             }
 
-            return;
+            return state.discoveryBuffer;
         }
         LOG('Ensuring discovery buffer...');
 
         state.ensuringDiscoveryBuffer = true;
 
-        if (state.discoveryBuffer && state.discoveryBuffer.length > 0) {
-            LOG('Discovery buffer already exists...');
-            state.ensuringDiscoveryBuffer = false;
+        try {
+            if (state.discoveryBuffer && state.discoveryBuffer.length > 0) {
+                LOG('Discovery buffer already exists...');
+                return state.discoveryBuffer;
+            }
+
+            LOG('Fetching next discovery group data...');
+
+            const groupSections = await generateDiscoveryGroup();
+
+            if (!groupSections || groupSections.length === 0) {
+                LOG('No more discovery sections available for buffer.');
+                state.discoveryBuffer = [];
+                state.discoverySectionsRemain = false;
+                return state.discoveryBuffer;
+            }
+
+            state.discoveryBuffer = await Promise.all(groupSections.map(async (sectionConfig) => {
+                const isDynamic = !!(sectionConfig.discoveryType || sectionConfig.source === 'Dynamic');
+                if (isDynamic) {
+                    // Sync stub + lazy resolve; do not await ensureData here
+                    return window.sectionHelper.buildDiscoverySectionPromise(sectionConfig, {
+                        order: sectionConfig.order,
+                        pairSpotlight: true
+                    });
+                }
+                return await loadSectionForRendering(sectionConfig);
+            }));
+
+            // Filter hard failures only; progressive stubs that later return empty are removed by cardBuilder enhance
+            state.discoveryBuffer = state.discoveryBuffer.filter(result => result !== null);
+
+            if (!state.discoveryBuffer.length) {
+                state.discoverySectionsRemain = false;
+            }
+
             return state.discoveryBuffer;
-        }
-
-        LOG('Fetching next discovery group data...');
-
-        const groupSections = await generateDiscoveryGroup();
-
-        if (!groupSections || groupSections.length === 0) {
-            LOG('No more discovery sections available for buffer.');
+        } finally {
             state.ensuringDiscoveryBuffer = false;
-            state.discoverySectionsRemain = false;
-            disconnectDiscoveryInteraction();
-            return;
         }
-
-        state.discoveryBuffer = await Promise.all(groupSections.map(async (sectionConfig) => {
-            // Use loadSectionForRendering which handles all queries, multi-query merging, and post-processing
-            return await loadSectionForRendering(sectionConfig);
-        }));
-
-        // Filter out any null results
-        state.discoveryBuffer = state.discoveryBuffer.filter(result => result !== null);
-
-        state.ensuringDiscoveryBuffer = false;
-        return state.discoveryBuffer;
     }
 
 
@@ -1994,6 +1415,12 @@
             return;
         }
 
+        // getDiscoverySections() above may mark legacy customDiscoverySections; clear only that
+        // so generateDiscoveryGroup can claim them without wiping genre/person/similar dedupe.
+        window.sectionHelper?.getDiscoveryState?.()?.renderedDiscoveryIds?.customDiscoverySections?.clear?.();
+        state.discoverySectionsRemain = true;
+        state.discoveryNeedsMoreScroll = false;
+
         if (PRE_FETCH_DISCOVERY_DATA) {
             ensureDiscoveryBuffer();
         }
@@ -2005,9 +1432,13 @@
         const useInfiniteScroll = userConfig ? (userConfig.infiniteScroll !== false) : true;
         
         if (useInfiniteScroll) {
+            state.discoveryMode = 'infinite';
+            setDiscoveryPageAttrs({ ready: false, infinite: true, exhausted: false });
             setupInfiniteScroll(container);
         } else {
-            setupLoadMoreButton(container);
+            state.discoveryMode = 'chevron';
+            setDiscoveryPageAttrs({ ready: true, infinite: false, exhausted: false });
+            setupChevronDiscoverMore(container);
         }
     }
 
@@ -2015,23 +1446,37 @@
         const container = document.querySelector('.libraryPage:not(.hide) .homeSectionsContainer');
         if (!container) return;
 
+        // Single-flight: set synchronously before any await
         if (state.isRenderingDiscovery) return;
-        state.isRenderingDiscovery = true;
-        container.dataset.loadingDiscovery = 'true';
+        if (state.discoverySectionsRemain === false) return;
 
-        await new Promise(resolve => requestAnimationFrame(resolve));
-        await new Promise(resolve => setTimeout(resolve, 0));
+        state.isRenderingDiscovery = true;
+        // Require another user scroll before auto-loading the next group (infinite mode)
+        state.discoveryNeedsMoreScroll = true;
+        container.dataset.loadingDiscovery = 'true';
+        container.classList.add('loading-discovery');
+        showDiscoveryLoadingIndicator();
 
         try {
+            await new Promise(resolve => requestAnimationFrame(resolve));
+            await new Promise(resolve => setTimeout(resolve, 0));
+
             await ensureDiscoveryBuffer();
             
-            const bufferedSections = state.discoveryBuffer;
+            let bufferedSections = state.discoveryBuffer;
             
             if (!bufferedSections || bufferedSections.length === 0) {
                 LOG('No more discovery sections available.');
-                state.discoveryBuffer = null;
+                markDiscoveryExhausted();
                 return;
             }
+
+            // Stable append: honor pre-assigned section.order after parallel loads
+            bufferedSections = bufferedSections.slice().sort((a, b) => {
+                const ao = Number(a?.config?.order);
+                const bo = Number(b?.config?.order);
+                return (Number.isFinite(ao) ? ao : 0) - (Number.isFinite(bo) ? bo : 0);
+            });
 
             LOG(`Rendering Discovery Group ${state.discoveryGroupIndex + 1} (${bufferedSections.length} sections)...`);
 
@@ -2040,12 +1485,8 @@
             await window.cardBuilder.renderProgressiveSections(container, bufferedSections, {
                 revealSectionsSequentially,
                 enhanceOnVisible: true,
-                showStaleDataBeforeRefresh: config.HOME_SETTINGS?.SHOW_STALE_DATA_BEFORE_REFRESH === true
+                showStaleDataBeforeRefresh: config.HOME_SETTINGS?.showStaleDataBeforeRefresh === true
             });
-
-            if (!getDiscoverySettings().infiniteScroll) {
-                setupLoadMoreButton(container);
-            }
 
             container.dataset.loadingDiscovery = 'false';
             container.classList.remove('loading-discovery');
@@ -2057,12 +1498,21 @@
                 ensureDiscoveryBuffer();
             }
 
+            // Chevron mode: nudge scroll so newly appended sections start entering the viewport
+            if (state.discoveryMode === 'chevron') {
+                window.scrollBy({ top: 100, behavior: 'smooth' });
+            }
+
         } catch (e) {
             ERR('Error rendering discovery group:', e);
             state.discoveryBuffer = null;
         } finally {
             state.isRenderingDiscovery = false;
-            updateLoadMoreButtonVisibility(); 
+            if (state.discoverySectionsRemain !== false) {
+                hideDiscoveryLoadingIndicator();
+                container.dataset.loadingDiscovery = 'false';
+                container.classList.remove('loading-discovery');
+            }
         }
     }
 
@@ -2104,26 +1554,23 @@
             discoveryTemplates = [...discoveryTemplates].sort(() => 0.5 - Math.random());
         }
         
+        // Collect enabled templates unresolved — progressive resolve happens in ensureDiscoveryBuffer
         for (const template of discoveryTemplates) {
             if (template.enabled === false) continue;
-
-            if (template.queries && template.queries.length > 0) {
-                selectedConfigs.push(template);
-                continue;
-            }
-            
-            const instanceConfig = await buildDiscoverySectionInstance(template);
-            if (instanceConfig) {
-                selectedConfigs.push(instanceConfig);
-            }
+            selectedConfigs.push(template);
         }
 
         if (getDiscoverySettings().renderSpotlightAboveMatching) {
-            const spotlightGenreSection = selectedConfigs.find(section => section.id.split('-')[0] === 'spotlightGenre');
+            const spotlightGenreSection = selectedConfigs.find((section) => {
+                const id = section.id.split('-')[0];
+                return id === 'spotlightGenre' || id === 'spotlightGenreSeries';
+            });
             const spotlightNetworkSection = selectedConfigs.find(section => section.id.split('-')[0] === 'spotlightNetwork');
 
             if (spotlightGenreSection) {
-                const genreSection = selectedConfigs.find(section => section.id.split('-')[0] === 'genreMovies');
+                const spotlightBaseId = spotlightGenreSection.id.split('-')[0];
+                const genreBaseId = spotlightBaseId === 'spotlightGenreSeries' ? 'genreSeries' : 'genreMovies';
+                const genreSection = selectedConfigs.find(section => section.id.split('-')[0] === genreBaseId);
                 if (genreSection) {
                     const genreSectionIndex = selectedConfigs.indexOf(genreSection);
                     const spotlightGenreSectionIndex = selectedConfigs.indexOf(spotlightGenreSection);
@@ -2194,60 +1641,139 @@
         return selectedConfigs;
     }
 
-    function setupInfiniteScroll() {
-        const container = document.querySelector('.libraryPage:not(.hide) .homeSectionsContainer');
-        if (!container) return;
+    function setupInfiniteScroll(container) {
+        const target = container
+            || document.querySelector('.libraryPage:not(.hide) .homeSectionsContainer');
+        if (!target) return;
 
-        if (container.dataset.discoveryHandler) return;
-        container.dataset.discoveryHandler = 'true';
+        removeDiscoveryScrollListeners();
+        target.dataset.discoveryHandler = 'true';
 
-        state.infiniteScrollHandler = window.addEventListener('scroll', () => {
-            // Check if the user is on the home page
-            const currentView = window.KefinTweaksUtils?.getCurrentView();
-            const isHomePage = currentView === 'home' || currentView === 'home.html';
-            if (!isHomePage) return;
+        let lastScrollTop = window.pageYOffset || document.documentElement.scrollTop || 0;
 
-            // Check if the user is on the first tab
-            const activeTab = document.querySelector('.headerTabs .emby-tab-button-active').getAttribute('data-index');
-            if (activeTab !== '0') return;
-
-            if (!container.dataset.sectionsRendered) return;
-
+        const handleScroll = () => {
+            if (!isDiscoveryHomeContext()) return;
+            if (!target.dataset.sectionsRendered) return;
             if (state.isRenderingDiscovery) return;
-             
+            if (state.discoverySectionsRemain === false) return;
+
+            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+            const delta = Math.abs(scrollTop - lastScrollTop);
+            lastScrollTop = scrollTop;
+
+            // After a group loads, ignore threshold until the user scrolls again
+            if (state.discoveryNeedsMoreScroll) {
+                if (delta < 2) return;
+                state.discoveryNeedsMoreScroll = false;
+            }
+
+            const windowHeight = window.innerHeight;
+            const documentHeight = document.documentElement.scrollHeight;
+            const threshold = windowHeight * 1.5;
+
+            if (scrollTop + windowHeight < documentHeight - threshold) return;
+
+            if (state.discoveryScrollDebounceTimer) {
+                clearTimeout(state.discoveryScrollDebounceTimer);
+            }
+            state.discoveryScrollDebounceTimer = setTimeout(() => {
+                state.discoveryScrollDebounceTimer = null;
+                if (state.isRenderingDiscovery || state.discoveryNeedsMoreScroll) return;
+                if (!isDiscoveryHomeContext()) return;
+                const st = window.pageYOffset || document.documentElement.scrollTop;
+                const wh = window.innerHeight;
+                const dh = document.documentElement.scrollHeight;
+                if (st + wh >= dh - wh * 1.5) {
+                    renderNextDiscoveryGroup();
+                }
+            }, 200);
+        };
+
+        state.infiniteScrollHandler = handleScroll;
+        window.addEventListener('scroll', handleScroll, { passive: true });
+        LOG('Infinite scroll enabled for discovery (debounced + scroll-gated re-arm).');
+    }
+
+    /**
+     * infiniteScroll=false: Discover More + chevron; load when user scrolls again at bottom.
+     */
+    function setupChevronDiscoverMore(container) {
+        const target = container
+            || document.querySelector('.libraryPage:not(.hide) .homeSectionsContainer');
+        if (!target) return;
+
+        removeDiscoveryScrollListeners();
+        target.dataset.discoveryHandler = 'true';
+        createDiscoveryLoadingIndicator(target);
+        hideDiscoveryLoadingIndicator();
+
+        let lastTouchY = null;
+
+        const scheduleLoadFromBottomGesture = () => {
+            if (state.isRenderingDiscovery) return;
+            if (state.discoverySectionsRemain === false) return;
+            if (state.discoveryScrollDebounceTimer) {
+                clearTimeout(state.discoveryScrollDebounceTimer);
+            }
+            state.discoveryScrollDebounceTimer = setTimeout(() => {
+                state.discoveryScrollDebounceTimer = null;
+                if (state.isRenderingDiscovery) return;
+                if (!isDiscoveryHomeContext()) return;
+                LOG('User scrolled at bottom (chevron mode); loading next discovery group...');
+                renderNextDiscoveryGroup();
+            }, 200);
+        };
+
+        const isAtDocumentBottom = () => {
             const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
             const windowHeight = window.innerHeight;
             const documentHeight = document.documentElement.scrollHeight;
-            
-            const threshold = windowHeight * 1.5;
-            
-            if (scrollTop + windowHeight >= documentHeight - threshold) { 
-                renderNextDiscoveryGroup(container);
-            }
-        }, { passive: true });
-        LOG('Infinite scroll enabled for discovery.');
-    }
-
-    function setupLoadMoreButton(container) {
-        const loadMoreButton = container.querySelector('.load-more-discovery-btn');
-        if (loadMoreButton) return;
-
-        let btn = document.createElement('button');
-        btn.className = 'raised button-submit emby-button load-more-discovery-btn';
-        btn.textContent = 'Discover More';
-        btn.onclick = () => {
-            btn.remove();
-            renderNextDiscoveryGroup(container)
+            return scrollTop + windowHeight >= documentHeight - 2;
         };
-        container.appendChild(btn);
-        LOG('Load More button enabled for discovery.');
-    }
-    
-    function updateLoadMoreButtonVisibility() {
-        const btn = document.querySelector('.load-more-discovery-btn');
-        if (btn) {
-            btn.style.display = 'block';
-        }
+
+        const handleWheel = (event) => {
+            if (!isDiscoveryHomeContext()) return;
+            if (!target.dataset.sectionsRendered) return;
+            if (state.isRenderingDiscovery) return;
+            if (event.deltaY <= 0) return;
+            if (!isAtDocumentBottom()) return;
+            scheduleLoadFromBottomGesture();
+        };
+
+        const handleTouchStart = (event) => {
+            const touch = event.touches && event.touches[0];
+            lastTouchY = touch ? touch.clientY : null;
+        };
+
+        const handleTouchMove = (event) => {
+            if (!isDiscoveryHomeContext()) return;
+            if (!target.dataset.sectionsRendered) return;
+            if (state.isRenderingDiscovery) return;
+
+            const touch = event.touches && event.touches[0];
+            if (!touch) return;
+
+            if (lastTouchY == null) {
+                lastTouchY = touch.clientY;
+                return;
+            }
+
+            const deltaY = touch.clientY - lastTouchY;
+            lastTouchY = touch.clientY;
+
+            // Upward swipe scrolls content down
+            if (deltaY >= 0) return;
+            if (!isAtDocumentBottom()) return;
+            scheduleLoadFromBottomGesture();
+        };
+
+        state.discoveryWheelHandler = handleWheel;
+        state.discoveryTouchStartHandler = handleTouchStart;
+        state.discoveryTouchMoveHandler = handleTouchMove;
+        window.addEventListener('wheel', handleWheel, { passive: true });
+        window.addEventListener('touchstart', handleTouchStart, { passive: true });
+        window.addEventListener('touchmove', handleTouchMove, { passive: true });
+        LOG('Chevron Discover More enabled for discovery (scroll-again at bottom).');
     }
 
     function isInSeasonalPeriod(start, end) {
@@ -2290,202 +1816,6 @@
         return isInSeasonalPeriod(activeSection.startDate, activeSection.endDate);        
     }
 
-    const localCache = new window.LocalStorageCache();
-
-    async function getRandomGenre() {
-        let movieGenres = localCache.get('movieGenres');
-        if (!movieGenres) movieGenres = await fetchAndCacheMovieGenres();
-        if (!movieGenres || !movieGenres.length) return null;
-        
-        const minCount = (Config.DISCOVERY_SETTINGS && Config.DISCOVERY_SETTINGS.minGenreMovieCount) 
-                         || (window.KefinTweaksConfig && window.KefinTweaksConfig.homeScreen && window.KefinTweaksConfig.homeScreen.discovery && window.KefinTweaksConfig.homeScreen.discovery.minGenreMovieCount)
-                         || 50;
-
-        const valid = movieGenres.filter(g => !state.renderedDiscoveryIds.genres.has(g.Id) && (g.MovieCount || 0) > minCount);
-        if (!valid.length) return null;
-        
-        const selected = valid[Math.floor(Math.random() * valid.length)];
-        state.renderedDiscoveryIds.genres.add(selected.Id);
-        return selected;
-    }
-
-    async function fetchAndCacheMovieGenres() {
-        try {
-            const userId = ApiClient.getCurrentUserId();
-            const response = await fetch(`${ApiClient.serverAddress()}/Genres?IncludeItemTypes=Movie`, {
-                headers: { 'Authorization': window.apiHelper.getAuthHeader() }
-            });
-            const data = await response.json();
-            const genres = (data.Items || []).map(g => ({ Id: g.Id, Name: g.Name, MovieCount: g.MovieCount }));
-            localCache.set('movieGenres', genres);
-            return genres;
-        } catch (e) {
-            ERR('Failed to fetch genres', e);
-            return [];
-        }
-    }
-
-    async function getRandomCollectionForDiscovery(minimumItems) {
-        const collections = await getCollectionsData();
-        if (!collections || !collections.length) return null;
-        const unrenderedCollections = collections.filter(c => !state.renderedDiscoveryIds.collections.has(c.Id));
-        const eligibleCollections = unrenderedCollections.filter(c => c.TotalRecordCount ?? c.RecursiveItemCount ?? c.ChildCount ?? 0 >= minimumItems);
-        if (!eligibleCollections.length) return null;
-        const selected = eligibleCollections[Math.floor(Math.random() * eligibleCollections.length)];
-        state.renderedDiscoveryIds.collections.add(selected.Id);
-        return selected;
-    }
-
-    async function getCollectionsData() {
-        const query = `${ApiClient.serverAddress()}/Items?IncludeItemTypes=BoxSet&Recursive=true&Fields=RecursiveItemCount,ChildCount,TotalRecordCount&StartIndex=0&Limit=500&SortBy=TotalRecordCount`;
-        
-        try {
-            const result = await ApiHelper.getQuery(query, {
-                useCache: true,
-                ttl: Config.CACHE.LONG_TTL
-            });
-            
-            let items = [];
-            if (result.data && result.data.Items) {
-                items = result.data.Items;
-            } else {
-                const fresh = await result.dataPromise;
-                items = fresh.Items || [];
-            }
-            return items;
-        } catch (e) {
-            ERR('Failed to fetch collections', e);
-            return [];
-        }
-    }
-
-    async function getRandomPersonFromHistory(personType, sourceType) {
-        let sourceItems = [];//window.apiHelper.getQuery(`${ApiClient.serverAddress()}/Items?IncludeItemTypes=Movie&Recursive=true&Filters=IsPlayed&Fields=UserData,People&EnableImageTypes=Primary,Backdrop,Thumb&ImageTypeLimit=1&SortBy=DatePlayed&SortOrder=Descending`, { useCache: true, ttl: Config.CACHE.LONG_TTL });
-        let queryUrl = null;
-
-        if (sourceType === 'watched-recent') {
-            queryUrl = `${ApiClient.serverAddress()}/Items?IncludeItemTypes=Movie&Recursive=true&Filters=IsPlayed&Fields=UserData,People&EnableImageTypes=Primary,Backdrop,Thumb&ImageTypeLimit=1&SortBy=DatePlayed&SortOrder=Descending&Limit=5`;
-            /* sourceItems = localCache.get('movies') || [];
-            if (sourceItems.length === 0) return null; */
-
-            sourceItems = sourceItems.sort((a, b) => new Date(b.UserData.LastPlayedDate) - new Date(a.UserData.LastPlayedDate)).slice(0, 5);
-        } else if (sourceType === 'watched') {
-            queryUrl = `${ApiClient.serverAddress()}/Items?IncludeItemTypes=Movie&Recursive=true&Filters=IsPlayed&Fields=UserData,People&EnableImageTypes=Primary,Backdrop,Thumb&ImageTypeLimit=1&SortBy=Random&SortOrder=Descending`;
-            /* sourceItems = localCache.get('movies') || []; 
-            if (sourceItems.length === 0) return null;
-            sourceItems = sourceItems.sort(() => 0.5 - Math.random()).slice(0, 20); */
-        }
-
-        if (queryUrl) {
-            const response = await window.apiHelper.getQuery(queryUrl, { useCache: true, ttl: Config.CACHE.LONG_TTL });
-            // Only check the cached data, ignore the promise
-            sourceItems = response?.data?.Items || response?.data || [];
-        }
-
-        if (!sourceItems.length) return null;
-
-        sourceItems.sort(() => 0.5 - Math.random());
-
-        for (const item of sourceItems) {
-            if (!item.People || !item.People.length) continue;
-            
-            const candidates = item.People.filter(p => p.Type === personType);
-            if (!candidates.length) continue;
-            
-            for (const person of candidates) {
-                let trackedSet = null;
-                if (personType === 'Director') trackedSet = state.renderedDiscoveryIds.directors;
-                else if (personType === 'Actor') trackedSet = state.renderedDiscoveryIds.actors;
-                else if (personType === 'Writer') trackedSet = state.renderedDiscoveryIds.writers;
-                
-                if (trackedSet && !trackedSet.has(person.Id)) {
-                    trackedSet.add(person.Id);
-                    return {
-                        person: { id: person.Id, name: person.Name },
-                        sourceItem: item
-                    };
-                }
-            }
-        }
-        
-        return null;
-    }
-
-    let _topPeople = null;
-    async function getTopPeople() {
-        if (_topPeople) return _topPeople;
-        _topPeople = await PeopleCache.getTopPeople();
-        return _topPeople;
-    }
-
-    async function getRandomPerson(type) {
-        if (!PeopleCache) return null;
-        
-        const peopleData = await getTopPeople();
-        if (!peopleData) return null;
-        
-        let list = [];
-        let trackedSet = null;
-
-        if (type === 'Director') {
-            list = peopleData.directors;
-            trackedSet = state.renderedDiscoveryIds.directors;
-        } else if (type === 'Actor') {
-            list = peopleData.actors;
-            trackedSet = state.renderedDiscoveryIds.actors;
-        } else if (type === 'Writer') {
-            list = peopleData.writers;
-            trackedSet = state.renderedDiscoveryIds.writers;
-        }
-        
-        if (!list || !list.length || !trackedSet) return null;
-        
-        const valid = list.filter(p => !trackedSet.has(p.Id));
-        if (!valid.length) return null;
-        
-        const selected = valid[Math.floor(Math.random() * valid.length)];
-        if (selected && selected.Id) {
-            trackedSet.add(selected.Id);
-        }
-        return selected;
-    }
-
-    function getRandomWatchedMovie() {
-        const movies = localCache.get('movies') || [];
-        if (!movies.length) return null;
-        const valid = movies.filter(m => !state.renderedDiscoveryIds.watchedMovies.has(m.Id));
-        if (!valid.length) return null;
-        const selected = valid[Math.floor(Math.random() * Math.min(valid.length, 10))];
-        state.renderedDiscoveryIds.watchedMovies.add(selected.Id);
-        return selected;
-    }
-
-    async function getRandomFavoriteMovie() {
-        if (state.cachedFavorites) {
-            const valid = state.cachedFavorites.filter(m => !state.renderedDiscoveryIds.likedMovies.has(m.Id));
-            if (valid.length > 0) {
-                const selected = valid[Math.floor(Math.random() * valid.length)];
-                state.renderedDiscoveryIds.likedMovies.add(selected.Id);
-                return selected;
-            }
-        }
-        const userId = ApiClient.getCurrentUserId();
-        try {
-            const response = await ApiClient.getItems(userId, { IncludeItemTypes: 'Movie', Filters: 'IsFavorite', Limit: 50, SortBy: 'Random', Recursive: true });
-            const items = response.Items || [];
-            if (!items.length) return null;
-            state.cachedFavorites = items;
-            const valid = items.filter(m => !state.renderedDiscoveryIds.likedMovies.has(m.Id));
-            if (!valid.length) return null;
-            const selected = valid[0];
-            state.renderedDiscoveryIds.likedMovies.add(selected.Id);
-            return selected;
-        } catch (e) {
-            ERR('Failed to get favorite movies:', e);
-            return null;
-        }
-    }
-
     async function getPopularTVNetworks() {
         if (!StudiosCache) return [];
 
@@ -2516,7 +1846,8 @@
     window.homeScreen3 = {
         init: enhanceHomeScreen,
         refreshHomeSections,
-        resolveDiscoverySection: buildDiscoverySectionInstance
+        resolveDiscoverySection: buildDiscoverySectionInstance,
+        sectionHelper: () => window.sectionHelper
     };
 
     //enhanceHomeScreen();

@@ -22,9 +22,9 @@
         { key: 'directedByTopDirector', label: 'Directed by [Top Director]', defaultName: 'Directed by [Director]' },
         { key: 'writtenByTopWriter', label: 'Written by [Top Writer]', defaultName: 'Written by [Writer]' },
         { key: 'becauseYouRecentlyWatched', label: 'Because you recently watched [Movie]', defaultName: 'Because you recently watched [Movie]' },
-        { key: 'starringActorRecentlyWatched', label: 'Starring [Actor] because you recently watched [Movie]', defaultName: 'Starring [Actor] because you recently watched [Movie]' },
-        { key: 'directedByDirectorRecentlyWatched', label: 'Directed by [Director] because you recently watched [Movie]', defaultName: 'Directed by [Director] because you recently watched [Movie]' },
-        { key: 'writtenByWriterRecentlyWatched', label: 'Written by [Writer] because you recently watched [Movie]', defaultName: 'Written by [Writer] because you recently watched [Movie]' }
+        { key: 'starringActorRecentlyWatched', label: 'Starring [Person]', defaultName: 'Starring {Person}', extras: { caption: 'because you recently watched {Title}' } },
+        { key: 'directedByDirectorRecentlyWatched', label: 'Directed by [Person]', defaultName: 'Directed by {Person}', extras: { caption: 'because you recently watched {Title}' } },
+        { key: 'writtenByWriterRecentlyWatched', label: 'Written by [Person]', defaultName: 'Written by {Person}', extras: { caption: 'because you recently watched {Title}' } }
     ];
 
     const SUPPORTED_CUSTOM_SECTION_PARAMS = {
@@ -1208,10 +1208,8 @@
         const defsByName = new Map(
             (window.KefinTweaks?.getScripts?.() || []).map((def) => [def.name, def])
         );
-        const major = window.KefinTweaks?._jellyfinMajorVersion
-            ?? (typeof window.KefinTweaks?.getJellyfinMajorVersion === 'function'
-                ? window.KefinTweaks.getJellyfinMajorVersion()
-                : null);
+        // Prefer cache warmed by await getJellyfinMajorVersion() before opening the modal
+        const major = window.KefinTweaks?._jellyfinMajorVersion ?? null;
 
         const visibleScripts = scriptNames.filter((script) => {
             const def = defsByName.get(script.key);
@@ -1710,6 +1708,9 @@
 
         if (definition.extras?.minimumItems !== undefined) {
             defaults.minimumItems = definition.extras.minimumItems;
+        }
+        if (definition.extras?.caption !== undefined) {
+            defaults.caption = definition.extras.caption;
         }
 
         let normalized = { ...defaults };
@@ -2270,7 +2271,7 @@
                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 0.75em; margin-bottom: 0.75em;">
             <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
                 <div class="listItemContent">
-                                    <div class="listItemBodyText" style="margin-bottom: 0.5em;">Infinite Scroll / Load More Button</div>
+                                    <div class="listItemBodyText" style="margin-bottom: 0.5em;">Infinite Scroll / Discover More</div>
                                     ${buildJellyfinCheckbox('homeScreen_discovery_infiniteScroll', discovery.infiniteScroll !== false, 'Infinite Scroll')}
                 </div>
             </div>
@@ -2479,9 +2480,8 @@
 
         // Ensure Jellyfin major is cached so version-gated feature cards filter correctly
         try {
-            if (typeof window.KefinTweaks?.getCurrentMajorServerVersion === 'function') {
-                const major = await window.KefinTweaks.getCurrentMajorServerVersion();
-                window.KefinTweaks._jellyfinMajorVersion = major;
+            if (typeof window.KefinTweaks?.getJellyfinMajorVersion === 'function') {
+                await window.KefinTweaks.getJellyfinMajorVersion();
             }
         } catch (e) {
             console.warn('[KefinTweaks Configuration] Could not resolve Jellyfin major version:', e);

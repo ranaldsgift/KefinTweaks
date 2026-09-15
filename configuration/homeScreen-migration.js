@@ -48,9 +48,9 @@
                 SEASONAL_SECTION_GROUPS: JSON.parse(JSON.stringify(defaults.SEASONAL_SECTION_GROUPS || [])),
                 DISCOVERY_SECTION_GROUPS: JSON.parse(JSON.stringify(defaults.DISCOVERY_SECTION_GROUPS || [])),
                 CUSTOM_SECTION_GROUPS: [],
-                REMOVE_CONFLICTING_SECTIONS: legacyHomeScreen.removeConflictingSections !== false,
                 DISCOVERY_SETTINGS: JSON.parse(JSON.stringify(defaults.DISCOVERY_SETTINGS || {})),
-                SEASONAL_THEME_SETTINGS: JSON.parse(JSON.stringify(defaults.SEASONAL_THEME_SETTINGS || {}))
+                SEASONAL_THEME_SETTINGS: JSON.parse(JSON.stringify(defaults.SEASONAL_THEME_SETTINGS || {})),
+                HOME_SETTINGS: JSON.parse(JSON.stringify(defaults.HOME_SETTINGS || {}))
             };
 
             // Migrate discovery settings
@@ -101,7 +101,6 @@
 
         if (discovery.enabled !== undefined) settings.enabled = discovery.enabled;
         if (discovery.infiniteScroll !== undefined) settings.infiniteScroll = discovery.infiniteScroll;
-        if (discovery.minPeopleAppearances !== undefined) settings.minPeopleAppearances = discovery.minPeopleAppearances;
         if (discovery.minGenreMovieCount !== undefined) settings.minGenreMovieCount = discovery.minGenreMovieCount;
         if (discovery.defaultItemLimit !== undefined) settings.defaultItemLimit = discovery.defaultItemLimit;
         if (discovery.defaultSortOrder !== undefined) settings.defaultSortOrder = discovery.defaultSortOrder;
@@ -112,6 +111,17 @@
         if (discovery.spotlight && typeof discovery.spotlight === 'object') {
             settings.spotlight = {};
             Object.assign(settings.spotlight, discovery.spotlight);
+        }
+
+        // Legacy discovery.minPeopleAppearances → HOME_SETTINGS mins
+        if (discovery.minPeopleAppearances !== undefined) {
+            if (!newConfig.HOME_SETTINGS) newConfig.HOME_SETTINGS = {};
+            const min = discovery.minPeopleAppearances;
+            const home = newConfig.HOME_SETTINGS;
+            if (home.minPeopleAppearancesTotal == null) home.minPeopleAppearancesTotal = min;
+            if (home.minPeopleAppearancesMovies == null) home.minPeopleAppearancesMovies = min;
+            if (home.minPeopleAppearancesSeries == null) home.minPeopleAppearancesSeries = min;
+            if (home.minPeopleAppearancesEpisodes == null) home.minPeopleAppearancesEpisodes = min;
         }
     }
 
@@ -216,8 +226,8 @@
     function mergeSectionConfig(defaultSection, legacyConfig) {
         const merged = JSON.parse(JSON.stringify(defaultSection));
 
-        // Map root fields
-        if (legacyConfig.enabled !== undefined) merged.enabled = legacyConfig.enabled;
+        // Map root fields — missing legacy enabled means on (same as seasonal/custom)
+        merged.enabled = legacyConfig.enabled !== false;
         if (legacyConfig.name !== undefined) merged.name = legacyConfig.name;
         if (legacyConfig.order !== undefined) merged.order = legacyConfig.order;
         if (legacyConfig.cardFormat !== undefined) merged.cardFormat = legacyConfig.cardFormat;
@@ -427,6 +437,7 @@
             watchlist: 'watchlist',
             upcoming: 'upcoming',
             imdbTop250: 'imdbTop250',
+            trending: 'trending',
             popularTVNetworks: 'popularTVNetworks'
         };
 
@@ -550,6 +561,50 @@
         LOG(`      Added as custom section: ${customSection.id}`);
     }
 
+    const RECENTLY_WATCHED_PERSON_IDS = new Set([
+        'starringActorRecentlyWatched',
+        'directedByDirectorRecentlyWatched',
+        'writtenByWriterRecentlyWatched'
+    ]);
+
+    const RECENTLY_WATCHED_CAPTION_DEFAULT = 'because you recently watched {Title}';
+
+    const RECENTLY_WATCHED_NAME_DEFAULTS = {
+        starringActorRecentlyWatched: 'Starring {Person}',
+        directedByDirectorRecentlyWatched: 'Directed by {Person}',
+        writtenByWriterRecentlyWatched: 'Written by {Person}'
+    };
+
+    function normalizeDiscoveryTemplatePlaceholders(text) {
+        if (!text || typeof text !== 'string') return text;
+        return text
+            .replace(/\[Actor\]/gi, '{Person}')
+            .replace(/\[Director\]/gi, '{Person}')
+            .replace(/\[Writer\]/gi, '{Person}')
+            .replace(/\[Person\]/gi, '{Person}')
+            .replace(/\[Movie\]/gi, '{Title}')
+            .replace(/\[Title\]/gi, '{Title}');
+    }
+
+    /**
+     * Split legacy combined "Starring X because you recently watched Y" into name + caption.
+     */
+    function splitLegacyRecentlyWatchedName(legacyName) {
+        if (!legacyName || typeof legacyName !== 'string') return null;
+        const match = legacyName.match(/^(.*?)\s+because you recently watched\s+(.*)$/i);
+        if (!match) return null;
+        let name = normalizeDiscoveryTemplatePlaceholders(match[1].trim());
+        let captionRight = normalizeDiscoveryTemplatePlaceholders(match[2].trim());
+        const caption = captionRight
+            ? `because you recently watched ${captionRight}`
+            : RECENTLY_WATCHED_CAPTION_DEFAULT;
+        // Prefer canonical caption placeholder when right side is Movie/Title token only
+        if (/^\{Title\}$/i.test(captionRight) || /^\[Movie\]$/i.test(match[2].trim())) {
+            return { name, caption: RECENTLY_WATCHED_CAPTION_DEFAULT };
+        }
+        return { name, caption };
+    }
+
     /**
      * Migrate DISCOVERY sections
      */
@@ -562,13 +617,10 @@
 
         const discoverySectionTypes = legacyHomeScreen.discovery.sectionTypes;
         Object.entries(discoverySectionTypes).forEach(([sectionKey, legacySectionConfig]) => {
-            // Use the key as the section ID
             const found = findDiscoverySectionById(sectionKey, newConfig.DISCOVERY_SECTION_GROUPS);
 
             if (found) {
-                // Discovery sections still use legacy format, so we map fields directly
-                if (legacySectionConfig.enabled !== undefined) found.section.enabled = legacySectionConfig.enabled;
-                if (legacySectionConfig.name !== undefined) found.section.name = legacySectionConfig.name;
+                found.section.enabled = legacySectionConfig.enabled !== false;
                 if (legacySectionConfig.itemLimit !== undefined) found.section.itemLimit = legacySectionConfig.itemLimit;
                 if (legacySectionConfig.cardFormat !== undefined) found.section.cardFormat = legacySectionConfig.cardFormat;
                 if (legacySectionConfig.isPlayed !== undefined && legacySectionConfig.isPlayed !== null) {
@@ -577,6 +629,29 @@
                 if (legacySectionConfig.minimumItems !== undefined) found.section.minimumItems = legacySectionConfig.minimumItems;
                 if (legacySectionConfig.sortOrder !== undefined) found.section.sortOrder = legacySectionConfig.sortOrder;
                 if (legacySectionConfig.sortOrderDirection !== undefined) found.section.sortOrderDirection = legacySectionConfig.sortOrderDirection;
+
+                const isRecentlyWatchedPerson = RECENTLY_WATCHED_PERSON_IDS.has(sectionKey);
+                if (legacySectionConfig.name !== undefined) {
+                    const split = splitLegacyRecentlyWatchedName(legacySectionConfig.name);
+                    if (split) {
+                        found.section.name = split.name;
+                        found.section.caption = split.caption;
+                    } else if (isRecentlyWatchedPerson) {
+                        found.section.name = RECENTLY_WATCHED_NAME_DEFAULTS[sectionKey]
+                            || normalizeDiscoveryTemplatePlaceholders(legacySectionConfig.name);
+                        if (!found.section.caption) {
+                            found.section.caption = RECENTLY_WATCHED_CAPTION_DEFAULT;
+                        }
+                    } else {
+                        found.section.name = legacySectionConfig.name;
+                    }
+                } else if (isRecentlyWatchedPerson && !found.section.caption) {
+                    found.section.caption = RECENTLY_WATCHED_CAPTION_DEFAULT;
+                }
+
+                if (legacySectionConfig.caption !== undefined) {
+                    found.section.caption = normalizeDiscoveryTemplatePlaceholders(legacySectionConfig.caption);
+                }
 
                 LOG(`  Migrated discovery section: ${sectionKey}`);
             } else {

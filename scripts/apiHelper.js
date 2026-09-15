@@ -1105,15 +1105,10 @@
             }
             
             try {
-                let dataPromise = cache[methodName]();
+                let dataPromise = Promise.resolve(cache[methodName](options));
                 dataPromise = dataPromise.then(data => {
                     if (!Array.isArray(data)) {
                         data = [];
-                    }
-                    
-                    // Filter studios/networks with no thumb
-                    if (cacheName === 'StudiosCache' && window.KefinHomeScreem?.getConfig()?.HOME_SETTINGS?.ensureThumbsForPopularTVNetworks === true) {
-                        data = data.filter(item => item.ImageTags?.Thumb);
                     }
                     
                     // Apply options (sorting, limits, etc.)

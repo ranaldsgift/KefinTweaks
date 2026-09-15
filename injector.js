@@ -356,7 +356,7 @@
             name: 'peopleCache',
             script: 'peopleCache.js',
             css: null,
-            dependencies: [],
+            dependencies: ['libraryCacheUtils', 'userHelper', 'moviesCache', 'seriesCache', 'indexedDBCache', 'apiHelper'],
             description: 'People cache for KefinTweaks'
         },
         {
@@ -367,11 +367,39 @@
             description: 'Studios cache for KefinTweaks'
         },
         {
+            name: 'libraryCacheUtils',
+            script: 'libraryCacheUtils.js',
+            css: null,
+            dependencies: [],
+            description: 'Shared strip/provider helpers for library caches'
+        },
+        {
             name: 'moviesCache',
             script: 'moviesCache.js',
             css: null,
-            dependencies: [],
-            description: 'Movies cache for KefinTweaks'
+            dependencies: ['libraryCacheUtils', 'userHelper', 'indexedDBCache', 'apiHelper'],
+            description: 'Movies library cache for KefinTweaks'
+        },
+        {
+            name: 'seriesCache',
+            script: 'seriesCache.js',
+            css: null,
+            dependencies: ['libraryCacheUtils', 'userHelper', 'indexedDBCache', 'apiHelper'],
+            description: 'Series library cache for KefinTweaks'
+        },
+        {
+            name: 'libraryCache',
+            script: 'libraryCache.js',
+            css: null,
+            dependencies: ['moviesCache', 'seriesCache'],
+            description: 'Library cache facade for KefinTweaks'
+        },
+        {
+            name: 'externalList',
+            script: 'externalList.js',
+            css: null,
+            dependencies: ['libraryCache', 'libraryCacheUtils', 'apiHelper'],
+            description: 'MDBList external list matching for home sections'
         },
         {
             name: 'skinManager',
@@ -387,6 +415,13 @@
             css: null,
             dependencies: ['dataHelper'],
             description: 'API helper functions for common Jellyfin operations'
+        },
+        {
+            name: 'sectionHelper',
+            script: 'sectionHelper.js',
+            css: null,
+            dependencies: ['apiHelper', 'cardBuilder', 'peopleCache', 'studiosCache', 'moviesCache', 'seriesCache', 'libraryCache', 'homeScreenConfig2', 'dataHelper'],
+            description: 'Section loading and progressive discovery resolve helpers'
         },
         {
             name: 'cardBuilder',
@@ -483,7 +518,7 @@
             name: 'homeScreen',
             script: 'homeScreen3.js',
             css: 'homeScreen.css',
-            dependencies: ['cardBuilder', 'localStorageCache', 'utils', 'homeScreenConfig2', 'homeScreen-configuration', 'peopleCache', 'studiosCache', 'moviesCache', 'indexedDBCache', 'homeScreenConfigCommunity', 'dataHelper', 'apiHelper', 'homeScreen-migration', 'homeScreen-user-configuration', 'homeScreenSectionConfigure', 'homeScreenPin'],
+            dependencies: ['cardBuilder', 'localStorageCache', 'utils', 'userHelper', 'homeScreenConfig2', 'homeScreen-configuration', 'peopleCache', 'studiosCache', 'moviesCache', 'seriesCache', 'libraryCache', 'libraryCacheUtils', 'externalList', 'indexedDBCache', 'homeScreenConfigCommunity', 'dataHelper', 'apiHelper', 'sectionHelper', 'homeScreen-migration', 'homeScreen-user-configuration', 'homeScreenSectionConfigure', 'homeScreenPin'],
             priority: true, // Load immediately after dependencies to reduce UI disruption
             description: 'Adds custom home screen sections'
         },
@@ -1088,6 +1123,32 @@
         console.log(`[KefinTweaks Injector] Successfully loaded: ${scriptDef.name}`);
     }
 
+
+    async function ensureKefinTweaksLoader(scriptRoot) {
+        if (window.KefinTweaksLoader) return window.KefinTweaksLoader;
+        const base = scriptRoot.endsWith('/') ? scriptRoot : scriptRoot + '/';
+        const url = base + 'kefinTweaks-loader.js';
+        await new Promise((resolve, reject) => {
+            if (document.querySelector('script[src="' + url + '"]')) {
+                const start = Date.now();
+                const wait = () => {
+                    if (window.KefinTweaksLoader) return resolve();
+                    if (Date.now() - start > 15000) return reject(new Error('Timed out waiting for KefinTweaksLoader'));
+                    setTimeout(wait, 50);
+                };
+                return wait();
+            }
+            const script = document.createElement('script');
+            script.src = url;
+            script.async = false;
+            script.onload = () => resolve();
+            script.onerror = () => reject(new Error('Failed to load kefinTweaks-loader.js'));
+            document.head.appendChild(script);
+        });
+        if (!window.KefinTweaksLoader) throw new Error('KefinTweaksLoader not available');
+        return window.KefinTweaksLoader;
+    }
+
     async function loadConfigurationJS() {
         const configDependencyNames = ['modal', 'toaster', 'utils', 'homeScreenConfig2', 'ui', 'homeScreen-migration', 'homeScreen-configuration', 'search-configuration', 'seriesEpisodes-configuration', 'seriesInfo-configuration', 'versionPreferences-configuration', 'skinManager-configuration', 'customMenuLinks-configuration', 'thumbnailScrubber-configuration', 'watchTogether-configuration', 'userManager-configuration', 'apiHelper'];
         for (const depName of configDependencyNames) {
@@ -1106,182 +1167,98 @@
         await loadCSS('configuration.css');
     }
     
-    // Main initialization function
+    // Main initialization: live load plan (fills gaps vs baked preload) + stamp sync
     async function initialize() {
-        console.log(`[KefinTweaks Injector] Starting KefinTweaks initialization...`);
-        
+        console.log('[KefinTweaks Injector] Starting KefinTweaks initialization...');
+
         const scriptRoot = await getScriptRoot();
         if (!scriptRoot) {
             console.log('[KefinTweaks Injector] kefinTweaksRoot is not configured. Please configure KefinTweaks using the installer before scripts can be loaded.');
             return;
         }
-        
-        // Resolve Jellyfin major for version-gated scripts (also used by configuration UI)
-        const majorVersion = await getCurrentMajorServerVersion();
-        syncCachedMajorOnApi(majorVersion);
-        console.log(`[KefinTweaks Injector] Jellyfin major version: ${majorVersion ?? 'unknown'}`);
 
-        // Check if KefinTweaks is enabled in config
-        const isKefinTweaksEnabled = window.KefinTweaksConfig?.enabled !== false;
-        
-        if (!isKefinTweaksEnabled) {
-            console.log('[KefinTweaks Injector] KefinTweaks is disabled in configuration. Only loading configuration UI requirements for admin access.');
-            
-            try {
-                // Ensure configuration dependencies are loaded so the admin UI works
-                await loadConfigurationJS();
-                console.log('[KefinTweaks Injector] Configuration script loaded (KefinTweaks is disabled)');
-            } catch (error) {
-                console.warn('[KefinTweaks Injector] Failed to load configuration UI while disabled:', error);
-            }
-            return;
-        }
-        
-        // Validate configuration
-        if (!validateConfiguration()) {
-            console.error('[KefinTweaks Injector] Configuration validation failed. Aborting.');
-            return;
-        }
-        
-        // Get enabled scripts compatible with this Jellyfin major
-        const enabledScripts = SCRIPT_DEFINITIONS.filter(script =>
-            ENABLED_SCRIPTS[script.name] && isScriptCompatible(script, majorVersion)
-        );
-        
-        // Step 1: Collect all dependencies from all enabled scripts
-        const allDependencyNames = new Set();
-        for (const script of enabledScripts) {
-            const deps = collectAllDependencies(script);
-            deps.forEach(dep => allDependencyNames.add(dep));
-        }
-        
-        // Step 2: Separate dependencies from non-dependencies
-        const dependencyScripts = SCRIPT_DEFINITIONS.filter(script => 
-            allDependencyNames.has(script.name) && ENABLED_SCRIPTS[script.name]
-        );
-        
-        const nonDependencyScripts = enabledScripts.filter(script => 
-            !allDependencyNames.has(script.name)
-        );
-        
-        // Step 2.5: Separate priority scripts from regular non-dependency scripts
-        const priorityScripts = nonDependencyScripts.filter(script => script.priority === true);
-        const regularScripts = nonDependencyScripts.filter(script => !script.priority);
-        
-        console.log(`[KefinTweaks Injector] Found ${dependencyScripts.length} dependency scripts:`, 
-                   dependencyScripts.map(s => s.name));
-        console.log(`[KefinTweaks Injector] Found ${priorityScripts.length} priority scripts:`, 
-                   priorityScripts.map(s => s.name));
-        console.log(`[KefinTweaks Injector] Found ${regularScripts.length} regular scripts:`, 
-                   regularScripts.map(s => s.name));
-        
+        let Loader;
         try {
-            // Step 3: Load all dependencies first
-            console.log('[KefinTweaks Injector] Loading dependencies first...');
-            console.log(`[KefinTweaks Injector] Dependency load order:`, dependencyScripts.map(s => s.name));
-            
-            let dependencyLoadPromises = [];
-            dependencyLoadPromises.push(...dependencyScripts.map(script => loadScriptSync(script)));
-            await Promise.all(dependencyLoadPromises);
-            
-            // Step 4: Load priority scripts immediately after dependencies
-            if (priorityScripts.length > 0) {
-                console.log('[KefinTweaks Injector] Loading priority scripts...');
-                console.log(`[KefinTweaks Injector] Priority load order:`, priorityScripts.map(s => s.name));
-                let priorityLoadPromises = [];
-                priorityLoadPromises.push(...priorityScripts.map(script => loadScriptSync(script)));
-                await Promise.all(priorityLoadPromises);
-            }
-            
-            // Step 5: Load regular non-dependencies in parallel (their dependencies are already loaded)
-            let loadPromises = [];
-            console.log('[KefinTweaks Injector] Loading regular non-dependencies...');
-            loadPromises.push(...regularScripts.map(script => loadScriptSync(script)));
-            await Promise.all(loadPromises);
-            
-            console.log('[KefinTweaks Injector] All scripts loaded successfully!');
-            
-            // Always load configuration.js for admin UI (loads after other scripts)
-            console.log('[KefinTweaks Injector] Loading configuration script...');
-            try {
-                await loadConfigurationJS();
-                console.log('[KefinTweaks Injector] Configuration script loaded successfully');
-            } catch (error) {
-                console.warn('[KefinTweaks Injector] Failed to load configuration script:', error);
-            }
-            
-            // Dispatch custom event when all scripts are loaded
-            const event = new CustomEvent('kefinTweaksLoaded', {
-                detail: {
-                    loadedScripts: enabledScripts.map(s => s.name),
-                    timestamp: new Date().toISOString()
-                }
+            Loader = await ensureKefinTweaksLoader(scriptRoot);
+        } catch (err) {
+            console.error('[KefinTweaks Injector] Failed to load kefinTweaks-loader.js:', err);
+            return;
+        }
+
+        Loader.ensureKefinTweaksApi(Loader.SCRIPT_DEFINITIONS);
+        const majorVersion = await window.KefinTweaks.getJellyfinMajorVersion();
+        console.log('[KefinTweaks Injector] Jellyfin major version:', majorVersion ?? 'unknown');
+
+        const config = window.KefinTweaksConfig || {};
+        const root = Loader.normalizeRoot(config.kefinTweaksRoot || '');
+
+        try {
+            const plan = Loader.buildLoadPlan(config, majorVersion, {
+                root,
+                urlSuffix,
+                configOnly: config.enabled === false
             });
-            document.dispatchEvent(event);
-            
+            console.log('[KefinTweaks Injector] Applying ordered assets:', plan.assets.length, 'stamp=', plan.stamp);
+            // Dedupe against tags already injected by baked KefinTweaks-injector
+            Loader.applyAssetsToDocument(plan.assets);
+            document.dispatchEvent(new CustomEvent('kefinTweaksLoaded', {
+                detail: {
+                    loadedScripts: plan.scriptNames,
+                    stamp: plan.stamp,
+                    timestamp: new Date().toISOString(),
+                    live: true
+                }
+            }));
+            console.log('[KefinTweaks Injector] Live ordered inject complete');
+
+            if (typeof Loader.syncKefinTweaksInjector === 'function') {
+                const syncResult = await Loader.syncKefinTweaksInjector(plan);
+                if (syncResult?.synced) {
+                    console.log('[KefinTweaks Injector] Baked KefinTweaks-injector synced to stamp:', syncResult.stamp);
+                } else if (syncResult?.reason && syncResult.reason !== 'stamp match' && syncResult.reason !== 'not admin' && syncResult.reason !== 'not logged in') {
+                    console.warn('[KefinTweaks Injector] Injector sync skipped:', syncResult.reason);
+                } else {
+                    console.log('[KefinTweaks Injector] Injector sync:', syncResult?.reason || 'done');
+                }
+            }
         } catch (error) {
             console.error('[KefinTweaks Injector] Error during initialization:', error);
         }
     }
-    
+
+
     // Utility functions for debugging and configuration
-    window.KefinTweaks = {
+    // Populated in initialize via KefinTweaksLoader.ensureKefinTweaksApi; stub for early callers
+    window.KefinTweaks = window.KefinTweaks || {
         _jellyfinMajorVersion: null,
-
-        // Get current configuration
-        getConfig: () => ({ ...ENABLED_SCRIPTS }),
-        
-        // Get script definitions
-        getScripts: () => [...SCRIPT_DEFINITIONS],
-
-        getMajorServerVersion,
-        getCurrentMajorServerVersion,
-        getJellyfinMajorVersion: () => cachedJellyfinMajorVersion,
-
-        isScriptCompatible: (scriptNameOrDef) => {
-            const scriptDef = typeof scriptNameOrDef === 'string'
-                ? SCRIPT_DEFINITIONS.find(s => s.name === scriptNameOrDef)
-                : scriptNameOrDef;
-            if (!scriptDef) return true;
-            return isScriptCompatible(scriptDef, cachedJellyfinMajorVersion);
-        },
-        
-        // Check if a script is loaded
-        isScriptLoaded: (scriptName) => {
-            const scriptDef = SCRIPT_DEFINITIONS.find(s => s.name === scriptName);
-            if (!scriptDef) return false;
-            
-            const scriptElement = document.querySelector(`script[src*="${scriptDef.script}"]`);
-            return !!scriptElement;
-        },
-        
-        // Reload all scripts (useful for development)
-        reload: () => {
-            console.log('[KefinTweaks Injector] Reloading all scripts...');
-            initialize();
-        },
-        
-        // Load a specific script (useful for dynamic loading)
-        loadScript: async (scriptName) => {
-            const scriptDef = SCRIPT_DEFINITIONS.find(s => s.name === scriptName);
-            if (!scriptDef) {
-                throw new Error(`Script '${scriptName}' not found`);
+        parseMajorVersion: function (version) {
+            if (!version || typeof version !== 'string') return null;
+            const versionParts = version.split('.');
+            if (versionParts[0] !== '10') {
+                const majorVersion = parseInt(versionParts[0], 10);
+                return Number.isNaN(majorVersion) ? null : majorVersion;
             }
-            
-            if (!ENABLED_SCRIPTS[scriptName]) {
-                throw new Error(`Script '${scriptName}' is disabled in configuration`);
+            if (versionParts.length >= 2) {
+                const majorVersion = parseInt(versionParts[1], 10);
+                if (!Number.isNaN(majorVersion)) return majorVersion;
             }
-
-            const major = await getCurrentMajorServerVersion();
-            syncCachedMajorOnApi(major);
-            if (!isScriptCompatible(scriptDef, major)) {
-                throw new Error(`Script '${scriptName}' is not compatible with this Jellyfin version`);
+            return null;
+        },
+        getJellyfinMajorVersion: async function () {
+            if (window.KefinTweaksLoader) {
+                window.KefinTweaksLoader.ensureKefinTweaksApi();
+                return window.KefinTweaks.getJellyfinMajorVersion();
             }
-            
-            await loadScriptWithDependencies(scriptDef);
-        }
+            return this._jellyfinMajorVersion;
+        },
+        getScripts: function () {
+            return (window.KefinTweaksLoader && window.KefinTweaksLoader.SCRIPT_DEFINITIONS)
+                ? window.KefinTweaksLoader.SCRIPT_DEFINITIONS.slice()
+                : (typeof SCRIPT_DEFINITIONS !== 'undefined' ? SCRIPT_DEFINITIONS.slice() : []);
+        },
+        reload: function () { initialize(); }
     };
-    
+
     // Check if user is admin (with timeout for login)
     async function checkAdminWithTimeout(maxWaitMs = 5000) {
         const startTime = Date.now();

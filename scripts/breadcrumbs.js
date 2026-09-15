@@ -471,15 +471,28 @@
     }
     
     // DOM manipulation
+    function isModernUI() {
+        return !!document.querySelector('.MuiBox-root');
+    }
+
+    function resolveBreadcrumbMount() {
+        if (isModernUI()) {
+            return document.querySelector('.MuiToolbar-root');
+        }
+        return document.querySelector('.skinHeader .headerLeft');
+    }
+
     function createBreadcrumbContainer() {
         if (breadcrumbContainer) {
             return breadcrumbContainer;
         }
-        
-        // Find the header left container
-        const headerLeft = document.querySelector('.skinHeader .headerLeft');
-        if (!headerLeft) {
-            error('Could not find .skinHeader .headerLeft element');
+
+        const isModern = isModernUI();
+        const mount = resolveBreadcrumbMount();
+        if (!mount) {
+            error(isModern
+                ? 'Could not find .MuiToolbar-root for breadcrumbs'
+                : 'Could not find .skinHeader .headerLeft element');
             return null;
         }
         
@@ -487,6 +500,9 @@
         const wrapper = document.createElement('div');
         wrapper.id = 'kefinTweaks-breadcrumbs-wrapper';
         wrapper.className = 'kefinTweaks-breadcrumbs-wrapper';
+        if (isModern) {
+            wrapper.classList.add('kefinTweaks-breadcrumbs-wrapper--modern');
+        }
         wrapper.style.cssText = `
             display: none;
         `;
@@ -509,10 +525,35 @@
         
         wrapper.appendChild(breadcrumbContainer);
         wrapper.appendChild(popoverContainer);
-        headerLeft.appendChild(wrapper);
+        mount.appendChild(wrapper);
         
-        log('Created breadcrumb container with wrapper structure inside .skinHeader .headerLeft');
+        log(isModern
+            ? 'Created breadcrumb container inside .MuiToolbar-root'
+            : 'Created breadcrumb container with wrapper structure inside .skinHeader .headerLeft');
         return breadcrumbContainer;
+    }
+
+    function ensureBreadcrumbContainer(retries = 20) {
+        const existing = createBreadcrumbContainer();
+        if (existing) return Promise.resolve(existing);
+
+        return new Promise((resolve) => {
+            let attempts = 0;
+            const tryMount = () => {
+                const container = createBreadcrumbContainer();
+                if (container) {
+                    resolve(container);
+                    return;
+                }
+                attempts += 1;
+                if (attempts >= retries) {
+                    resolve(null);
+                    return;
+                }
+                setTimeout(tryMount, 100);
+            };
+            tryMount();
+        });
     }
     
     function showBreadcrumbs() {
@@ -864,9 +905,13 @@
     
     // Create breadcrumbs from scratch
     async function createBreadcrumbsFromScratch(targetStructure) {
-        // Create container if it doesn't exist
+        // Create container if it doesn't exist (retry briefly on ModernUI if toolbar not ready)
         if (!breadcrumbContainer) {
-            breadcrumbContainer = createBreadcrumbContainer();
+            breadcrumbContainer = await ensureBreadcrumbContainer();
+        }
+        if (!breadcrumbContainer) {
+            error('Breadcrumb container unavailable');
+            return;
         }
         
         // Build all elements first

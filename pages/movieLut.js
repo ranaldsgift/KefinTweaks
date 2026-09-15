@@ -151,7 +151,10 @@
 
     function actorFilmography(actor) {
         const items = actor.items || actor.actorItems || [];
-        return items.filter((m) => m && m.Id);
+        // PeopleCache may return raw movie Id strings; normalize to { Id } for gatherThreeTrickplayMovies
+        return items
+            .map((m) => (typeof m === 'string' || typeof m === 'number' ? { Id: String(m) } : m))
+            .filter((m) => m && m.Id);
     }
 
     async function fetchFullItem(apiClient, itemId) {

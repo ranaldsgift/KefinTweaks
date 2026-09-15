@@ -57,12 +57,18 @@
      * API Helper functions for Jellyfin operations
      */
     const userHelper = {
-        getUserDisplayPreferences: async function() {
+        /**
+         * Get current-user display preferences.
+         * @param {{ cacheOnly?: boolean }} [options]
+         * @returns {Promise<{ promise: Promise<object>, cached: object|null }>}
+         */
+        getUserDisplayPreferences: async function(options = {}) {
             ensureApiClient();
             ensureLoggedIn();
 
+            const cacheOnly = options.cacheOnly === true;
             let cachedDisplayPreferences = null;
-            
+
             if (__userDisplayPreferences) {
                 cachedDisplayPreferences = __userDisplayPreferences;
             } else if (window.LocalStorageCache) {
@@ -70,7 +76,16 @@
                 const displayPreferencesData = cache.get('userDisplayPreferences');
                 if (displayPreferencesData) {
                     cachedDisplayPreferences = displayPreferencesData;
+                    // Hydrate memory so later cacheOnly calls skip localStorage too
+                    __userDisplayPreferences = displayPreferencesData;
                 }
+            }
+
+            if (cacheOnly && cachedDisplayPreferences) {
+                return {
+                    promise: Promise.resolve(cachedDisplayPreferences),
+                    cached: cachedDisplayPreferences
+                };
             }
 
             // Wrap this in a promise to return with the cached data
@@ -286,7 +301,7 @@
         waitForLogin: waitForLogin
     };
 
-    // TODO -- Update this whenever the user display preferences are updated
+    // Updated by getUserDisplayPreferences / updateDisplayPreferencesForUser({ updateCache: true })
     let __userDisplayPreferences = null;
     
     // Expose userHelper to global window object

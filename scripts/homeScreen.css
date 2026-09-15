@@ -3,7 +3,6 @@
 .sections.homeSectionsContainer {
 	display: flex;
 	flex-direction: column;
-	padding-bottom: 100px;
 	gap: 1rem;
 }
 
@@ -36,6 +35,10 @@
 	content: "Discover More";
 }
 
+#indexPage[data-discovery-exhausted] div#discovery-loading-indicator:not(.show)::before {
+	content: "No More Content to Discover";
+}
+
 div#discovery-loading-indicator:not(.show)::after {
 	content: "\E313";
 	font-family: "Material Icons";
@@ -49,8 +52,24 @@ div#discovery-loading-indicator:not(.show)::after {
 	opacity: 1;
 }
 
+#indexPage[data-discovery-exhausted] div#discovery-loading-indicator:not(.show)::after {
+	content: "";
+}
+
 [data-loading-discovery="true"] div#discovery-loading-indicator {
 	display: flex;
+}
+
+/* Idle Discover More / exhausted prompt (chevron mode) */
+#indexPage[data-discovery-ready] #discovery-loading-indicator:not(.show) {
+	display: flex !important;
+	visibility: visible !important;
+	opacity: 1 !important;
+}
+
+#indexPage[data-discovery-ready] #discovery-loading-indicator:not(.show) .spinner {
+	visibility: hidden;
+	opacity: 0;
 }
 
 /* #indexPage[data-discovery-ready]:not([data-infinite-scroll='true']) div#discovery-loading-indicator {
@@ -298,3 +317,28 @@ body[data-seasonal-background="true"]:has(.homePage:not(.hide)) #reactRoot:has(.
 body[data-seasonal-animations="true"]:has(.homePage:not(.hide)) .snowverlay {
     display: block;
 } */
+
+.homePage[data-discovery-ready] div#discovery-loading-indicator:not(.show) {
+	min-height: 50px;
+}
+
+@keyframes fadeInDelayed {
+	0%, 99% {
+	  opacity: 0;
+	  visibility: hidden;
+	}
+	100% {
+	  opacity: 1;
+	  visibility: visible;
+	}
+  }
+  
+  .homeSectionsContainer:not(:has([data-page]), :has([data-section-id]))::after {
+	content: 'Customize your Home Screen from your User Settings > Home in the top right corner.';
+	text-align: center;
+	margin: 3em auto;
+	display: block;
+	animation: fadeInDelayed 0.1s linear 1s forwards;
+	opacity: 0;
+	visibility: hidden;
+  }

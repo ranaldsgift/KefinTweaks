@@ -75,9 +75,6 @@
 }
 
 [data-modal-id="kefin-homescreen-config-main"] div#section-content {
-	border: 1px solid rgba(255, 255, 255, 0.1);
-	border-radius: 4px;
-	padding: 0.75em;
 	max-height: calc(90vh - 19em);
 	overflow: auto;
 }
@@ -245,6 +242,7 @@ span.listItemBodyText.secondary.seasonal-tag {
 
 [data-modal-id="kefin-homescreen-config-main"] #global-settings-content .hsc-settings-grid-2 {
 	grid-template-columns: repeat(2, minmax(0, 1fr));
+	grid-auto-rows: 1fr;
 }
 
 [data-modal-id="kefin-homescreen-config-main"] #global-settings-content .hsc-settings-grid-3 {
@@ -335,4 +333,12 @@ span.listItemBodyText.secondary.seasonal-tag {
 	[data-modal-id="kefin-homescreen-config-main"] #global-settings-content .hsae-toggle-card-grid {
 		grid-template-columns: 1fr;
 	}
+}
+
+[data-modal-id="kefin-homescreen-config-main"] .hsc-settings-span-2 {
+	display: flex;
+}
+
+[data-modal-id="kefin-homescreen-config-main"] .hsc-settings-grid .hsc-settings-span-2 .kefin-toggle-card {
+	flex: 1;
 }

@@ -968,8 +968,25 @@
 	}
 }
 
-.skeleton-card {
-	margin-bottom: 45px !important;
+.skeleton-text-line {
+	display: inline-block;
+	height: 1em;
+	max-width: 100%;
+	border-radius: 4px;
+	background: rgba(255, 255, 255, 0.12);
+	animation: skeleton-pulse 1.5s ease-in-out infinite;
+	vertical-align: middle;
+}
+
+.skeleton-section-title {
+	width: 50%;
+	min-width: 8rem;
+}
+
+.skeleton-section-caption {
+	width: 35%;
+	min-width: 6rem;
+	margin-top: 0.15em;
 }
 
 /* Tagline always 1 line - Movie-specific override kept for any edge cases */
@@ -1293,7 +1310,7 @@
 }
 
 .sectionTitle.sectionCaption {
-	font-size: 0.9em;
+	font-size: 0.9em !important;
 	text-align: left;
 	grid-column: 1 / -1;
 	grid-row: 2;
@@ -2033,6 +2050,18 @@
 	background: transparent !important;
 	box-shadow: none !important;
 	border: none !important;
+}
+
+/* Skeletons need a visible padder even when Logo/Clear Art/Disc force transparent cards */
+.emby-scroller-container[data-card-format="Logo"] .skeleton-card .cardPadder,
+.emby-scroller-container[data-card-format="Logo"] .skeleton-card .cardScalable,
+.emby-scroller-container[data-card-format="Clear Art"] .skeleton-card .cardPadder,
+.emby-scroller-container[data-card-format="Clear Art"] .skeleton-card .cardScalable,
+.emby-scroller-container[data-card-format="Disc"] .skeleton-card .cardPadder,
+.emby-scroller-container[data-card-format="Disc"] .skeleton-card .cardScalable,
+.emby-scroller-container[data-section-id="liveTv-channels"] .skeleton-card .cardPadder,
+.emby-scroller-container[data-section-id="liveTv-channels"] .skeleton-card .cardScalable {
+	background: rgba(255, 255, 255, 0.12) !important;
 }
 
 .emby-scroller-container[data-card-format="Logo"] .cardImageContainer,

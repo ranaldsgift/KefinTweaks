@@ -1882,10 +1882,10 @@ div[data-tab="watchlist"] .loading-message {
 }
 
 .card:has(button[data-played="true"]) .watchlist-button,
-.card:not(:has(button[data-played])) .watchlist-button,
+.card:not(:has(button[data-played], button:has([data-testid="CheckIcon"]))) .watchlist-button,
 .mainDetailButtons:has(button[data-played="true"]) .watchlist-icon,
-.mainDetailButtons:not(:has(button[data-played])) .watchlist-icon,
-.mainDetailButtons:not(:has(button[data-played])) .btnRecommend {
+.mainDetailButtons:not(:has(button[data-played], button:has([data-testid="CheckIcon"]))) .watchlist-icon,
+.mainDetailButtons:not(:has(button[data-played], button:has([data-testid="CheckIcon"]))) .btnRecommend {
 	display: none;
 }
 

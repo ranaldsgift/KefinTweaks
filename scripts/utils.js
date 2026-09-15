@@ -1449,6 +1449,10 @@
             anyOk = injectIntoUserMenu(entry) || anyOk;
         }
 
+        if (entry.topNavigation === 'main') {
+            syncCustomTopNavActiveState();
+        }
+
         return anyOk;
     }
 
@@ -1460,6 +1464,91 @@
                 ERR('Error re-applying custom menu link:', entry?.name, err);
             }
         });
+        syncCustomTopNavActiveState();
+    }
+
+    function parseNavHashParts(hash) {
+        const raw = String(hash || '#/').replace(/^#/, '') || '/';
+        const qIndex = raw.indexOf('?');
+        const path = (qIndex >= 0 ? raw.slice(0, qIndex) : raw) || '/';
+        const query = qIndex >= 0 ? raw.slice(qIndex + 1) : '';
+        const params = new URLSearchParams(query);
+        return { path: path.startsWith('/') ? path : `/${path}`, params };
+    }
+
+    function customTopNavHrefMatchScore(href, currentHash) {
+        if (!href || /^https?:/i.test(href)) return -1;
+        const targetHash = href.startsWith('#') ? href : `#${href}`;
+        const current = parseNavHashParts(currentHash);
+        const target = parseNavHashParts(targetHash);
+
+        if (
+            targetHash === currentHash
+            || decodeURIComponent(targetHash) === decodeURIComponent(currentHash)
+        ) {
+            return 1000 + targetHash.length;
+        }
+
+        if (target.path !== current.path) return -1;
+
+        for (const [key, value] of target.params.entries()) {
+            if (current.params.get(key) !== value) return -1;
+        }
+
+        let score = 100 + targetHash.length;
+        score += [...target.params.keys()].length * 10;
+
+        if (target.path === '/home' && !target.params.has('tab') && current.params.has('tab')) {
+            return -1;
+        }
+
+        return score;
+    }
+
+    function resolveCustomTopNavHref(el) {
+        if (!el) return '';
+        const attrHref = el.getAttribute('href');
+        if (attrHref) return attrHref;
+        const key = el.getAttribute('data-kefin-custom-menu-top-link');
+        if (!key) return '';
+        const entry = customMenuLinkRegistry.find((e) => entryKey(e) === key);
+        return entry ? getCustomMenuLinkHref(entry) : '';
+    }
+
+    function syncCustomTopNavActiveState() {
+        const links = Array.from(document.querySelectorAll('[data-kefin-custom-menu-top-link]'));
+        if (!links.length) return;
+
+        const currentHash = window.location.hash || '#/';
+        const normalizedHash = currentHash.startsWith('#') ? currentHash : `#${currentHash}`;
+        let bestScore = -1;
+        const winners = [];
+
+        links.forEach((el) => {
+            el.classList.remove('active');
+            const score = customTopNavHrefMatchScore(resolveCustomTopNavHref(el), normalizedHash);
+            if (score < 0) return;
+            if (score > bestScore) {
+                bestScore = score;
+                winners.length = 0;
+                winners.push(el);
+            } else if (score === bestScore) {
+                winners.push(el);
+            }
+        });
+
+        winners.forEach((el) => el.classList.add('active'));
+    }
+
+    let customTopNavActiveSyncBound = false;
+    function ensureCustomTopNavActiveSync() {
+        if (customTopNavActiveSyncBound) return;
+        customTopNavActiveSyncBound = true;
+        window.addEventListener('hashchange', syncCustomTopNavActiveState);
+        onViewPage(() => {
+            syncCustomTopNavActiveState();
+        }, { pages: [] });
+        syncCustomTopNavActiveState();
     }
 
     function ensureCustomMenuLinkObserver() {
@@ -1507,6 +1596,39 @@
 .kefin-custom-menu-top-link {
 	text-transform: none;
 	white-space: nowrap;
+}
+[data-kefin-custom-menu-top-link].active {
+	display: inline-flex;
+	-moz-box-align: center;
+	align-items: center;
+	-moz-box-pack: center;
+	justify-content: center;
+	position: relative;
+	box-sizing: border-box;
+	outline: 0;
+	margin: 0;
+	cursor: pointer;
+	user-select: none;
+	vertical-align: middle;
+	appearance: none;
+	text-decoration: none;
+	font-family: "Noto Sans", sans-serif;
+	font-weight: 500;
+	font-size: 0.875rem;
+	line-height: 1.75;
+	text-transform: none;
+	min-width: 64px;
+	border: 0;
+	border-radius: var(--jf-shape-borderRadius);
+	padding: 6px 8px;
+	color: var(--variant-textColor);
+	background-color: var(--variant-textBg);
+	--variant-textColor: var(--jf-palette-primary-main);
+	--variant-outlinedColor: var(--jf-palette-primary-main);
+	--variant-outlinedBorder: rgba(var(--jf-palette-primary-mainChannel) / 0.5);
+	--variant-containedColor: var(--jf-palette-primary-contrastText);
+	--variant-containedBg: var(--jf-palette-primary-main);
+	transition: background-color 250ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 250ms cubic-bezier(0.4, 0, 0.2, 1), border-color 250ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 .userPreferencesPage .readOnlyContent > * {
   display: flex;
@@ -1716,6 +1838,7 @@ button[data-kefin-custom-menu-more] .MuiSvgIcon-root {
      */
     async function addCustomMenuLink(name, icon, url, openInNewTab = false, containerSelectorOrOptions = DEFAULT_CUSTOM_MENU_SELECTOR) {
         ensureCustomMenuLinkStyles();
+        ensureCustomTopNavActiveSync();
         const options = parseCustomMenuLinkOptions(containerSelectorOrOptions);
         const trimmedUrl = url != null ? String(url).trim() : '';
         const action = options.action || '';
@@ -2086,24 +2209,65 @@ button[data-kefin-custom-menu-more] .MuiSvgIcon-root {
 // Do not edit manually unless you know what you're doing
 
 window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
-            
-            // Find or create KefinTweaks-Config script
-            const existingScriptIndex = injectorConfig.CustomJavaScripts.findIndex(
-                script => script.Name === 'KefinTweaks-Config'
-            );
-            
-            if (existingScriptIndex !== -1) {
-                // Update existing script
-                injectorConfig.CustomJavaScripts[existingScriptIndex].Script = scriptContent;
-            } else {
-                // Add new script
-                injectorConfig.CustomJavaScripts.push({
-                    Name: 'KefinTweaks-Config',
-                    Script: scriptContent,
-                    Enabled: true,
-                    RequiresAuthentication: false
-                });
+
+            // Build / refresh KefinTweaks-injector preload entry (same POST)
+            let injectorScriptContent = null;
+            try {
+                const root = (configToSave.kefinTweaksRoot || '').endsWith('/')
+                    ? configToSave.kefinTweaksRoot
+                    : (configToSave.kefinTweaksRoot || '') + '/';
+                if (root && root !== '/') {
+                    if (!window.KefinTweaksLoader) {
+                        await new Promise((resolve, reject) => {
+                            const url = `${root}scripts/kefinTweaks-loader.js`;
+                            const existing = document.querySelector(`script[src="${url}"]`);
+                            if (existing && window.KefinTweaksLoader) {
+                                resolve();
+                                return;
+                            }
+                            const script = document.createElement('script');
+                            script.src = url;
+                            script.async = false;
+                            script.onload = () => resolve();
+                            script.onerror = () => reject(new Error('Failed to load kefinTweaks-loader.js'));
+                            document.head.appendChild(script);
+                        });
+                    }
+                    const Loader = window.KefinTweaksLoader;
+                    if (Loader) {
+                        Loader.ensureKefinTweaksApi(Loader.SCRIPT_DEFINITIONS);
+                        const major = await window.KefinTweaks.getJellyfinMajorVersion();
+                        const plan = Loader.buildLoadPlan(configToSave, major, {
+                            root,
+                            configOnly: configToSave.enabled === false
+                        });
+                        injectorScriptContent = Loader.buildInjectorScript(plan);
+                        LOG(`Built KefinTweaks-injector (${plan.assets.length} assets, major=${major})`);
+                    }
+                }
+            } catch (loaderErr) {
+                WARN('Could not build KefinTweaks-injector entry:', loaderErr);
             }
+
+            injectorConfig.CustomJavaScripts = (window.KefinTweaksLoader
+                ? window.KefinTweaksLoader.upsertInjectorEntries(injectorConfig.CustomJavaScripts, {
+                    configScriptContent: scriptContent,
+                    injectorScriptContent: injectorScriptContent
+                })
+                : (() => {
+                    // Fallback: Config-only upsert if loader unavailable
+                    const list = injectorConfig.CustomJavaScripts || [];
+                    const idx = list.findIndex((s) => s.Name === 'KefinTweaks-Config');
+                    const entry = {
+                        Name: 'KefinTweaks-Config',
+                        Script: scriptContent,
+                        Enabled: true,
+                        RequiresAuthentication: false
+                    };
+                    if (idx !== -1) list[idx] = { ...list[idx], ...entry };
+                    else list.push(entry);
+                    return list;
+                })());
             
             // Save the updated configuration
             const saveResponse = await fetch(configUrl, {
@@ -2119,7 +2283,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
                 throw new Error(`Failed to save plugin config: ${saveResponse.statusText}`);
             }
             
-            LOG('Successfully saved config to JS Injector plugin');
+            LOG('Successfully saved config (+ injector preload) to JS Injector plugin');
             return true;
         } catch (err) {
             ERR('Error saving config to JS Injector:', err);
@@ -2453,21 +2617,26 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
         }
     }
 
+    function syncCustomPagesAndTopNavActive() {
+        syncAllCustomPages();
+        syncCustomTopNavActiveState();
+    }
+
     function ensureCustomPageViewHandler() {
         if (customPageViewHandlerUnregister) return;
         // onViewShow misses custom→custom hash changes (no real Jellyfin view);
         // hashchange covers those; both are fine when they double-fire.
         const unregView = onViewPage(() => {
-            syncAllCustomPages();
+            syncCustomPagesAndTopNavActive();
         }, { pages: [] });
         if (!customPageHashChangeBound) {
-            window.addEventListener('hashchange', syncAllCustomPages);
+            window.addEventListener('hashchange', syncCustomPagesAndTopNavActive);
             customPageHashChangeBound = true;
         }
         customPageViewHandlerUnregister = () => {
             if (typeof unregView === 'function') unregView();
             if (customPageHashChangeBound) {
-                window.removeEventListener('hashchange', syncAllCustomPages);
+                window.removeEventListener('hashchange', syncCustomPagesAndTopNavActive);
                 customPageHashChangeBound = false;
             }
         };
