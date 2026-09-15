@@ -9,6 +9,10 @@
 	text-transform: capitalize;
 }
 
+.card[data-type="Studio"] a.cardImageContainer:not(.lazy-loaded) .cardImageIcon {
+	display: none;
+}
+
 .layout-mobile .card[data-type="Studio"] a.cardImageContainer:not(.lazy-loaded)::after {
 	font-size: 2em;
 }
