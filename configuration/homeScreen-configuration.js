@@ -2082,13 +2082,6 @@
                     ${buildSelect('home-maxPeopleCount', maxPeopleOptions, String(maxPeopleCount), 'Maximum Person Count')}
                 </div>
             </div>
-            <div class="hsc-settings-group" style="${settingsGroupStyle}">
-                <div class="listItemBodyText" style="font-weight: 500; font-size: 1.1em;">External Integrations</div>
-                <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-top: 0.25em; margin-bottom: 0.75em;">
-                    Enter your personal API keys for the services below to enable support for home sections based on external lists.
-                </div>
-                ${buildTextInput('libraryCache-mdblistApiKey', libraryCache.mdblistApiKey || '', 'MDBList API Key', 'password', 'Required for External List sections')}
-            </div>
         `;
     }
 

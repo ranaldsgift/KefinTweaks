@@ -1930,13 +1930,6 @@
                             <div class="listItemBodyText secondary hsse-type-desc">${escapeHtml(CUSTOM_TYPE.description)}</div>
                         </div>
                     </button>
-                    <button type="button" class="hsse-type-card hsse-type-card-span${wizardState.parentType === 'External' ? ' hsse-active' : ''}" data-hsse-action="wizard-select-type" data-type="External">
-                        ${renderMaterialIcon(EXTERNAL_TYPE.icon, 'hsse-type-icon')}
-                        <div>
-                            <div class="listItemBodyText hsse-type-label">${escapeHtml(EXTERNAL_TYPE.label)}</div>
-                            <div class="listItemBodyText secondary hsse-type-desc">${escapeHtml(EXTERNAL_TYPE.description)}</div>
-                        </div>
-                    </button>
                 </div>
             `;
         }

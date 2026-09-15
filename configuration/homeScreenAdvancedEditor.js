@@ -1624,15 +1624,6 @@
                             <div class="listItemBodyText secondary hsae-source-desc">${escapeHtml(CUSTOM_SOURCE_DESC)}</div>
                         </div>
                     </button>
-                    <button type="button" class="hsae-source-card${itemSource === 'external' ? ' hsae-active' : ''}" data-hsae-action="set-item-source" data-item-source="external">
-                        <div class="hsae-source-card-text">
-                            <div class="listItemBodyText hsae-source-title">
-                                <span class="material-icons hsae-source-icon">link</span>
-                                External List
-                            </div>
-                            <div class="listItemBodyText secondary hsae-source-desc">Match an MDBList (or compatible) URL against your Jellyfin library by provider IDs</div>
-                        </div>
-                    </button>
                 </div>
             </section>
         `;
@@ -3138,6 +3129,10 @@
 
         const toggleBtn = e.target.closest('.toggle-slider, .kefin-toggle-switch');
         if (toggleBtn && root.contains(toggleBtn)) {
+            // Already wired by bindToggleCards — avoid double-flip (Spotlight toggles looked stuck)
+            if (toggleBtn.classList.contains('kefin-toggle-switch') && toggleBtn.dataset.kefinToggleBound === 'true') {
+                return;
+            }
             const checkboxId = toggleBtn.dataset.checkboxId;
             if (!checkboxId) return;
             e.preventDefault();
