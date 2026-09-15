@@ -886,6 +886,26 @@
         return null;
     }
 
+    function isExperimentalKefinRoot(root) {
+        return /@experimental(\/|$)/i.test(String(root || ''));
+    }
+
+    function isOfficialJsDelivrKefinRoot(root) {
+        return /cdn\.jsdelivr\.net\/gh\/ranaldsgift\/KefinTweaks@/i.test(String(root || ''));
+    }
+
+    /**
+     * Whether baked KefinTweaks-injector should inject assets for this root.
+     * Allow Experimental and self-host/custom; no-op for official jsDelivr Latest/Dev/version/SHA.
+     */
+    function allowsKefinInjectorPreload(root) {
+        const r = String(root || '').trim();
+        if (!r) return false;
+        if (isExperimentalKefinRoot(r)) return true;
+        if (!isOfficialJsDelivrKefinRoot(r)) return true;
+        return false;
+    }
+
     function buildInjectorScript(loadPlan) {
         const assetsJson = JSON.stringify(loadPlan.assets || []);
         const defsJson = JSON.stringify(loadPlan.definitions || SCRIPT_DEFINITIONS);
@@ -896,6 +916,11 @@
             '// kefinTweaksInjectorStamp=' + stamp,
             '(function () {',
             '  if (window.KefinTweaksScriptsPreloaded) return;',
+            '  var root = (window.KefinTweaksConfig && window.KefinTweaksConfig.kefinTweaksRoot) || \'\';',
+            '  var isExperimental = /@experimental(\\/|$)/i.test(String(root));',
+            '  var isOfficialCdn = /cdn\\.jsdelivr\\.net\\/gh\\/ranaldsgift\\/KefinTweaks@/i.test(String(root));',
+            '  if (!String(root).trim()) return;',
+            '  if (!isExperimental && isOfficialCdn) return;',
             '  window.KefinTweaksScriptsPreloaded = true;',
             '  window.KefinTweaksInjectorStamp = ' + stampJson + ';',
             '  var SCRIPT_DEFINITIONS_BAKED = ' + defsJson + ';',
@@ -1161,6 +1186,9 @@
         resolveAssetUrl: resolveAssetUrl,
         buildLoadPlan: buildLoadPlan,
         buildInjectorScript: buildInjectorScript,
+        isExperimentalKefinRoot: isExperimentalKefinRoot,
+        isOfficialJsDelivrKefinRoot: isOfficialJsDelivrKefinRoot,
+        allowsKefinInjectorPreload: allowsKefinInjectorPreload,
         extractInjectorStamp: extractInjectorStamp,
         syncKefinTweaksInjector: syncKefinTweaksInjector,
         ensureKefinTweaksApi: ensureKefinTweaksApi,
