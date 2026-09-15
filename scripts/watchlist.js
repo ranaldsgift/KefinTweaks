@@ -1,6 +1,7 @@
 // Jellyfin Watchlist Script
 // Adds watchlist functionality throughout Jellyfin interface
-// Requires: cardBuilder.js, localStorageCache.js, modal.js, utils.js modules to be loaded before this script
+// Requires: cardBuilder.js, localStorageCache.js, modal.js, utils.js, statistics.js modules to be loaded before this script
+// Chart.js is loaded as a thirdParty dependency of watchlist
 // Requirement #2: Custom Tabs plugin
 /* 
 In the Custom Tabs plugin, add a new tab with the following HTML content:
@@ -32,40 +33,60 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 
 	// Data optimization functions for localStorage storage
 	function optimizeProgressDataForStorage(progressDataArray) {
-		return progressDataArray.map(progress => ({
-			// Series info (minimal)
-			series: {
-				Id: progress.series.Id,
-				Name: progress.series.Name,
-				ImageTags: progress.series.ImageTags,
-				Status: progress.series.Status,
-				ProductionYear: progress.series.ProductionYear
-			},
-			
-			// Progress metrics (pre-calculated statistics only)
-			watchedCount: progress.watchedCount,
-			totalEpisodes: progress.totalEpisodes,
-			remainingCount: progress.remainingCount,
-			percentage: progress.percentage,
-			totalRuntime: progress.totalRuntime,
-			watchedRuntime: progress.watchedRuntime,
-			remainingRuntime: progress.remainingRuntime,
-			
-			// Last watched episode (minimal)
-			lastWatchedEpisode: progress.lastWatchedEpisode ? {
-				Id: progress.lastWatchedEpisode.Id,
-				Name: progress.lastWatchedEpisode.Name,
-				IndexNumber: progress.lastWatchedEpisode.IndexNumber,
-				ParentIndexNumber: progress.lastWatchedEpisode.ParentIndexNumber,
-				UserData: progress.lastWatchedEpisode.UserData,
-				ImageTags: progress.lastWatchedEpisode.ImageTags
-			} : null,
-			
-			// Binary progress data for instant rendering (compact storage)
-			binaryProgress: progress.binaryProgress || {}
-			
-			// Episodes array completely removed - will be fetched on-demand
-		}));
+		return progressDataArray.map(progress => {
+			const episodeSource = progress.episodes || progress.playEvents || [];
+			const playEvents = episodeSource
+				.filter((ep) => {
+					if (ep.UserData?.Played && ep.UserData?.LastPlayedDate) return true;
+					// Restored compact playEvents already have LastPlayedDate at top level
+					return !!(ep.LastPlayedDate && (ep.Id || ep.Name));
+				})
+				.map((ep) => ({
+					Id: ep.Id,
+					Name: ep.Name,
+					LastPlayedDate: ep.UserData?.LastPlayedDate || ep.LastPlayedDate,
+					RunTimeTicks: ep.RunTimeTicks || 0,
+					ParentIndexNumber: ep.ParentIndexNumber != null ? ep.ParentIndexNumber : null,
+					IndexNumber: ep.IndexNumber != null ? ep.IndexNumber : null
+				}));
+
+			const seriesUserData = progress.series?.UserData
+				? {
+					IsFavorite: !!progress.series.UserData.IsFavorite,
+					LastPlayedDate: progress.series.UserData.LastPlayedDate || null,
+					PlayCount: progress.series.UserData.PlayCount || 0,
+					Played: !!progress.series.UserData.Played
+				}
+				: undefined;
+
+			return {
+				series: {
+					Id: progress.series.Id,
+					Name: progress.series.Name,
+					ImageTags: progress.series.ImageTags,
+					Status: progress.series.Status,
+					ProductionYear: progress.series.ProductionYear,
+					...(seriesUserData ? { UserData: seriesUserData } : {})
+				},
+				watchedCount: progress.watchedCount,
+				totalEpisodes: progress.totalEpisodes,
+				remainingCount: progress.remainingCount,
+				percentage: progress.percentage,
+				totalRuntime: progress.totalRuntime,
+				watchedRuntime: progress.watchedRuntime,
+				remainingRuntime: progress.remainingRuntime,
+				lastWatchedEpisode: progress.lastWatchedEpisode ? {
+					Id: progress.lastWatchedEpisode.Id,
+					Name: progress.lastWatchedEpisode.Name,
+					IndexNumber: progress.lastWatchedEpisode.IndexNumber,
+					ParentIndexNumber: progress.lastWatchedEpisode.ParentIndexNumber,
+					UserData: progress.lastWatchedEpisode.UserData,
+					ImageTags: progress.lastWatchedEpisode.ImageTags
+				} : null,
+				binaryProgress: progress.binaryProgress || {},
+				playEvents
+			};
+		});
 	}
 
 	function optimizeMovieDataForStorage(movieDataArray) {		
@@ -176,12 +197,17 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			try {
 				// Clear localStorage cache
 				if (cacheName === 'progress') {
-					localStorageCache.clear(`progress`);
+					localStorageCache.clear(`progress_v2`);
+					localStorageCache.clear(`progress`); // legacy key
 					// Clear in-memory cache
 					progressCache.data = [];
 					progressCache.allDataLoaded = false;
 					progressCache.totalPages = 0;
 					tabStates.progress.isDataFetched = false;
+					tabStates.statistics.isDataFetched = false;
+					if (window.KefinWatchlistStats?.destroy) {
+						window.KefinWatchlistStats.destroy();
+					}
 				} else if (cacheName === 'movies') {
 					localStorageCache.clear(`movies`);
 					// Clear in-memory cache
@@ -189,6 +215,10 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 					movieCache.allDataLoaded = false;
 					movieCache.totalPages = 0;
 					tabStates.history.isDataFetched = false;
+					tabStates.statistics.isDataFetched = false;
+					if (window.KefinWatchlistStats?.destroy) {
+						window.KefinWatchlistStats.destroy();
+					}
 				} else if (cacheName === 'watchlist') {
 					await invalidateAllWatchlistQueries();
 					resetWatchlistItemsByType();
@@ -1630,7 +1660,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			const optimizedData = optimizeProgressDataForStorage(progressCache.data);
 			
 			// Update localStorage with the new data
-			const success = localStorageCache.set('progress', optimizedData);
+			const success = localStorageCache.set('progress_v2', optimizedData);
 			if (success) {
 				LOG('Updated progress data in localStorage');
 			} else {
@@ -2435,7 +2465,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 
 		// Check localStorage cache if in-memory cache is empty
 		if (useCache && !progressCache.allDataLoaded) {
-			const cachedData = localStorageCache.get(`progress`);
+			const cachedData = localStorageCache.get(`progress_v2`);
 			if (cachedData) {
 				LOG('Using localStorage cache for progress data');
 				progressCache.data = cachedData;
@@ -2498,7 +2528,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 
 			// Store in localStorage for next time (optimized)
 			const optimizedData = optimizeProgressDataForStorage(sortedProgressData);
-			localStorageCache.set(`progress`, optimizedData);
+			localStorageCache.set(`progress_v2`, optimizedData);
 			LOG('Stored optimized progress data in localStorage');
 
 			LOG(`All progress data loaded and sorted: ${sortedProgressData.length} items, ${progressCache.totalPages} pages`);
@@ -2511,7 +2541,8 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			// Always clear the fetching flag, even on error
 			tabStates.progress.isFetching = false;
 			LOG('Progress data fetch completed');
-			renderStatisticsContent();
+			// Do not call renderStatisticsContent here — nested re-entry while the
+			// stats panel is still data-ready=false leaves Chart.js with a 0-size canvas.
 		}
 	}
 
@@ -2546,7 +2577,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			}
 			
 			// Get all episodes including missing ones to get accurate TotalRecordCount
-			const episodesUrl = `${serverUrl}/Shows/${series.Id}/Episodes?UserId=${userId}&Fields=UserData&EnableImageTypes=Primary`;
+			const episodesUrl = `${serverUrl}/Shows/${series.Id}/Episodes?UserId=${userId}&Fields=UserData,RunTimeTicks&EnableImageTypes=Primary`;
 			const episodesRes = await fetch(episodesUrl, { headers: { "Authorization": window.apiHelper.getAuthHeader() } });
 			const episodesData = await episodesRes.json();
 			let episodes = episodesData.Items || [];
@@ -2797,10 +2828,11 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		
 		const showsHtml = topShows.map((show, index) => {
 			const rank = index + 1;
+			const rankClass = rank <= 3 ? ` rank-${rank}` : '';
 			const episodesText = show.episodesWatched === 1 ? 'episode' : 'episodes';
 			
 			return `
-				<div class="top-show-item">
+				<div class="top-show-item${rankClass}">
 					<div class="show-rank">${rank}</div>
 					<div class="top-show-name" title="${show.name}">${show.name}</div>
 					<div class="top-show-episodes">${show.episodesWatched} of ${show.totalEpisodes} ${episodesText} (${show.percentage}%)</div>
@@ -5029,7 +5061,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	// Update episode in localStorage when progress cache is not fully loaded
 	async function updateEpisodeInLocalStorage(episode) {
 		try {
-			const cachedProgress = localStorageCache.get('progress');
+			const cachedProgress = localStorageCache.get('progress_v2');
 			if (!cachedProgress) {
 				LOG('No progress data in localStorage to update');
 				return;
@@ -5086,7 +5118,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 					LOG(`Updated episode ${episode.IndexNumber} in season ${season} as watched in localStorage`);
 					
 					// Save back to localStorage
-					localStorageCache.set('progress', cachedProgress);
+					localStorageCache.set('progress_v2', cachedProgress);
 				}
 			}
 		} catch (err) {
@@ -5125,7 +5157,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	// Update episode as unwatched in localStorage when progress cache is not fully loaded
 	async function updateEpisodeInLocalStorageUnwatched(episode) {
 		try {
-			const cachedProgress = localStorageCache.get('progress');
+			const cachedProgress = localStorageCache.get('progress_v2');
 			if (!cachedProgress) {
 				LOG('No progress data in localStorage to update');
 				return;
@@ -5152,7 +5184,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 					LOG(`Updated episode ${episode.IndexNumber} in season ${season} as unwatched in localStorage`);
 					
 					// Save back to localStorage
-					localStorageCache.set('progress', cachedProgress);
+					localStorageCache.set('progress_v2', cachedProgress);
 				}
 			}
 		} catch (err) {
@@ -5660,32 +5692,62 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		}
 	}
 
+	let statisticsRenderPromise = null;
+
 	async function renderStatisticsContent() {
-		LOG('Rendering Statistics content');
-
-		const watchlistSection = getWatchlistSection();
-		const statisticsTab = watchlistSection ? watchlistSection.querySelector('div[data-tab="statistics"]') : null;
-		if (!statisticsTab) return;
-
-		try {
-			statisticsTab.setAttribute('data-ready', 'false');
-
-			await Promise.all([
-				fetchAllProgressData(true),
-				fetchWatchedMovies(true)
-			]);
-
-			tabStates.progress.isDataFetched = true;
-			tabStates.history.isDataFetched = true;
-
-			await updateProgressStatistics(progressCache.data);
-			statisticsTab.setAttribute('data-ready', 'true');
-
-			LOG('Statistics content rendered successfully');
-		} catch (err) {
-			ERR('Error rendering statistics content:', err);
-			statisticsTab.setAttribute('data-ready', 'false');
+		// Coalesce concurrent calls (e.g. init + switchTab both firing)
+		if (statisticsRenderPromise) {
+			return statisticsRenderPromise;
 		}
+
+		statisticsRenderPromise = (async () => {
+			LOG('Rendering Statistics content');
+
+			const watchlistSection = getWatchlistSection();
+			const statisticsTab = watchlistSection ? watchlistSection.querySelector('div[data-tab="statistics"]') : null;
+			if (!statisticsTab) return;
+
+			try {
+				statisticsTab.setAttribute('data-ready', 'false');
+
+				await Promise.all([
+					fetchAllProgressData(true),
+					fetchWatchedMovies(true)
+				]);
+
+				tabStates.progress.isDataFetched = true;
+				tabStates.history.isDataFetched = true;
+
+				// Reveal layout before Chart.js measures canvas size (hidden → 0-height blank charts)
+				statisticsTab.setAttribute('data-ready', 'true');
+				await new Promise((resolve) => {
+					requestAnimationFrame(() => requestAnimationFrame(resolve));
+				});
+
+				if (window.KefinWatchlistStats && typeof window.KefinWatchlistStats.render === 'function') {
+					window.KefinWatchlistStats.render(statisticsTab, {
+						progress: progressCache.data,
+						movies: movieCache.data
+					});
+					if (typeof window.KefinWatchlistStats.resize === 'function') {
+						window.KefinWatchlistStats.resize();
+						requestAnimationFrame(() => window.KefinWatchlistStats.resize());
+					}
+				} else {
+					WARN('KefinWatchlistStats unavailable; falling back to summary cards only');
+					await updateProgressStatistics(progressCache.data);
+				}
+
+				LOG('Statistics content rendered successfully');
+			} catch (err) {
+				ERR('Error rendering statistics content:', err);
+				statisticsTab.setAttribute('data-ready', 'false');
+			}
+		})().finally(() => {
+			statisticsRenderPromise = null;
+		});
+
+		return statisticsRenderPromise;
 	}
 
 	function renderPaginationControls(currentPage, totalPages, tabName = 'progress') {
@@ -6203,7 +6265,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		
 		try {
 			LOG(`Fetching episodes from API for series: ${seriesId}`);
-			const episodesUrl = `${serverUrl}/Shows/${seriesId}/Episodes?UserId=${userId}&Fields=UserData&EnableImageTypes=Primary`;
+			const episodesUrl = `${serverUrl}/Shows/${seriesId}/Episodes?UserId=${userId}&Fields=UserData,RunTimeTicks&EnableImageTypes=Primary`;
 			const episodesRes = await fetch(episodesUrl, { headers: { "Authorization": window.apiHelper.getAuthHeader() } });
 			const episodesData = await episodesRes.json();
 			let episodes = episodesData.Items || [];

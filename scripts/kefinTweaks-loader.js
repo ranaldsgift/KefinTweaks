@@ -42,6 +42,12 @@
             css: [
                 'thirdparty/pickr/pickr-nano.min.css'
             ]
+        },
+        chartjs: {
+            js: [
+                'thirdparty/chartjs/chart.js'
+            ],
+            css: []
         }
     };
 
@@ -365,10 +371,18 @@
             description: 'Toast notification system using Jellyfin\'s existing toast functionality'
         },
         {
+            name: 'statistics',
+            script: 'statistics.js',
+            css: null,
+            dependencies: [],
+            description: 'Watchlist statistics charts and activity analytics'
+        },
+        {
             name: 'watchlist',
             script: 'watchlist.js',
             css: 'watchlist.css',
-            dependencies: ['cardBuilder', 'localStorageCache', 'modal', 'utils'],
+            dependencies: ['cardBuilder', 'localStorageCache', 'modal', 'utils', 'statistics'],
+            thirdParty: ['chartjs'],
             description: 'Adds watchlist functionality throughout Jellyfin interface'
         },
         {
