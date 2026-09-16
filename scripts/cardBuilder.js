@@ -3801,7 +3801,7 @@
                     sectionTitleEl = titleLink;
                 } else {
                     sectionTitleEl = document.createElement('div');
-                    sectionTitleEl.className = 'emby-tab-button emby-tab-button-active';
+                    sectionTitleEl.className = 'emby-tab-button emby-tab-button-active emby-button-foreground';
                     sectionTitleEl.textContent = title;
                 }
 
@@ -3992,7 +3992,7 @@
             // icon: optional Material Icons name (e.g. 'schedule') - same pattern as genres/director/writer
             function createMetadataItem(content, tag = 'span', extraClasses = '', icon = null) {
                 const group = document.createElement('div');
-                group.className = 'headerTabs sectionTabs';
+                group.className = 'headerTabs sectionTabs emby-tabs-slider';
                 const item = document.createElement(tag);
                 item.className = 'emby-tab-button emby-button-foreground' + (extraClasses ? ' ' + extraClasses : '');
                 if (icon) item.setAttribute('data-icon', icon);
@@ -4052,7 +4052,7 @@
             // linkType: 'person' | 'genre' | 'studio' | null - when set, create links
             function createTruncatedList(label, items, maxItems = 3, isPeople = false, icon = null, linkType = null) {                
                 const container = document.createElement('div');
-                container.className = 'spotlight-truncated-list headerTabs sectionTabs';
+                container.className = 'spotlight-truncated-list headerTabs sectionTabs emby-tabs-slider';
                 container.setAttribute('data-label', label);
                 if (icon) container.setAttribute('data-icon', icon);
 
@@ -6305,6 +6305,11 @@
         // Persist the card format if provided (ensures consistency for random/updates)
         if (cardFormat) {
             verticalSection.setAttribute('data-card-format', cardFormat);
+        }
+
+        // If the query is using the /Genres or /Studios paths, set the row hue to a random color
+        if (sectionConfig?.queries?.some(query => typeof query.path === 'string' && (query.path.includes('/Genres') || query.path.includes('/Studios')))) {
+            verticalSection.style.setProperty('--row-hue', `${Math.floor(Math.random() * 360)}deg`);
         }
 
         // Create section title
