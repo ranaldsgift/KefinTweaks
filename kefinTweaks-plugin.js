@@ -1816,6 +1816,30 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             console.log('[KefinTweaks Installer] Resolved root from', rootUrl, 'to', resolvedRoot);
         }
 
+        // Persist commit-SHA root when floating GitHub refs resolve to a new URL
+        try {
+            const normalize = (r) => {
+                if (!r || typeof r !== 'string') return '';
+                return r.endsWith('/') ? r : r + '/';
+            };
+            const expected = normalize(resolvedRoot);
+            if (!window.KefinTweaksConfig) {
+                window.KefinTweaksConfig = {};
+            }
+            const current = normalize(window.KefinTweaksConfig.kefinTweaksRootResolved || '');
+            if (expected && expected !== current) {
+                window.KefinTweaksConfig.kefinTweaksRootResolved = expected;
+                console.log('[KefinTweaks Installer] Updated kefinTweaksRootResolved:', current || '(none)', '->', expected);
+                if (isLoggedInForInjectorWrite()) {
+                    await saveConfigToJavaScriptInjector(window.KefinTweaksConfig);
+                } else {
+                    console.warn('[KefinTweaks Installer] kefinTweaksRootResolved updated in memory; not logged in to persist');
+                }
+            }
+        } catch (e) {
+            console.warn('[KefinTweaks Installer] Failed to persist kefinTweaksRootResolved:', e);
+        }
+
         // Check if injector is already loaded from this URL
         const existingScript = document.querySelector(`script[src="${injectorUrl}"]`);
         if (existingScript) {
