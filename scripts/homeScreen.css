@@ -159,13 +159,6 @@ div#discovery-loading-indicator:not(.show)::after {
     display: none;
 } */
 
-/* Hide scroll buttons on mobile and tablet layouts */
-@media (max-width: 768px) {
-	.emby-scrollbuttons {
-		display: none !important;
-	}
-}
-
 /* Hide scroll buttons on mobile using Jellyfin's layout classes */
 .layout-mobile .emby-scrollbuttons,
 .layout-tv .emby-scrollbuttons {
@@ -348,5 +341,23 @@ body[data-seasonal-animations="true"]:has(.homePage:not(.hide)) .snowverlay {
 }
 
 [data-section-id="browse-by-studio"] .card {
-	width: 8vw;
+	width: 8vw !important;
+}
+
+[data-section-id="browse-by-studio"] .card,
+[data-section-id="browse-by-studio"] .card .cardScalable,
+[data-section-id="browse-by-studio"] .card .cardImageContainer,
+[data-section-id="browse-by-studio"] .card .cardPadder {
+	border-radius: 0px !important;
+}
+
+/* Hide scroll buttons on mobile and tablet layouts */
+@media (max-width: 768px) {
+	.emby-scrollbuttons {
+		display: none !important;
+	}
+
+	[data-section-id="browse-by-studio"] .card {
+		width: 30vw !important;
+	}
 }
