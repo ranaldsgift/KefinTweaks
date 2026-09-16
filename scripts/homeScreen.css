@@ -290,7 +290,7 @@ div#discovery-loading-indicator:not(.show)::after {
 	display: none;
 }
 
-.homeSectionsContainer .section9 + .custom-scroller-container {
+body:not(:has(#slides-container)) .homeSectionsContainer .section9 + .custom-scroller-container {
 	margin-top: 1em;
 }
 
