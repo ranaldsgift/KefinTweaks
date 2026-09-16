@@ -935,110 +935,93 @@
                     },
                     {
                         name: 'Round UI Corners',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/rounding.css',
-                        enabled: false
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/rounding.css'
                     },
                     {
                         name: 'Round UI with circle accent on hover',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/rounding_circlehover.css',
-                        enabled: false
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/rounding_circlehover.css'
                     },
                     {
                         name: 'Login Screen Minimal',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/login/login_minimalistic.css',
-                        enabled: false
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/login/login_minimalistic.css'
                     },
                     {
                         name: 'Login Screen Full',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/login/login_frame.css',
-                        enabled: false
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/login/login_frame.css'
                     },
                     {
                         name: 'Input Fields with Border',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/fields/fields_border.css',
-                        enabled: false
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/fields/fields_border.css'
                     },
                     {
                         name: 'Input Fields without Border',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/fields/fields_noborder.css',
-                        enabled: false
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/fields/fields_noborder.css'
                     },
                     {
                         name: 'Floating Watched Indicators',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/cornerindicator/indicator_floating.css',
-                        enabled: false
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/cornerindicator/indicator_floating.css'
                     },
                     {
                         name: 'Corner Watched Indicators',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/cornerindicator/indicator_corner.css',
-                        enabled: false
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/cornerindicator/indicator_corner.css'
                     },
                     {
                         name: 'Simple Titles',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/titlepage/title_simple.css',
-                        enabled: false
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/titlepage/title_simple.css'
                     },
                     {
                         name: 'Logo Titles',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/titlepage/title_simple-logo.css',
-                        enabled: false
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/titlepage/title_simple-logo.css'
                     },
                     {
                         name: 'Banner Titles',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/titlepage/title_banner.css',
-                        enabled: false
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/titlepage/title_banner.css'
                     },
                     {
                         name: 'Banner Logo Titles',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/titlepage/title_banner-logo.css',
-                        enabled: false
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/titlepage/title_banner-logo.css'
                     },
                     {
                         name: 'Progress Bar',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/overlayprogress.css',
-                        enabled: false
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/overlayprogress.css'
                     },
                     {
                         name: 'Bottom Progress Bar',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/bottombarprogress.css',
-                        enabled: false
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/bottombarprogress.css'
                     },
                     {
                         name: 'Floating Progress Bar',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/progress/floating.css',
-                        enabled: false
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/progress/floating.css'
                     },
                     {
                         name: 'Hoverglow Effect',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/effects/hoverglow.css',
-                        enabled: false
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/effects/hoverglow.css'
                     },
                     {
                         name: 'Glassy Effect',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/effects/glassy.css',
-                        enabled: false
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/effects/glassy.css'
                     },
                     {
                         name: 'Mobile Backdrop "Hack"',
-                        url: 'https://ctalvio.github.io/Monochromic/backdrop-hack_style.css',
-                        enabled: false
+                        url: 'https://ctalvio.github.io/Monochromic/backdrop-hack_style.css'
                     }
                 ],
                 colorSchemes: [
                     {
+                        name: 'Default',
+                        url: '',
+                    },
+                    {
                         name: 'Monochromic',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/presets/monochromic_preset.css',
-                        enabled: false
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/presets/monochromic_preset.css'
                     },
                     {
                         name: 'Kaleidochromic',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/presets/kaleidochromic_preset.css',
-                        enabled: false
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/presets/kaleidochromic_preset.css'
                     },
                     {
                         name: 'Novachromic',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/presets/novachromic_preset.css',
-                        enabled: false
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/presets/novachromic_preset.css'
                     }
                 ]
             },
