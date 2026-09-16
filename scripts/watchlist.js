@@ -3121,8 +3121,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				}
 				const result = await apiHelper.getWatchlistItems({
 					IncludeItemTypes: WATCHLIST_SUPPORTED_TYPES_CSV,
-					Fields: 'Id',
-					Limit: 10000
+					Limit: 1000
 				}, true);
 				watchlistLikedIds.clear();
 				mergeLikedIdsFromItems(result);
