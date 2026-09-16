@@ -13,6 +13,106 @@
             throw new Error('ApiClient is not available');
         }
     }
+
+    /** @type {Map<string, { Genres: Array, Tags: Array, OfficialRatings: Array, Years: Array }>} */
+    const filtersMemoryCache = new Map();
+
+    function parseMajorVersion(version) {
+        if (!version || typeof version !== 'string') return 0;
+        const major = parseInt(version.split('.')[0], 10);
+        return Number.isNaN(major) ? 0 : major;
+    }
+
+    function getServerMajorVersion() {
+        ensureApiClient();
+        const version = ApiClient._serverVersion || ApiClient._appVersion || '';
+        return parseMajorVersion(version);
+    }
+
+    function normalizeIncludeItemTypesKey(includeItemTypes) {
+        if (includeItemTypes == null) return 'ALL';
+        const list = Array.isArray(includeItemTypes)
+            ? includeItemTypes.map(t => String(t).trim()).filter(Boolean)
+            : String(includeItemTypes).split(',').map(s => s.trim()).filter(Boolean);
+        if (list.length === 0) return 'ALL';
+        return [...list].sort().join(',');
+    }
+
+    function buildIncludeItemTypesParam(includeItemTypes) {
+        const key = normalizeIncludeItemTypesKey(includeItemTypes);
+        if (key === 'ALL') return '';
+        return key;
+    }
+
+    async function unwrapGetQueryResult(result) {
+        if (!result) return null;
+        if (typeof result.ensureData === 'function' || result.dataPromise != null) {
+            if (result.data != null) return result.data;
+            return await (typeof result.ensureData === 'function'
+                ? result.ensureData()
+                : result.dataPromise);
+        }
+        return result;
+    }
+
+    function normalizeGenreEntry(entry) {
+        if (entry == null) return null;
+        if (typeof entry === 'string') {
+            const name = entry.trim();
+            return name ? { id: name, name } : null;
+        }
+        const id = entry.Id ?? entry.id;
+        const name = entry.Name ?? entry.name;
+        if (id != null && name != null) {
+            return { id: String(id), name: String(name) };
+        }
+        if (name != null) {
+            const n = String(name);
+            return { id: n, name: n };
+        }
+        return null;
+    }
+
+    function normalizeTagEntry(entry) {
+        if (entry == null) return null;
+        if (typeof entry === 'string') {
+            const name = entry.trim();
+            return name ? { id: name, name } : null;
+        }
+        const name = entry.Name ?? entry.name ?? entry.Id ?? entry.id;
+        if (name == null) return null;
+        const n = String(name);
+        return { id: n, name: n };
+    }
+
+    function normalizeFiltersPayload(raw) {
+        const genres = (Array.isArray(raw?.Genres) ? raw.Genres : [])
+            .map(normalizeGenreEntry)
+            .filter(Boolean);
+        const tags = (Array.isArray(raw?.Tags) ? raw.Tags : [])
+            .map(normalizeTagEntry)
+            .filter(Boolean);
+        return {
+            Genres: genres,
+            Tags: tags,
+            OfficialRatings: Array.isArray(raw?.OfficialRatings) ? raw.OfficialRatings : [],
+            Years: Array.isArray(raw?.Years) ? raw.Years : []
+        };
+    }
+
+    function buildFiltersUrl(serverAddress, userId, includeItemTypes) {
+        const typesParam = buildIncludeItemTypesParam(includeItemTypes);
+        const useFilters2 = getServerMajorVersion() >= 12;
+        const path = useFilters2 ? '/Items/Filters2' : '/Items/Filters';
+        const params = new URLSearchParams({ UserId: userId });
+        if (useFilters2) {
+            params.set('recursive', 'true');
+        }
+        if (typesParam) {
+            params.set('IncludeItemTypes', typesParam);
+        }
+        return `${serverAddress}${path}?${params.toString()}`;
+    }
     
     /**
      * API Helper functions for Jellyfin operations
@@ -50,35 +150,39 @@
                 throw new Error('User ID or server address not available');
             }
 
-            // Normalize includeItemTypes to comma-separated string
-            const itemTypesStr = Array.isArray(includeItemTypes) 
-                ? includeItemTypes.join(',') 
-                : (includeItemTypes || 'Movie');
-
-            // Build URL
-            let url = `${serverAddress}/Items/Filters?UserId=${userId}`;
-            if (itemTypesStr) {
-                url += `&IncludeItemTypes=${itemTypesStr}`;
+            const cacheKey = normalizeIncludeItemTypesKey(includeItemTypes);
+            if (forceRefresh) {
+                filtersMemoryCache.delete(cacheKey);
             }
+            if (useCache && !forceRefresh && filtersMemoryCache.has(cacheKey)) {
+                return filtersMemoryCache.get(cacheKey);
+            }
+
+            const url = buildFiltersUrl(serverAddress, userId, includeItemTypes);
             
-            // Use apiHelper.getQuery with 24-hour cache (86400000 ms)
             const cacheOptions = {
                 useCache: useCache && !forceRefresh,
-                ttl: 24 * 60 * 60 * 1000, // 24 hours
+                ttl: 24 * 60 * 60 * 1000,
                 forceRefresh: forceRefresh
             };
 
-            const data = await window.apiHelper.getQuery(url, cacheOptions);
-            
-            // Handle both direct response and promise response
-            const filters = (data && data.data) ? data.data : data;
-            
-            return {
-                Genres: filters?.Genres || [],
-                Tags: filters?.Tags || [],
-                OfficialRatings: filters?.OfficialRatings || [],
-                Years: filters?.Years || []
-            };
+            const result = await window.apiHelper.getQuery(url, cacheOptions);
+            const raw = await unwrapGetQueryResult(result);
+            const normalized = normalizeFiltersPayload(raw);
+            filtersMemoryCache.set(cacheKey, normalized);
+            return normalized;
+        },
+
+        getFilterGenreItems: async function(includeItemTypes, options = {}) {
+            const { useCache = true, forceRefresh = false } = options;
+            const filters = await this.getFilters(includeItemTypes, useCache, forceRefresh);
+            return filters.Genres || [];
+        },
+
+        getFilterTagItems: async function(includeItemTypes, options = {}) {
+            const { useCache = true, forceRefresh = false } = options;
+            const filters = await this.getFilters(includeItemTypes, useCache, forceRefresh);
+            return filters.Tags || [];
         },
 
         /**

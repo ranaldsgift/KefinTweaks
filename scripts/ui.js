@@ -420,11 +420,11 @@
                     }
                     
                     if (type === 'Tag' || type === 'Genre') {
-                        // Use dataHelper.getFilters with includeItemTypes
-                        const itemTypes = includeItemTypes || ['Movie'];
+                        const itemTypes = (includeItemTypes && includeItemTypes.length) ? includeItemTypes : null;
                         if (window.dataHelper && window.dataHelper.getFilters) {
                             const filters = await window.dataHelper.getFilters(itemTypes, !refresh, refresh);
-                            options = type === 'Tag' ? (filters?.Tags || []) : (filters?.Genres || []);
+                            const raw = type === 'Tag' ? (filters?.Tags || []) : (filters?.Genres || []);
+                            options = raw.map(entry => (typeof entry === 'string' ? entry : entry.name));
                         } else {
                             // Fallback to old method
                             const url = `${serverAddress}/Items/Filters?UserId=${userId}&IncludeItemTypes=${Array.isArray(itemTypes) ? itemTypes.join(',') : itemTypes}`;

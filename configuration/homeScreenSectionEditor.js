@@ -55,10 +55,70 @@
     ];
 
     const WIZARD_PARENT_DATA = {
-        PERSON_RESULT_LIMIT: 500,
+        PERSON_RESULT_LIMIT: 100,
+        STUDIO_RESULT_LIMIT: 100,
+        PARENT_LIST_DISPLAY_LIMIT: 100,
         SEARCH_DEBOUNCE_MS: 300,
         APPEARANCE_PREVIEW_DEBOUNCE_MS: 400
     };
+
+    const LOCAL_SEARCH_PARENT_TYPES = new Set(['Genre', 'Tag', 'Collection', 'Playlist', 'Library']);
+    const SERVER_SEARCH_PARENT_TYPES = new Set(['Person', 'Studio']);
+    const PARENT_FILTER_CHIP_TYPES = new Set(['Genre', 'Tag', 'Studio']);
+
+    function getParentFilterItemTypes(wizardState, parentType = wizardState?.parentType) {
+        if (!parentType || !wizardState?.parentFilterItemTypesByType) return [];
+        const list = wizardState.parentFilterItemTypesByType[parentType];
+        return Array.isArray(list) ? list : [];
+    }
+
+    function ensureParentFilterItemTypes(wizardState, parentType = wizardState?.parentType) {
+        if (!wizardState.parentFilterItemTypesByType) {
+            wizardState.parentFilterItemTypesByType = {};
+        }
+        if (!parentType) return [];
+        if (!Array.isArray(wizardState.parentFilterItemTypesByType[parentType])) {
+            wizardState.parentFilterItemTypesByType[parentType] = [];
+        }
+        return wizardState.parentFilterItemTypesByType[parentType];
+    }
+
+    function getParentSearch(wizardState, parentType = wizardState?.parentType) {
+        if (!parentType || !wizardState?.parentSearchByType) return '';
+        return wizardState.parentSearchByType[parentType] || '';
+    }
+
+    function setParentSearch(wizardState, value, parentType = wizardState?.parentType) {
+        if (!wizardState.parentSearchByType) {
+            wizardState.parentSearchByType = {};
+        }
+        if (!parentType) return;
+        wizardState.parentSearchByType[parentType] = value || '';
+        // Keep legacy mirror in sync for the active type
+        if (parentType === wizardState.parentType) {
+            wizardState.search = wizardState.parentSearchByType[parentType];
+        }
+    }
+
+    function getParentFetchKey(wizardState, parentType = wizardState?.parentType) {
+        if (!parentType) return '';
+        const search = getParentSearch(wizardState, parentType);
+        const types = getParentFilterItemTypes(wizardState, parentType).slice().sort().join(',');
+        return `${search}\0${types}`;
+    }
+
+    function markParentFetchKey(wizardState, parentType = wizardState?.parentType) {
+        if (!wizardState.parentFetchKeyByType) {
+            wizardState.parentFetchKeyByType = {};
+        }
+        if (!parentType) return;
+        wizardState.parentFetchKeyByType[parentType] = getParentFetchKey(wizardState, parentType);
+    }
+
+    function parentFetchKeyMatches(wizardState, parentType = wizardState?.parentType) {
+        if (!parentType) return false;
+        return wizardState.parentFetchKeyByType?.[parentType] === getParentFetchKey(wizardState, parentType);
+    }
 
     const PARENT_TYPES = [
         { type: 'Genre', label: 'Genre', plural: 'genres', description: 'Show items that share a Genre, like Action or Comedy.', icon: 'theater_comedy', queryField: 'GenreIds' },
@@ -286,49 +346,63 @@
         return items.filter(i => i.name.toLowerCase().includes(q));
     }
 
+    function getDisplayParentItems(fullList, search, limit = WIZARD_PARENT_DATA.PARENT_LIST_DISPLAY_LIMIT) {
+        return filterParentItemsBySearch(fullList, search).slice(0, limit);
+    }
+
+    function renderParentItemTypeChipsHTML(activeTypes, actionAttr, toggleAction) {
+        return `
+            <div class="hsse-section-block">
+                <div class="listItemBodyText hsse-section-label">Included Item Types</div>
+                <p id="hsse-item-types-hint" class="listItemBodyText secondary hsse-field-hint">${escapeHtml(getIncludedItemTypesHintText(activeTypes))}</p>
+                <div class="hsse-chip-row">
+                    ${ITEM_TYPE_OPTIONS.map(type => {
+                        const active = activeTypes.includes(type);
+                        return `<button type="button" class="kefin-chip hsse-chip listItemBodyText${active ? ' hsse-active' : ''}" ${actionAttr}="${toggleAction}" data-item-type="${escapeHtml(type)}">${escapeHtml(humanizeLabel(type))}</button>`;
+                    }).join('')}
+                </div>
+            </div>
+        `;
+    }
+
     function formatItemCountMeta(count) {
         if (count == null || Number.isNaN(count)) return '';
         const n = parseInt(count, 10);
         return n === 1 ? '1 item' : `${n} items`;
     }
 
-    async function fetchGenres(includeItemTypes) {
-        const itemTypes = (includeItemTypes && includeItemTypes.length > 0)
-            ? includeItemTypes
-            : ['Movie'];
-        const serverAddress = window.ApiClient?.serverAddress();
-        if (!serverAddress) return [];
-
-        const typesParam = Array.isArray(itemTypes) ? itemTypes.join(',') : itemTypes;
-        const url = `${serverAddress}/Genres?IncludeItemTypes=${typesParam}`;
-        let data;
-        if (window.apiHelper?.getData) {
-            data = await window.apiHelper.getData(url, true, 24 * 60 * 60 * 1000);
-        } else if (window.ApiClient?.fetch) {
-            const resp = await window.ApiClient.fetch({ url, method: 'GET' });
-            data = await resp.json();
-        } else {
-            return [];
+    /**
+     * Unwrap progressive apiHelper.getQuery results ({ data, dataPromise/ensureData }).
+     * On cache miss, data is null until ensureData()/dataPromise resolves — never treat
+     * the wrapper object itself as the payload.
+     */
+    async function resolveQueryPayload(result) {
+        if (!result) return null;
+        if (typeof result.ensureData === 'function' || result.dataPromise != null) {
+            if (result.data != null) return result.data;
+            return await (typeof result.ensureData === 'function'
+                ? result.ensureData()
+                : result.dataPromise);
         }
-        return (data?.Items || []).map(item => ({ id: item.Id, name: item.Name }));
+        return result;
+    }
+
+    function asItemArray(payload) {
+        if (Array.isArray(payload?.Items)) return payload.Items;
+        if (Array.isArray(payload)) return payload;
+        return [];
+    }
+
+    async function fetchGenres(includeItemTypes) {
+        if (!window.dataHelper?.getFilterGenreItems) return [];
+        const types = (includeItemTypes && includeItemTypes.length > 0) ? includeItemTypes : null;
+        return window.dataHelper.getFilterGenreItems(types, { useCache: true });
     }
 
     async function fetchTags(includeItemTypes) {
-        const itemTypes = (includeItemTypes && includeItemTypes.length > 0)
-            ? includeItemTypes
-            : ['Movie'];
-        if (window.dataHelper?.getFilters) {
-            const filters = await window.dataHelper.getFilters(itemTypes, true, false);
-            const list = filters?.Tags || [];
-            return list.map(name => ({ id: name, name }));
-        }
-        const userId = window.ApiClient?.getCurrentUserId();
-        const serverAddress = window.ApiClient?.serverAddress();
-        if (!userId || !serverAddress || !window.apiHelper?.getData) return [];
-        const url = `${serverAddress}/Items/Filters?UserId=${userId}&IncludeItemTypes=${Array.isArray(itemTypes) ? itemTypes.join(',') : itemTypes}`;
-        const data = await window.apiHelper.getData(url, true);
-        const list = data?.Tags || [];
-        return list.map(name => ({ id: name, name }));
+        if (!window.dataHelper?.getFilterTagItems) return [];
+        const types = (includeItemTypes && includeItemTypes.length > 0) ? includeItemTypes : null;
+        return window.dataHelper.getFilterTagItems(types, { useCache: true });
     }
 
     async function fetchCollectionsOrPlaylists(parentType) {
@@ -339,22 +413,46 @@
             true,
             24 * 60 * 60 * 1000
         );
-        return (data?.Items || []).map(item => ({
+        return asItemArray(data).map(item => ({
             id: item.Id,
             name: item.Name,
             meta: formatItemCountMeta(item.ChildCount ?? item.UserData?.UnplayedItemCount ?? item.RecursiveItemCount)
         }));
     }
 
-    async function fetchStudios() {
+    async function fetchStudios(search, includeItemTypes) {
         const userId = window.ApiClient?.getCurrentUserId();
         const serverAddress = window.ApiClient?.serverAddress();
         if (!userId || !serverAddress || !window.apiHelper?.getQuery) return [];
-        const url = `${serverAddress}/Studios?UserId=${userId}&Fields=PrimaryImageAspectRatio`;
-        const result = await window.apiHelper.getQuery(url, { useCache: true, ttl: 24 * 60 * 60 * 1000 });
-        const data = (result && result.data) ? result.data : result;
-        const items = data?.Items || data || [];
-        return items.map(item => ({
+
+        const params = new URLSearchParams({
+            UserId: userId,
+            Limit: String(WIZARD_PARENT_DATA.STUDIO_RESULT_LIMIT),
+            Fields: 'PrimaryImageAspectRatio'
+        });
+
+        const trimmed = (search || '').trim();
+        if (trimmed.length === 1) {
+            params.set('NameStartsWith', trimmed);
+        } else if (trimmed.length > 1) {
+            params.set('SearchTerm', trimmed);
+        }
+
+        const types = (includeItemTypes && includeItemTypes.length > 0)
+            ? (Array.isArray(includeItemTypes) ? includeItemTypes.join(',') : String(includeItemTypes))
+            : '';
+        if (types) {
+            params.set('IncludeItemTypes', types);
+        }
+
+        const url = `${serverAddress}/Studios?${params.toString()}`;
+        const useCache = !trimmed && !types;
+        const result = await window.apiHelper.getQuery(url, {
+            useCache,
+            ttl: 24 * 60 * 60 * 1000
+        });
+        const data = await resolveQueryPayload(result);
+        return asItemArray(data).map(item => ({
             id: item.Id,
             name: item.Name,
             meta: formatItemCountMeta(item.ChildCount ?? item.SeriesCount)
@@ -384,7 +482,7 @@
         let data;
         if (window.apiHelper?.getQuery) {
             const result = await window.apiHelper.getQuery(url, { useCache: false });
-            data = (result && result.data) ? result.data : result;
+            data = await resolveQueryPayload(result);
         } else if (window.ApiClient?.fetch) {
             const resp = await window.ApiClient.fetch({ url, method: 'GET' });
             data = await resp.json();
@@ -392,7 +490,7 @@
             return [];
         }
 
-        return (data?.Items || []).map(item => ({
+        return asItemArray(data).map(item => ({
             id: item.Id,
             name: item.Name,
             meta: item.ProductionYear ? String(item.ProductionYear) : ''
@@ -406,8 +504,7 @@
         try {
             if (window.ApiClient?.getUserViews) {
                 const result = await window.ApiClient.getUserViews({}, userId);
-                const items = result?.Items || result || [];
-                return items.map(item => ({
+                return asItemArray(result).map(item => ({
                     id: item.Id,
                     name: item.Name,
                     meta: item.CollectionType ? humanizeLabel(item.CollectionType) : ''
@@ -418,9 +515,8 @@
             if (!serverAddress || !window.apiHelper?.getQuery) return [];
             const url = `${serverAddress}/UserViews?UserId=${userId}`;
             const result = await window.apiHelper.getQuery(url, { useCache: true, ttl: 24 * 60 * 60 * 1000 });
-            const data = (result && result.data) ? result.data : result;
-            const items = data?.Items || data || [];
-            return items.map(item => ({
+            const data = await resolveQueryPayload(result);
+            return asItemArray(data).map(item => ({
                 id: item.Id,
                 name: item.Name,
                 meta: item.CollectionType ? humanizeLabel(item.CollectionType) : ''
@@ -446,7 +542,7 @@
             case 'Playlist':
                 return fetchCollectionsOrPlaylists(parentType);
             case 'Studio':
-                return fetchStudios();
+                return fetchStudios(search, includeItemTypes);
             case 'Person':
                 return fetchPersons(search);
             case 'Library':
@@ -594,7 +690,7 @@
                     await resolveItemsByGetItems(ids, null, idToName);
                     break;
                 case 'Genre': {
-                    (await fetchGenres(includeItemTypes.length ? includeItemTypes : ['Movie']))
+                    (await fetchGenres(includeItemTypes.length ? includeItemTypes : null))
                         .forEach(item => idToName.set(item.id, item.name));
                     const remaining = ids.filter(id => !idToName.has(id));
                     if (remaining.length) {
@@ -603,14 +699,15 @@
                     break;
                 }
                 case 'Tag':
-                    (await fetchTags(includeItemTypes.length ? includeItemTypes : ['Movie']))
+                    (await fetchTags(includeItemTypes.length ? includeItemTypes : null))
                         .forEach(item => idToName.set(item.id, item.name));
                     break;
                 case 'Person':
                     await resolveItemsByGetItems(ids, 'Person', idToName);
                     break;
                 case 'Studio': {
-                    (await fetchStudios()).forEach(item => idToName.set(item.id, item.name));
+                    (await fetchStudios('', includeItemTypes.length ? includeItemTypes : null))
+                        .forEach(item => idToName.set(item.id, item.name));
                     const remaining = ids.filter(id => !idToName.has(id));
                     if (remaining.length) {
                         await resolveItemsByGetItems(remaining, 'Studio', idToName);
@@ -687,16 +784,30 @@
         }).join('');
     }
 
+    function getWizardParentListItems(wizardState) {
+        const type = wizardState.parentType;
+        const search = getParentSearch(wizardState, type);
+        if (type === 'Person') {
+            return wizardState.personSearchResults || [];
+        }
+        if (SERVER_SEARCH_PARENT_TYPES.has(type)) {
+            return wizardState.parentItemsByType[type] || [];
+        }
+        return getDisplayParentItems(
+            wizardState.parentItemsByType[type] || [],
+            search
+        );
+    }
+
     function renderParentListHTML(wizardState) {
-        const items = wizardState.parentType === 'Person'
-            ? (wizardState.personSearchResults || [])
-            : filterParentItemsBySearch(wizardState.parentItemsByType[wizardState.parentType] || [], wizardState.search);
+        const items = getWizardParentListItems(wizardState);
+        const search = getParentSearch(wizardState);
 
         return renderSelectionListHTML({
             type: wizardState.parentType,
             items,
             selected: wizardState.parents || [],
-            search: wizardState.search,
+            search,
             status: wizardState.parentListStatus,
             error: wizardState.parentListError,
             actionAttr: 'data-hsse-action',
@@ -733,6 +844,7 @@
         let search = '';
         let itemsCache = [];
         let personResults = [];
+        let activeItemTypes = [...(includeItemTypes || [])];
         let listStatus = type === 'Custom' ? 'idle' : 'loading';
         let listError = '';
         let searchTimer = null;
@@ -752,7 +864,8 @@
 
         function getVisibleItems() {
             if (type === 'Person') return personResults;
-            return filterParentItemsBySearch(itemsCache, search);
+            if (SERVER_SEARCH_PARENT_TYPES.has(type)) return itemsCache;
+            return getDisplayParentItems(itemsCache, search);
         }
 
         function renderBody(options = {}) {
@@ -771,7 +884,12 @@
                 return;
             }
 
+            const filterChips = PARENT_FILTER_CHIP_TYPES.has(type)
+                ? renderParentItemTypeChipsHTML(activeItemTypes, 'data-sel-action', 'toggle-filter-type')
+                : '';
+
             content.innerHTML = `
+                ${filterChips}
                 <div class="hsse-section-block">
                     <input type="text" id="hsse-selection-search" class="fld emby-input" value="${escapeHtml(search)}" placeholder="Search..." aria-label="Search ${escapeHtml(meta?.plural || 'items')}">
                 </div>
@@ -806,7 +924,7 @@
             try {
                 const fetched = await fetchSelectionItems(type, {
                     search: forceSearch != null ? forceSearch : search,
-                    includeItemTypes
+                    includeItemTypes: PARENT_FILTER_CHIP_TYPES.has(type) ? activeItemTypes : includeItemTypes
                 });
                 if (requestId !== loadRequestId) return;
                 if (type === 'Person') {
@@ -863,6 +981,12 @@
                         toggleItem(actionEl.dataset.parentId, actionEl.dataset.parentName);
                     } else if (action === 'retry-load') {
                         loadItems();
+                    } else if (action === 'toggle-filter-type') {
+                        const chipType = actionEl.dataset.itemType;
+                        const idx = activeItemTypes.indexOf(chipType);
+                        if (idx >= 0) activeItemTypes.splice(idx, 1);
+                        else activeItemTypes.push(chipType);
+                        loadItems();
                     }
                 });
 
@@ -870,7 +994,7 @@
                     if (e.target.id === 'hsse-selection-search') {
                         search = e.target.value;
                         if (searchTimer) clearTimeout(searchTimer);
-                        if (type === 'Person') {
+                        if (SERVER_SEARCH_PARENT_TYPES.has(type)) {
                             searchTimer = setTimeout(() => loadItems(search), WIZARD_PARENT_DATA.SEARCH_DEBOUNCE_MS);
                         } else {
                             renderBody();
@@ -1944,10 +2068,19 @@
 
         if (step === 'parent') {
             const meta = PARENT_TYPES.find(t => t.type === wizardState.parentType);
+            const parentSearch = getParentSearch(wizardState);
+            const filterChips = PARENT_FILTER_CHIP_TYPES.has(wizardState.parentType)
+                ? renderParentItemTypeChipsHTML(
+                    getParentFilterItemTypes(wizardState),
+                    'data-hsse-action',
+                    'wizard-toggle-parent-filter-type'
+                )
+                : '';
 
             return `
+                ${filterChips}
                 <div class="hsse-section-block">
-                    <input type="text" id="hsse-parent-search" class="fld emby-input" value="${escapeHtml(wizardState.search)}" placeholder="Search..." aria-label="Search ${escapeHtml(meta?.plural || 'items')}">
+                    <input type="text" id="hsse-parent-search" class="fld emby-input" value="${escapeHtml(parentSearch)}" placeholder="Search..." aria-label="Search ${escapeHtml(meta?.plural || 'items')}">
                 </div>
                 <div class="hsse-parent-list" id="hsse-parent-list">
                     ${renderParentListHTML(wizardState)}
@@ -2821,9 +2954,16 @@
 
         // Calculate itemTypesForFilters early (used for Genres/Tags)
         const rawItemTypes = includeItemTypes || queryOptions.IncludeItemTypes;
-        const itemTypesForFilters = (type === 'Genres' || type === 'Tags') 
-            ? (Array.isArray(rawItemTypes) ? rawItemTypes : [rawItemTypes])
-            : null;
+        let itemTypesForFilters = null;
+        if (type === 'Genres' || type === 'Tags') {
+            if (Array.isArray(rawItemTypes)) {
+                itemTypesForFilters = rawItemTypes.filter(Boolean);
+            } else if (rawItemTypes) {
+                itemTypesForFilters = [rawItemTypes];
+            } else {
+                itemTypesForFilters = [];
+            }
+        }
 
         // Extract current values from query options
         let currentValues = [];
@@ -2834,30 +2974,24 @@
             const selectedGenres = queryOptions.Genres || '';
             const selectedGenreNames = selectedGenres ? (Array.isArray(selectedGenres) ? selectedGenres : selectedGenres.split(',').map(s => s.trim()).filter(s => s)) : [];
             
-            // Fetch available genres from dataHelper.getFilters() to validate/match selected values
-            if (window.dataHelper && window.dataHelper.getFilters && itemTypesForFilters) {
+            if (window.dataHelper?.getFilterGenreItems) {
                 try {
-                    const filters = await window.dataHelper.getFilters(itemTypesForFilters, true, false);
-                    const availableGenres = filters?.Genres || [];
-                    
-                    // Match selected genre names against available genres (case-insensitive)
-                    const genreMap = new Map(availableGenres.map(g => [g.toLowerCase(), g]));
+                    const filterTypes = itemTypesForFilters?.length ? itemTypesForFilters : null;
+                    const availableGenres = await window.dataHelper.getFilterGenreItems(filterTypes, { useCache: true });
+                    const genreNames = availableGenres.map(g => g.name);
+                    const genreMap = new Map(genreNames.map(g => [g.toLowerCase(), g]));
                     currentValues = selectedGenreNames
                         .map(name => {
-                            // Try exact match first, then case-insensitive
-                            const exactMatch = availableGenres.find(g => g === name);
+                            const exactMatch = genreNames.find(g => g === name);
                             if (exactMatch) return exactMatch;
-                            const caseInsensitiveMatch = genreMap.get(name.toLowerCase());
-                            return caseInsensitiveMatch || name; // Fallback to original name if not found
+                            return genreMap.get(name.toLowerCase()) || name;
                         })
                         .filter(Boolean);
                 } catch (err) {
                     WARN('Error fetching genres from dataHelper:', err);
-                    // Fallback to using selected values as-is
                     currentValues = selectedGenreNames;
                 }
             } else {
-                // Fallback to using selected values as-is
                 currentValues = selectedGenreNames;
             }
         } else if (type === 'Tags') {
@@ -2865,30 +2999,24 @@
             const selectedTags = queryOptions.Tags || '';
             const selectedTagNames = selectedTags ? (Array.isArray(selectedTags) ? selectedTags : selectedTags.split(',').map(s => s.trim()).filter(s => s)) : [];
             
-            // Fetch available tags from dataHelper.getFilters() to validate/match selected values
-            if (window.dataHelper && window.dataHelper.getFilters && itemTypesForFilters) {
+            if (window.dataHelper?.getFilterTagItems) {
                 try {
-                    const filters = await window.dataHelper.getFilters(itemTypesForFilters, true, false);
-                    const availableTags = filters?.Tags || [];
-                    
-                    // Match selected tag names against available tags (case-insensitive)
-                    const tagMap = new Map(availableTags.map(t => [t.toLowerCase(), t]));
+                    const filterTypes = itemTypesForFilters?.length ? itemTypesForFilters : null;
+                    const availableTags = await window.dataHelper.getFilterTagItems(filterTypes, { useCache: true });
+                    const tagNames = availableTags.map(t => t.name);
+                    const tagMap = new Map(tagNames.map(t => [t.toLowerCase(), t]));
                     currentValues = selectedTagNames
                         .map(name => {
-                            // Try exact match first, then case-insensitive
-                            const exactMatch = availableTags.find(t => t === name);
+                            const exactMatch = tagNames.find(t => t === name);
                             if (exactMatch) return exactMatch;
-                            const caseInsensitiveMatch = tagMap.get(name.toLowerCase());
-                            return caseInsensitiveMatch || name; // Fallback to original name if not found
+                            return tagMap.get(name.toLowerCase()) || name;
                         })
                         .filter(Boolean);
                 } catch (err) {
                     WARN('Error fetching tags from dataHelper:', err);
-                    // Fallback to using selected values as-is
                     currentValues = selectedTagNames;
                 }
             } else {
-                // Fallback to using selected values as-is
                 currentValues = selectedTagNames;
             }
         } else if (type === 'Collections') {
@@ -3836,6 +3964,9 @@
             parentType: null,
             parents: [],
             search: '',
+            parentSearchByType: {},
+            parentFilterItemTypesByType: {},
+            parentFetchKeyByType: {},
             parentItemsByType: {},
             parentListStatus: 'idle',
             parentListError: null,
@@ -3882,17 +4013,27 @@
             if (list) list.innerHTML = renderParentListHTML(wizardState);
 
             try {
+                const parentSearch = getParentSearch(wizardState);
+                const parentFilterTypes = getParentFilterItemTypes(wizardState);
                 if (wizardState.parentType === 'Person') {
-                    const results = await fetchPersons(wizardState.search);
+                    const results = await fetchPersons(parentSearch);
                     if (requestId !== parentLoadRequestId) return;
                     wizardState.personSearchResults = results;
+                } else if (SERVER_SEARCH_PARENT_TYPES.has(wizardState.parentType)) {
+                    const items = await fetchWizardParentItems(wizardState.parentType, {
+                        search: parentSearch,
+                        includeItemTypes: parentFilterTypes
+                    });
+                    if (requestId !== parentLoadRequestId) return;
+                    wizardState.parentItemsByType[wizardState.parentType] = items;
                 } else {
                     const items = await fetchWizardParentItems(wizardState.parentType, {
-                        includeItemTypes: wizardState.includeItemTypes
+                        includeItemTypes: parentFilterTypes
                     });
                     if (requestId !== parentLoadRequestId) return;
                     wizardState.parentItemsByType[wizardState.parentType] = items;
                 }
+                markParentFetchKey(wizardState);
                 wizardState.parentListStatus = 'idle';
             } catch (err) {
                 if (requestId !== parentLoadRequestId) return;
@@ -3914,7 +4055,7 @@
         function scheduleParentSearch(root) {
             if (parentSearchDebounceTimer) clearTimeout(parentSearchDebounceTimer);
 
-            if (wizardState.parentType === 'Person') {
+            if (SERVER_SEARCH_PARENT_TYPES.has(wizardState.parentType)) {
                 parentSearchDebounceTimer = setTimeout(() => {
                     loadParentItemsForType(wizardState, root);
                 }, WIZARD_PARENT_DATA.SEARCH_DEBOUNCE_MS);
@@ -4134,9 +4275,10 @@
 
             if (stage === 'wizard' && wizardState.step === 'parent' && wizardState.parentType) {
                 const cached = wizardState.parentItemsByType[wizardState.parentType];
+                const keyMatches = parentFetchKeyMatches(wizardState);
                 const needsLoad = wizardState.parentType === 'Person'
-                    ? wizardState.parentListStatus === 'idle' && wizardState.personSearchResults.length === 0
-                    : !cached && wizardState.parentListStatus !== 'loading';
+                    ? !keyMatches || (wizardState.parentListStatus === 'idle' && wizardState.personSearchResults.length === 0)
+                    : !keyMatches || (!cached && wizardState.parentListStatus !== 'loading');
                 if (needsLoad || wizardState.parentListStatus === 'error') {
                     loadParentItemsForType(wizardState, activeRoot);
                 } else if (wizardState.parents?.length) {
@@ -4202,10 +4344,13 @@
                     if (selected !== wizardState.parentType) {
                         wizardState.parentType = selected;
                         wizardState.parents = [];
-                        wizardState.search = '';
+                        // Restore per-type search; do not share chips/search across Genre/Tag/Studio
+                        wizardState.search = getParentSearch(wizardState, selected);
                         wizardState.parentListStatus = 'idle';
                         wizardState.parentListError = null;
-                        wizardState.personSearchResults = [];
+                        if (selected !== 'Person') {
+                            wizardState.personSearchResults = [];
+                        }
                         wizardState.maxReachedStepIndex = 0;
                         if (selected === 'Custom') {
                             wizardState.customItems = [createBlankCustomItem()];
@@ -4355,6 +4500,29 @@
                     break;
                 }
 
+                case 'wizard-toggle-parent-filter-type': {
+                    const type = el.dataset.itemType;
+                    const filterTypes = ensureParentFilterItemTypes(wizardState);
+                    const idx = filterTypes.indexOf(type);
+                    if (idx >= 0) {
+                        filterTypes.splice(idx, 1);
+                    } else {
+                        filterTypes.push(type);
+                    }
+                    el.classList.toggle('hsse-active');
+                    updateIncludedItemTypesHint(root, filterTypes);
+                    // Invalidate cached list for this parent type so chips stay in sync with results
+                    delete wizardState.parentItemsByType[wizardState.parentType];
+                    if (wizardState.parentFetchKeyByType) {
+                        delete wizardState.parentFetchKeyByType[wizardState.parentType];
+                    }
+                    if (wizardState.parentType === 'Person') {
+                        wizardState.personSearchResults = [];
+                    }
+                    loadParentItemsForType(wizardState, root);
+                    break;
+                }
+
                 case 'wizard-set-render-mode':
                     wizardState.renderMode = el.dataset.renderMode;
                     if (wizardState.renderMode === 'Random') {
@@ -4500,7 +4668,7 @@
 
                 root.addEventListener('input', (e) => {
                     if (e.target.id === 'hsse-parent-search') {
-                        wizardState.search = e.target.value;
+                        setParentSearch(wizardState, e.target.value);
                         scheduleParentSearch(root);
                     }
                     if (e.target.matches('[data-hsse-custom-preview]')) {
