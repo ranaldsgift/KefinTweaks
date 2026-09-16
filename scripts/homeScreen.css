@@ -263,16 +263,19 @@ div#discovery-loading-indicator:not(.show)::after {
 	justify-content: center;
 } */
 
-.homeSectionsContainer .section0:not([data-page]),
-.homeSectionsContainer .section1:not([data-page]),
-.homeSectionsContainer .section2:not([data-page]),
-.homeSectionsContainer .section3:not([data-page]),
-.homeSectionsContainer .section4:not([data-page]),
-.homeSectionsContainer .section5:not([data-page]),
-.homeSectionsContainer .section6:not([data-page]),
-.homeSectionsContainer .section7:not([data-page]),
-.homeSectionsContainer .section8:not([data-page]),
-.homeSectionsContainer .section9:not([data-page]) {
+.homeSectionsContainer:has([data-page], [data-section-id])
+	> :is(
+		.section0:not([data-page]),
+		.section1:not([data-page]),
+		.section2:not([data-page]),
+		.section3:not([data-page]),
+		.section4:not([data-page]),
+		.section5:not([data-page]),
+		.section6:not([data-page]),
+		.section7:not([data-page]),
+		.section8:not([data-page]),
+		.section9:not([data-page])
+	) {
 	display: none !important;
 }
 
@@ -323,22 +326,23 @@ body[data-seasonal-animations="true"]:has(.homePage:not(.hide)) .snowverlay {
 }
 
 @keyframes fadeInDelayed {
-	0%, 99% {
-	  opacity: 0;
-	  visibility: hidden;
+	0%,
+	99% {
+		opacity: 0;
+		visibility: hidden;
 	}
 	100% {
-	  opacity: 1;
-	  visibility: visible;
+		opacity: 1;
+		visibility: visible;
 	}
-  }
-  
-  .homeSectionsContainer:not(:has([data-page]), :has([data-section-id]))::after {
-	content: 'Customize your Home Screen from your User Settings > Home in the top right corner.';
+}
+
+.homeSectionsContainer:not(:has([data-page]), :has([data-section-id]))::after {
+	content: "Customize your Home Screen from your User Settings > Home in the top right corner.";
 	text-align: center;
 	margin: 3em auto;
 	display: block;
 	animation: fadeInDelayed 0.1s linear 1s forwards;
 	opacity: 0;
 	visibility: hidden;
-  }
+}
