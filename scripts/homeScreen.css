@@ -346,3 +346,7 @@ body[data-seasonal-animations="true"]:has(.homePage:not(.hide)) .snowverlay {
 	opacity: 0;
 	visibility: hidden;
 }
+
+[data-section-id="browse-by-studio"] .card {
+	width: 8vw;
+}

@@ -977,6 +977,32 @@
                 }
             ]
         },
+        // Misc
+        {
+            id: 'home-misc',
+            name: 'Misc',
+            sections: [
+                {
+                    id: 'suggested-jellyfin-clients',
+                    name: 'Suggested Jellyfin Clients',
+                    enabled: false,
+                    order: 50,
+                    cardFormat: 'Thumb',
+                    queries: [],
+                    renderMode: 'Normal',
+                    type: 'home',
+                    userConfigurable: true,
+                    ttl: 3600000,
+                    items: [
+                        { Name: 'AFinity', Type: 'Folder', cardUrl: 'https://afinity.vercel.app/', imageUrl: '${kefinTweaksRoot}pages/images/clients/afinity.png' },
+                        { Name: 'Moonfin', Type: 'Folder', cardUrl: 'https://moonfin.io/', imageUrl: '${kefinTweaksRoot}pages/images/clients/moonfin.png' },
+                        { Name: 'Neptune', Type: 'Folder', cardUrl: 'https://neptuneplayer.com/', imageUrl: '${kefinTweaksRoot}pages/images/clients/neptune.png' },
+                        { Name: 'Pelagica', Type: 'Folder', cardUrl: 'https://pelagica.app/', imageUrl: '${kefinTweaksRoot}pages/images/clients/pelagica.png' },
+                        { Name: 'Streamyfin', Type: 'Folder', cardUrl: 'https://streamyfin.app/', imageUrl: '${kefinTweaksRoot}pages/images/clients/streamyfin.png' }
+                    ]
+                }
+            ]
+        },
     ];
 
     // Seasonal Sections
@@ -2204,7 +2230,7 @@
         minPeopleAppearancesMovies: 10,
         minPeopleAppearancesSeries: 10,
         minPeopleAppearancesEpisodes: 10,
-        maxPeopleCount: 1000,
+        maxPeopleCount: 100,
         loadPeopleEpisodeData: false,
     }
 

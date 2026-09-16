@@ -629,6 +629,130 @@
     }
 
     /**
+     * Catalog for Browse by Studio custom section.
+     * `name` must match Jellyfin Studio.Name exactly. Paramount uses "Paramount Pictures" (common JF name).
+     */
+    const BROWSE_BY_STUDIO_CATALOG = [
+        { name: 'AMC', file: 'AMC.svg' },
+        { name: 'Apple TV', file: 'Apple_TV.svg' },
+        { name: 'Columbia Pictures', file: 'Columbia_Pictures.svg' },
+        { name: 'Disney+', file: 'Disney+.svg' },
+        { name: 'Dreamworks Animation', file: 'DreamWorks_Animation.svg' },
+        { name: 'FX', file: 'FX.svg' },
+        { name: 'HBO', file: 'HBO.svg' },
+        { name: 'Lucasfilm', file: 'Lucasfilm.svg' },
+        { name: 'Marvel Studios', file: 'Marvel_Studios.svg' },
+        { name: 'New Line Cinema', file: 'New_Line_Cinema.svg' },
+        { name: 'Paramount Pictures', file: 'Paramount_Pictures.svg' },
+        { name: 'Pixar', file: 'Pixar.svg' },
+        { name: 'Showtime', file: 'Showtime.svg' },
+        { name: 'Universal Pictures', file: 'Universal_Pictures.svg' },
+        { name: 'Walt Disney Pictures', file: 'Walt_Disney_Pictures.svg' },
+        { name: 'Warner Bros.', file: 'Warner_Bros..svg' },
+        { name: 'HBO Max', file: 'HBO_Max.svg' }
+    ];
+
+    const BROWSE_BY_STUDIO_SECTION_ID = 'browse-by-studio';
+    const BROWSE_BY_STUDIO_GROUP_ID = 'home-popular-studios';
+    const BROWSE_BY_STUDIO_GROUP_NAME = 'Popular Studios';
+
+    let browseStudiosFetchPromise = null;
+
+    function isBrowseByStudioCatalogFullyResolved(existingItems) {
+        const resolvedNames = new Set(
+            (existingItems || [])
+                .filter((item) => item?.Id && item?.Name)
+                .map((item) => item.Name)
+        );
+        return BROWSE_BY_STUDIO_CATALOG.every((entry) => resolvedNames.has(entry.name));
+    }
+
+    async function fetchAllStudiosForBrowseSection() {
+        if (browseStudiosFetchPromise) {
+            return browseStudiosFetchPromise;
+        }
+
+        browseStudiosFetchPromise = (async () => {
+            const userId = window.ApiClient?.getCurrentUserId?.();
+            const serverAddress = window.ApiClient?.serverAddress?.();
+            if (!userId || !serverAddress || !window.apiHelper?.getData) {
+                return [];
+            }
+
+            const url = `${serverAddress}/Studios?UserId=${encodeURIComponent(userId)}`;
+            const data = await window.apiHelper.getData(url, true, 24 * 60 * 60 * 1000);
+            if (Array.isArray(data?.Items)) return data.Items;
+            if (Array.isArray(data)) return data;
+            return [];
+        })().finally(() => {
+            browseStudiosFetchPromise = null;
+        });
+
+        return browseStudiosFetchPromise;
+    }
+
+    function buildBrowseByStudioItem(catalogEntry, studio) {
+        return {
+            Name: catalogEntry.name,
+            Type: 'Folder',
+            Id: studio.Id,
+            imageUrl: `\${kefinTweaksRoot}pages/images/studios/${catalogEntry.file}`,
+            cardUrl: `#/details?id=${studio.Id}&serverId=\${serverId}`
+        };
+    }
+
+    /**
+     * Build browse-by-studio items from exact Name matches.
+     * Skips catalog entries already present in existingItems with an Id.
+     * @param {Array} studios
+     * @param {Array} [existingItems]
+     * @returns {Array}
+     */
+    function buildBrowseByStudioItems(studios, existingItems = []) {
+        const byName = new Map();
+        (studios || []).forEach((studio) => {
+            if (studio?.Name != null && studio?.Id) {
+                byName.set(studio.Name, studio);
+            }
+        });
+
+        const resolvedNames = new Set(
+            (existingItems || [])
+                .filter((item) => item?.Id && item?.Name)
+                .map((item) => item.Name)
+        );
+
+        const items = [];
+        BROWSE_BY_STUDIO_CATALOG.forEach((entry) => {
+            if (resolvedNames.has(entry.name)) return;
+            const studio = byName.get(entry.name);
+            if (!studio) return;
+            items.push(buildBrowseByStudioItem(entry, studio));
+        });
+        return items;
+    }
+
+    function createBrowseByStudioSection(items) {
+        return {
+            id: BROWSE_BY_STUDIO_SECTION_ID,
+            name: 'Browse by Studio',
+            enabled: true,
+            order: 11,
+            cardFormat: 'Logo',
+            ttl: 604800000,
+            queries: [],
+            renderMode: 'Normal',
+            items: items || [],
+            type: 'home',
+            userConfigurable: true,
+            sortBy: 'Random',
+            cardTitleVisibility: 'hidden',
+            hideName: true,
+            useGaplessCards: false
+        };
+    }
+
+    /**
      * Verify and sync library-based section groups (Recently Added, Popular Genres, etc.) with actual Jellyfin libraries
      * @param {Object} config - Current configuration object
      * @returns {Object} Updated configuration with synced library-based sections
@@ -646,154 +770,201 @@
             }
 
             const libraries = await window.dataHelper.getLibraries();
-            if (!libraries || libraries.length === 0) {
-                LOG('No libraries found, skipping library sections verification');
-                return { config, hasChanges: false };
-            }
-
-            // Filter out boxsets and playlists; all templates apply to this list
-            const filteredLibraries = libraries.filter(l => l.CollectionType && l.CollectionType !== 'boxsets' && l.CollectionType !== 'playlists');
+            const filteredLibraries = (libraries || []).filter(l => l.CollectionType && l.CollectionType !== 'boxsets' && l.CollectionType !== 'playlists');
             const currentLibraryIds = new Set(filteredLibraries.map(l => l.Id));
 
-            const libraryTemplates = [
-                {
-                    idPrefix: 'recently-added-',
-                    groupId: 'home-recently-added',
-                    groupName: 'Recently Added',
-                    sectionTemplate: {
-                        enabled: false,
-                        order: 61,
-                        cardFormat: 'Poster',
-                        buildSection: function (library) {
-                            let viewMoreUrl = null;
-                            if (library.CollectionType === 'movies') {
-                                viewMoreUrl = `#/movies.html?topParentId=${library.Id}&collectionType=movies&tab=1`;
-                            } else if (library.CollectionType === 'tvshows') {
-                                viewMoreUrl = `#/tv.html?topParentId=${library.Id}&collectionType=tvshows&tab=1`;
-                            }
-                            return {
-                                id: `recently-added-${library.Id}`,
-                                name: `Recently Added ${library.Name}`,
-                                viewMoreUrl: viewMoreUrl,
-                                jellyfinId: 'latestmedia',
-                                userConfigurable: true,
-                                queries: [{
-                                    path: '/Items/Latest',
-                                    queryOptions: {
-                                        ParentId: library.Id,
-                                        Fields: 'PrimaryImageAspectRatio,Path',
-                                        Limit: 16,
-                                        ImageTypeLimit: 1,
-                                        EnableImageTypes: 'Primary,Backdrop,Thumb',
-                                    }
-                                }]
-                            };
-                        }
-                    }
-                },
-                {
-                    idPrefix: 'popular-genres-',
-                    groupId: 'home-popular-genres',
-                    groupName: 'Popular Genres',
-                    sectionTemplate: {
-                        enabled: false,
-                        order: 81,
-                        cardFormat: 'Thumb',
-                        ttl: 604800000,
-                        buildSection: function (library) {
-                            const ct = (library.CollectionType || '').toLowerCase();
-                            let includeItemTypes = ['Movie', 'Series', 'Video', 'MusicArtist', 'Book', 'AudioBook'];
-                            if (ct === 'music') includeItemTypes = ['MusicArtist'];
-                            else if (ct === 'tvshows') includeItemTypes = ['Series'];
-                            else if (ct === 'movies') includeItemTypes = ['Movie'];
-                            else if (ct === 'books') includeItemTypes = ['Book', 'AudioBook'];
-                            else if (ct === 'homevideos') includeItemTypes = ['Video'];
-                            return {
-                                id: `popular-genres-${library.Id}`,
-                                name: `Popular ${library.Name} Genres`,
-                                userConfigurable: true,
-                                queries: [{
-                                    path: '/Genres',
-                                    ParentId: library.Id,
-                                    queryOptions: {
-                                        ParentId: library.Id,
-                                        IncludeItemTypes: includeItemTypes,
-                                        SortBy: 'ChildCount',
-                                        SortOrder: 'Descending',
-                                        Limit: 20
-                                    }
-                                }]
-                            };
-                        }
-                    }
-                }
-            ];
+            if (!libraries || libraries.length === 0) {
+                LOG('No libraries found; syncing Browse by Studio only');
+            }
 
             const groups = config.HOME_SECTION_GROUPS || [];
             let updatedGroups = groups.map(g => ({ ...g, sections: Array.isArray(g.sections) ? [...g.sections] : [] }));
             let hasChanges = false;
 
-            for (const template of libraryTemplates) {
-                let group = updatedGroups.find(g => g.id === template.groupId || g.name === template.groupName);
-                if (!group) {
-                    group = {
-                        id: template.groupId,
-                        name: template.groupName,
-                        sections: []
-                    };
-                    updatedGroups.push(group);
-                    hasChanges = true;
-                } else if (!group.id) {
-                    group.id = template.groupId;
-                    hasChanges = true;
-                }
-
-                const groupSections = group.sections || [];
-                const templateSectionIds = groupSections.filter(s => s.id && s.id.startsWith(template.idPrefix)).map(s => s.id);
-                const existingLibraryIdsForTemplate = new Set(templateSectionIds.map(id => id.replace(template.idPrefix, '')));
-
-                const sectionsToRemove = groupSections.filter(s => {
-                    if (!s.id || !s.id.startsWith(template.idPrefix)) return false;
-                    const libId = s.id.replace(template.idPrefix, '');
-                    return !currentLibraryIds.has(libId);
-                });
-                const sectionsToRemoveIds = new Set(sectionsToRemove.map(s => s.id));
-                const librariesToAdd = filteredLibraries.filter(l => !existingLibraryIdsForTemplate.has(l.Id));
-
-                if (sectionsToRemoveIds.size > 0 || librariesToAdd.length > 0) hasChanges = true;
-
-                group.sections = groupSections.filter(s => !sectionsToRemoveIds.has(s.id));
-
-                librariesToAdd.forEach(library => {
-                    const base = template.sectionTemplate.buildSection(library);
-                    const newSection = {
-                        ...template.sectionTemplate,
-                        ...base,
-                        id: base.id,
-                        name: base.name,
-                        queries: base.queries
-                    };
-                    delete newSection.buildSection;
-                    group.sections.push(newSection);
-                });
-            }
-
-            // Remove stale library sections from any HOME group (e.g. misplaced sections)
-            for (const group of updatedGroups) {
-                const beforeCount = (group.sections || []).length;
-                group.sections = (group.sections || []).filter(s => {
-                    if (!s?.id) return true;
-                    for (const template of libraryTemplates) {
-                        if (s.id.startsWith(template.idPrefix)) {
-                            const libId = s.id.replace(template.idPrefix, '');
-                            return currentLibraryIds.has(libId);
+            if (filteredLibraries.length > 0) {
+                const libraryTemplates = [
+                    {
+                        idPrefix: 'recently-added-',
+                        groupId: 'home-recently-added',
+                        groupName: 'Recently Added',
+                        sectionTemplate: {
+                            enabled: false,
+                            order: 61,
+                            cardFormat: 'Poster',
+                            buildSection: function (library) {
+                                let viewMoreUrl = null;
+                                if (library.CollectionType === 'movies') {
+                                    viewMoreUrl = `#/movies.html?topParentId=${library.Id}&collectionType=movies&tab=1`;
+                                } else if (library.CollectionType === 'tvshows') {
+                                    viewMoreUrl = `#/tv.html?topParentId=${library.Id}&collectionType=tvshows&tab=1`;
+                                }
+                                return {
+                                    id: `recently-added-${library.Id}`,
+                                    name: `Recently Added ${library.Name}`,
+                                    viewMoreUrl: viewMoreUrl,
+                                    jellyfinId: 'latestmedia',
+                                    userConfigurable: true,
+                                    queries: [{
+                                        path: '/Items/Latest',
+                                        queryOptions: {
+                                            ParentId: library.Id,
+                                            Fields: 'PrimaryImageAspectRatio,Path',
+                                            Limit: 16,
+                                            ImageTypeLimit: 1,
+                                            EnableImageTypes: 'Primary,Backdrop,Thumb',
+                                        }
+                                    }]
+                                };
+                            }
+                        }
+                    },
+                    {
+                        idPrefix: 'popular-genres-',
+                        groupId: 'home-popular-genres',
+                        groupName: 'Popular Genres',
+                        sectionTemplate: {
+                            enabled: false,
+                            order: 81,
+                            cardFormat: 'Thumb',
+                            ttl: 604800000,
+                            buildSection: function (library) {
+                                const ct = (library.CollectionType || '').toLowerCase();
+                                let includeItemTypes = ['Movie', 'Series', 'Video', 'MusicArtist', 'Book', 'AudioBook'];
+                                if (ct === 'music') includeItemTypes = ['MusicArtist'];
+                                else if (ct === 'tvshows') includeItemTypes = ['Series'];
+                                else if (ct === 'movies') includeItemTypes = ['Movie'];
+                                else if (ct === 'books') includeItemTypes = ['Book', 'AudioBook'];
+                                else if (ct === 'homevideos') includeItemTypes = ['Video'];
+                                return {
+                                    id: `popular-genres-${library.Id}`,
+                                    name: `Popular ${library.Name} Genres`,
+                                    userConfigurable: true,
+                                    queries: [{
+                                        path: '/Genres',
+                                        ParentId: library.Id,
+                                        queryOptions: {
+                                            ParentId: library.Id,
+                                            IncludeItemTypes: includeItemTypes,
+                                            SortBy: 'ChildCount',
+                                            SortOrder: 'Descending',
+                                            Limit: 20
+                                        }
+                                    }]
+                                };
+                            }
                         }
                     }
-                    return true;
-                });
-                if (group.sections.length !== beforeCount) {
+                ];
+
+                for (const template of libraryTemplates) {
+                    let group = updatedGroups.find(g => g.id === template.groupId || g.name === template.groupName);
+                    if (!group) {
+                        group = {
+                            id: template.groupId,
+                            name: template.groupName,
+                            sections: []
+                        };
+                        updatedGroups.push(group);
+                        hasChanges = true;
+                    } else if (!group.id) {
+                        group.id = template.groupId;
+                        hasChanges = true;
+                    }
+
+                    const groupSections = group.sections || [];
+                    const templateSectionIds = groupSections.filter(s => s.id && s.id.startsWith(template.idPrefix)).map(s => s.id);
+                    const existingLibraryIdsForTemplate = new Set(templateSectionIds.map(id => id.replace(template.idPrefix, '')));
+
+                    const sectionsToRemove = groupSections.filter(s => {
+                        if (!s.id || !s.id.startsWith(template.idPrefix)) return false;
+                        const libId = s.id.replace(template.idPrefix, '');
+                        return !currentLibraryIds.has(libId);
+                    });
+                    const sectionsToRemoveIds = new Set(sectionsToRemove.map(s => s.id));
+                    const librariesToAdd = filteredLibraries.filter(l => !existingLibraryIdsForTemplate.has(l.Id));
+
+                    if (sectionsToRemoveIds.size > 0 || librariesToAdd.length > 0) hasChanges = true;
+
+                    group.sections = groupSections.filter(s => !sectionsToRemoveIds.has(s.id));
+
+                    librariesToAdd.forEach(library => {
+                        const base = template.sectionTemplate.buildSection(library);
+                        const newSection = {
+                            ...template.sectionTemplate,
+                            ...base,
+                            id: base.id,
+                            name: base.name,
+                            queries: base.queries
+                        };
+                        delete newSection.buildSection;
+                        group.sections.push(newSection);
+                    });
+                }
+
+                // Remove stale library sections from any HOME group (e.g. misplaced sections)
+                for (const group of updatedGroups) {
+                    const beforeCount = (group.sections || []).length;
+                    group.sections = (group.sections || []).filter(s => {
+                        if (!s?.id) return true;
+                        for (const template of libraryTemplates) {
+                            if (s.id.startsWith(template.idPrefix)) {
+                                const libId = s.id.replace(template.idPrefix, '');
+                                return currentLibraryIds.has(libId);
+                            }
+                        }
+                        return true;
+                    });
+                    if (group.sections.length !== beforeCount) {
+                        hasChanges = true;
+                    }
+                }
+            }
+
+            // Browse by Studio: create once, then backfill unresolved catalog entries
+            try {
+                let studiosGroup = updatedGroups.find(
+                    (g) => g.id === BROWSE_BY_STUDIO_GROUP_ID || g.name === BROWSE_BY_STUDIO_GROUP_NAME
+                );
+                if (!studiosGroup) {
+                    studiosGroup = {
+                        id: BROWSE_BY_STUDIO_GROUP_ID,
+                        name: BROWSE_BY_STUDIO_GROUP_NAME,
+                        sections: []
+                    };
+                    updatedGroups.push(studiosGroup);
+                    hasChanges = true;
+                } else if (!studiosGroup.id) {
+                    studiosGroup.id = BROWSE_BY_STUDIO_GROUP_ID;
                     hasChanges = true;
                 }
+                if (!Array.isArray(studiosGroup.sections)) {
+                    studiosGroup.sections = [];
+                }
+
+                const browseSection = studiosGroup.sections.find((s) => s?.id === BROWSE_BY_STUDIO_SECTION_ID);
+                const existingItems = Array.isArray(browseSection?.items) ? browseSection.items : [];
+
+                if (browseSection && isBrowseByStudioCatalogFullyResolved(existingItems)) {
+                    LOG('Browse by Studio catalog fully resolved; skipping /Studios fetch');
+                } else {
+                    const studios = await fetchAllStudiosForBrowseSection();
+
+                    if (!browseSection) {
+                        const items = buildBrowseByStudioItems(studios, []);
+                        studiosGroup.sections.push(createBrowseByStudioSection(items));
+                        hasChanges = true;
+                        LOG(`Created browse-by-studio with ${items.length} matched studios`);
+                    } else {
+                        const toAppend = buildBrowseByStudioItems(studios, existingItems);
+                        if (toAppend.length > 0) {
+                            browseSection.items = existingItems.concat(toAppend);
+                            hasChanges = true;
+                            LOG(`Backfilled ${toAppend.length} browse-by-studio studios`);
+                        }
+                    }
+                }
+            } catch (browseErr) {
+                WARN('Browse by Studio sync skipped:', browseErr);
             }
 
             if (!hasChanges) {
@@ -933,19 +1104,20 @@
         }
     }
 
-    let startupSyncDone = false;
-
     async function runStartupDefaultSectionSync() {
-        if (startupSyncDone) return;
+        if (window.__kefinHomeStartupDefaultSectionSync) return;
+        window.__kefinHomeStartupDefaultSectionSync = true;
 
         if (window.userHelper?.waitForLogin) {
             const loggedIn = await window.userHelper.waitForLogin();
-            if (!loggedIn) return;
+            if (!loggedIn) {
+                window.__kefinHomeStartupDefaultSectionSync = false;
+                return;
+            }
         } else if (!window.ApiClient?._loggedIn) {
+            window.__kefinHomeStartupDefaultSectionSync = false;
             return;
         }
-
-        startupSyncDone = true;
 
         try {
             if (window.migrateHomeScreenConfig) {
@@ -2048,7 +2220,7 @@
         const userHomeScreen = currentConfig.USER_HOME_SCREEN_SETTINGS || {};
         const libraryCache = currentConfig.LIBRARY_CACHE || {};
         const D = GENERAL_TOGGLE_DESCRIPTIONS;
-        const maxPeopleCount = homeSettings.maxPeopleCount ?? 500;
+        const maxPeopleCount = homeSettings.maxPeopleCount ?? 100;
         const maxPeopleOptions = MAX_PEOPLE_COUNT_OPTIONS.map((n) => ({ value: String(n), label: String(n) }));
         const settingsGroupStyle = 'margin-bottom: 1.5em; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 1em;';
         return `
@@ -2270,7 +2442,7 @@
                 minPeopleAppearancesMovies: parseInt(root.querySelector('#home-minPeopleAppearancesMovies')?.value || '10', 10),
                 minPeopleAppearancesSeries: parseInt(root.querySelector('#home-minPeopleAppearancesSeries')?.value || '10', 10),
                 minPeopleAppearancesEpisodes: parseInt(root.querySelector('#home-minPeopleAppearancesEpisodes')?.value || '10', 10),
-                maxPeopleCount: parseInt(root.querySelector('#home-maxPeopleCount')?.value || '500', 10),
+                maxPeopleCount: parseInt(root.querySelector('#home-maxPeopleCount')?.value || '100', 10),
                 loadPeopleEpisodeData: root.querySelector('#home-loadPeopleEpisodeData')?.checked === true
             };
             syncEnsureThumbsOnPopularStudios(currentConfig);
