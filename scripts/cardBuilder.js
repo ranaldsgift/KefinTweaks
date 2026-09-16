@@ -494,7 +494,7 @@
             element.style.removeProperty('--kefin-card-title-color');
         }
 
-        if (sectionConfig.hideName === true) {
+        if (sectionConfig.hideName === true || sectionConfig.hideName === 'true') {
             element.dataset.hideSectionName = 'true';
         } else {
             delete element.dataset.hideSectionName;
@@ -1595,6 +1595,31 @@
         };
     }
 
+    function normalizeStaticSectionItems(sectionConfig) {
+        const kefinTweaksRoot = window.KefinTweaksConfig?.kefinTweaksRoot || '';
+        const serverId = typeof ApiClient !== 'undefined' && typeof ApiClient.serverId === 'function'
+            ? ApiClient.serverId()
+            : '';
+        const normalizeTemplate = (value) => (value || '')
+            .replace(/\$\{kefinTweaksRoot\}/g, kefinTweaksRoot)
+            .replace(/\$\{serverId\}/g, serverId);
+
+        return sectionConfig.items.map((item, index) => ({
+            Name: item.Name,
+            Id: item.Id || 'static-' + sectionConfig.id + '-' + index,
+            Type: item.Type || 'Folder',
+            posterUrl: normalizeTemplate(item.posterUrl),
+            thumbUrl: normalizeTemplate(item.thumbUrl),
+            squareUrl: normalizeTemplate(item.squareUrl),
+            imageUrl: normalizeTemplate(item.imageUrl),
+            cardUrl: normalizeTemplate(item.cardUrl),
+            backdropUrl: normalizeTemplate(item.backdropUrl),
+            bannerUrl: normalizeTemplate(item.bannerUrl),
+            logoUrl: normalizeTemplate(item.logoUrl),
+            CustomFooterText: item.cardFooter || undefined
+        }));
+    }
+
     /**
      * Refresh section content in place (used by section control registry).
      * @returns {Promise<HTMLElement|null>} refresh button on the new section, if any
@@ -1603,11 +1628,30 @@
         sectionElement.dataset.refreshing = 'true';
 
         try {
-            const freshItems = await refreshSectionQueries(sectionConfig);
+            const hasStaticItems = Array.isArray(sectionConfig.items) && sectionConfig.items.length > 0;
+            let freshItems;
 
-            if (freshItems.length === 0) {
-                sectionElement.remove();
-                return null;
+            if (hasStaticItems) {
+                if (!sectionHasRandomQuerySort(sectionConfig)) {
+                    sectionElement.dataset.refreshing = 'false';
+                    const refreshButton = sectionElement.querySelector('.section-refresh-button');
+                    if (refreshButton) {
+                        showRefreshComplete(refreshButton);
+                    }
+                    return refreshButton || null;
+                }
+
+                freshItems = postProcessItems(sectionConfig, normalizeStaticSectionItems(sectionConfig));
+                if (freshItems.length === 0) {
+                    sectionElement.dataset.refreshing = 'false';
+                    return null;
+                }
+            } else {
+                freshItems = await refreshSectionQueries(sectionConfig);
+                if (freshItems.length === 0) {
+                    sectionElement.remove();
+                    return null;
+                }
             }
 
             let finalCardFormat = sectionConfig.cardFormat;
@@ -2226,6 +2270,9 @@
                 const sectionStartTime = performance.now();
                 const { element: sectionElement, section } = sectionEnhancementTargets[index];
 
+                if (Array.isArray(section.config.items) && section.config.items.length > 0) {
+                    continue;
+                }
                 scheduleSectionProgressiveEnhancement(sectionElement, section, enhanceOptions);
 
                 const sectionEndTime = performance.now();
@@ -6434,7 +6481,22 @@
                 cardImageContainer.setAttribute('data-loading', 'true');
                 const img = new Image();
                 img.onload = () => {
-                    cardImageContainer.style.backgroundImage = `url("${imageUrl}")`;
+                    const isSvg = /\.svg(?:[?#]|$)/i.test(imageUrl);
+                    if (isSvg) {
+                        const maskUrl = `url("${imageUrl}")`;
+                        cardImageContainer.style.webkitMaskImage = maskUrl;
+                        cardImageContainer.style.maskImage = maskUrl;
+                        cardImageContainer.style.webkitMaskRepeat = 'no-repeat';
+                        cardImageContainer.style.maskRepeat = 'no-repeat';
+                        cardImageContainer.style.webkitMaskPosition = 'center';
+                        cardImageContainer.style.maskPosition = 'center';
+                        cardImageContainer.style.webkitMaskSize = 'contain';
+                        cardImageContainer.style.maskSize = 'contain';
+                        cardImageContainer.style.backgroundColor = 'white';
+                        cardImageContainer.classList.add('lazy-masked-svg');
+                    } else {
+                        cardImageContainer.style.backgroundImage = `url("${imageUrl}")`;
+                    }
                     cardImageContainer.classList.remove('lazy');
                     cardImageContainer.classList.add('lazy-loaded');
                     cardImageContainer.removeAttribute('data-src');
