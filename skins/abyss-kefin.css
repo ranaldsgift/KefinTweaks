@@ -1,0 +1,6 @@
+.dashboardDocument .mainAnimatedPage:not(.metadataEditorPage) {
+	left: 300px !important;
+}
+.MuiDrawer-root > .MuiDrawer-paper {
+	width: auto !important;
+}

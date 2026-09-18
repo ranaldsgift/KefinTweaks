@@ -1272,6 +1272,7 @@
                         majorServerVersions: [10, 11, 12],
                         urls: [
                             'https://cdn.jsdelivr.net/gh/AumGupta/abyss-jellyfin@main/abyss.css',
+                            `${getKefinTweaksRoot()}skins/abyss-kefin.css`
                         ]
                     },
                 ],
