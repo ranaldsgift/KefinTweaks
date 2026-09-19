@@ -256,7 +256,30 @@ div#discovery-loading-indicator:not(.show)::after {
 	justify-content: center;
 } */
 
+.section0:not([data-page]),
+.section1:not([data-page]),
+.section2:not([data-page]),
+.section3:not([data-page]),
+.section4:not([data-page]),
+.section5:not([data-page]),
+.section6:not([data-page]),
+.section7:not([data-page]),
+.section8:not([data-page]),
+.section9:not([data-page]),
 .homeSectionsContainer:has([data-page], [data-section-id])
+	> :is(
+		.section0:not([data-page]),
+		.section1:not([data-page]),
+		.section2:not([data-page]),
+		.section3:not([data-page]),
+		.section4:not([data-page]),
+		.section5:not([data-page]),
+		.section6:not([data-page]),
+		.section7:not([data-page]),
+		.section8:not([data-page]),
+		.section9:not([data-page])
+	),
+.homeSectionsContainer[data-sections-rendered="true"]
 	> :is(
 		.section0:not([data-page]),
 		.section1:not([data-page]),
@@ -330,7 +353,7 @@ body[data-seasonal-animations="true"]:has(.homePage:not(.hide)) .snowverlay {
 	}
 }
 
-.homeSectionsContainer:not(:has([data-page]), :has([data-section-id]))::after {
+.homeSectionsContainer:not(:has([data-page]), :has([data-section-id])):not([data-sections-rendered])::after {
 	content: "Customize your Home Screen from your User Settings > Home in the top right corner.";
 	text-align: center;
 	margin: 3em auto;
