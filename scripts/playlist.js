@@ -452,6 +452,42 @@
     }
 
     /**
+     * Play playlist items in sort order, optionally resuming from first unplayed.
+     * @param {string} playlistId
+     * @param {{ resume?: boolean }} [options]
+     */
+    async function playPlaylistItems(playlistId, options = {}) {
+        const resume = options.resume === true;
+        const sortedItems = await getSortedPlaylistItems(playlistId, resume);
+        const sortedIds = sortedItems.map(item => item.Id);
+
+        if (sortedIds.length === 0) {
+            WARN(resume ? 'No items to resume for playlist:' : 'No items to play for playlist:', playlistId);
+            return;
+        }
+
+        LOG(
+            resume
+                ? `Resuming ${sortedIds.length} sorted items from playlist:`
+                : `Playing ${sortedIds.length} items from playlist:`,
+            playlistId
+        );
+
+        const playOptions = {};
+        if (resume && sortedItems[0].UserData?.PlaybackPositionTicks > 0) {
+            playOptions.startPositionTicks = sortedItems[0].UserData.PlaybackPositionTicks;
+        }
+
+        if (window.apiHelper && window.apiHelper.playItem) {
+            await window.apiHelper.playItem(sortedIds, playOptions);
+        } else if (window.ApiClient && typeof window.ApiClient.play === 'function') {
+            await window.ApiClient.play({ ids: sortedIds, ...playOptions });
+        } else {
+            ERR('No play method available');
+        }
+    }
+
+    /**
      * Override play button to use sorted playlist items
      * @param {HTMLElement} mainDetailButtons - Main detail buttons container
      * @param {string} playlistId - Playlist item ID
@@ -514,33 +550,10 @@
         clonedButton.onclick = async (e) => {
             e.preventDefault();
             e.stopPropagation();
-            e.stopImmediatePropagation(); // Prevent any other handlers
+            e.stopImmediatePropagation();
 
             try {
-                // Get sorted item IDs with resume mode (skip played items from start)
-                const sortedItems = await getSortedPlaylistItems(playlistId, true);
-                const sortedIds = sortedItems.map(item => item.Id);
-                
-                if (sortedIds.length === 0) {
-                    WARN('No items to resume for playlist:', playlistId);
-                    return;
-                }                
-
-                LOG(`Resuming ${sortedIds.length} sorted items from playlist:`, playlistId);
-
-                let options = {};
-                // Check if the first item has playback progress
-                if (sortedItems[0].UserData?.PlaybackPositionTicks > 0) {
-                    // Add the playback position to the options
-                    options.startPositionTicks = sortedItems[0].UserData?.PlaybackPositionTicks;
-                }
-
-                // Use apiHelper if available, otherwise fallback to ApiClient
-                if (window.apiHelper && window.apiHelper.playItem) {
-                    await window.apiHelper.playItem(sortedIds, options);
-                } else {
-                    ERR('No play method available');
-                }
+                await playPlaylistItems(playlistId, { resume: true });
             } catch (error) {
                 ERR('Error resuming sorted playlist:', error);
             }
@@ -693,30 +706,7 @@
             e.stopImmediatePropagation();
 
             try {
-                // Get sorted item IDs without resume mode (play all items from beginning)
-                const sortedItems = await getSortedPlaylistItems(playlistId, false);
-                const sortedIds = sortedItems.map(item => item.Id);
-
-                if (sortedIds.length === 0) {
-                    WARN('No items to play for playlist:', playlistId);
-                    return;
-                }
-
-                LOG(`Playing from beginning ${sortedIds.length} items from playlist:`, playlistId);
-
-                // Use apiHelper if available, otherwise fallback to ApiClient
-                if (window.apiHelper && window.apiHelper.playItem) {
-                    await window.apiHelper.playItem(sortedIds);
-                } else if (window.ApiClient && typeof window.ApiClient.play === 'function') {
-                    await window.ApiClient.play({ ids: sortedIds });
-                } else if (window.PlaybackManager && window.PlaybackManager.play) {
-                    await window.PlaybackManager.play({
-                        ids: sortedIds,
-                        serverId: window.ApiClient.serverId()
-                    });
-                } else {
-                    ERR('No play method available');
-                }
+                await playPlaylistItems(playlistId, { resume: false });
             } catch (error) {
                 ERR('Error playing from beginning:', error);
             }
@@ -1183,6 +1173,104 @@
     }
     
     /**
+     * Override overlay Play on Playlist cards so play resumes mid-playlist.
+     * @param {HTMLElement} overlayContainer
+     */
+    function overridePlaylistCardPlayButton(overlayContainer) {
+        if (!overlayContainer) return;
+
+        const card = overlayContainer.closest('.card');
+        if (!card || card.getAttribute('data-type') !== 'Playlist') return;
+
+        const playlistId = card.getAttribute('data-id');
+        if (!playlistId) {
+            WARN('Playlist card missing data-id');
+            return;
+        }
+
+        let playButton = overlayContainer.querySelector('.cardOverlayFab-primary') ||
+            overlayContainer.querySelector('button[data-action="resume"]') ||
+            overlayContainer.querySelector('button[data-action="play"]');
+
+        if (!playButton) {
+            const buttons = overlayContainer.querySelectorAll('button');
+            playButton = Array.from(buttons).find(btn => {
+                const icon = btn.querySelector('.material-icons');
+                if (!icon) return false;
+                const iconText = icon.textContent.trim();
+                return iconText === 'play_arrow' || iconText === 'play';
+            });
+        }
+
+        if (!playButton) return;
+
+        if (playButton.dataset.ktPlaylistCardOverridden === 'true') return;
+
+        LOG('Overriding card overlay play for playlist:', playlistId);
+
+        const clonedButton = playButton.cloneNode(true);
+        clonedButton.className = playButton.className;
+        clonedButton.id = playButton.id;
+        clonedButton.title = 'Resume';
+        clonedButton.setAttribute('is', playButton.getAttribute('is') || '');
+        clonedButton.type = playButton.type || 'button';
+        clonedButton.removeAttribute('data-action');
+        clonedButton.removeAttribute('onclick');
+        clonedButton.onclick = null;
+
+        playButton.parentNode.replaceChild(clonedButton, playButton);
+
+        clonedButton.onclick = async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+
+            try {
+                await playPlaylistItems(playlistId, { resume: true });
+            } catch (error) {
+                ERR('Error resuming playlist from card:', error);
+            }
+        };
+
+        clonedButton.dataset.ktPlaylistCardOverridden = 'true';
+    }
+
+    function processExistingPlaylistCardOverlays() {
+        document.querySelectorAll('.cardOverlayContainer').forEach((overlayContainer) => {
+            overridePlaylistCardPlayButton(overlayContainer);
+        });
+    }
+
+    function setupPlaylistCardPlayObserver() {
+        const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                if (mutation.type !== 'childList') return;
+                mutation.addedNodes.forEach((node) => {
+                    if (node.nodeType !== Node.ELEMENT_NODE) return;
+
+                    if (node.classList && node.classList.contains('cardOverlayContainer')) {
+                        overridePlaylistCardPlayButton(node);
+                    }
+
+                    const overlayContainers = node.querySelectorAll && node.querySelectorAll('.cardOverlayContainer');
+                    if (overlayContainers && overlayContainers.length > 0) {
+                        overlayContainers.forEach((overlayContainer) => {
+                            overridePlaylistCardPlayButton(overlayContainer);
+                        });
+                    }
+                });
+            });
+        });
+
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+
+        processExistingPlaylistCardOverlays();
+    }
+
+    /**
      * Initialize playlist hook using utils
      */
     function initializePlaylistHook() {
@@ -1195,6 +1283,8 @@
         addPlaylistCSS();
 
         LOG('Registering playlist handler with KefinTweaksUtils');
+
+        setupPlaylistCardPlayObserver();
         
         // Register handler for details pages
         window.KefinTweaksUtils.onViewPage(async (view, element, hash, itemPromise) => {
@@ -1204,14 +1294,15 @@
             if (item && item.Type === 'Playlist') {
                 // Run both original functionality and sorting functionality
                 modifyPlaylistPage();
+                await addPlaylistSorting(item);
                 
                 // Small delay to ensure details DOM is ready for sorting
-                setTimeout(async () => {
+/*                 setTimeout(async () => {
                     if (item && item.Id) {
                         await addPlaylistSorting(item);
                     }
                 }, 100);
-                return;
+                return; */
             }
         }, {
             pages: ['details']
