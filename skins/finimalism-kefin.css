@@ -19,3 +19,10 @@ div#kefinTweaks-breadcrumbs-wrapper {
 .elsewhere-link-reset::before {
 	content: none !important;
 }
+.homeSectionsContainer .spotlight-section {
+	padding-left: 0;
+}
+.layout-desktop #indexPage .verticalSection .itemsContainer.scrollSlider.focuscontainer-x.animatedScrollX .card:nth-child(n + 15),
+.layout-tv #indexPage .verticalSection .itemsContainer.scrollSlider.focuscontainer-x.animatedScrollX .card:nth-child(n + 15) {
+	display: block !important;
+}

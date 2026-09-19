@@ -27,3 +27,28 @@ div#kefinTweaks-breadcrumbs-wrapper {
 	background-color: #110d20de;
 	margin: 0;
 }
+
+.custom-scroller-container .emby-scrollbuttons:not(:has(:first-child:disabled):has(:last-child:disabled)) > * {
+	opacity: 1 !important;
+	margin-right: 0px !important;
+}
+
+[data-card-format="Logo"] .cardBox,
+[data-card-format="Clear Art"] .cardBox {
+	background: transparent !important;
+}
+.detailSection > .trackSelections select {
+	margin-left: 3em !important;
+	padding-left: 0.5em !important;
+	text-align: left !important;
+}
+.itemDetailPage .detailsGroupItem > :last-child {
+	text-align: left !important;
+	padding-left: 0 !important;
+}
+.detailsGroupItem {
+	display: flex;
+}
+.detailSection .selectContainer {
+	display: flex;
+}
