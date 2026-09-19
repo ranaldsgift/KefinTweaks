@@ -259,51 +259,44 @@
         return homeSectionsContainer;
     }
 
-    // Observe the home sections container so we can react when Jellyfin renders
-    function observeContainerMutations(container, onJellyfinRender) {
-        if (!container || typeof MutationObserver === 'undefined') {
-            return null;
+    const HOME_SECTIONS_SELECTOR = '.homePage:not(.hide) #homeTab .sections';
+    let homeSectionsReadyObserver = null;
+
+    function disconnectHomeSectionsReadyObserver() {
+        if (!homeSectionsReadyObserver) return;
+        homeSectionsReadyObserver.disconnect();
+        homeSectionsReadyObserver = null;
+        LOG('Disconnected home sections ready observer');
+    }
+
+    function connectHomeSectionsReadyObserver() {
+        if (homeSectionsReadyObserver) {
+            LOG('Home sections ready observer already connected');
+            return;
         }
 
-        const observer = new MutationObserver((mutations) => {
-            for (const mutation of mutations) {
-                // Check if .homeSectionsContainer class was added
-                if (mutation.type === 'attributes' &&
-                    mutation.attributeName === 'class' &&
-                    container.classList.contains('homeSectionsContainer')) {
+        const existing = document.querySelector(HOME_SECTIONS_SELECTOR);
+        if (existing) {
+            LOG('Home sections container already present; enhancing');
+            enhanceHomeScreen();
+            return;
+        }
 
-                    LOG('Jellyfin rendered homeSectionsContainer, re-rendering custom sections');
-                    sectionCache.jellyfinHasRendered = true;
-                    performanceMetrics.jellyfinDetected = performance.now();
-                    observer.disconnect();
-                    if (typeof onJellyfinRender === 'function') {
-                        onJellyfinRender();
-                    }
-                    break;
-                }
+        if (typeof MutationObserver === 'undefined') {
+            WARN('MutationObserver unavailable; cannot wait for home sections container');
+            return;
+        }
 
-                // Check for childList changes (innerHTML overwrite before class is applied)
-                if (mutation.type === 'childList' &&
-                    !sectionCache.jellyfinHasRendered) {
-
-                    const hasKefinSections = Array.from(container.children)
-                        .some(el => el.dataset && el.dataset.sectionId);
-
-                    if (!hasKefinSections && sectionCache.renderedSections.length > 0) {
-                        LOG('Home sections container content cleared; awaiting Jellyfin homeSectionsContainer class.');
-                        // We intentionally keep observing for the class change.
-                    }
-                }
-            }
+        homeSectionsReadyObserver = new MutationObserver(() => {
+            if (!document.querySelector(HOME_SECTIONS_SELECTOR)) return;
+            LOG('Home sections container appeared; enhancing');
+            enhanceHomeScreen();
         });
-
-        observer.observe(container, {
+        homeSectionsReadyObserver.observe(document.documentElement, {
             childList: true,
-            attributes: true,
-            attributeFilter: ['class']
+            subtree: true
         });
-
-        return observer;
+        LOG('Connected home sections ready observer');
     }
 
     /**
@@ -428,56 +421,7 @@
             }
         }
     }
-
-    async function handleUserDataChanged(event, nextupSectionConfig, continueWatchingSectionConfig, continueWatchingAndNextUpSectionConfig) {
-        LOG('UserDataChanged event received:', event);
-        const userData = event.Data?.UserDataList?.[0];
-        const parentItemUserData = event.Data?.UserDataList?.[1];
-
-        if (parentItemUserData.Key.includes('MusicAlbum')) {
-            return;
-        }
-
-        if (userData?.ItemId) {
-            LOG(`Detected UserDataChanged for item: ${userData.ItemId}, Played: ${userData.Played}`);
-            
-            // Invalidate cache for Next Up section
-            if (nextupSectionConfig && nextupSectionConfig.enabled && nextupSectionConfig.queries) {
-                for (const query of nextupSectionConfig.queries) {
-                    if (query.path || !query.dataSource) {
-                        const queryUrl = ApiHelper.buildQueryFromSection(query, ApiClient.getCurrentUserId(), ApiClient.serverAddress(), nextupSectionConfig.renderMode === 'Spotlight', { sectionType: nextupSectionConfig.type });
-                        if (queryUrl && typeof queryUrl === 'string') {
-                            ApiHelper.invalidateCache(queryUrl);
-                        }
-                    }
-                }
-            }
-
-            // Invalidate cache for Continue Watching section
-            if (continueWatchingSectionConfig && continueWatchingSectionConfig.enabled && continueWatchingSectionConfig.queries) {
-                for (const query of continueWatchingSectionConfig.queries) {
-                    if (query.path || !query.dataSource) {
-                        const queryUrl = ApiHelper.buildQueryFromSection(query, ApiClient.getCurrentUserId(), ApiClient.serverAddress(), continueWatchingSectionConfig.renderMode === 'Spotlight', { sectionType: continueWatchingSectionConfig.type });
-                        if (queryUrl && typeof queryUrl === 'string') {
-                            ApiHelper.invalidateCache(queryUrl);
-                        }
-                    }
-                }
-            }
-
-            // Invalidate cache for Continue Watching and Next Up section
-            if (continueWatchingAndNextUpSectionConfig && continueWatchingAndNextUpSectionConfig.enabled && continueWatchingAndNextUpSectionConfig.queries) {
-                for (const query of continueWatchingAndNextUpSectionConfig.queries) {
-                    if (query.path || !query.dataSource) {
-                        const queryUrl = ApiHelper.buildQueryFromSection(query, ApiClient.getCurrentUserId(), ApiClient.serverAddress(), continueWatchingAndNextUpSectionConfig.renderMode === 'Spotlight', { sectionType: continueWatchingAndNextUpSectionConfig.type });
-                        if (queryUrl && typeof queryUrl === 'string') {
-                            ApiHelper.invalidateCache(queryUrl);
-                        }
-                    }
-                }
-            }
-        }
-    }
+    
 
     /**
      * Main Entry Point
@@ -502,11 +446,14 @@
             await window.migrateHomeScreenConfig();
         }
         
-        const container = document.querySelector('.homePage:not(.hide) #homeTab .sections');
+        const container = document.querySelector(HOME_SECTIONS_SELECTOR);
         if (!container) {
             LOG('Home sections container not found');
+            connectHomeSectionsReadyObserver();
             return;
         }
+
+        disconnectHomeSectionsReadyObserver();
 
         // Create Kefin home sections container as a sibling of the Jellyfin sections container
 /*         let kefinHomeSectionsContainer = document.querySelector('.homePage:not(.hide) #homeTab .kefinHomeSectionsContainer');
@@ -522,10 +469,25 @@
         } */
 
         // If we've already initialized and Jellyfin has completed its render, avoid re-running
-        if (container.dataset.kefinHomeScreen) {
+        const kefinTweaksHomeSections = document.querySelectorAll('.homePage:not(.hide) #homeTab .homeSectionsContainer [data-section-id]');
+        if (kefinTweaksHomeSections.length > 0) {
             LOG('Home screen already initialized and Jellyfin has rendered');
             return;
         }
+
+        // Check if another page container exists with an already rendered KefinTweaks home screen
+/*         const otherPageContainer = document.querySelector('.pageContainer:not(.hide) .homeSectionsContainer[data-sections-rendered="true"]');
+        if (otherPageContainer) {
+            // Copy the existing home sections with [data-section-id] from that container into our target container instead of re-rendering it
+            const otherPageSections = otherPageContainer.querySelectorAll('[data-section-id]');
+            const homeScreenFragment = document.createDocumentFragment();
+            otherPageSections.forEach(section => {
+                homeScreenFragment.appendChild(section.cloneNode(true));
+            });
+            container.appendChild(homeScreenFragment);
+            LOG('Cloned existing home sections from a previous container');
+            return;
+        } */
 
         let performanceStartTime = performance.now();
         
@@ -579,13 +541,6 @@
         state.kefinNextUp = nextupSectionConfig?.enabled === true || continueWatchingAndNextUpSectionConfig?.enabled === true;
         state.kefinContinueWatching = continueWatchingSectionConfig?.enabled === true || continueWatchingAndNextUpSectionConfig?.enabled === true;
         state.kefinLatestMedia = recentlyAddedSectionConfig?.enabled === true;
-
-        // Setup event listener for UserDataChanged
-        if (window.ApiClient && window.ApiClient.addEventListener) {
-            window.ApiClient.addEventListener('userdatachanged', (event) => {
-                handleUserDataChanged(event, nextupSectionConfig, continueWatchingSectionConfig, continueWatchingAndNextUpSectionConfig);
-            });
-        }
 
         // Set up mutation observer BEFORE rendering, so we can react when Jellyfin renders home sections
 /*         const handleJellyfinRender = async () => {
@@ -1211,7 +1166,12 @@
             LOG('Re-rendering home sections from cache');
             sectionsToRender.push(...sectionCache.renderedSections);
         } else {
-            const sortedSections = [...sections].sort((a, b) => (a.order || 99) - (b.order || 99));
+            const sortedSections = [...sections].sort((a, b) => {
+                const orderA = (a.order !== undefined && a.order !== null) ? a.order : 99;
+                const orderB = (b.order !== undefined && b.order !== null) ? b.order : 99;
+                return orderA - orderB;
+            });
+    
             const sectionPromises = [];
 
             let performanceStartTime = performance.now();
@@ -1273,7 +1233,7 @@
         const homeConfig = await window.KefinHomeScreen.getConfig();
         const showStaleDataBeforeRefresh = homeConfig?.HOME_SETTINGS?.showStaleDataBeforeRefresh === true;
 
-        const targetContainer = container;
+        const targetContainer = container;   
 
         const renderStartTime = performance.now();
         await window.cardBuilder.renderProgressiveSections(targetContainer, sectionsToRender, {
@@ -1284,6 +1244,11 @@
         const renderEndTime = performance.now();
         const renderDuration = renderEndTime - renderStartTime;
         LOG(`Home Screen v3 Render progressive sections initialization time: ${renderDuration.toFixed(2)}ms`);
+        
+        // If MediaBar plugin is in use, call LayoutSync.update() to update the layout
+        if (typeof LayoutSync !== 'undefined' && LayoutSync && typeof LayoutSync.update === 'function') {
+            LayoutSync.update();
+        }
 
         // Allow deferred library-cache crawls to start (movies/series/people scheduleBootstrap)
         if (!state.homePaintedEventFired) {
@@ -1457,6 +1422,11 @@
         container.classList.add('loading-discovery');
         showDiscoveryLoadingIndicator();
 
+        // Chevron mode: nudge scroll so newly appended sections start entering the viewport
+        if (state.discoveryMode === 'chevron') {
+            window.scrollBy({ top: 100, behavior: 'smooth' });
+        }
+
         try {
             await new Promise(resolve => requestAnimationFrame(resolve));
             await new Promise(resolve => setTimeout(resolve, 0));
@@ -1496,11 +1466,6 @@
             state.discoveryBuffer = null;
             if (PRE_FETCH_DISCOVERY_DATA) {
                 ensureDiscoveryBuffer();
-            }
-
-            // Chevron mode: nudge scroll so newly appended sections start entering the viewport
-            if (state.discoveryMode === 'chevron') {
-                window.scrollBy({ top: 100, behavior: 'smooth' });
             }
 
         } catch (e) {
@@ -1851,6 +1816,7 @@
     };
 
     //enhanceHomeScreen();
+    connectHomeSectionsReadyObserver();
 
     if (window.KefinTweaksUtils && typeof window.KefinTweaksUtils.onViewPage === 'function') {
         window.KefinTweaksUtils.onViewPage((view, element, hash) => {
