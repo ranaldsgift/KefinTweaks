@@ -2047,17 +2047,22 @@
 	margin-bottom: 1rem;
 }
 
-.emby-scroller-container[data-card-format="Logo"] :not(.visualCardBox) .cardScalable,
-.emby-scroller-container[data-card-format="Logo"] :not(.visualCardBox) .cardPadder,
-.emby-scroller-container[data-card-format="Clear Art"] :not(.visualCardBox) .cardScalable,
-.emby-scroller-container[data-card-format="Clear Art"] :not(.visualCardBox) .cardPadder,
-.emby-scroller-container[data-card-format="Disc"] :not(.visualCardBox) .cardScalable,
-.emby-scroller-container[data-card-format="Disc"] :not(.visualCardBox) .cardPadder,
-.emby-scroller-container[data-section-id="liveTv-channels"] :not(.visualCardBox) .cardScalable,
-.emby-scroller-container[data-section-id="liveTv-channels"] :not(.visualCardBox) .cardPadder {
+.emby-scroller-container[data-card-format="Logo"]:not(.visualCardBox) .cardScalable,
+.emby-scroller-container[data-card-format="Logo"]:not(.visualCardBox) .cardPadder,
+.emby-scroller-container[data-card-format="Clear Art"]:not(.visualCardBox) .cardScalable,
+.emby-scroller-container[data-card-format="Clear Art"]:not(.visualCardBox) .cardPadder,
+.emby-scroller-container[data-card-format="Disc"]:not(.visualCardBox) .cardScalable,
+.emby-scroller-container[data-card-format="Disc"]:not(.visualCardBox) .cardPadder,
+.emby-scroller-container[data-section-id="liveTv-channels"]:not(.visualCardBox) .cardScalable,
+.emby-scroller-container[data-section-id="liveTv-channels"]:not(.visualCardBox) .cardPadder,
+html.sleekfin-main-ui .emby-scroller-container[data-card-format="Logo"]:not(.visualCardBox) .cardPadder,
+html.sleekfin-main-ui .emby-scroller-container[data-card-format="Clear Art"]:not(.visualCardBox) .cardPadder,
+html.sleekfin-main-ui .emby-scroller-container[data-card-format="Disc"]:not(.visualCardBox) .cardPadder,
+html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"]:not(.visualCardBox) .cardPadder {
 	background: transparent !important;
 	box-shadow: none !important;
 	border: none !important;
+	background-color: transparent !important;
 }
 
 /* Skeletons need a visible padder even when Logo/Clear Art/Disc force transparent cards */
