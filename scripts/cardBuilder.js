@@ -13,6 +13,10 @@
     const SPOTLIGHT_WINDOW_PREV = 4;
     const SPOTLIGHT_WINDOW_NEXT = 4;
 
+    const state = {
+        defaultCardBackgroundNumber: 1
+    }
+
     function getSpotlightWindowIndices(currentIndex, totalLength) {
         if (totalLength <= 9) {
             return Array.from({ length: totalLength }, (_, i) => i);
@@ -1898,10 +1902,11 @@
          * @param {boolean} overflowCard - Use overflow card classes instead of normal card classes
          * @param {string} cardFormat - Override card format: 'portrait', 'backdrop', 'thumb', or 'square'
          * @param {string} customFooterText - Optional custom footer text (e.g., air date for episodes)
+         * @param {boolean} useParentCard - When true, the parent item will be rendered as the card image and link
          * @returns {HTMLElement} - The constructed card element
          */
-        buildCard: function(item, overflowCard = false, cardFormat = null, customFooterText = null) {
-            return createJellyfinCardElement(item, overflowCard, cardFormat, customFooterText);
+        buildCard: function(item, overflowCard = false, cardFormat = null, customFooterText = null, useParentCard = false) {
+            return createJellyfinCardElement(item, overflowCard, cardFormat, customFooterText, useParentCard);
         },
         
         /**
@@ -3045,9 +3050,10 @@
      * @param {boolean} overflowCard - Use overflow card classes instead of normal card classes
      * @param {string} cardFormat - Override card format: 'portrait', 'backdrop', 'thumb', 'square', 'series thumb', 'series poster'
      * @param {string} customFooterText - Optional custom footer text (e.g., air date for episodes)
+     * @param {boolean} useParentCard - When true, the parent item will be rendered as the card image and link
      * @returns {HTMLElement} - The constructed card element
      */
-    function createJellyfinCardElement(item, overflowCard = false, cardFormat = null, customFooterText = null) {
+    function createJellyfinCardElement(item, overflowCard = false, cardFormat = null, customFooterText = null, useParentCard = false) {
         cardFormat = cardFormat?.toLowerCase() || null;
         if (cardFormat === 'button') {
             return createLibraryButtonElement(item);
@@ -3110,6 +3116,8 @@
                 imageParams = 'fillHeight=446&fillWidth=297';
             }
         }
+
+        const cardLinkId = useParentCard && (item.SeriesId || item.ParentId) ? (item.SeriesId || item.ParentId) : itemId;
         
         // Create the main card container
         const card = document.createElement('div');
@@ -3117,7 +3125,7 @@
         card.setAttribute('data-index', '0');
         card.setAttribute('data-isfolder', itemType === 'MusicAlbum' || itemType === 'Artist' || item.IsFolder ? 'true' : 'false');
         card.setAttribute('data-serverid', serverId);
-        if (!isCustomCard) card.setAttribute('data-id', itemId);
+        if (!isCustomCard) card.setAttribute('data-id', cardLinkId);
         if (isCustomCard) card.setAttribute('data-custom-card', 'true');
         card.setAttribute('data-type', itemType);
         card.setAttribute('data-retro-marquee', getRetroPosterMarqueeLabel(item));
@@ -3184,7 +3192,7 @@
             libraryUrl = buildCollectionFolderHref(item, serverId, { useHtmlExtension: true }) || '';
         }
 
-        let cardUrl = item.cardUrl || libraryUrl || `#/details?id=${itemId}&serverId=${serverId}`;
+        let cardUrl = item.cardUrl || libraryUrl || `#/details?id=${cardLinkId}&serverId=${serverId}`;
 
         if (!item.cardUrl && itemType === 'Genre') {
             const parentParam = item.ParentId ? `&parentId=${item.ParentId}` : '';
@@ -3212,7 +3220,13 @@
                 imageUrl = `${item.posterUrl || item.imageUrl || item.thumbUrl || item.squareUrl}`;
             }
         } else if (cardFormat === 'backdrop') {
-            if (item.BackdropImageTags[0]) {
+            if (useParentCard && item.ParentBackdropImageTags && item.ParentBackdropImageTags[0]) {
+                imageUrl = `${serverAddress}/Items/${item.ParentBackdropItemId}/Images/Backdrop?${imageParams}&quality=96&tag=${item.ParentBackdropImageTags[0]}`;
+            } else if (useParentCard && item.ParentThumbImageTag) {
+                imageUrl = `${serverAddress}/Items/${item.ParentThumbItemId}/Images/Thumb?${imageParams}&quality=96&tag=${item.ParentThumbImageTag}`;
+            } else if (useParentCard && item.SeriesPrimaryImageTag) {
+                imageUrl = `${serverAddress}/Items/${item.SeriesId}/Images/Primary?${imageParams}&quality=96&tag=${item.SeriesPrimaryImageTag}`;
+            } else if (item.BackdropImageTags[0]) {
                 imageUrl = `${serverAddress}/Items/${item.Id}/Images/Backdrop?${imageParams}&quality=96&tag=${item.BackdropImageTags[0]}`;
             } else if (item.ParentBackdropImageTags && item.ParentBackdropImageTags[0]) {
                 imageUrl = `${serverAddress}/Items/${item.ParentBackdropItemId}/Images/Backdrop?${imageParams}&quality=96&tag=${item.ParentBackdropImageTags[0]}`;
@@ -3222,7 +3236,13 @@
                 imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.ImageTags?.Primary}`;
             }
         } else if (cardFormat === 'square') {
-            if (item.Type === 'Season' || item.Type === 'Series' || item.Type === 'Movie') {
+            if (useParentCard && item.ParentBackdropImageTags && item.ParentBackdropImageTags[0]) {
+                imageUrl = `${serverAddress}/Items/${item.ParentBackdropItemId}/Images/Backdrop?${imageParams}&quality=96&tag=${item.ParentBackdropImageTags[0]}`;
+            } else if (useParentCard && item.ParentThumbImageTag) {
+                imageUrl = `${serverAddress}/Items/${item.ParentThumbItemId}/Images/Thumb?${imageParams}&quality=96&tag=${item.ParentThumbImageTag}`;
+            } else if (useParentCard && item.SeriesPrimaryImageTag) {
+                imageUrl = `${serverAddress}/Items/${item.SeriesId}/Images/Primary?${imageParams}&quality=96&tag=${item.SeriesPrimaryImageTag}`;
+            } else if (item.Type === 'Season' || item.Type === 'Series' || item.Type === 'Movie') {
                 imageUrl = item.BackdropImageTags && item.BackdropImageTags[0] ? `${serverAddress}/Items/${item.Id}/Images/Backdrop?${imageParams}&quality=96&tag=${item.BackdropImageTags[0]}` : item.ImageTags?.Primary ? `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.ImageTags?.Primary}` : '';
             } else if (item.ImageTags?.Primary) {
                 imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.ImageTags?.Primary}`;
@@ -3242,7 +3262,7 @@
                 imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.PrimaryImageTag}`;
             } 
         } else if (cardFormat === 'portrait' || cardFormat === 'poster') {
-            if (item.Type === 'Episode' && item.SeriesPrimaryImageTag) {
+            if ((useParentCard || item.Type === 'Episode') && item.SeriesPrimaryImageTag) {
                 imageUrl = `${serverAddress}/Items/${item.SeriesId}/Images/Primary?${imageParams}&quality=96&tag=${item.SeriesPrimaryImageTag}`;                
             } else if (item.ImageTags?.Primary) {
                 imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.ImageTags?.Primary}`;
@@ -3270,7 +3290,7 @@
                 imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.ImageTags.Primary}`;
             }
         } else if (cardFormat === 'thumb') {
-            if (item.Type === 'Episode') {
+            if (item.Type === 'Episode' && !useParentCard) {
                 if (item.ImageTags?.Primary) {
                     imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.ImageTags.Primary}`;
                 } else if (item.PrimaryImageTag) {
@@ -3284,6 +3304,10 @@
                 } else if (item.SeriesPrimaryImageTag) {
                     imageUrl = `${serverAddress}/Items/${item.SeriesId}/Images/Primary?${imageParams}&quality=96&tag=${item.SeriesPrimaryImageTag}`;
                 }
+            } else if (useParentCard && item.ParentThumbImageTag) {
+                imageUrl = `${serverAddress}/Items/${item.ParentThumbItemId}/Images/Thumb?${imageParams}&quality=96&tag=${item.ParentThumbImageTag}`;
+            } else if (useParentCard && item.ParentBackdropImageTags && item.ParentBackdropImageTags[0]) {
+                imageUrl = `${serverAddress}/Items/${item.ParentBackdropItemId}/Images/Backdrop?${imageParams}&quality=96&tag=${item.ParentBackdropImageTags[0]}`;
             } else if (item.ImageTags?.Thumb) {
                 // Prefer explicit thumb on the item
                 imageUrl = `${serverAddress}/Items/${item.Id}/Images/Thumb?${imageParams}&quality=96&tag=${item.ImageTags?.Thumb}`;
@@ -3352,9 +3376,13 @@
         // Card image container
         const cardImageContainer = document.createElement('a');
         cardImageContainer.href = cardUrl;
-        cardImageContainer.className = `cardImageContainer ${!imageUrl ? 'defaultCardBackground defaultCardBackground2' : ''} coveredImage cardContent itemAction lazy blurhashed lazy-image-fadein-fast`;
+        cardImageContainer.className = `cardImageContainer ${!imageUrl ? 'defaultCardBackground' + state.defaultCardBackgroundNumber++ : ''} coveredImage cardContent itemAction lazy blurhashed lazy-image-fadein-fast`;
         cardImageContainer.setAttribute('data-action', 'link');
         cardImageContainer.setAttribute('aria-label', item.Name || 'Unknown');
+
+        if (state.defaultCardBackgroundNumber > 5) {
+            state.defaultCardBackgroundNumber = 1;
+        }
         
         // No image - add icon as inner element
         if (!imageUrl) {
@@ -6136,8 +6164,9 @@
         const itemsContainer = createItemsSliderElement();
 
         // Add items to container
+        const useParentCard = !!sectionConfig?.useParentCard;
         items.forEach((item, index) => {
-            const card = createJellyfinCardElement(item, overflowCard, cardFormat, item.cardFooter);
+            const card = createJellyfinCardElement(item, overflowCard, cardFormat, item.cardFooter, useParentCard);
             card.setAttribute('data-index', index);
             itemsContainer.appendChild(card);
         });
@@ -6945,10 +6974,10 @@
         });
     }
 
-    function appendCardsForItems(itemsContainer, items, overflowCard, cardFormat, startIndex = 0) {
+    function appendCardsForItems(itemsContainer, items, overflowCard, cardFormat, startIndex = 0, useParentCard = false) {
         const cards = [];
         items.forEach((item, offset) => {
-            const card = createJellyfinCardElement(item, overflowCard, cardFormat, item.cardFooter);
+            const card = createJellyfinCardElement(item, overflowCard, cardFormat, item.cardFooter, useParentCard);
             card.setAttribute('data-index', String(startIndex + offset));
             itemsContainer.appendChild(card);
             cards.push(card);
@@ -7017,7 +7046,7 @@
             if (id && !cardById.has(id)) cardById.set(id, card);
         });
 
-        const freshIds = items.map((item) => item?.Id).filter(Boolean);
+        const freshIds = sectionConfig?.useParentCard ? items.map((item) => item?.ParentId || item?.SeriesId || item?.Id).filter(Boolean) : items.map((item) => item?.Id).filter(Boolean);
         const freshSet = new Set(freshIds);
         const outgoing = paintedCards.filter((card) => !freshSet.has(card.getAttribute('data-id')));
         const inserted = [];
@@ -7038,7 +7067,7 @@
                 return;
             }
 
-            const card = createJellyfinCardElement(item, overflowCard, cardFormat, item.cardFooter);
+            const card = createJellyfinCardElement(item, overflowCard, cardFormat, item.cardFooter, !!sectionConfig?.useParentCard);
             if (nextNode) itemsContainer.insertBefore(card, nextNode);
             else itemsContainer.appendChild(card);
             inserted.push(card);
@@ -7146,8 +7175,9 @@
                 fragment.appendChild(button);
             });
         } else {
+            const useParentCard = !!sectionConfig?.useParentCard;
             items.forEach((item, index) => {
-                const card = createJellyfinCardElement(item, overflowCard, cardFormat, item.cardFooter);
+                const card = createJellyfinCardElement(item, overflowCard, cardFormat, item.cardFooter, useParentCard);
                 card.setAttribute('data-index', String(index));
                 fragment.appendChild(card);
             });
@@ -7256,6 +7286,72 @@
         }
     }
 
+    function getDismissEmptySectionTimerMs() {
+        const raw = window.KefinTweaksConfig?.homeScreenConfig?.HOME_SETTINGS?.dismissEmptySectionTimer
+            ?? window.KefinHomeConfig2?.HOME_SETTINGS?.dismissEmptySectionTimer
+            ?? 0;
+        const n = Number(raw);
+        return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+    }
+
+    /**
+     * Show "No items found" at locked section height, then fade and remove.
+     * Used when progressive enhance resolves to an empty item list and the timer is > 0.
+     */
+    function dismissEmptyProgressiveSection(sectionElement, { holdMs = 1000 } = {}) {
+        if (!sectionElement || !sectionElement.isConnected) return;
+        if (sectionElement.dataset.emptyDismissing === 'true') return;
+
+        sectionElement.dataset.emptyDismissing = 'true';
+        const lockedHeight = Math.max(sectionElement.offsetHeight, 0);
+        if (lockedHeight > 0) {
+            sectionElement.style.minHeight = `${lockedHeight}px`;
+        }
+
+        const isSpotlight = sectionElement.classList.contains('spotlight-section')
+            || !!sectionElement.querySelector('.spotlight-items-container, .skeleton-spotlight-item');
+
+        const message = document.createElement('div');
+        message.className = 'cardbuilder-empty-message';
+        message.textContent = 'No items found';
+
+        if (isSpotlight) {
+            const itemsContainer = sectionElement.querySelector('.spotlight-items-container');
+            if (itemsContainer) {
+                itemsContainer.innerHTML = '';
+                itemsContainer.appendChild(message);
+            } else {
+                const body = sectionElement.querySelector('.spotlight-banner-container') || sectionElement;
+                Array.from(body.children).forEach((child) => {
+                    if (!child.classList.contains('spotlight-section-title-container')
+                        && !child.classList.contains('sectionTitleContainer')) {
+                        child.remove();
+                    }
+                });
+                body.appendChild(message);
+            }
+        } else {
+            const itemsContainer = sectionElement.querySelector('.itemsContainer');
+            if (itemsContainer) {
+                itemsContainer.innerHTML = '';
+                itemsContainer.appendChild(message);
+            } else {
+                sectionElement.appendChild(message);
+            }
+        }
+
+        const hold = Math.max(0, Number(holdMs) || 0);
+        setTimeout(() => {
+            if (!sectionElement.isConnected) return;
+            sectionElement.classList.add('cardbuilder-items-fade');
+            sectionElement.offsetHeight;
+            sectionElement.classList.add('is-hidden');
+            runAfterTransition(sectionElement, 320, () => {
+                sectionElement.remove();
+            });
+        }, hold);
+    }
+
     function hasSectionDeferredData(result) {
         if (!result) return false;
         if (typeof result.ensureData === 'function') return true;
@@ -7300,7 +7396,12 @@
             const hasSkeletonTitle = !!sectionElement.querySelector('.skeleton-section-title');
 
             if (items.length === 0) {
-                sectionElement.remove();
+                const holdMs = getDismissEmptySectionTimerMs();
+                if (holdMs > 0) {
+                    dismissEmptyProgressiveSection(sectionElement, { holdMs });
+                } else {
+                    sectionElement.remove();
+                }
                 return;
             }
 
@@ -7320,7 +7421,7 @@
                     : Array.from(sectionElement.querySelectorAll('.spotlight-item[data-id]:not(.skeleton-spotlight-item)'))
                         .map((el) => el.getAttribute('data-id'))
                         .filter(Boolean);
-                const freshIds = items.map((item) => item.Id).filter(Boolean);
+                const freshIds = sectionConfig?.useParentCard ? items.map((item) => item?.ParentId || item?.SeriesId || item?.Id).filter(Boolean) : items.map((item) => item?.Id).filter(Boolean);
                 const match = classifyIdSequence(paintedIds, freshIds);
                 if (match.type === 'perfect') {
                     markSectionEnhanced(sectionElement, sectionConfig);
@@ -7334,7 +7435,7 @@
 
             if (!isSkeleton && !isSpotlight) {
                 const paintedIds = getPaintedCardIds(sectionElement);
-                const freshIds = items.map((item) => item.Id).filter(Boolean);
+                const freshIds = sectionConfig?.useParentCard ? items.map((item) => item?.ParentId || item?.SeriesId || item?.Id).filter(Boolean) : items.map((item) => item?.Id).filter(Boolean);
                 const match = classifyIdSequence(paintedIds, freshIds);
 
                 if (match.type === 'perfect') {

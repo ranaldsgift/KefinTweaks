@@ -2237,6 +2237,12 @@
                 <div class="hsc-settings-span-2">
                     ${hscToggleCard('home-ensureThumbsForPopularTVNetworks', homeSettings.ensureThumbsForPopularTVNetworks === true, 'Require Studio Thumbs', D)}
                 </div>
+                <div class="hsc-settings-span-2">
+                    ${buildTextInput('home-dismissEmptySectionTimer', homeSettings.dismissEmptySectionTimer ?? 0, 'Empty Section Dismiss Timer (ms)', 'number')}
+                    <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-top: 0.35em;">
+                        When a section loads with no items: <code>0</code> removes it immediately. Any other value shows “No items found” for that many milliseconds, then fades the section out.
+                    </div>
+                </div>
             </div>
             <div class="hsc-settings-group" style="${settingsGroupStyle}">
                 <div class="listItemBodyText" style="font-weight: 500; font-size: 1.1em;">Top People</div>
@@ -2420,6 +2426,7 @@
             || root.querySelector('#userHome-inlineConfigure')
             || root.querySelector('#libraryCache-mdblistApiKey')
             || root.querySelector('#home-minPeopleAppearancesTotal')
+            || root.querySelector('#home-dismissEmptySectionTimer')
             || root.querySelector('#home-loadPeopleEpisodeData')) {
             const prevLoadPeopleEpisodeData = currentConfig.HOME_SETTINGS?.loadPeopleEpisodeData === true;
             currentConfig.SEASONAL_THEME_SETTINGS = {
@@ -2433,11 +2440,13 @@
                         : season.enabled
                 }))
             };
+            const dismissEmptyRaw = parseInt(root.querySelector('#home-dismissEmptySectionTimer')?.value ?? '0', 10);
             currentConfig.HOME_SETTINGS = {
                 ...(currentConfig.HOME_SETTINGS || {}),
                 fadeInSections: root.querySelector('#home-fadeInSections')?.checked === true,
                 ensureThumbsForPopularTVNetworks: root.querySelector('#home-ensureThumbsForPopularTVNetworks')?.checked === true,
                 showStaleDataBeforeRefresh: root.querySelector('#home-showStaleDataBeforeRefresh')?.checked === true,
+                dismissEmptySectionTimer: Number.isFinite(dismissEmptyRaw) && dismissEmptyRaw > 0 ? dismissEmptyRaw : 0,
                 minPeopleAppearancesTotal: parseInt(root.querySelector('#home-minPeopleAppearancesTotal')?.value || '10', 10),
                 minPeopleAppearancesMovies: parseInt(root.querySelector('#home-minPeopleAppearancesMovies')?.value || '10', 10),
                 minPeopleAppearancesSeries: parseInt(root.querySelector('#home-minPeopleAppearancesSeries')?.value || '10', 10),
