@@ -1443,7 +1443,7 @@
                         }
                     },
                     name: 'Starring {Person}',
-                    caption: 'because you recently watched {Title}',
+                    caption: 'Because you recently watched {Title}',
                     enabled: true,
                     userConfigurable: true,
                     itemLimit: 20,
@@ -1479,7 +1479,7 @@
                         }
                     },
                     name: 'Directed by {Person}',
-                    caption: 'because you recently watched {Title}',
+                    caption: 'Because you recently watched {Title}',
                     enabled: true,
                     userConfigurable: true,
                     itemLimit: 20,
@@ -1515,7 +1515,7 @@
                         }
                     },
                     name: 'Written by {Person}',
-                    caption: 'because you recently watched {Title}',
+                    caption: 'Because you recently watched {Title}',
                     enabled: true,
                     userConfigurable: true,
                     itemLimit: 20,
@@ -2048,7 +2048,7 @@
                         }
                     },
                     name: 'Starring {Person}',
-                    caption: 'because you recently watched {Title}',
+                    caption: 'Because you recently watched {Title}',
                     enabled: true,
                     userConfigurable: true,
                     itemLimit: 20,
@@ -2084,7 +2084,7 @@
                         }
                     },
                     name: 'Directed by {Person}',
-                    caption: 'because you recently watched {Title}',
+                    caption: 'Because you recently watched {Title}',
                     enabled: true,
                     userConfigurable: true,
                     itemLimit: 20,
@@ -2120,7 +2120,7 @@
                         }
                     },
                     name: 'Written by {Person}',
-                    caption: 'because you recently watched {Title}',
+                    caption: 'Because you recently watched {Title}',
                     enabled: true,
                     userConfigurable: true,
                     itemLimit: 20,
@@ -2163,7 +2163,7 @@
                         }
                     },
                     name: 'Guest starring {Person}',
-                    caption: 'because you recently watched {Title}',
+                    caption: 'Because you recently watched {Title}',
                     enabled: true,
                     userConfigurable: true,
                     itemLimit: 20,
@@ -2226,12 +2226,30 @@
         fadeInSections: false,
         ensureThumbsForPopularTVNetworks: false,
         showStaleDataBeforeRefresh: true,
+        dismissEmptySectionTimer: 0,
         minPeopleAppearancesTotal: 10,
         minPeopleAppearancesMovies: 10,
         minPeopleAppearancesSeries: 10,
         minPeopleAppearancesEpisodes: 10,
         maxPeopleCount: 100,
         loadPeopleEpisodeData: false,
+        categories: [
+            {
+                id: 'none',
+                name: 'None',
+                icon: 'home',
+            },
+            {
+                id: 'discovery', 
+                name: 'Discover',
+                icon: 'explore',
+            },
+            {
+                id: 'pinned',
+                name: 'Pinned',
+                icon: 'pin',
+            }
+        ]
     }
 
     const USER_HOME_SCREEN_SETTINGS = {

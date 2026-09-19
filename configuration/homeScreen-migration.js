@@ -567,7 +567,7 @@
         'writtenByWriterRecentlyWatched'
     ]);
 
-    const RECENTLY_WATCHED_CAPTION_DEFAULT = 'because you recently watched {Title}';
+    const RECENTLY_WATCHED_CAPTION_DEFAULT = 'Because you recently watched {Title}';
 
     const RECENTLY_WATCHED_NAME_DEFAULTS = {
         starringActorRecentlyWatched: 'Starring {Person}',
@@ -596,7 +596,7 @@
         let name = normalizeDiscoveryTemplatePlaceholders(match[1].trim());
         let captionRight = normalizeDiscoveryTemplatePlaceholders(match[2].trim());
         const caption = captionRight
-            ? `because you recently watched ${captionRight}`
+            ? `Because you recently watched ${captionRight}`
             : RECENTLY_WATCHED_CAPTION_DEFAULT;
         // Prefer canonical caption placeholder when right side is Movie/Title token only
         if (/^\{Title\}$/i.test(captionRight) || /^\[Movie\]$/i.test(match[2].trim())) {
