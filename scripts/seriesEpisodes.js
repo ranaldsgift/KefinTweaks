@@ -128,6 +128,7 @@
             enabled: true,
             order: 0,
             viewMoreUrl: buildSeasonViewMoreUrl(initialSeasonObj),
+            cardFormat: 'Thumb',
             overflowCard: true,
             ttl: EPISODES_CACHE_TTL,
             userConfigurable: false,
