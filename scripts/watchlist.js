@@ -24,6 +24,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	const localStorageCache = new window.LocalStorageCache();
 	
 	const WATCHLIST_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+	const WATCHLIST_URL = window.KefinTweaksUtils._watchlistUrl || '#/watchlist';
 
 	// Playback monitoring for watchlist cleanup
 	let playbackMonitorInitialized = false;
@@ -7091,6 +7092,12 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		});
 
 		function checkForEmptyWatchlist() {
+			const onWatchlistPage = window.location.pathname.includes(window.KefinTweaksUtils._watchlistUrl || '#/watchlist');
+			
+			if (!onWatchlistPage) {
+				return;
+			}
+
 			const visibleWatchlistSections = document.querySelectorAll('.libraryPage:not(.hide) .sections.watchlist');
 
 			visibleWatchlistSections.forEach((section) => {
@@ -7307,11 +7314,17 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			return _watchlistTabIndex;
 		}
 
+		const api = (typeof ApiClient !== 'undefined' && ApiClient) || window.ApiClient || null;
+		const serverAddress = api && (api._serverAddress || (typeof api.serverAddress === 'function' ? api.serverAddress() : null));
+		if (!api || !serverAddress) {
+			return _watchlistTabIndex;
+		}
+
 		const authHeader = apiHelper.getAuthHeader();
 
 		// Fetch the tab index as we do in addCustomMenuLink
 		try {
-			const response = await fetch(`${ApiClient._serverAddress}/CustomTabs/Config`, {
+			const response = await fetch(`${serverAddress}/CustomTabs/Config`, {
 				method: "GET",
 				headers: {
 					"Content-Type": "application/json",
@@ -7386,14 +7399,15 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	if (window.KefinTweaksUtils && window.KefinTweaksUtils.onViewPage) {
 		window.KefinTweaksUtils.onViewPage(async (view, element, hash) => {
 			const path = String(hash || '').split('?')[0];
-			if (path === '#/watchlist' || path.includes('#/home')) {
-				LOG('onViewPage: #/watchlist');
+			const watchlistPath =  window.KefinTweaksUtils._watchlistUrl || '#/watchlist';
+			if (path.includes(watchlistPath)) {
+				LOG('onViewPage: Watchlist');
 				renderWatchlist();
 			}
 		}, {
 			pages: []
 		});
-		LOG('Registered onViewPage handler for #/watchlist');
+		LOG('Registered onViewPage handler for Watchlist');
 	} else {
 		WARN('KefinTweaksUtils.onViewPage not available');
 	}
@@ -7408,7 +7422,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			'Watchlist',
 			'<div class="sections watchlist"></div>'
 		);
-		LOG('Registered custom page #/watchlist');
+		LOG('Registered custom page Watchlist');
 		return true;
 	}
 
@@ -7429,7 +7443,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 
 		// Major version of Jellyfin
 		const jellyfinVersion = await window.KefinTweaks.getJellyfinMajorVersion();
-		const isModernUI = document.querySelector('.MuiBox-root') !== null;
+		const isModernUI = document.querySelector('.MuiBox-root') !== null || localStorage.getItem('layout')?.length === 0;
 
 		// If watchlist tab index is null or undefined, add to top navigation
 		if (watchlistTabIndex === null || watchlistTabIndex === undefined || isModernUI) {
@@ -7451,8 +7465,15 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	}
 
 	function waitForUtilsAndRegisterWatchlist() {
-		const ready = () =>
-			window.KefinTweaksUtils?.addCustomPage && window.KefinTweaksUtils?.addCustomMenuLink;
+		const ready = () => {
+			if (!window.KefinTweaksUtils?.addCustomPage || !window.KefinTweaksUtils?.addCustomMenuLink) {
+				return false;
+			}
+			const api = (typeof ApiClient !== 'undefined' && ApiClient) || window.ApiClient || null;
+			if (!api) return false;
+			const serverAddress = api._serverAddress || (typeof api.serverAddress === 'function' ? api.serverAddress() : null);
+			return !!serverAddress;
+		};
 
 		const run = () => {
 			addCustomWatchlistPage();
@@ -7464,7 +7485,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			return;
 		}
 
-		LOG('Waiting for KefinTweaksUtils…');
+		LOG('Waiting for KefinTweaksUtils and ApiClient…');
 		const checkInterval = setInterval(() => {
 			if (ready()) {
 				clearInterval(checkInterval);
@@ -7475,7 +7496,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		setTimeout(() => {
 			clearInterval(checkInterval);
 			if (!ready()) {
-				WARN('KefinTweaksUtils not available after 10 seconds');
+				WARN('KefinTweaksUtils/ApiClient not available after 10 seconds');
 			}
 		}, 10000);
 	}
@@ -7927,6 +7948,10 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 
 	// Initialize the slides container observer
 	monitorSlidesContainer();
+
+	window.debugWatchlistUrl = function() {
+		LOG('Watchlist URL:', WATCHLIST_URL);
+	};
 
     // Debug functions for troubleshooting (available in console)
     window.debugWatchlistButtons = function() {
