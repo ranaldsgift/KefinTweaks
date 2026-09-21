@@ -1,39 +1,30 @@
 .docspinner {
-    contain: layout style size;
-    top: 6em;
-    right: calc(1em + 7px);
-    left: unset;
-    position: fixed;
-    width: 3em;
-    height: 3em;
-    z-index: 9999999;
-    margin: 0;
-    pointer-events: none;
+	contain: layout style size;
+	top: 6em;
+	right: calc(1em + 7px);
+	left: unset;
+	position: fixed;
+	width: 3em;
+	height: 3em;
+	z-index: 9999999;
+	margin: 0;
+	pointer-events: none;
 }
 
 /* Item Details Page */
 
 div#seriesScheduleSection {
-    order: 2;
+	order: 2;
 }
 
-.detailPageContent>* {
-    order: 1;
+.detailPageContent > * {
+	order: 1;
 }
 
 .commentsSection {
-    order: 3;
-}
-
-@media (max-width: 768px) {
-    .headerRight .btnRecommendations, 
-    .headerRight .btnAdmin, 
-    .headerRight .headerAppearanceButton,
-    .headerRight [data-kefin-custom-menu-top-right] {
-        display: none;
-    }
+	order: 3;
 }
 
 .itemBackdrop {
-    pointer-events: none;
+	pointer-events: none;
 }
