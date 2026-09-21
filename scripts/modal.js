@@ -48,6 +48,11 @@ window.ModalSystem = (function() {
         const useFixedSize = fixedSize === true
             || (fixedSize !== false && typeof window !== 'undefined' && window.innerWidth < 900);
 
+        let _showCloseButton = showCloseButton;
+        if (window.innerWidth < 900) {
+            _showCloseButton = true;
+        }
+
         // Create modal elements
         const backdrop = document.createElement('div');
         backdrop.className = 'dialogBackdrop dialogBackdropOpened';
@@ -72,41 +77,41 @@ window.ModalSystem = (function() {
 
         // Create header if title is provided
         let dialogHeader = null;
+        dialogHeader = document.createElement('div');
+        dialogHeader.className = 'formDialogHeader';
+        dialogHeader.style.display = 'flex';
+        dialogHeader.style.justifyContent = 'space-between';
+        dialogHeader.style.alignItems = 'center';
+        dialogHeader.style.padding = '1.25em 1.5em';
+        dialogHeader.style.borderBottom = '1px solid rgba(255,255,255,0.1)';
+        dialogHeader.style.flexShrink = '0';
+        
         if (title) {
-            dialogHeader = document.createElement('div');
-            dialogHeader.className = 'formDialogHeader';
-            dialogHeader.style.display = 'flex';
-            dialogHeader.style.justifyContent = 'space-between';
-            dialogHeader.style.alignItems = 'center';
-            dialogHeader.style.padding = '1.25em 1.5em';
-            dialogHeader.style.borderBottom = '1px solid rgba(255,255,255,0.1)';
-            dialogHeader.style.flexShrink = '0';
-
             const titleElement = document.createElement('h2');
             titleElement.style.margin = '0';
             titleElement.style.textAlign = 'left';
             titleElement.textContent = title;
             dialogHeader.appendChild(titleElement);
-
-            // Add close button if enabled
-            if (showCloseButton) {
-                const closeButton = document.createElement('button');
-                closeButton.setAttribute('is', 'paper-icon-button-light');
-                closeButton.className = 'btnCancel btnClose autoSize paper-icon-button-light';
-                closeButton.setAttribute('tabindex', '-1');
-                closeButton.title = 'Close';
-                closeButton.onclick = () => closeModal(id);
-
-                const closeIcon = document.createElement('span');
-                closeIcon.className = 'material-icons close';
-                closeIcon.setAttribute('aria-hidden', 'true');
-                closeButton.appendChild(closeIcon);
-
-                dialogHeader.appendChild(closeButton);
-            }
-
-            dialog.appendChild(dialogHeader);
         }
+
+        // Add close button if enabled
+        if (_showCloseButton) {
+            const closeButton = document.createElement('button');
+            closeButton.setAttribute('is', 'paper-icon-button-light');
+            closeButton.className = 'btnCancel btnClose autoSize paper-icon-button-light';
+            closeButton.setAttribute('tabindex', '-1');
+            closeButton.title = 'Close';
+            closeButton.onclick = () => closeModal(id);
+
+            const closeIcon = document.createElement('span');
+            closeIcon.className = 'material-icons close';
+            closeIcon.setAttribute('aria-hidden', 'true');
+            closeButton.appendChild(closeIcon);
+
+            dialogHeader.appendChild(closeButton);
+        }
+
+        dialog.appendChild(dialogHeader);
 
         // Create scrollable content area
         const dialogContent = document.createElement('div');
