@@ -241,10 +241,11 @@
      * @returns {string}
      */
     function getAuthHeaderForToken(token) {
-        const client = typeof ApiClient.applicationName === 'function' ? ApiClient.applicationName() : 'Jellyfin Web';
-        const device = typeof ApiClient.deviceName === 'function' ? ApiClient.deviceName() : (navigator.userAgent.includes('Chrome') ? 'Chrome' : 'Browser');
-        const deviceId = typeof ApiClient.deviceId === 'function' ? ApiClient.deviceId() : '';
-        const version = ApiClient._appVersion || ApiClient._serverVersion || '';
+        const api = (typeof ApiClient !== 'undefined' && ApiClient) || window.ApiClient || null;
+        const client = api && typeof api.applicationName === 'function' ? api.applicationName() : 'Jellyfin Web';
+        const device = api && typeof api.deviceName === 'function' ? api.deviceName() : (navigator.userAgent.includes('Chrome') ? 'Chrome' : 'Browser');
+        const deviceId = api && typeof api.deviceId === 'function' ? api.deviceId() : '';
+        const version = (api && (api._appVersion || api._serverVersion)) || '';
         const parts = [
             `Client="${encodeURIComponent(client)}"`,
             `Device="${encodeURIComponent(device)}"`,
