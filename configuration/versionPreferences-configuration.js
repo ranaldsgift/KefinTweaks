@@ -172,7 +172,7 @@
                 align-items: start;
                 height: calc(100% - 40px);
             }
-            @media (max-width: 900px) {
+            @media (max-width: 899px) {
                 .kefin-vp-lists-grid {
                     grid-template-columns: 1fr;
                 }
