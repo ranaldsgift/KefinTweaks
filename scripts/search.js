@@ -613,9 +613,9 @@
                     performSmartSearch((smartInput.value||'').trim(), internalType); 
                 }
             });
-            smartCoreBtn.addEventListener('click', ()=>setSearchType('videos'));
-            smartMusicBtn.addEventListener('click', ()=>setSearchType('music'));
-            smartBooksBtn.addEventListener('click', ()=>setSearchType('books'));
+            smartCoreBtn?.addEventListener('click', ()=>setSearchType('videos'));
+            smartMusicBtn?.addEventListener('click', ()=>setSearchType('music'));
+            smartBooksBtn?.addEventListener('click', ()=>setSearchType('books'));
             smartAllBtn.addEventListener('click', ()=>setSearchType('all'));
             if (smartRequestBtn) {
                 smartRequestBtn.addEventListener('click', ()=>setSearchType('request'));
