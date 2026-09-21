@@ -2049,16 +2049,24 @@
 
 .emby-scroller-container[data-card-format="Logo"]:not(.visualCardBox) .cardScalable,
 .emby-scroller-container[data-card-format="Logo"]:not(.visualCardBox) .cardPadder,
+.emby-scroller-container[data-card-format="Logo"]:not(.visualCardBox) .cardBox,
 .emby-scroller-container[data-card-format="Clear Art"]:not(.visualCardBox) .cardScalable,
 .emby-scroller-container[data-card-format="Clear Art"]:not(.visualCardBox) .cardPadder,
+.emby-scroller-container[data-card-format="Clear Art"]:not(.visualCardBox) .cardBox,
 .emby-scroller-container[data-card-format="Disc"]:not(.visualCardBox) .cardScalable,
 .emby-scroller-container[data-card-format="Disc"]:not(.visualCardBox) .cardPadder,
+.emby-scroller-container[data-card-format="Disc"]:not(.visualCardBox) .cardBox,
 .emby-scroller-container[data-section-id="liveTv-channels"]:not(.visualCardBox) .cardScalable,
 .emby-scroller-container[data-section-id="liveTv-channels"]:not(.visualCardBox) .cardPadder,
+.emby-scroller-container[data-section-id="liveTv-channels"]:not(.visualCardBox) .cardBox,
 html.sleekfin-main-ui .emby-scroller-container[data-card-format="Logo"]:not(.visualCardBox) .cardPadder,
 html.sleekfin-main-ui .emby-scroller-container[data-card-format="Clear Art"]:not(.visualCardBox) .cardPadder,
 html.sleekfin-main-ui .emby-scroller-container[data-card-format="Disc"]:not(.visualCardBox) .cardPadder,
-html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"]:not(.visualCardBox) .cardPadder {
+html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"]:not(.visualCardBox) .cardPadder,
+html.sleekfin-main-ui .emby-scroller-container[data-card-format="Logo"]:not(.visualCardBox) .cardBox,
+html.sleekfin-main-ui .emby-scroller-container[data-card-format="Clear Art"]:not(.visualCardBox) .cardBox,
+html.sleekfin-main-ui .emby-scroller-container[data-card-format="Disc"]:not(.visualCardBox) .cardBox,
+html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"]:not(.visualCardBox) .cardBox {
 	background: transparent !important;
 	box-shadow: none !important;
 	border: none !important;
@@ -2192,88 +2200,89 @@ html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"
 	display: inline-block;
 }
 
-/* .spotlight-section .spotlight-item:has(.spotlight-background-layer-center) .spotlight-background-layer {
-    width: 37.5%;
+.spotlight-section .spotlight-item:has(.spotlight-background-layer-center) .spotlight-background-layer {
+	width: 37.5%;
 }
 
 .emby-scroller-container:has([data-direction="right"]:disabled):has([data-direction="left"]:disabled) button.show-all-button {
-    display: none;    
+	display: none;
 }
 
 .emby-scroller-container .emby-scrollbuttons:has([data-direction="right"]:disabled):has([data-direction="left"]:disabled) {
-    display: none;
+	display: none;
 }
 
 .spotlight-truncated-list:has(.spotlight-truncated-list-tooltip) {
-    overflow: visible;
+	overflow: visible;
 }
 
 .emby-scroller-container:has(.itemsContainer[data-layout="grid"]) .emby-scrollbuttons {
-    display: none !important;
+	display: none !important;
 }
 
 .emby-scroller-container:has(.itemsContainer[data-layout="grid"]) .show-all-button {
-    display: initial !important;
+	display: initial !important;
 }
 
 :has(.spotlight-section[data-layout="Borderless"]) .homeSectionsContainer > *:not(.spotlight-section) {
-    z-index: 1;
+	z-index: 1;
 }
 
-.spotlight-section[data-size="full"] .spotlight-truncated-list.itemDetailsGroup:has(>.detailsGroupItem),
-.spotlight-section[data-size="full"] .spotlight-truncated-list.sectionTabs:has(>.emby-tab-button) {
-    font-size: large;
-    display: flex;
-    align-items: center;
-    align-self: start;
+.spotlight-section[data-size="full"] .spotlight-truncated-list.itemDetailsGroup:has(> .detailsGroupItem),
+.spotlight-section[data-size="full"] .spotlight-truncated-list.sectionTabs:has(> .emby-tab-button) {
+	font-size: large;
+	display: flex;
+	align-items: center;
+	align-self: start;
 }
 
-.spotlight-section .itemDetailsGroup:has(.detailsGroupItem:not(.hide)), .spotlight-section .sectionTabs:not(.spotlight-section-title):has(.emby-tab-button:not(.hide)) {
-    margin: 0px !important;
-    padding: 0px !important;
-    width: initial !important;
-    min-width: initial !important;
+.spotlight-section .itemDetailsGroup:has(.detailsGroupItem:not(.hide)),
+.spotlight-section .sectionTabs:not(.spotlight-section-title):has(.emby-tab-button:not(.hide)) {
+	margin: 0px !important;
+	padding: 0px !important;
+	width: initial !important;
+	min-width: initial !important;
 }
 
 .spotlight-section:not(.hide) span.emby-tab-button.emby-tab-button-active:not(:has(a)) {
-    cursor: default;
+	cursor: default;
 }
 
 .emby-scroller-container:has(.itemsContainer[data-layout="grid"]) button.show-all-button::after {
-    content: 'Collapse';
+	content: "Collapse";
 }
 
 .layout-mobile .emby-scroller-container:has(.itemsContainer[data-layout="grid"]) button.show-all-button::after {
-    content: 'keyboard_arrow_up';
+	content: "keyboard_arrow_up";
 }
 
 .layout-mobile .spotlight-section .spotlight-section-title.sectionTabs:has(.emby-tab-button:not(.hide)) {
-    justify-self: center;
-    display: flex !important;
-    justify-content: center;
+	justify-self: center;
+	display: flex !important;
+	justify-content: center;
 }
 
 .layout-mobile .spotlight-section .spotlight-section-title.sectionTabs:has(.emby-tab-button:not(.hide)) > * {
-    display: block !important;
+	display: block !important;
 }
 
 .layout-mobile .spotlight-section[data-hide-section-name="true"] .spotlight-section-title,
 .layout-mobile .spotlight-section[data-hide-section-name="true"] .spotlight-section-title.sectionTabs,
 .spotlight-section[data-hide-section-name="true"] .spotlight-section-title.sectionTabs {
-    display: none !important;
+	display: none !important;
 }
 
 .emby-scroller-container:has(.emby-scrollbuttons-button:not(.hide)) button.show-all-button {
-    display: flex;
+	display: flex;
 }
 
 .layout-mobile .emby-scroller-container:has(.overflowPortraitCard:nth-child(4)) button.show-all-button,
 .layout-mobile .emby-scroller-container:has(.overflowBackdropCard:nth-child(3)) button.show-all-button {
-    display: flex;
+	display: flex;
 }
 .emby-scroller-container:has([data-custom-card="true"]) .section-refresh-button {
-    display: none;
-} */
+	display: none;
+}
 
 /* Section-level card title presentation */
 .verticalSection .cardText,

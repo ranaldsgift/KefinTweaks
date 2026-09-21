@@ -75,7 +75,8 @@
         kefinContinueWatching: false,
         kefinLatestMedia: false,
         jellyfinOrders: {},
-        homePaintedEventFired: false
+        homePaintedEventFired: false,
+        isRenderingHome: false
     };
 
     async function fetchDisplayPreferences() {
@@ -427,10 +428,13 @@
      * Main Entry Point
      */
     async function enhanceHomeScreen() {
-        LOG('Login detected, continuing with home screen initialization');
         LOG('Initializing Home Screen v3...');
         performanceTimer.loadTimeStart = performance.now();
         performanceMetrics.initialRenderStart = performance.now();
+
+        mountCreateSectionButton();
+        mountCategoryRail();
+        syncHomeScreenChromeVisibility();
 
         // Reset cache/metrics for a new initialization cycle
         sectionCache.renderedSections = [];
@@ -476,7 +480,7 @@
         }
 
         // Check if another page container exists with an already rendered KefinTweaks home screen
-/*         const otherPageContainer = document.querySelector('.pageContainer:not(.hide) .homeSectionsContainer[data-sections-rendered="true"]');
+        const otherPageContainer = document.querySelector('.pageContainer:not(.hide) .homeSectionsContainer[data-sections-rendered="true"]');
         if (otherPageContainer) {
             // Copy the existing home sections with [data-section-id] from that container into our target container instead of re-rendering it
             const otherPageSections = otherPageContainer.querySelectorAll('[data-section-id]');
@@ -487,7 +491,7 @@
             container.appendChild(homeScreenFragment);
             LOG('Cloned existing home sections from a previous container');
             return;
-        } */
+        }
 
         let performanceStartTime = performance.now();
         
@@ -529,6 +533,8 @@
             filteredHomeSections = userHomeConfig.applyUserSectionOverrides(filteredHomeSections, homeScreen, { serverSectionsById });
             filteredHomeSections = filteredHomeSections.filter(section => section.enabled !== false);
         }
+
+        updatePinnedCategoryAvailability(filteredHomeSections, homeScreen);
 
         performanceEndTime = performance.now();
         performanceDuration = performanceEndTime - performanceStartTime;
@@ -605,6 +611,12 @@
         
         LOG('Initializing Discovery Sections...');
         setupDiscoveryInteraction(container);
+
+        try {
+            refreshHomeCategoryChrome();
+        } catch (err) {
+            ERR('Failed to refresh home category chrome after home render:', err);
+        }
 
         /* // If Jellyfin hasn't rendered after 5 seconds, assume it won't and clean up the observer
         setTimeout(() => {
@@ -1147,9 +1159,6 @@
             return;
         }
 
-        // Skip if we've already rendered into this container for this cycle and we're not explicitly re-using the cache
-        if (container.dataset.sectionsRendered && !useCache) return;
-
         // Check if children with [data-section-id] are present
         const children = container.children;
         const hasSections = Array.from(children).some(child => child.dataset && child.dataset.sectionId);
@@ -1159,6 +1168,8 @@
         }
 
         container.dataset.sectionsRendered = 'true';
+        applyActiveHomeCategory(homeChromeActiveCategory || 'none');
+        syncHomeScreenChromeVisibility();
 
         const sectionsToRender = [];
 
@@ -1233,34 +1244,47 @@
         const homeConfig = await window.KefinHomeScreen.getConfig();
         const showStaleDataBeforeRefresh = homeConfig?.HOME_SETTINGS?.showStaleDataBeforeRefresh === true;
 
-        const targetContainer = container;   
+        const targetContainer = container;
 
-        const renderStartTime = performance.now();
-        await window.cardBuilder.renderProgressiveSections(targetContainer, sectionsToRender, {
-            waitForContainerClass: 'homeSectionsContainer',
-            enhanceOnVisible: true,
-            showStaleDataBeforeRefresh
-        });
-        const renderEndTime = performance.now();
-        const renderDuration = renderEndTime - renderStartTime;
-        LOG(`Home Screen v3 Render progressive sections initialization time: ${renderDuration.toFixed(2)}ms`);
-        
-        // If MediaBar plugin is in use, call LayoutSync.update() to update the layout
-        if (typeof LayoutSync !== 'undefined' && LayoutSync && typeof LayoutSync.update === 'function') {
-            LayoutSync.update();
+        const kefinSections = Array.from(children).some(child => child.dataset && child.dataset.sectionId);
+        if (kefinSections) {
+            LOG('Sections already rendered, skipping');
+            return;
         }
 
-        // Allow deferred library-cache crawls to start (movies/series/people scheduleBootstrap)
-        if (!state.homePaintedEventFired) {
-            state.homePaintedEventFired = true;
-            try {
-                document.dispatchEvent(new CustomEvent('kefinTweaksHomePainted'));
-            } catch (_) { /* ignore */ }
-        }
+        if (!state.isRenderingHome && !kefinSections) {
+            const renderStartTime = performance.now();
+            state.isRenderingHome = true;
 
-        // Check if target container is homeSectionsContainer
-        if (!targetContainer.classList.contains('homeSectionsContainer')) {
-            targetContainer.dataset.sectionsPrerendered = 'true';
+            await window.cardBuilder.renderProgressiveSections(targetContainer, sectionsToRender, {
+                waitForContainerClass: 'homeSectionsContainer',
+                enhanceOnVisible: true,
+                showStaleDataBeforeRefresh
+            });
+
+            state.isRenderingHome = false;
+
+            const renderEndTime = performance.now();
+            const renderDuration = renderEndTime - renderStartTime;
+            LOG(`Home Screen v3 Render progressive sections initialization time: ${renderDuration.toFixed(2)}ms`);
+            
+            // If MediaBar plugin is in use, call LayoutSync.update() to update the layout
+            if (typeof LayoutSync !== 'undefined' && LayoutSync && typeof LayoutSync.update === 'function') {
+                LayoutSync.update();
+            }
+
+            // Allow deferred library-cache crawls to start (movies/series/people scheduleBootstrap)
+            if (!state.homePaintedEventFired) {
+                state.homePaintedEventFired = true;
+                try {
+                    document.dispatchEvent(new CustomEvent('kefinTweaksHomePainted'));
+                } catch (_) { /* ignore */ }
+            }
+    
+            // Check if target container is homeSectionsContainer
+            if (!targetContainer.classList.contains('homeSectionsContainer')) {
+                targetContainer.dataset.sectionsPrerendered = 'true';
+            }
         }
     }
 
@@ -1301,6 +1325,10 @@
      * Ensures discovery buffer is populated (pre-fetches next group)
      */
     async function ensureDiscoveryBuffer() {
+        if (!isDiscoveryAllowedForActiveCategory()) {
+            LOG('Discovery buffer skipped: active category does not allow discovery');
+            return state.discoveryBuffer;
+        }
         if (state.ensuringDiscoveryBuffer) {
             LOG('Already ensuring discovery buffer...');
 
@@ -1410,6 +1438,11 @@
     async function renderNextDiscoveryGroup() {
         const container = document.querySelector('.libraryPage:not(.hide) .homeSectionsContainer');
         if (!container) return;
+
+        if (!isDiscoveryAllowedForActiveCategory()) {
+            LOG('Discovery render skipped: active category does not allow discovery');
+            return;
+        }
 
         // Single-flight: set synchronously before any await
         if (state.isRenderingDiscovery) return;
@@ -1808,15 +1841,327 @@
         await enhanceHomeScreen();
     }
 
+    const HOME_CHROME_CREATE_ID = 'kefin-home-create-section-btn';
+    const HOME_CHROME_CATEGORY_RAIL_ID = 'kefin-home-category-rail';
+    const HOME_CHROME_CATEGORY_STYLE_ID = 'kefin-home-category-filter-styles';
+    const HOME_CHROME_CLASSIC_RAIL_CLASSES = 'skinHeader skinHeader-withBackground emby-tab-button';
+    let homeChromeActiveCategory = 'none';
+    let homeChromeCreateMounted = false;
+    let homeChromeCategoryMounted = false;
+    let homeChromeHasPinnedContent = false;
+    let homeChromeVisibilityObserver = null;
+    let homeChromeMuiAppBarObserver = null;
+
+    function getHomeSettings() {
+        return window.KefinTweaksConfig?.homeScreenConfig?.HOME_SETTINGS
+            || window.KefinHomeConfig2?.HOME_SETTINGS
+            || {};
+    }
+
+    function getConfiguredCategories() {
+        const defaults = window.KefinHomeConfig2?.HOME_SETTINGS?.categories || [];
+        const configured = getHomeSettings().categories;
+        if (Array.isArray(configured) && configured.length) return configured;
+        return defaults;
+    }
+
+    function sectionIsPinnedCategory(section) {
+        const id = String(section?.id || '');
+        return id.startsWith('pinned-list-')
+            || id.startsWith('pinned-parent-')
+            || section?.category === 'pinned';
+    }
+
+    function updatePinnedCategoryAvailability(sections, homeScreen) {
+        const userHomeConfig = window.KefinUserHomeScreenConfig;
+        const fromUserPins = (userHomeConfig?.buildPinnedSectionConfigs?.(homeScreen) || []).length > 0;
+        const fromSections = (sections || []).some(sectionIsPinnedCategory);
+        homeChromeHasPinnedContent = fromUserPins || fromSections;
+    }
+
+    function getRailCategories() {
+        return getConfiguredCategories().filter((cat) => {
+            if (cat?.id === 'pinned') return homeChromeHasPinnedContent;
+            return true;
+        });
+    }
+
+    function isModernUIChrome() {
+        return document.querySelector('.MuiBox-root') !== null || localStorage.getItem('layout')?.length === 0;
+    }
+
+    function getCategoryRailNativeClasses() {
+        const base = 'kefin-home-chrome kefin-home-category-rail';
+        if (isModernUIChrome()) {
+            let appBar = document.querySelector('.MuiAppBar-root');       
+
+            if (appBar?.className) {
+                return `${base} ${appBar.className}`;
+            }
+        }
+        return `${base} ${HOME_CHROME_CLASSIC_RAIL_CLASSES}`;
+    }
+
+    function ensureMuiAppBarClassObserver() {
+        if (!isModernUIChrome() || homeChromeMuiAppBarObserver) return;
+        if (document.querySelector('.MuiAppBar-root')) return;
+        homeChromeMuiAppBarObserver = new MutationObserver(() => {
+            if (!document.querySelector('.MuiAppBar-root')) return;
+            try { homeChromeMuiAppBarObserver?.disconnect(); } catch (_) { /* ignore */ }
+            homeChromeMuiAppBarObserver = null;
+            const inner = document.querySelector(`#${HOME_CHROME_CATEGORY_RAIL_ID} .kefin-home-category-rail`);
+            if (inner) inner.className = getCategoryRailNativeClasses();
+        });
+        homeChromeMuiAppBarObserver.observe(document.body, { childList: true, subtree: true });
+    }
+
+    function isHomePageVisible() {
+        return !!document.querySelector('.homePage:not(.hide)');
+    }
+
+    function syncHomeScreenChromeVisibility() {
+        const onHome = isHomePageVisible();
+        const createBtn = document.getElementById(HOME_CHROME_CREATE_ID);
+        if (createBtn) {
+            createBtn.hidden = !onHome;
+            createBtn.setAttribute('aria-hidden', onHome ? 'false' : 'true');
+        }
+        const showFilters = getHomeSettings().showCategoryFilters !== false;
+        const rail = document.getElementById(HOME_CHROME_CATEGORY_RAIL_ID);
+        if (rail) {
+            const visible = onHome && showFilters;
+            rail.hidden = !visible;
+            rail.setAttribute('aria-hidden', visible ? 'false' : 'true');
+        }
+        if (onHome) {
+            applyActiveHomeCategory(homeChromeActiveCategory || 'none');
+        }
+    }
+
+    function ensureHomeChromeVisibilityObserver() {
+        if (homeChromeVisibilityObserver) return;
+        homeChromeVisibilityObserver = new MutationObserver(() => syncHomeScreenChromeVisibility());
+        homeChromeVisibilityObserver.observe(document.body, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['class']
+        });
+    }
+
+    async function mountCreateSectionButton() {
+        if (homeChromeCreateMounted || document.getElementById(HOME_CHROME_CREATE_ID)) {
+            homeChromeCreateMounted = true;
+            return;
+        }
+        if (getHomeSettings().showCreateSectionButtonOnHome !== true) return;
+        try {
+            const isAdmin = !!(await window.apiHelper?.isAdmin?.());
+            if (!isAdmin) return;
+        } catch {
+            return;
+        }
+
+        const wrap = document.createElement('div');
+        wrap.id = HOME_CHROME_CREATE_ID;
+        wrap.className = 'kefin-home-chrome kefin-home-create-section';
+        wrap.hidden = !isHomePageVisible();
+        wrap.innerHTML = `
+            <button type="button" class="paper-icon-button-light emby-button kefin-home-create-section-btn" title="Create Section" aria-label="Create Section">
+                <span class="material-icons" aria-hidden="true">add_circle</span>
+            </button>
+        `;
+        wrap.querySelector('button')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            try {
+                window.KefinHomeScreen?.openNewCustomSection?.({ refreshHomeOnSave: true });
+            } catch (err) {
+                ERR('Failed to open create section from home:', err);
+            }
+        });
+        document.body.appendChild(wrap);
+        homeChromeCreateMounted = true;
+    }
+
+    function buildCategoryFilterStyles(categories) {
+        const rules = [];
+        rules.push(`
+.homeSectionsContainer[data-render-categories-separately="true"][data-category="none"] > [data-section-id]:not([data-category="none"]) {
+    display: none !important;
+}
+`);
+        (categories || []).forEach((cat) => {
+            const id = String(cat?.id || '').trim();
+            if (!id || id === 'none') return;
+            const safe = CSS.escape(id);
+            rules.push(`
+.homeSectionsContainer[data-category="${safe}"] > [data-section-id]:not([data-category="${safe}"]) {
+    display: none !important;
+}
+`);
+        });
+        return rules.join('\n');
+    }
+
+    function ensureCategoryFilterStyles() {
+        let styleEl = document.getElementById(HOME_CHROME_CATEGORY_STYLE_ID);
+        if (!styleEl) {
+            styleEl = document.createElement('style');
+            styleEl.id = HOME_CHROME_CATEGORY_STYLE_ID;
+            document.head.appendChild(styleEl);
+        }
+        styleEl.textContent = buildCategoryFilterStyles(getConfiguredCategories());
+    }
+
+    function applyActiveHomeCategory(categoryId) {
+        const categories = getRailCategories();
+        const next = categories.some((c) => c.id === categoryId) ? categoryId : 'none';
+        const prev = homeChromeActiveCategory || 'none';
+        homeChromeActiveCategory = next;
+        const separate = getHomeSettings().renderCategoriesSeparately === true;
+
+        document.querySelectorAll('.homeSectionsContainer').forEach((container) => {
+            container.dataset.category = next;
+            container.dataset.renderCategoriesSeparately = separate ? 'true' : 'false';
+        });
+
+        const rail = document.getElementById(HOME_CHROME_CATEGORY_RAIL_ID);
+        if (rail) {
+            rail.querySelectorAll('.kefin-home-category-btn').forEach((btn) => {
+                const active = btn.dataset.categoryId === next;
+                btn.classList.toggle('is-active', active);
+                btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+            });
+        }
+
+        if (next === 'discovery' && prev !== 'discovery' && isDiscoveryAllowedForActiveCategory()) {
+            const container = document.querySelector('.libraryPage:not(.hide) .homeSectionsContainer, .homePage:not(.hide) .homeSectionsContainer');
+            if (container) {
+                const hasDiscovery = !!(
+                    container.querySelector('[data-discovery-section="true"], [data-category="discovery"]')
+                );
+                if (!hasDiscovery) {
+                    try {
+                        renderNextDiscoveryGroup();
+                    } catch (err) {
+                        ERR('Failed to bootstrap discovery group for Discover category:', err);
+                    }
+                }
+            }
+        }
+    }
+
+    function isDiscoveryAllowedForActiveCategory() {
+        const separate = getHomeSettings().renderCategoriesSeparately === true;
+        const active = homeChromeActiveCategory || 'none';
+        if (separate) return active === 'discovery';
+        return active === 'none' || active === 'discovery';
+    }
+
+    function mountCategoryRail() {
+        if (getHomeSettings().showCategoryFilters === false) {
+            const existing = document.getElementById(HOME_CHROME_CATEGORY_RAIL_ID);
+            if (existing) existing.remove();
+            homeChromeCategoryMounted = false;
+            ensureCategoryFilterStyles();
+            homeChromeActiveCategory = 'none';
+            applyActiveHomeCategory('none');
+            return;
+        }
+
+        if (homeChromeCategoryMounted && document.getElementById(HOME_CHROME_CATEGORY_RAIL_ID)) {
+            ensureCategoryFilterStyles();
+            applyActiveHomeCategory(homeChromeActiveCategory || 'none');
+            return;
+        }
+
+        const categories = getRailCategories();
+        ensureCategoryFilterStyles();
+
+        const desiredCategory = categories.some((c) => c.id === homeChromeActiveCategory)
+            ? homeChromeActiveCategory
+            : 'none';
+
+        const outer = document.createElement('div');
+        outer.id = HOME_CHROME_CATEGORY_RAIL_ID;
+        outer.className = 'sectionTabs';
+        outer.hidden = !isHomePageVisible();
+        outer.setAttribute('role', 'toolbar');
+        outer.setAttribute('aria-label', 'Home categories');
+        outer.setAttribute('aria-hidden', outer.hidden ? 'true' : 'false');
+
+        const inner = document.createElement('div');
+        inner.className = getCategoryRailNativeClasses();
+        inner.innerHTML = categories.map((cat) => {
+            const id = escapeHtmlChrome(cat.id);
+            const name = escapeHtmlChrome(cat.name || cat.id);
+            const icon = escapeHtmlChrome(cat.icon || 'label');
+            const active = desiredCategory === cat.id;
+            return `
+                <button type="button"
+                    class="paper-icon-button-light emby-button kefin-home-category-btn${active ? ' is-active' : ''}"
+                    data-category-id="${id}"
+                    title="${name}"
+                    aria-label="${name}"
+                    aria-pressed="${active ? 'true' : 'false'}">
+                    <span class="material-icons" aria-hidden="true">${icon}</span>
+                </button>
+            `;
+        }).join('');
+
+        outer.appendChild(inner);
+        outer.addEventListener('click', (e) => {
+            const btn = e.target.closest('.kefin-home-category-btn');
+            if (!btn) return;
+            e.preventDefault();
+            e.stopPropagation();
+            applyActiveHomeCategory(btn.dataset.categoryId || 'none');
+        });
+
+        document.body.appendChild(outer);
+        homeChromeCategoryMounted = true;
+        ensureMuiAppBarClassObserver();
+        applyActiveHomeCategory(desiredCategory);
+    }
+
+    function refreshHomeCategoryChrome() {
+        ensureCategoryFilterStyles();
+        const rail = document.getElementById(HOME_CHROME_CATEGORY_RAIL_ID);
+        if (rail) rail.remove();
+        homeChromeCategoryMounted = false;
+        mountCategoryRail();
+        syncHomeScreenChromeVisibility();
+    }
+
+    function escapeHtmlChrome(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    async function initHomeScreenChrome() {
+        ensureHomeChromeVisibilityObserver();
+        await mountCreateSectionButton();
+        mountCategoryRail();
+        syncHomeScreenChromeVisibility();
+    }
+
     window.homeScreen3 = {
         init: enhanceHomeScreen,
         refreshHomeSections,
         resolveDiscoverySection: buildDiscoverySectionInstance,
-        sectionHelper: () => window.sectionHelper
+        sectionHelper: () => window.sectionHelper,
+        getActiveHomeCategory: () => homeChromeActiveCategory || 'none',
+        isDiscoveryAllowedForActiveCategory,
+        refreshHomeCategoryChrome
     };
 
     //enhanceHomeScreen();
     connectHomeSectionsReadyObserver();
+    //initHomeScreenChrome();
 
     if (window.KefinTweaksUtils && typeof window.KefinTweaksUtils.onViewPage === 'function') {
         window.KefinTweaksUtils.onViewPage((view, element, hash) => {
@@ -1834,6 +2179,7 @@
             try { 
                 manageBodyClasses();
                 enhanceHomeScreen();
+                syncHomeScreenChromeVisibility();
             } catch (err) { ERR('Home screen page change handler failed:', err); }
         }, { pages: ['home', 'home.html'] });
     }

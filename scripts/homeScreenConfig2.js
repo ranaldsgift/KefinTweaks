@@ -2227,6 +2227,9 @@
         ensureThumbsForPopularTVNetworks: false,
         showStaleDataBeforeRefresh: true,
         dismissEmptySectionTimer: 0,
+        showCreateSectionButtonOnHome: false,
+        showCategoryFilters: true,
+        renderCategoriesSeparately: false,
         minPeopleAppearancesTotal: 10,
         minPeopleAppearancesMovies: 10,
         minPeopleAppearancesSeries: 10,
@@ -2236,18 +2239,18 @@
         categories: [
             {
                 id: 'none',
-                name: 'None',
+                name: 'Home',
                 icon: 'home',
             },
             {
-                id: 'discovery', 
+                id: 'discovery',
                 name: 'Discover',
                 icon: 'explore',
             },
             {
                 id: 'pinned',
                 name: 'Pinned',
-                icon: 'pin',
+                icon: 'push_pin',
             }
         ]
     }

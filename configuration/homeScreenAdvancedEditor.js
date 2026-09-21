@@ -393,7 +393,14 @@
     const ADVANCED_TOGGLE_DESCRIPTIONS = {
         'section-flattenSeries': 'Multiple episodes from the same series will be grouped into one item in the section.',
         'hsae-limit-before-sort': 'When enabled, the item limit is applied before section-level sort.',
-        'hsae-hide-card-titles': 'Card titles for individual items in the section will not be shown.'
+        'hsae-hide-card-titles': {
+            on: 'Card titles for individual items in the section will not be shown.',
+            off: 'Card titles for individual items in the section will be shown.'
+        },
+        'hsae-use-parent-card': {
+            on: 'Items in this section will link to their Parent item where available. This means that an Episode or Season will link to the Series.',
+            off: 'Items in this section will link to the normal item.'
+        }
     };
 
     const RANDOM_QUERY_TOGGLE_DESCRIPTIONS = {
@@ -1014,6 +1021,15 @@
         if (groupNewEl) state.groupNew = groupNewEl.value;
         if (visibilityEl) state.sectionVisibility = visibilityEl.value;
         if (orderEl) state.order = orderEl.value;
+
+        const categoryEl = root.querySelector('#section-category');
+        if (categoryEl) {
+            const isDiscovery = state.sectionVisibility === 'discovery';
+            state.category = isDiscovery ? 'discovery' : (categoryEl.value || 'none');
+            state.section = state.section || {};
+            state.section.category = state.category;
+        }
+
         if (hideWatchedEl) state.hideWatched = hideWatchedEl.checked === true;
         if (hideNameEl) state.hideName = hideNameEl.checked === true;
         if (startDateEl) state.startDate = startDateEl.value;
@@ -1154,6 +1170,13 @@
                 delete state.section.cardTitleVisibility;
                 delete state.section.hideCardTitles;
             }
+        }
+
+        const useParentCardEl = root.querySelector('#hsae-use-parent-card');
+        if (useParentCardEl) {
+            state.section = state.section || {};
+            if (useParentCardEl.checked === true) state.section.useParentCard = true;
+            else delete state.section.useParentCard;
         }
 
         const cardTitlePositionEl = root.querySelector('#hsae-card-title-position');
@@ -1525,11 +1548,33 @@
                 <div class="hsae-card">
                     <div class="hsae-field-grid hsae-field-grid-2 hsae-basic-name-caption">
                         ${buildTextInput('section-name', section.name || state.sectionName || '', 'Section Name')}
-                        ${buildTextInput('section-caption', section.caption || state.caption || '', 'Caption', 'text', 'Displayed below the Section Name.')}
+                        ${buildTextInput('section-caption', section.caption || state.caption || '', 'Caption', 'text', 'Displayed below the Section Name')}
                     </div>
 
-                    <div class="hsae-basic-group-row" data-hsae-profiles="full">
+                    <div class="hsae-field-grid hsae-field-grid-2 hsae-basic-group-row" data-hsae-profiles="full">
                         ${buildSelect('section-group', groupOptions, selectedGroup, 'Section Group')}
+                        ${(() => {
+                            const categories = (context.config?.HOME_SETTINGS?.categories
+                                || window.KefinTweaksConfig?.homeScreenConfig?.HOME_SETTINGS?.categories
+                                || window.KefinHomeConfig2?.HOME_SETTINGS?.categories
+                                || []).map((c) => ({ value: c.id, label: c.name || c.id }));
+                            const isDiscovery = state.sectionVisibility === 'discovery'
+                                || section.discoveryEnabled === true
+                                || section.type === 'discovery';
+                            const selectedCategory = isDiscovery ? 'discovery' : (section.category || state.category || 'none');
+                            const categorySelect = buildSelect(
+                                'section-category',
+                                categories.length ? categories : [{ value: 'none', label: 'Home' }],
+                                selectedCategory,
+                                'Category'
+                            );
+                            return isDiscovery
+                                ? categorySelect.replace(
+                                    'id="section-category" class="fld emby-select emby-select-withcolor"',
+                                    'id="section-category" class="fld emby-select emby-select-withcolor" disabled'
+                                )
+                                : categorySelect;
+                        })()}
                         <div id="section-group-new-container" class="hsae-group-new" style="display:${selectedGroup === 'New...' ? 'block' : 'none'};">
                             ${buildTextInput('section-group-new', state.groupNew || '', 'New Group Name')}
                         </div>
@@ -1853,6 +1898,7 @@
             itemsLayout: draft?.itemsLayout,
             cardTitleVisibility: draft?.cardTitleVisibility,
             hideCardTitles: draft?.hideCardTitles,
+            useParentCard: draft?.useParentCard === true,
             cardTitlePosition: draft?.cardTitlePosition,
             cardTitleCapitalization: draft?.cardTitleCapitalization,
             cardTitleFontFamily: draft?.cardTitleFontFamily,
@@ -2017,7 +2063,15 @@
                             'hsae-hide-card-titles',
                             hideCardTitles,
                             'Hide Card Titles',
-                            ADVANCED_TOGGLE_DESCRIPTIONS['hsae-hide-card-titles']
+                            ADVANCED_TOGGLE_DESCRIPTIONS['hsae-hide-card-titles'][hideCardTitles ? 'on' : 'off'],
+                            { hintKey: 'hsae-hide-card-titles' }
+                        )}
+                        ${buildToggleCard(
+                            'hsae-use-parent-card',
+                            section.useParentCard === true,
+                            'Link Parent Item',
+                            ADVANCED_TOGGLE_DESCRIPTIONS['hsae-use-parent-card'][section.useParentCard === true ? 'on' : 'off'],
+                            { hintKey: 'hsae-use-parent-card' }
                         )}
                     </div>
                     <div id="hsae-card-title-options-row" style="display:${hideCardTitles ? 'none' : ''};">
@@ -2524,6 +2578,8 @@
         else section.cardTitleVisibility = '';
         section.hideCardTitles = '';
 
+        section.useParentCard = dialog.querySelector('#hsae-use-parent-card')?.checked === true;
+
         const cardTitlePosition = dialog.querySelector('#hsae-card-title-position')?.value;
         if (cardTitlePosition && cardTitlePosition !== 'default') section.cardTitlePosition = cardTitlePosition;
         else section.cardTitlePosition = '';
@@ -2545,6 +2601,14 @@
             section._targetGroupName = targetGroupName === 'New...'
                 ? (dialog.querySelector('#section-group-new')?.value || '').trim() || 'Custom Sections'
                 : targetGroupName;
+        }
+
+        const categoryEl = dialog.querySelector('#section-category');
+        if (categoryEl) {
+            const isDiscovery = dialog.querySelector('#hsae-section-visibility')?.value === 'discovery'
+                || section.discoveryEnabled === true
+                || section.type === 'discovery';
+            section.category = isDiscovery ? 'discovery' : (categoryEl.value || 'none');
         }
 
         return section;
@@ -2885,13 +2949,15 @@
             { key: 'hideName', checkboxId: 'hsae-hide-section-name', tooltips: HIDE_NAME_TOGGLE_DESCRIPTIONS },
             { key: 'hideWatched', checkboxId: 'hsae-hide-watched', tooltips: HIDE_WATCHED_TOGGLE_DESCRIPTIONS },
             { key: 'userEnabledByDefault', checkboxId: 'hsae-user-enabled-by-default', tooltips: USER_TOGGLE_TOOLTIPS.userEnabledByDefault },
-            { key: 'userConfigurable', checkboxId: 'hsae-user-configurable', tooltips: USER_TOGGLE_TOOLTIPS.userConfigurable }
+            { key: 'userConfigurable', checkboxId: 'hsae-user-configurable', tooltips: USER_TOGGLE_TOOLTIPS.userConfigurable },
+            { key: 'hsae-hide-card-titles', checkboxId: 'hsae-hide-card-titles', tooltips: ADVANCED_TOGGLE_DESCRIPTIONS['hsae-hide-card-titles'] },
+            { key: 'hsae-use-parent-card', checkboxId: 'hsae-use-parent-card', tooltips: ADVANCED_TOGGLE_DESCRIPTIONS['hsae-use-parent-card'] }
         ];
 
         toggles.forEach(({ key, checkboxId, tooltips }) => {
             const checkbox = root.querySelector(`#${checkboxId}`);
             const hint = root.querySelector(`[data-hsae-hint="${key}"]`);
-            if (!checkbox || !hint) return;
+            if (!checkbox || !hint || !tooltips) return;
             const enabled = checkbox.checked === true;
             hint.textContent = tooltips[enabled ? 'on' : 'off'];
         });

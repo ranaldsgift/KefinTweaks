@@ -169,7 +169,7 @@ span.listItemBodyText.secondary.seasonal-tag {
 	white-space: nowrap;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 899px) {
 	[data-modal-id="kefin-homescreen-config-main"] .hsc-split-pane {
 		grid-template-columns: 1fr;
 		gap: 1em;
@@ -315,7 +315,7 @@ span.listItemBodyText.secondary.seasonal-tag {
 	align-items: end;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 899px) {
 	[data-modal-id="kefin-homescreen-config-main"] #global-settings-content .hsae-field-grid-4 {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}

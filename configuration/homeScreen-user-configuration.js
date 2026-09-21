@@ -45,7 +45,7 @@
         return flattened;
     }
 
-    const SECTION_PREF_FIELD_COUNT = 20;
+    const SECTION_PREF_FIELD_COUNT = 21;
     const DEFAULT_PINNED_LIST_NAME = 'Pinned';
     const PINNED_LIST_ID_PREFIX = 'pinned-list-';
     const PINNED_PARENT_ID_PREFIX = 'pinned-parent-';
@@ -174,7 +174,25 @@
         // Field 19: useGaplessCards
         if (parts[19] === 'true') result.useGaplessCards = true;
         else if (parts[19] === 'false') result.useGaplessCards = false;
+        // Field 20: renderMode Normal|Spotlight|Random
+        if (parts[20] !== '') {
+            const renderMode = normalizeRenderMode(parts[20]);
+            if (renderMode) result.renderMode = renderMode;
+        }
         return result;
+    }
+
+    const RENDER_MODES = ['Normal', 'Spotlight', 'Random'];
+
+    function normalizeRenderMode(value) {
+        if (value == null || value === '') return null;
+        const lower = String(value).trim().toLowerCase();
+        return RENDER_MODES.find(mode => mode.toLowerCase() === lower) || null;
+    }
+
+    function resolveRenderMode(section) {
+        return normalizeRenderMode(section?.renderMode)
+            || (section?.spotlight === true ? 'Spotlight' : 'Normal');
     }
 
     function normalizeItemsLayout(value) {
@@ -438,6 +456,11 @@
         appendPrefField(fields, overrides.borderColor, serverDefaults.borderColor);
         appendPrefField(fields, overrides.cardTitleColor, serverDefaults.cardTitleColor);
         appendBoolPrefField(fields, overrides.useGaplessCards, serverDefaults.useGaplessCards);
+        appendPrefField(
+            fields,
+            normalizeRenderMode(overrides.renderMode),
+            normalizeRenderMode(serverDefaults.renderMode) || 'Normal'
+        );
         return fields.join(';');
     }
 
@@ -921,9 +944,9 @@
 
     function getServerSectionDefaults(section) {
         if (!section) return {};
-        const isSpotlight = section.renderMode === 'Spotlight' || section.spotlight === true;
         const spotlight = section.spotlightConfig || {};
         return {
+            renderMode: resolveRenderMode(section),
             order: section.order ?? 0,
             ttl: section.ttl,
             cardFormat: section.cardFormat,
@@ -970,6 +993,10 @@
                 serverById.get(section.id) || serverById.get(storedId) || section
             );
             if (pref.enabled !== undefined) next.enabled = pref.enabled;
+            if (pref.renderMode !== undefined) {
+                next.renderMode = pref.renderMode;
+                next.spotlight = pref.renderMode === 'Spotlight';
+            }
             if (pref.order !== undefined) next.order = pref.order;
             if (pref.ttl !== undefined) next.ttl = pref.ttl;
             if (pref.cardFormat !== undefined) next.cardFormat = pref.cardFormat;
@@ -2031,6 +2058,8 @@
         saveKefinTweaksSectionState,
         createEmptySectionState,
         normalizeItemsLayout,
+        normalizeRenderMode,
+        resolveRenderMode,
         DEFAULT_PINNED_LIST_NAME,
         PINNED_DEFAULT_ORDER,
         homeScreenToLegacyArray,

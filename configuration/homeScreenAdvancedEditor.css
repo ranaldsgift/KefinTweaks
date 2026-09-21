@@ -131,10 +131,16 @@
 
 :is([data-modal-id="kefin-homescreen-section-editor"], [data-modal-id="kefin-homescreen-section-create-flow"]) .hsae-basic-group-row {
 	display: grid;
-	grid-template-columns: 1fr;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
 	gap: 0.75em;
 	margin-top: 0.85em;
 	margin-bottom: 0.85em;
+}
+
+:is([data-modal-id="kefin-homescreen-section-editor"], [data-modal-id="kefin-homescreen-section-create-flow"])
+	.hsae-basic-group-row
+	.hsae-group-new {
+	grid-column: 1 / -1;
 }
 
 :is([data-modal-id="kefin-homescreen-section-editor"], [data-modal-id="kefin-homescreen-section-create-flow"]) .hsae-field-grid-4 {
@@ -149,7 +155,7 @@
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-@media (max-width: 900px) {
+@media (max-width: 899px) {
 	:is([data-modal-id="kefin-homescreen-section-editor"], [data-modal-id="kefin-homescreen-section-create-flow"]) .hsae-field-grid-4,
 	:is([data-modal-id="kefin-homescreen-section-editor"], [data-modal-id="kefin-homescreen-section-create-flow"]) .hsae-query-row-sort {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -792,7 +798,7 @@
 	gap: 0.75em;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 899px) {
 	:is([data-modal-id="kefin-homescreen-section-editor"], [data-modal-id="kefin-homescreen-section-create-flow"]) .hsae-appearance-grid {
 		grid-template-columns: 1fr;
 	}
@@ -1556,6 +1562,7 @@
 }
 
 .hsae-root[data-editor-profile] .hsae-field-grid[data-hsae-profiles],
+.hsae-root[data-editor-profile] .hsae-basic-group-row[data-hsae-profiles],
 .hsae-root[data-editor-profile] .hsae-advanced-section-sort[data-hsae-profiles],
 .hsae-root[data-editor-profile] .hsae-advanced-min-max-age[data-hsae-profiles],
 .hsae-root[data-editor-profile] .hsae-advanced-limits[data-hsae-profiles] {
@@ -1567,6 +1574,7 @@
 .hsae-root[data-editor-profile="postProcessing"] .hsae-field-grid[data-hsae-profiles~="postProcessing"],
 .hsae-root[data-editor-profile="normal"] .hsae-field-grid[data-hsae-profiles~="normal"],
 .hsae-root[data-editor-profile="dateCutoffs"] .hsae-field-grid[data-hsae-profiles~="dateCutoffs"],
+.hsae-root[data-editor-profile="full"] .hsae-basic-group-row[data-hsae-profiles~="full"],
 .hsae-root[data-editor-profile="full"] .hsae-advanced-section-sort[data-hsae-profiles~="full"],
 .hsae-root[data-editor-profile="postProcessing"] .hsae-advanced-section-sort[data-hsae-profiles~="postProcessing"],
 .hsae-root[data-editor-profile="normal"] .hsae-advanced-section-sort[data-hsae-profiles~="normal"],

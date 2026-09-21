@@ -67,6 +67,27 @@ div#discovery-loading-indicator:not(.show)::after {
 	opacity: 1 !important;
 }
 
+/* Hide Discover More / loading affordance outside Home + Discover categories */
+#indexPage .homeSectionsContainer[data-category]:not([data-category="none"]):not([data-category="discovery"]) #discovery-loading-indicator,
+.homePage .homeSectionsContainer[data-category]:not([data-category="none"]):not([data-category="discovery"]) #discovery-loading-indicator,
+.libraryPage
+	.homeSectionsContainer[data-category]:not([data-category="none"]):not([data-category="discovery"])
+	#discovery-loading-indicator,
+#indexPage .homeSectionsContainer[data-category]:not([data-category="none"]):not([data-category="discovery"]) .discovery-loading-indicator,
+.homePage .homeSectionsContainer[data-category]:not([data-category="none"]):not([data-category="discovery"]) .discovery-loading-indicator,
+.libraryPage
+	.homeSectionsContainer[data-category]:not([data-category="none"]):not([data-category="discovery"])
+	.discovery-loading-indicator {
+	display: none !important;
+	visibility: hidden !important;
+	min-height: 0 !important;
+	height: 0 !important;
+	overflow: hidden !important;
+	padding: 0 !important;
+	margin: 0 !important;
+	opacity: 0 !important;
+}
+
 #indexPage[data-discovery-ready] #discovery-loading-indicator:not(.show) .spinner {
 	visibility: hidden;
 	opacity: 0;
@@ -358,7 +379,7 @@ body[data-seasonal-animations="true"]:has(.homePage:not(.hide)) .snowverlay {
 	text-align: center;
 	margin: 3em auto;
 	display: block;
-	animation: fadeInDelayed 0.1s linear 1s forwards;
+	animation: fadeInDelayed 0.1s linear 3s forwards;
 	opacity: 0;
 	visibility: hidden;
 }
@@ -383,4 +404,107 @@ body[data-seasonal-animations="true"]:has(.homePage:not(.hide)) .snowverlay {
 	[data-section-id="browse-by-studio"] .card {
 		width: 30vw !important;
 	}
+}
+
+/* Home screen chrome: create section + category rail */
+.kefin-home-chrome {
+	position: fixed;
+	z-index: 12;
+	pointer-events: none;
+	opacity: 0.18;
+	transition: opacity 0.2s ease;
+}
+.kefin-home-chrome:hover,
+.kefin-home-chrome:focus-within {
+	opacity: 1;
+}
+.kefin-home-chrome[hidden],
+#kefin-home-category-rail[hidden] {
+	display: none !important;
+}
+.kefin-home-chrome button,
+#kefin-home-category-rail button {
+	pointer-events: auto;
+}
+.kefin-home-create-section {
+	left: max(0.75rem, env(safe-area-inset-left));
+	bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+.kefin-home-create-section-btn .material-icons {
+	font-size: 1.75rem;
+}
+
+/* Outer sectionTabs wrapper — no native header layout */
+#kefin-home-category-rail.sectionTabs {
+	position: static;
+	display: contents;
+}
+
+/* Inner visual bar — keep our layout over skinHeader / MuiAppBar positioning */
+#kefin-home-category-rail .kefin-home-category-rail {
+	position: fixed;
+	z-index: 12;
+	top: max(4.5rem, calc(env(safe-area-inset-top) + 4.5rem));
+	left: max(0.5rem, env(safe-area-inset-left));
+	right: auto;
+	bottom: auto;
+	width: auto;
+	height: auto;
+	max-width: none;
+	display: flex;
+	flex-direction: column;
+	gap: 0.25rem;
+	border-radius: 999px;
+	box-shadow: 1px 1px 2px 0 #fff !important;
+	transform: none;
+	pointer-events: none;
+}
+#kefin-home-category-rail .kefin-home-category-rail:hover,
+#kefin-home-category-rail .kefin-home-category-rail:focus-within {
+	opacity: 1;
+}
+.kefin-home-category-btn {
+	opacity: 0.75;
+}
+.kefin-home-category-btn.is-active {
+	opacity: 1;
+	color: var(--theme-primary-color, #00a4dc);
+	background: rgba(0, 164, 220, 0.18);
+}
+.kefin-home-category-btn .material-icons {
+	font-size: 1.35rem;
+}
+
+@media (max-width: 899px) {
+	#kefin-home-category-rail .kefin-home-category-rail {
+		top: auto;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		flex-direction: row;
+		justify-content: space-evenly;
+		align-items: center;
+		gap: 0.15rem;
+		padding: 0.4rem 0.5rem calc(0.4rem + env(safe-area-inset-bottom, 0px)) !important;
+		border-radius: 0;
+		opacity: 1;
+		pointer-events: auto;
+		margin: 0 !important;
+		-webkit-backdrop-filter: blur(10px);
+		backdrop-filter: blur(10px);
+	}
+	.kefin-home-create-section {
+		bottom: calc(3.25rem + env(safe-area-inset-bottom, 0px));
+	}
+	.homePage:not(.hide) {
+		padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+	}
+}
+
+.kefin-section-more-toggle {
+	margin-left: auto;
+}
+
+body:not(:has(.homePage:not(.hide))) div#kefin-home-category-rail {
+	display: none;
 }

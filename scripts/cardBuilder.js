@@ -551,11 +551,32 @@
             element.removeAttribute('data-section-type');
         }
 
+        const resolvedCategory = resolveSectionCategory(sectionConfig);
+        if (resolvedCategory) {
+            element.setAttribute('data-category', resolvedCategory);
+        } else {
+            element.removeAttribute('data-category');
+        }
+
         if (isCustomSection) element.dataset.customSection = 'true';
         else delete element.dataset.customSection;
 
         if (isDiscoverySection) element.dataset.discoverySection = 'true';
         else delete element.dataset.discoverySection;
+    }
+
+    function resolveSectionCategory(sectionConfig) {
+        if (!sectionConfig) return 'none';
+        const id = String(sectionConfig.id || '');
+        if (id.startsWith('pinned-list-') || id.startsWith('pinned-parent-')) return 'pinned';
+        const sectionType = String(sectionConfig.type || '').toLowerCase();
+        const isDiscovery = sectionConfig.discoveryEnabled === true
+            || sectionConfig.discoverySection === true
+            || sectionType === 'discovery'
+            || sectionType === 'custom-discovery'
+            || !!sectionConfig.discoveryType;
+        if (isDiscovery) return 'discovery';
+        return sectionConfig.category || 'none';
     }
 
     /**
@@ -4691,31 +4712,33 @@
             bannerContainer.appendChild(navContainer);
         }
         
-        // Pause button (bottom right)
+        // Pause button (bottom right) — only when nav chrome exists (showNavButtons)
         if (autoPlay && items.length > 1) {
             const navButtonsContainer = bannerContainer.querySelector('.spotlight-nav-container .spotlight-nav-buttons-container');
-            const pauseButton = document.createElement('button');
-            pauseButton.className = 'spotlight-pause-button spotlight-nav-button emby-button';
-            const pauseIcon = document.createElement('span');
-            pauseIcon.className = 'material-icons';
-            pauseIcon.textContent = 'pause';
-            pauseButton.appendChild(pauseIcon);
-            pauseButton.addEventListener('click', (e) => {
-                e.stopPropagation();
-                isPaused = !isPaused;
-                if (isPaused) {
-                    if (autoPlayTimer) {
-                        clearTimeout(autoPlayTimer);
-                        autoPlayTimer = null;
+            if (navButtonsContainer) {
+                const pauseButton = document.createElement('button');
+                pauseButton.className = 'spotlight-pause-button spotlight-nav-button emby-button';
+                const pauseIcon = document.createElement('span');
+                pauseIcon.className = 'material-icons';
+                pauseIcon.textContent = 'pause';
+                pauseButton.appendChild(pauseIcon);
+                pauseButton.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    isPaused = !isPaused;
+                    if (isPaused) {
+                        if (autoPlayTimer) {
+                            clearTimeout(autoPlayTimer);
+                            autoPlayTimer = null;
+                        }
+                        pauseIcon.textContent = 'play_arrow';
+                    } else {
+                        startAutoPlay();
+                        pauseIcon.textContent = 'pause';
                     }
-                    pauseIcon.textContent = 'play_arrow';
-                } else {
-                    startAutoPlay();
-                    pauseIcon.textContent = 'pause';
-                }
-            });
-            
-            navButtonsContainer.insertBefore(pauseButton, navButtonsContainer.firstChild);
+                });
+
+                navButtonsContainer.insertBefore(pauseButton, navButtonsContainer.firstChild);
+            }
         }
         
         // Slide state container (dots or numeric "N / X")

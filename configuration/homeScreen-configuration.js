@@ -70,6 +70,18 @@
         'home-loadPeopleEpisodeData': {
             on: 'Loads all Person appearances from all episodes in your library. This data takes much longer to cache than just the Movies/Series level data.',
             off: 'Person appearance data is limited to only Movies and Series.'
+        },
+        'home-showCreateSectionButtonOnHome': {
+            on: 'Adds a hidden button to the bottom left corner of the home screen so that you can quickly create a new section directly from the Home Screen. Only admins will see this button.',
+            off: 'You must use the KefinTweaks Configuration > Home Screen > New Section flow to create new Home Screen sections.'
+        },
+        'home-showCategoryFilters': {
+            on: 'Category Filters will appear on the Home Screen to quickly navigate between Discovery, Pinned or any custom Category sections.',
+            off: 'Category Filters will not appear on the Home Screen.'
+        },
+        'home-renderCategoriesSeparately': {
+            on: 'Sections will only appear when their defined category is selected on the Home Screen. Discovery sections will only load when the Discovery category is selected.',
+            off: 'All sections will be visible when the default Home category is selected. Discovery sections will render at the bottom of the Home and Discovery categories.'
         }
     };
 
@@ -1184,6 +1196,17 @@
                 mergedConfig.HOME_SETTINGS.minPeopleAppearancesEpisodes = legacyPeopleMin;
             }
 
+            mergedConfig.HOME_SETTINGS.categories = normalizeHomeCategories(mergedConfig.HOME_SETTINGS.categories);
+            if (mergedConfig.HOME_SETTINGS.renderCategoriesSeparately == null) {
+                mergedConfig.HOME_SETTINGS.renderCategoriesSeparately = false;
+            }
+            if (mergedConfig.HOME_SETTINGS.showCategoryFilters == null) {
+                mergedConfig.HOME_SETTINGS.showCategoryFilters = true;
+            }
+            if (mergedConfig.HOME_SETTINGS.showCreateSectionButtonOnHome == null) {
+                mergedConfig.HOME_SETTINGS.showCreateSectionButtonOnHome = false;
+            }
+
             // Add ENABLED_NORMAL_SECTIONS and ENABLED_DISCOVERY_SECTIONS
             // ENABLED_NORMAL_SECTIONS is all enabled sections from HOME_SECTION_GROUPS, SEASONAL_SECTION_GROUPS, and CUSTOM_SECTION_GROUPS that aren't discovery sections
             // If they have a start/end date the current date must fall within that date range
@@ -1948,6 +1971,7 @@
             { id: 'general', label: 'General Settings' },
             { id: 'spotlight', label: 'Spotlight Settings' },
             { id: 'discovery', label: 'Discovery Settings' },
+            { id: 'categories', label: 'Category Settings' },
             { id: 'cache', label: 'Cache Settings' }
         ];
         return `
@@ -1972,6 +1996,7 @@
             case 'general': return buildGeneralSettingsHTML();
             case 'spotlight': return se().buildGlobalSpotlightSettingsHTML?.(currentConfig) || '';
             case 'discovery': return buildDiscoverySettingsHTML();
+            case 'categories': return buildCategorySettingsHTML();
             case 'cache': return buildCacheSettingsHTML();
             default: return buildGeneralSettingsHTML();
         }
@@ -2238,6 +2263,9 @@
                     ${hscToggleCard('home-ensureThumbsForPopularTVNetworks', homeSettings.ensureThumbsForPopularTVNetworks === true, 'Require Studio Thumbs', D)}
                 </div>
                 <div class="hsc-settings-span-2">
+                    ${hscToggleCard('home-showCreateSectionButtonOnHome', homeSettings.showCreateSectionButtonOnHome === true, 'Create Section button on Home Screen', D)}
+                </div>
+                <div class="hsc-settings-span-2">
                     ${buildTextInput('home-dismissEmptySectionTimer', homeSettings.dismissEmptySectionTimer ?? 0, 'Empty Section Dismiss Timer (ms)', 'number')}
                     <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-top: 0.35em;">
                         When a section loads with no items: <code>0</code> removes it immediately. Any other value shows “No items found” for that many milliseconds, then fades the section out.
@@ -2296,6 +2324,193 @@
      */
     function buildSeasonalSettingsHTML() {
         return '';
+    }
+
+    const CATEGORY_SENTINEL_IDS = new Set(['none', 'discovery', 'pinned']);
+
+    function normalizeHomeCategories(list) {
+        const defaults = window.KefinHomeConfig2?.HOME_SETTINGS?.categories || [];
+        const incoming = Array.isArray(list) ? list : [];
+        const byId = new Map();
+        defaults.forEach((cat) => {
+            if (cat?.id) byId.set(cat.id, { ...cat });
+        });
+        incoming.forEach((cat) => {
+            if (!cat?.id) return;
+            const prev = byId.get(cat.id) || {};
+            byId.set(cat.id, {
+                id: cat.id,
+                name: cat.name || prev.name || cat.id,
+                icon: cat.icon || prev.icon || 'label'
+            });
+        });
+        const ordered = [];
+        const seen = new Set();
+        incoming.forEach((cat) => {
+            if (!cat?.id || seen.has(cat.id)) return;
+            ordered.push(byId.get(cat.id));
+            seen.add(cat.id);
+        });
+        defaults.forEach((cat) => {
+            if (!cat?.id || seen.has(cat.id)) return;
+            ordered.push(byId.get(cat.id));
+            seen.add(cat.id);
+        });
+        return ordered.filter(Boolean);
+    }
+
+    function buildCategoryRowHTML(cat, index, total) {
+        const isSentinel = CATEGORY_SENTINEL_IDS.has(cat.id);
+        return `
+            <div class="listItem kefin-home-category-row" data-index="${index}" data-category-id="${escapeHtml(cat.id)}" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.5em 0.65em; margin-bottom: 0.4em; display: flex; align-items: center; gap: 0.5em;${isSentinel ? ' background: rgba(255,255,255,0.04);' : ''}">
+                <span class="listItemBodyText secondary" style="min-width: 1.5em; text-align: right;">${index + 1}.</span>
+                <input type="text" class="emby-input kefin-home-category-name" value="${escapeHtml(cat.name || '')}" data-index="${index}" aria-label="Category name" style="flex: 1.2; min-width: 0;" />
+                <input type="text" class="emby-input kefin-home-category-icon" value="${escapeHtml(cat.icon || '')}" data-index="${index}" aria-label="Material icon name" placeholder="icon" style="flex: 0.8; min-width: 5em;" />
+                <button type="button" class="emby-button raised kefin-home-category-up" data-index="${index}" title="Move up" style="min-width: auto; padding: 0.35em 0.5em;" ${index === 0 ? 'disabled' : ''}>
+                    <span class="material-icons" style="font-size: 1.1em; vertical-align: middle;">arrow_upward</span>
+                </button>
+                <button type="button" class="emby-button raised kefin-home-category-down" data-index="${index}" title="Move down" style="min-width: auto; padding: 0.35em 0.5em;" ${index >= total - 1 ? 'disabled' : ''}>
+                    <span class="material-icons" style="font-size: 1.1em; vertical-align: middle;">arrow_downward</span>
+                </button>
+                ${isSentinel ? '' : `
+                <button type="button" class="emby-button raised kefin-home-category-remove" data-index="${index}" title="Remove" style="min-width: auto; padding: 0.35em 0.5em;">
+                    <span class="material-icons" style="font-size: 1.1em; vertical-align: middle;">delete</span>
+                </button>`}
+            </div>
+        `;
+    }
+
+    function buildCategorySettingsHTML() {
+        if (!currentConfig) return '';
+        const homeSettings = currentConfig.HOME_SETTINGS || {};
+        const categories = normalizeHomeCategories(homeSettings.categories);
+        const D = GENERAL_TOGGLE_DESCRIPTIONS;
+        return `
+            <div class="hsc-settings-panel">
+                <div class="hsc-settings-desc listItemBodyText secondary" style="margin-bottom: 1em;">
+                    Categories control which Home Screen sections are visible from the fixed category rail. Custom sections can be assigned a category in the section editor.
+                </div>
+                <div class="hsc-settings-grid hsc-settings-grid-2" style="margin-bottom: 1em;">
+                    ${hscToggleCard('home-showCategoryFilters', homeSettings.showCategoryFilters !== false, 'Show Category Filters', D)}
+                    ${hscToggleCard('home-renderCategoriesSeparately', homeSettings.renderCategoriesSeparately === true, 'Render Categories Separately', D)}
+                </div>
+                <div class="listItemBodyText" style="font-weight: 500; margin-bottom: 0.5em;">Categories</div>
+                <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-bottom: 0.75em;">
+                    Home, Discover, and Pinned are built-in. Their ids cannot change and they cannot be deleted. Custom categories get a stable id when created.
+                </div>
+                <div id="kefin-home-category-list">
+                    ${categories.map((cat, i) => buildCategoryRowHTML(cat, i, categories.length)).join('')}
+                </div>
+                <div style="display: flex; gap: 0.5em; margin-top: 0.65em; flex-wrap: wrap;">
+                    <input type="text" id="kefin-home-category-add-name" class="emby-input" placeholder="Category name…" style="flex: 1; min-width: 140px;" />
+                    <input type="text" id="kefin-home-category-add-icon" class="emby-input" placeholder="Material icon (e.g. movie)" style="flex: 0.8; min-width: 120px;" />
+                    <button type="button" class="emby-button raised button-submit" id="kefin-home-category-add-btn">Add</button>
+                </div>
+            </div>
+        `;
+    }
+
+    function collectCategoriesFromForm(root) {
+        const rows = Array.from(root.querySelectorAll('.kefin-home-category-row'));
+        return rows.map((row) => ({
+            id: row.dataset.categoryId,
+            name: (row.querySelector('.kefin-home-category-name')?.value || '').trim() || row.dataset.categoryId,
+            icon: (row.querySelector('.kefin-home-category-icon')?.value || '').trim() || 'label'
+        })).filter((cat) => cat.id);
+    }
+
+    function refreshCategoryListUI(root) {
+        const list = root.querySelector('#kefin-home-category-list');
+        if (!list) return;
+        const categories = normalizeHomeCategories(currentConfig.HOME_SETTINGS?.categories);
+        list.innerHTML = categories.map((cat, i) => buildCategoryRowHTML(cat, i, categories.length)).join('');
+    }
+
+    function wireCategorySettingsListeners(root) {
+        if (!root?.querySelector('#kefin-home-category-list')) return;
+
+        const persistCategories = () => {
+            currentConfig.HOME_SETTINGS = {
+                ...(currentConfig.HOME_SETTINGS || {}),
+                showCategoryFilters: root.querySelector('#home-showCategoryFilters')?.checked === true,
+                renderCategoriesSeparately: root.querySelector('#home-renderCategoriesSeparately')?.checked === true,
+                categories: normalizeHomeCategories(collectCategoriesFromForm(root))
+            };
+            applyGlobalSettingsFromForm({ save: true });
+            try {
+                window.homeScreen3?.refreshHomeCategoryChrome?.();
+            } catch (_) { /* ignore */ }
+        };
+
+        root.querySelector('#home-showCategoryFilters')?.addEventListener('change', () => {
+            updateHscToggleCardHints(root, GENERAL_TOGGLE_DESCRIPTIONS);
+            persistCategories();
+        });
+
+        root.querySelector('#home-renderCategoriesSeparately')?.addEventListener('change', () => {
+            updateHscToggleCardHints(root, GENERAL_TOGGLE_DESCRIPTIONS);
+            persistCategories();
+        });
+
+        root.addEventListener('change', (e) => {
+            if (e.target.matches?.('.kefin-home-category-name, .kefin-home-category-icon')) {
+                persistCategories();
+            }
+        });
+
+        root.addEventListener('click', (e) => {
+            const up = e.target.closest?.('.kefin-home-category-up');
+            const down = e.target.closest?.('.kefin-home-category-down');
+            const remove = e.target.closest?.('.kefin-home-category-remove');
+            const add = e.target.closest?.('#kefin-home-category-add-btn');
+            if (!up && !down && !remove && !add) return;
+
+            let categories = collectCategoriesFromForm(root);
+
+            if (add) {
+                const name = (root.querySelector('#kefin-home-category-add-name')?.value || '').trim();
+                const icon = (root.querySelector('#kefin-home-category-add-icon')?.value || '').trim() || 'label';
+                if (!name) return;
+                const id = `cat_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+                categories.push({ id, name, icon });
+                const nameInput = root.querySelector('#kefin-home-category-add-name');
+                const iconInput = root.querySelector('#kefin-home-category-add-icon');
+                if (nameInput) nameInput.value = '';
+                if (iconInput) iconInput.value = '';
+            } else {
+                const index = parseInt((up || down || remove).dataset.index, 10);
+                if (!Number.isFinite(index)) return;
+                if (up && index > 0) {
+                    [categories[index - 1], categories[index]] = [categories[index], categories[index - 1]];
+                } else if (down && index < categories.length - 1) {
+                    [categories[index + 1], categories[index]] = [categories[index], categories[index + 1]];
+                } else if (remove) {
+                    const id = categories[index]?.id;
+                    if (CATEGORY_SENTINEL_IDS.has(id)) return;
+                    categories.splice(index, 1);
+                }
+            }
+
+            currentConfig.HOME_SETTINGS = {
+                ...(currentConfig.HOME_SETTINGS || {}),
+                showCategoryFilters: root.querySelector('#home-showCategoryFilters')?.checked === true,
+                renderCategoriesSeparately: root.querySelector('#home-renderCategoriesSeparately')?.checked === true,
+                categories: normalizeHomeCategories(categories)
+            };
+            refreshCategoryListUI(root);
+            applyGlobalSettingsFromForm({ save: true });
+            try {
+                window.homeScreen3?.refreshHomeCategoryChrome?.();
+            } catch (_) { /* ignore */ }
+        });
+    }
+
+    function escapeHtml(str) {
+        return String(str ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
     }
 
     /**
@@ -2427,6 +2642,7 @@
             || root.querySelector('#libraryCache-mdblistApiKey')
             || root.querySelector('#home-minPeopleAppearancesTotal')
             || root.querySelector('#home-dismissEmptySectionTimer')
+            || root.querySelector('#home-showCreateSectionButtonOnHome')
             || root.querySelector('#home-loadPeopleEpisodeData')) {
             const prevLoadPeopleEpisodeData = currentConfig.HOME_SETTINGS?.loadPeopleEpisodeData === true;
             currentConfig.SEASONAL_THEME_SETTINGS = {
@@ -2447,6 +2663,7 @@
                 ensureThumbsForPopularTVNetworks: root.querySelector('#home-ensureThumbsForPopularTVNetworks')?.checked === true,
                 showStaleDataBeforeRefresh: root.querySelector('#home-showStaleDataBeforeRefresh')?.checked === true,
                 dismissEmptySectionTimer: Number.isFinite(dismissEmptyRaw) && dismissEmptyRaw > 0 ? dismissEmptyRaw : 0,
+                showCreateSectionButtonOnHome: root.querySelector('#home-showCreateSectionButtonOnHome')?.checked === true,
                 minPeopleAppearancesTotal: parseInt(root.querySelector('#home-minPeopleAppearancesTotal')?.value || '10', 10),
                 minPeopleAppearancesMovies: parseInt(root.querySelector('#home-minPeopleAppearancesMovies')?.value || '10', 10),
                 minPeopleAppearancesSeries: parseInt(root.querySelector('#home-minPeopleAppearancesSeries')?.value || '10', 10),
@@ -2926,6 +3143,7 @@
         window.KefinTweaksUI?.bindToggleCards?.(contentRoot);
         updateHscToggleCardHints(contentRoot, GENERAL_TOGGLE_DESCRIPTIONS);
         updateHscToggleCardHints(contentRoot, DISCOVERY_TOGGLE_DESCRIPTIONS);
+        wireCategorySettingsListeners(contentRoot);
     }
 
     function ensureGlobalSettingsLiveSync(dialog) {
@@ -2967,13 +3185,15 @@
         });
     }
 
-    function openNewCustomSectionEditor() {
+    function openNewCustomSectionEditor(options = {}) {
+        getConfig();
         const defaultTtl = Number(currentConfig?.CACHE?.DEFAULT_TTL);
         const newSection = {
             id: `custom-${Date.now()}`,
             name: 'New Custom Section',
             enabled: true,
             order: 100,
+            category: 'none',
             cardFormat: 'Poster',
             ...(Number.isFinite(defaultTtl) ? { ttl: defaultTtl } : {}),
             queries: [{
@@ -2983,7 +3203,7 @@
                 }
             }]
         };
-        openSectionEditor(newSection, 'custom');
+        openSectionEditor(newSection, 'custom', options);
     }
 
     function applyOrderListFromForm(dialogRoot) {
@@ -5211,6 +5431,10 @@
     window.KefinHomeScreen.buildEditorPreviewProgressiveSection = buildEditorPreviewProgressiveSection;
     window.KefinHomeScreen.canOpenSectionEditor = canOpenSectionEditor;
     window.KefinHomeScreen.openSectionEditorForId = openSectionEditorForId;
+    window.KefinHomeScreen.openNewCustomSection = (options = {}) => openNewCustomSectionEditor({
+        refreshHomeOnSave: true,
+        ...options
+    });
     window.KefinHomeScreen.publishSectionPresentationDefaults = publishSectionPresentationDefaults;
     window.KefinHomeScreen.findSectionInAllGroups = findSectionInAllGroups;
     window.KefinHomeScreen.ensureKefinTweaksDefaultSections = ensureKefinTweaksDefaultSections;
