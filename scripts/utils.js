@@ -1111,7 +1111,7 @@
     }
 
     function isModernUI() {
-        return document.querySelector('.MuiBox-root') !== null;
+        return document.querySelector('.MuiBox-root') !== null ||  localStorage.getItem('layout')?.length === 0;
     }
 
     function injectIntoTopNavMain(entry) {

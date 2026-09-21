@@ -472,7 +472,7 @@
     
     // DOM manipulation
     function isModernUI() {
-        return !!document.querySelector('.MuiBox-root');
+        return !!document.querySelector('.MuiBox-root') || localStorage.getItem('layout')?.length === 0;
     }
 
     function resolveBreadcrumbMount() {
