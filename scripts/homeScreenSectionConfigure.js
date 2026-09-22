@@ -349,7 +349,7 @@
             order: cfg.order,
             ttl: cfg.ttl,
             cardFormat: cfg.cardFormat,
-            animationEnabled: spotlight.panAnimation,
+            animationEnabled: spotlight.panAnimation !== false,
             hideName: cfg.hideName === true,
             hideCardTitles: cfg.cardTitleVisibility === 'hidden' || cfg.hideCardTitles === true,
             cardTitlePosition: cfg.cardTitlePosition,
@@ -450,6 +450,7 @@
 
     function syncRestoreDefaultsButton(btn, dirty) {
         if (!btn) return;
+        btn.hidden = !dirty;
         btn.disabled = !dirty;
         btn.classList.toggle('is-disabled', !dirty);
         btn.setAttribute('aria-disabled', String(!dirty));
@@ -2309,7 +2310,7 @@
             <div class="kefin-section-configure-title-container">
                 <div class="kefin-section-configure-title-row">
                     <h3>${escapeHtml(sectionConfig.name)}</h3>
-                    <button type="button" is="paper-icon-button-light" class="paper-icon-button-light emby-button kefin-section-restore-defaults-btn${sectionDirty ? '' : ' is-disabled'}" title="Restore defaults" aria-label="Restore defaults" ${sectionDirty ? '' : 'disabled'} aria-disabled="${sectionDirty ? 'false' : 'true'}">
+                    <button type="button" is="paper-icon-button-light" class="paper-icon-button-light emby-button kefin-section-restore-defaults-btn${sectionDirty ? '' : ' is-disabled'}" title="Restore defaults" aria-label="Restore defaults" ${sectionDirty ? '' : 'hidden disabled'} aria-disabled="${sectionDirty ? 'false' : 'true'}">
                         <span class="material-icons" aria-hidden="true">settings_backup_restore</span>
                     </button>
                     ${isPinnedParent ? `
@@ -2714,8 +2715,8 @@
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'section-configure-button material-icons settings';
-        button.title = 'Configure Section';
-        button.setAttribute('aria-label', 'Configure Section');
+        button.title = 'Configure';
+        button.setAttribute('aria-label', 'Configure');
         button.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -2743,7 +2744,7 @@
         return {
             id: 'configure',
             icon: 'settings',
-            label: 'Configure Section',
+            label: 'Configure',
             className: 'section-configure-button',
             isVisible: () => true,
             onClick: (e, anchorButton) => {
@@ -2892,8 +2893,7 @@
         }
         .kefin-section-restore-defaults-btn.is-disabled,
         .kefin-section-restore-defaults-btn:disabled {
-            opacity: 0.4;
-            pointer-events: none;
+            display: none !important;
         }
         .kefin-section-more-toggle[aria-expanded="true"] {
             opacity: 1;
@@ -3175,6 +3175,7 @@
         attachSectionControls,
         createConfigureButton,
         getConfigureSectionControl,
+        openConfigurePopover,
         updateRuntimeItemsLayout,
         updateRuntimeGridExpanded
     };

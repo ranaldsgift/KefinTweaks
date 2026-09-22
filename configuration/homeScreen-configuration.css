@@ -77,6 +77,10 @@
 [data-modal-id="kefin-homescreen-config-main"] div#section-content {
 	max-height: calc(90vh - 19em);
 	overflow: auto;
+	scrollbar-width: none;
+}
+[data-modal-id="kefin-homescreen-config-main"] #section-content > div > div:last-child {
+	margin-bottom: 6em;
 }
 
 div#order-sections-container .editable-group-name {
@@ -341,4 +345,22 @@ span.listItemBodyText.secondary.seasonal-tag {
 
 [data-modal-id="kefin-homescreen-config-main"] .hsc-settings-grid .hsc-settings-span-2 .kefin-toggle-card {
 	flex: 1;
+}
+
+[data-modal-id="kefin-homescreen-config-main"] .kefin-settings-input-card {
+	align-items: center;
+}
+
+[data-modal-id="kefin-homescreen-config-main"] .kefin-settings-input-card-control {
+	flex-shrink: 0;
+	width: 7.5em;
+}
+
+[data-modal-id="kefin-homescreen-config-main"] .kefin-settings-input-card-control .emby-input {
+	width: 100%;
+	box-sizing: border-box;
+}
+
+.section-row-actions .btnSectionConfigure {
+	display: none;
 }

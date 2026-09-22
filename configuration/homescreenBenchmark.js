@@ -369,7 +369,6 @@
                 display: grid;
                 grid-template-columns: 1fr 1fr 1fr 1fr;
                 gap: 0.4em;
-                max-height: 460px;
                 overflow-y: auto;
                 padding: 0.5em;
                 border: 1px solid rgba(255,255,255,0.12);

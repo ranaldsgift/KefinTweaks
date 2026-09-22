@@ -734,7 +734,7 @@
 	font-style: normal;
 	opacity: 0.9;
 	line-height: 1.45;
-	max-width: 75%;
+	max-width: min(700px, 75%);
 	-webkit-line-clamp: 3;
 	-webkit-box-orient: vertical;
 	overflow: hidden;
@@ -853,10 +853,8 @@
 	opacity: 1;
 }
 
-.spotlight-nav-container {
+.spotlight-section:is([data-section-id]):not(.hide) .spotlight-nav-container {
 	position: absolute !important;
-	top: 0px;
-	right: 0px;
 	display: flex;
 	gap: 8px;
 	z-index: 2;
@@ -1184,8 +1182,17 @@
 	min-width: 12rem;
 }
 
-.section-controls-more-popover .section-controls-more-item {
-	align-items: start;
+/* Modal-hosted more menu: normal flow so the dialog body does not collapse */
+.section-controls-more-menu {
+	position: static;
+	display: block;
+	min-width: 12rem;
+	background: transparent;
+}
+
+.section-controls-more-popover .section-controls-more-item,
+.section-controls-more-menu .section-controls-more-item {
+	align-items: center;
 }
 
 .section-controls-more-item {
@@ -1209,10 +1216,54 @@
 	display: none !important;
 }
 
+@media (max-width: 899px) {
+	:not(.layout-mobile) .section-controls-more {
+		display: inline-flex !important;
+		opacity: 1;
+		visibility: visible;
+		pointer-events: auto;
+	}
+
+	:not(.layout-mobile) .section-controls-inline .show-all-button,
+	:not(.layout-mobile) .section-controls-inline .section-refresh-button,
+	:not(.layout-mobile) .section-controls-inline .section-configure-button {
+		display: none !important;
+	}
+
+	.spotlight-section {
+		position: relative;
+	}
+
+	.spotlight-section .section-controls {
+		position: absolute;
+		right: 0.5rem;
+		bottom: 0.5rem;
+		z-index: 5;
+		margin: 0;
+	}
+}
+
+.layout-mobile .spotlight-section {
+	position: relative;
+}
+
+.layout-mobile .spotlight-section .section-controls {
+	position: absolute;
+	right: -0.5rem;
+	bottom: unset;
+	top: -4px;
+	z-index: 5;
+	margin: 0;
+}
+
 .layout-mobile .section-controls-inline .show-all-button,
 .layout-mobile .section-controls-inline .section-refresh-button,
 .layout-mobile .section-controls-inline .section-configure-button {
 	display: none !important;
+}
+
+.layout-mobile .spotlight-section .section-controls-more {
+	opacity: 0;
 }
 
 .layout-mobile .section-controls-more {
@@ -1220,6 +1271,18 @@
 	opacity: 1;
 	visibility: visible;
 	pointer-events: auto;
+}
+
+.layout-mobile .spotlight-section:hover .section-controls-more {
+	opacity: 1;
+}
+
+.kefinTweaks-popover.section-controls-more-menu > .kefinTweaks-popover-item {
+	align-items: center;
+	justify-content: space-between;
+	margin: 0 !important;
+	padding: 0.5em 0.9em;
+	max-width: unset !important;
 }
 
 /* Grid (non-scrolling) item layouts */
@@ -1416,7 +1479,7 @@
 }
 
 .layout-mobile .spotlight-section[data-layout="Borderless"] {
-	margin-top: -6rem;
+	margin-top: -4rem;
 	margin-bottom: -6rem;
 }
 
@@ -1453,7 +1516,7 @@
 	left: 0;
 	right: 0;
 	width: 100%;
-	height: 22%;
+	height: 15%;
 	pointer-events: none;
 	z-index: 2;
 }
@@ -1660,7 +1723,7 @@
 .layout-mobile .spotlight-overlay {
 	width: calc(100% - 2rem) !important;
 	background: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.4) 40%, rgba(0, 0, 0, 0.85) 100%) !important;
-	padding: 4rem 1rem 2rem 1rem !important;
+	padding: 4rem 1rem 1rem 1rem !important;
 	align-items: start;
 	align-content: start;
 	grid-template-rows: auto auto 1fr minmax(48px, auto);
@@ -1677,7 +1740,7 @@
 }
 
 .layout-mobile .spotlight-section[data-layout="Borderless"] .spotlight-section-title-container {
-	top: 6rem;
+	top: 4rem;
 }
 
 .layout-mobile .spotlight-section .spotlight-section-title-container {
@@ -1686,6 +1749,7 @@
 	left: unset !important;
 	justify-content: center;
 	margin: 0 auto !important;
+	display: grid;
 }
 
 .layout-mobile .metadata-container {
@@ -1716,9 +1780,20 @@
 	gap: 0px !important;
 }
 
+.layout-mobile .spotlight-buttons-container .starRatingContainer {
+	display: none !important;
+}
+
+.layout-mobile .spotlight-section .spotlight-buttons-container.mainDetailButtons .btnPlay {
+	margin: 0.3em !important;
+}
+
 .spotlight-section .spotlight-buttons-container.mainDetailButtons .btnPlay {
 	right: 0px !important;
-	margin: 0.3em !important;
+	margin-top: 0 !important;
+	min-width: unset;
+	flex: unset !important;
+	margin-right: 0 !important;
 }
 
 .spotlight-section .spotlight-buttons-container.mainDetailButtons {
@@ -1736,8 +1811,6 @@
 	margin-right: 0px !important;
 	width: auto !important;
 	position: relative !important;
-	top: initial !important;
-	left: initial !important;
 	transform: unset !important;
 }
 
@@ -1788,7 +1861,7 @@
 }
 
 .spotlight-section[data-layout="Borderless"][data-size="normal"] {
-	margin-top: calc(-1 * calc(var(--spotlight-fullscreen-vertical) * 2));
+	margin-top: calc(-1 * calc(var(--spotlight-fullscreen-vertical) * 1.5));
 	margin-bottom: calc(-1 * calc(var(--spotlight-fullscreen-vertical) * 2));
 }
 .spotlight-section[data-layout="Borderless"][data-size="normal"] .spotlight-banner-container {
@@ -1859,7 +1932,7 @@
 	display: none;
 }
 .spotlight-section[data-size="large"] .spotlight-overlay {
-	grid-template-rows: 2fr auto minmax(auto, 6rem) 1fr;
+	grid-template-rows: 2fr auto minmax(auto, 6rem) auto;
 }
 .spotlight-section[data-size="large"] .spotlight-overlay .spotlight-item-logo {
 	background-position: left bottom;
@@ -1894,8 +1967,8 @@
 }
 .spotlight-section[data-layout="Border"][data-size="large"] .spotlight-nav-container,
 .spotlight-section[data-layout="Border"][data-size="full"] .spotlight-nav-container {
-	top: 2rem;
-	right: 2rem;
+	top: 2rem !important;
+	right: 2rem !important;
 }
 .spotlight-section[data-layout="Border"][data-size="normal"] .spotlight-section-title a {
 	font-size: 1rem !important;
@@ -1929,8 +2002,7 @@
 }
 
 .layout-mobile .section-controls-inline .show-all-button,
-.layout-mobile .section-controls-inline .section-refresh-button,
-.layout-mobile .section-controls-inline .section-configure-button {
+.layout-mobile .section-controls-inline .section-refresh-button {
 	opacity: 1;
 	visibility: visible;
 }
@@ -1963,6 +2035,7 @@
 
 .layout-mobile .spotlight-dots {
 	bottom: 1rem !important;
+	display: none;
 }
 
 .layout-mobile .spotlight-section[data-layout="Borderless"] .spotlight-dots {
@@ -2220,10 +2293,6 @@ html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"
 	display: none !important;
 }
 
-.emby-scroller-container:has(.itemsContainer[data-layout="grid"]) .show-all-button {
-	display: initial !important;
-}
-
 :has(.spotlight-section[data-layout="Borderless"]) .homeSectionsContainer > *:not(.spotlight-section) {
 	z-index: 1;
 }
@@ -2264,6 +2333,7 @@ html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"
 
 .layout-mobile .spotlight-section .spotlight-section-title.sectionTabs:has(.emby-tab-button:not(.hide)) > * {
 	display: block !important;
+	padding: 0.25em 0.5em !important;
 }
 
 .layout-mobile .spotlight-section[data-hide-section-name="true"] .spotlight-section-title,

@@ -945,9 +945,11 @@
     function getServerSectionDefaults(section) {
         if (!section) return {};
         const spotlight = section.spotlightConfig || {};
+        const id = String(section.id || '');
+        const isPinned = id.startsWith(PINNED_LIST_ID_PREFIX) || id.startsWith(PINNED_PARENT_ID_PREFIX);
         return {
             renderMode: resolveRenderMode(section),
-            order: section.order ?? 0,
+            order: isPinned ? PINNED_DEFAULT_ORDER : (section.order ?? 0),
             ttl: section.ttl,
             cardFormat: section.cardFormat,
             animationEnabled: spotlight.panAnimation !== false,
@@ -1512,11 +1514,13 @@
                 return pref?.id && getPrefDedupeKey(pref) === storedId;
             });
             const existing = parseSectionPrefString(existingRaw) || {};
+            const serverDefaults = section._userPrefDefaults
+                || getServerSectionDefaults(serverSection);
             return serializeSectionPref(
                 storedId,
                 section.enabled !== false,
                 { ...existing, order: section.order },
-                getServerSectionDefaults(serverSection)
+                serverDefaults
             );
         });
         return sanitizeHomeScreenSections({
@@ -1855,7 +1859,7 @@
                     const modalId = 'kefin-user-homescreen-restore-defaults';
                     const content = '<p class="listItemBodyText">Restoring the default Home Screen Settings will override your existing settings. Are you sure you want to proceed?</p>';
                     const footer = `
-                        <button type="button" class="emby-button" onclick="window.ModalSystem.close('${modalId}')">Cancel</button>
+                        <button type="button" class="emby-button button-cancel button-flat" onclick="window.ModalSystem.close('${modalId}')">Cancel</button>
                         <button type="button" class="emby-button raised button-submit" id="kefin-restore-defaults-confirm">Proceed</button>
                     `;
                     window.ModalSystem.create({

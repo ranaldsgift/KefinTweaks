@@ -391,8 +391,14 @@
     };
 
     const ADVANCED_TOGGLE_DESCRIPTIONS = {
-        'section-flattenSeries': 'Multiple episodes from the same series will be grouped into one item in the section.',
-        'hsae-limit-before-sort': 'When enabled, the item limit is applied before section-level sort.',
+        'section-flattenSeries': {
+            on: 'Multiple episodes from the same series will be grouped into one item in the section.',
+            off: 'Episodes from the same series appear as separate items in the section.'
+        },
+        'hsae-limit-before-sort': {
+            on: 'When enabled, the item limit is applied before section-level sort.',
+            off: 'The item limit is applied after section-level sort.'
+        },
         'hsae-hide-card-titles': {
             on: 'Card titles for individual items in the section will not be shown.',
             off: 'Card titles for individual items in the section will be shown.'
@@ -1915,7 +1921,7 @@
 
     let appearancePreviewDebounceTimer = null;
     let appearancePreviewRequestId = 0;
-    let appearancePreviewCache = { fetchKey: null, renderKey: null, items: null };
+    let appearancePreviewCache = { fetchKey: null, renderKey: null, items: null, resolvedSection: null };
 
     function clearAppearancePreviewScheduling() {
         if (appearancePreviewDebounceTimer) {
@@ -1935,6 +1941,7 @@
 
         const fetchPreview = window.KefinHomeScreen?.fetchSectionPreviewItems;
         const renderPreview = window.KefinHomeScreen?.renderSectionPreviewInto;
+        const mergeResolved = window.KefinHomeScreen?.mergeDraftWithResolvedPreview;
         if (typeof fetchPreview !== 'function' || typeof renderPreview !== 'function') {
             container.innerHTML = '<p class="listItemBodyText secondary hsae-preview-placeholder">Preview unavailable.</p>';
             return;
@@ -1967,9 +1974,9 @@
 
         try {
             if (!cacheHit) {
-                const { items } = await fetchPreview(draft);
+                const { items, section: resolvedSection } = await fetchPreview(draft);
                 if (requestId !== appearancePreviewRequestId) return;
-                appearancePreviewCache = { fetchKey, renderKey, items };
+                appearancePreviewCache = { fetchKey, renderKey, items, resolvedSection: resolvedSection || null };
             } else {
                 appearancePreviewCache.renderKey = renderKey;
             }
@@ -1982,10 +1989,14 @@
                 return;
             }
 
-            await renderPreview(getDraftSection(), previewItems, container, { getDraftSection });
+            const liveDraft = getDraftSection();
+            const previewSection = typeof mergeResolved === 'function'
+                ? mergeResolved(liveDraft, appearancePreviewCache.resolvedSection)
+                : liveDraft;
+            await renderPreview(previewSection, previewItems, container, { getDraftSection });
         } catch (err) {
             if (requestId !== appearancePreviewRequestId) return;
-            appearancePreviewCache = { fetchKey: null, renderKey: null, items: null };
+            appearancePreviewCache = { fetchKey: null, renderKey: null, items: null, resolvedSection: null };
             container.innerHTML = `<p class="listItemBodyText secondary hsae-preview-placeholder">${escapeHtml(err.message || 'Preview failed')}</p>`;
         }
     }
@@ -2065,13 +2076,6 @@
                             'Hide Card Titles',
                             ADVANCED_TOGGLE_DESCRIPTIONS['hsae-hide-card-titles'][hideCardTitles ? 'on' : 'off'],
                             { hintKey: 'hsae-hide-card-titles' }
-                        )}
-                        ${buildToggleCard(
-                            'hsae-use-parent-card',
-                            section.useParentCard === true,
-                            'Link Parent Item',
-                            ADVANCED_TOGGLE_DESCRIPTIONS['hsae-use-parent-card'][section.useParentCard === true ? 'on' : 'off'],
-                            { hintKey: 'hsae-use-parent-card' }
                         )}
                     </div>
                     <div id="hsae-card-title-options-row" style="display:${hideCardTitles ? 'none' : ''};">
@@ -2204,13 +2208,25 @@
                     </div>
 
                     <div class="hsae-advanced-section-sort hsae-field-grid hsae-field-grid-2 hsae-advanced-sort-row" data-hsae-profiles="full postProcessing normal dateCutoffs">
-                        ${buildSelect('hsae-advanced-sortBy', toSortBySelectOptions(SORT_ORDERS), state.sortBy || '', 'Sort By')}
-                        ${buildSelect('hsae-advanced-sortOrder', getSectionSortOrderDirectionOptions(SORT_ORDER_DIRECTIONS), state.sortOrder || '', 'Sort Order')}
+                        <div class="hsae-field-with-hint">
+                            ${buildSelect('hsae-advanced-sortBy', toSortBySelectOptions(SORT_ORDERS), state.sortBy || '', 'Sort By')}
+                            <div class="listItemBodyText secondary hsae-field-hint">Items will be sorted in this order after they are returned from Jellyfin.</div>
+                        </div>
+                        <div class="hsae-field-with-hint">
+                            ${buildSelect('hsae-advanced-sortOrder', getSectionSortOrderDirectionOptions(SORT_ORDER_DIRECTIONS), state.sortOrder || '', 'Sort Order')}
+                            <div class="listItemBodyText secondary hsae-field-hint">Items will be sorted in this direction after they are returned from Jellyfin.</div>
+                        </div>
                     </div>
 
                     <div class="hsae-advanced-min-max-age hsae-field-grid hsae-field-grid-2 hsae-advanced-age-row" data-hsae-profiles="full dateCutoffs">
-                        ${buildTextInput('hsae-query-minAge', premiereAge.minAge, 'Minimum Age (Days)', 'number')}
-                        ${buildTextInput('hsae-query-maxAge', premiereAge.maxAge, 'Maximum Age (Days)', 'number')}
+                        <div class="hsae-field-with-hint">
+                            ${buildTextInput('hsae-query-minAge', premiereAge.minAge, 'Minimum Age (Days)', 'number')}
+                            <div class="listItemBodyText secondary hsae-field-hint">Only show items that have a Premiere Date older than this.</div>
+                        </div>
+                        <div class="hsae-field-with-hint">
+                            ${buildTextInput('hsae-query-maxAge', premiereAge.maxAge, 'Maximum Age (Days)', 'number')}
+                            <div class="listItemBodyText secondary hsae-field-hint">Only show items that have a Premiere Date newer than this.</div>
+                        </div>
                     </div>
 
                     <div class="hsae-advanced-limits hsae-field-grid hsae-field-grid-2 hsae-advanced-limits-row" data-hsae-profiles="full postProcessing normal dateCutoffs">
@@ -2230,7 +2246,8 @@
                                 'section-flattenSeries',
                                 section.flattenSeries === true,
                                 'Flatten Series',
-                                ADVANCED_TOGGLE_DESCRIPTIONS['section-flattenSeries']
+                                ADVANCED_TOGGLE_DESCRIPTIONS['section-flattenSeries'][section.flattenSeries === true ? 'on' : 'off'],
+                                { hintKey: 'section-flattenSeries' }
                             )}
                         </div>
                         <div class="hsae-advanced-limit-before-sort" data-hsae-profiles="full postProcessing normal dateCutoffs">
@@ -2238,9 +2255,19 @@
                                 'hsae-limit-before-sort',
                                 section.limitBeforeSort === true,
                                 'Limit Before Sort',
-                                ADVANCED_TOGGLE_DESCRIPTIONS['hsae-limit-before-sort']
+                                ADVANCED_TOGGLE_DESCRIPTIONS['hsae-limit-before-sort'][section.limitBeforeSort === true ? 'on' : 'off'],
+                                { hintKey: 'hsae-limit-before-sort' }
                             )}
                         </div>
+                    </div>
+                    <div class="hsae-toggle-card-grid" data-hsae-profiles="full minimal">
+                        ${buildToggleCard(
+                            'hsae-use-parent-card',
+                            section.useParentCard === true,
+                            'Link Parent Item',
+                            ADVANCED_TOGGLE_DESCRIPTIONS['hsae-use-parent-card'][section.useParentCard === true ? 'on' : 'off'],
+                            { hintKey: 'hsae-use-parent-card' }
+                        )}
                     </div>
                 </div>
             </details>
@@ -2951,7 +2978,9 @@
             { key: 'userEnabledByDefault', checkboxId: 'hsae-user-enabled-by-default', tooltips: USER_TOGGLE_TOOLTIPS.userEnabledByDefault },
             { key: 'userConfigurable', checkboxId: 'hsae-user-configurable', tooltips: USER_TOGGLE_TOOLTIPS.userConfigurable },
             { key: 'hsae-hide-card-titles', checkboxId: 'hsae-hide-card-titles', tooltips: ADVANCED_TOGGLE_DESCRIPTIONS['hsae-hide-card-titles'] },
-            { key: 'hsae-use-parent-card', checkboxId: 'hsae-use-parent-card', tooltips: ADVANCED_TOGGLE_DESCRIPTIONS['hsae-use-parent-card'] }
+            { key: 'hsae-use-parent-card', checkboxId: 'hsae-use-parent-card', tooltips: ADVANCED_TOGGLE_DESCRIPTIONS['hsae-use-parent-card'] },
+            { key: 'section-flattenSeries', checkboxId: 'section-flattenSeries', tooltips: ADVANCED_TOGGLE_DESCRIPTIONS['section-flattenSeries'] },
+            { key: 'hsae-limit-before-sort', checkboxId: 'hsae-limit-before-sort', tooltips: ADVANCED_TOGGLE_DESCRIPTIONS['hsae-limit-before-sort'] }
         ];
 
         toggles.forEach(({ key, checkboxId, tooltips }) => {
@@ -3302,7 +3331,7 @@
             state.renderMode = renderMode;
             const renderModeInput = root.querySelector('#hsae-render-mode-value');
             if (renderModeInput) renderModeInput.value = renderMode;
-            appearancePreviewCache = { fetchKey: null, renderKey: null, items: null };
+            appearancePreviewCache = { fetchKey: null, renderKey: null, items: null, resolvedSection: null };
             refreshEditorBody(modalInstance);
             return;
         }
@@ -3519,7 +3548,7 @@
 
     function attachListeners(modalInstance, context, callbacks = {}) {
         clearAppearancePreviewScheduling();
-        appearancePreviewCache = { fetchKey: null, renderKey: null, items: null };
+        appearancePreviewCache = { fetchKey: null, renderKey: null, items: null, resolvedSection: null };
         modalInstance._hsaePreviewInitialized = false;
 
         const section = context.section || {};
@@ -3584,7 +3613,7 @@
                     }
                 }
 
-                if (target.id === 'hsae-hide-section-name' || target.id === 'hsae-hide-watched' || target.id === 'hsae-user-enabled-by-default' || target.id === 'hsae-user-configurable') {
+                if (target.matches?.('input[type="checkbox"]') && target.closest('.kefin-toggle-card')) {
                     updateToggleCardHints(root);
                 }
             });

@@ -13,7 +13,7 @@
         },
         minimal: {
             queryFields: ['limit'],
-            advancedFields: ['cache'],
+            advancedFields: ['cache', 'useParentCard'],
             lockVisibility: true,
             allowGroupChange: false,
             allowItemSourceChange: false,

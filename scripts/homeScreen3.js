@@ -113,18 +113,24 @@
         recoveryRenderEnd: null
     };
 
-    // Create loading indicator element
+    // Create loading indicator element (always last child of the sections container)
     function createDiscoveryLoadingIndicator(container) {
-        let loadingDiv = document.querySelector('.homePage:not(.hide) #discovery-loading-indicator')
-            || document.querySelector('.libraryPage:not(.hide) #discovery-loading-indicator');
-        if (loadingDiv) {
-            return loadingDiv;
-        }
-
         // Prefer the provided container, but fall back to the standard sections container
         if (!container) {
             container = document.querySelector('.homePage:not(.hide) #homeTab .sections')
                 || document.querySelector('.libraryPage:not(.hide) .homeSectionsContainer');
+        }
+
+        let loadingDiv = document.querySelector('.homePage:not(.hide) #discovery-loading-indicator')
+            || document.querySelector('.libraryPage:not(.hide) #discovery-loading-indicator');
+
+        if (loadingDiv) {
+            if (container && loadingDiv.parentElement !== container) {
+                container.appendChild(loadingDiv);
+            } else if (container && container.lastElementChild !== loadingDiv) {
+                container.appendChild(loadingDiv);
+            }
+            return loadingDiv;
         }
 
         if (!container) {
@@ -144,6 +150,10 @@
         LOG('Created discovery loading indicator inside sections container');
         
         return loadingDiv;
+    }
+
+    function removeDiscoveryLoadingIndicator() {
+        document.querySelectorAll('#discovery-loading-indicator').forEach((el) => el.remove());
     }
 
     function getDiscoveryHomePageEl() {
@@ -260,7 +270,7 @@
         return homeSectionsContainer;
     }
 
-    const HOME_SECTIONS_SELECTOR = '.homePage:not(.hide) #homeTab .sections';
+    const HOME_SECTIONS_SELECTOR = '.homePage:not(.hide) #homeTab.is-active .sections';
     let homeSectionsReadyObserver = null;
 
     function disconnectHomeSectionsReadyObserver() {
@@ -433,7 +443,7 @@
         performanceMetrics.initialRenderStart = performance.now();
 
         mountCreateSectionButton();
-        mountCategoryRail();
+        // Defer mountCategoryRail until pinned availability is known (avoids first-load tab jump)
         syncHomeScreenChromeVisibility();
 
         // Reset cache/metrics for a new initialization cycle
@@ -476,20 +486,18 @@
         const kefinTweaksHomeSections = document.querySelectorAll('.homePage:not(.hide) #homeTab .homeSectionsContainer [data-section-id]');
         if (kefinTweaksHomeSections.length > 0) {
             LOG('Home screen already initialized and Jellyfin has rendered');
-            return;
-        }
-
-        // Check if another page container exists with an already rendered KefinTweaks home screen
-        const otherPageContainer = document.querySelector('.pageContainer:not(.hide) .homeSectionsContainer[data-sections-rendered="true"]');
-        if (otherPageContainer) {
-            // Copy the existing home sections with [data-section-id] from that container into our target container instead of re-rendering it
-            const otherPageSections = otherPageContainer.querySelectorAll('[data-section-id]');
-            const homeScreenFragment = document.createDocumentFragment();
-            otherPageSections.forEach(section => {
-                homeScreenFragment.appendChild(section.cloneNode(true));
-            });
-            container.appendChild(homeScreenFragment);
-            LOG('Cloned existing home sections from a previous container');
+            try {
+                updatePinnedCategoryAvailability(
+                    Array.from(kefinTweaksHomeSections).map((el) => ({
+                        id: el.dataset.sectionId,
+                        category: el.dataset.category
+                    })),
+                    null
+                );
+                refreshHomeCategoryChrome();
+            } catch (err) {
+                ERR('Failed to sync home category chrome for existing home:', err);
+            }
             return;
         }
 
@@ -535,6 +543,8 @@
         }
 
         updatePinnedCategoryAvailability(filteredHomeSections, homeScreen);
+        mountCategoryRail();
+        syncHomeScreenChromeVisibility();
 
         performanceEndTime = performance.now();
         performanceDuration = performanceEndTime - performanceStartTime;
@@ -1485,11 +1495,17 @@
 
             const config = await window.KefinHomeScreen.getConfig();
             const revealSectionsSequentially = config.DISCOVERY_SETTINGS?.fadeInSections === true;
+
+            // Park the indicator so newly appended sections are not inserted after it in the DOM
+            removeDiscoveryLoadingIndicator();
+
             await window.cardBuilder.renderProgressiveSections(container, bufferedSections, {
                 revealSectionsSequentially,
                 enhanceOnVisible: true,
                 showStaleDataBeforeRefresh: config.HOME_SETTINGS?.showStaleDataBeforeRefresh === true
             });
+
+            createDiscoveryLoadingIndicator(container);
 
             container.dataset.loadingDiscovery = 'false';
             container.classList.remove('loading-discovery');
@@ -1504,6 +1520,7 @@
         } catch (e) {
             ERR('Error rendering discovery group:', e);
             state.discoveryBuffer = null;
+            createDiscoveryLoadingIndicator(container);
         } finally {
             state.isRenderingDiscovery = false;
             if (state.discoverySectionsRemain !== false) {
@@ -1844,13 +1861,14 @@
     const HOME_CHROME_CREATE_ID = 'kefin-home-create-section-btn';
     const HOME_CHROME_CATEGORY_RAIL_ID = 'kefin-home-category-rail';
     const HOME_CHROME_CATEGORY_STYLE_ID = 'kefin-home-category-filter-styles';
-    const HOME_CHROME_CLASSIC_RAIL_CLASSES = 'skinHeader skinHeader-withBackground emby-tab-button';
+    const HOME_CHROME_CLASSIC_RAIL_CLASSES = 'skinHeader skinHeader-withBackground emby-tabs-slider emby-tab-button';
+    const HOME_CHROME_MODERN_RAIL_CLASSES = 'MuiPaper-root MuiPaper-elevation MuiPaper-elevation1 MuiAppBar-root MuiAppBar-colorDefault MuiAppBar-positionFixed mui-fixed';
     let homeChromeActiveCategory = 'none';
     let homeChromeCreateMounted = false;
+    let homeChromeCreateMounting = false;
     let homeChromeCategoryMounted = false;
     let homeChromeHasPinnedContent = false;
     let homeChromeVisibilityObserver = null;
-    let homeChromeMuiAppBarObserver = null;
 
     function getHomeSettings() {
         return window.KefinTweaksConfig?.homeScreenConfig?.HOME_SETTINGS
@@ -1873,10 +1891,8 @@
     }
 
     function updatePinnedCategoryAvailability(sections, homeScreen) {
-        const userHomeConfig = window.KefinUserHomeScreenConfig;
-        const fromUserPins = (userHomeConfig?.buildPinnedSectionConfigs?.(homeScreen) || []).length > 0;
-        const fromSections = (sections || []).some(sectionIsPinnedCategory);
-        homeChromeHasPinnedContent = fromUserPins || fromSections;
+        const fromSections = (sections || []).some(s => sectionIsPinnedCategory(s) && s.enabled !== false);
+        homeChromeHasPinnedContent = fromSections;
     }
 
     function getRailCategories() {
@@ -1887,32 +1903,15 @@
     }
 
     function isModernUIChrome() {
-        return document.querySelector('.MuiBox-root') !== null || localStorage.getItem('layout')?.length === 0;
+        return !!document.querySelector('main.MuiBox-root') || localStorage.getItem('layout')?.length === 0;
     }
 
     function getCategoryRailNativeClasses() {
         const base = 'kefin-home-chrome kefin-home-category-rail';
         if (isModernUIChrome()) {
-            let appBar = document.querySelector('.MuiAppBar-root');       
-
-            if (appBar?.className) {
-                return `${base} ${appBar.className}`;
-            }
+            return `${base} ${HOME_CHROME_MODERN_RAIL_CLASSES}`;
         }
         return `${base} ${HOME_CHROME_CLASSIC_RAIL_CLASSES}`;
-    }
-
-    function ensureMuiAppBarClassObserver() {
-        if (!isModernUIChrome() || homeChromeMuiAppBarObserver) return;
-        if (document.querySelector('.MuiAppBar-root')) return;
-        homeChromeMuiAppBarObserver = new MutationObserver(() => {
-            if (!document.querySelector('.MuiAppBar-root')) return;
-            try { homeChromeMuiAppBarObserver?.disconnect(); } catch (_) { /* ignore */ }
-            homeChromeMuiAppBarObserver = null;
-            const inner = document.querySelector(`#${HOME_CHROME_CATEGORY_RAIL_ID} .kefin-home-category-rail`);
-            if (inner) inner.className = getCategoryRailNativeClasses();
-        });
-        homeChromeMuiAppBarObserver.observe(document.body, { childList: true, subtree: true });
     }
 
     function isHomePageVisible() {
@@ -1950,38 +1949,57 @@
     }
 
     async function mountCreateSectionButton() {
-        if (homeChromeCreateMounted || document.getElementById(HOME_CHROME_CREATE_ID)) {
-            homeChromeCreateMounted = true;
+        const existingNodes = document.querySelectorAll(`#${HOME_CHROME_CREATE_ID}`);
+        if (existingNodes.length > 1) {
+            existingNodes.forEach((el, idx) => {
+                if (idx > 0) el.remove();
+            });
+        }
+        if (homeChromeCreateMounted || homeChromeCreateMounting || document.getElementById(HOME_CHROME_CREATE_ID)) {
+            homeChromeCreateMounted = !!document.getElementById(HOME_CHROME_CREATE_ID);
             return;
         }
         if (getHomeSettings().showCreateSectionButtonOnHome !== true) return;
-        try {
-            const isAdmin = !!(await window.apiHelper?.isAdmin?.());
-            if (!isAdmin) return;
-        } catch {
-            return;
-        }
 
-        const wrap = document.createElement('div');
-        wrap.id = HOME_CHROME_CREATE_ID;
-        wrap.className = 'kefin-home-chrome kefin-home-create-section';
-        wrap.hidden = !isHomePageVisible();
-        wrap.innerHTML = `
-            <button type="button" class="paper-icon-button-light emby-button kefin-home-create-section-btn" title="Create Section" aria-label="Create Section">
-                <span class="material-icons" aria-hidden="true">add_circle</span>
-            </button>
-        `;
-        wrap.querySelector('button')?.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
+        homeChromeCreateMounting = true;
+        try {
+            let isAdmin = false;
             try {
-                window.KefinHomeScreen?.openNewCustomSection?.({ refreshHomeOnSave: true });
-            } catch (err) {
-                ERR('Failed to open create section from home:', err);
+                isAdmin = !!(await window.apiHelper?.isAdmin?.());
+            } catch {
+                return;
             }
-        });
-        document.body.appendChild(wrap);
-        homeChromeCreateMounted = true;
+            if (!isAdmin) return;
+
+            // Re-check after await — another caller may have mounted meanwhile
+            if (document.getElementById(HOME_CHROME_CREATE_ID)) {
+                homeChromeCreateMounted = true;
+                return;
+            }
+
+            const wrap = document.createElement('div');
+            wrap.id = HOME_CHROME_CREATE_ID;
+            wrap.className = 'kefin-home-chrome kefin-home-create-section';
+            wrap.hidden = !isHomePageVisible();
+            wrap.innerHTML = `
+                <button type="button" class="paper-icon-button-light emby-button kefin-home-create-section-btn" title="Create Section" aria-label="Create Section">
+                    <span class="material-icons" aria-hidden="true">add_circle</span>
+                </button>
+            `;
+            wrap.querySelector('button')?.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                try {
+                    window.KefinHomeScreen?.openNewCustomSection?.({ refreshHomeOnSave: true });
+                } catch (err) {
+                    ERR('Failed to open create section from home:', err);
+                }
+            });
+            document.body.appendChild(wrap);
+            homeChromeCreateMounted = true;
+        } finally {
+            homeChromeCreateMounting = false;
+        }
     }
 
     function buildCategoryFilterStyles(categories) {
@@ -2017,7 +2035,6 @@
     function applyActiveHomeCategory(categoryId) {
         const categories = getRailCategories();
         const next = categories.some((c) => c.id === categoryId) ? categoryId : 'none';
-        const prev = homeChromeActiveCategory || 'none';
         homeChromeActiveCategory = next;
         const separate = getHomeSettings().renderCategoriesSeparately === true;
 
@@ -2031,11 +2048,12 @@
             rail.querySelectorAll('.kefin-home-category-btn').forEach((btn) => {
                 const active = btn.dataset.categoryId === next;
                 btn.classList.toggle('is-active', active);
+                btn.classList.toggle('emby-tab-button-active', active);
                 btn.setAttribute('aria-pressed', active ? 'true' : 'false');
             });
         }
 
-        if (next === 'discovery' && prev !== 'discovery' && isDiscoveryAllowedForActiveCategory()) {
+        if (next === 'discovery' && isDiscoveryAllowedForActiveCategory()) {
             const container = document.querySelector('.libraryPage:not(.hide) .homeSectionsContainer, .homePage:not(.hide) .homeSectionsContainer');
             if (container) {
                 const hasDiscovery = !!(
@@ -2089,7 +2107,7 @@
         outer.hidden = !isHomePageVisible();
         outer.setAttribute('role', 'toolbar');
         outer.setAttribute('aria-label', 'Home categories');
-        outer.setAttribute('aria-hidden', outer.hidden ? 'true' : 'false');
+        //outer.setAttribute('aria-hidden', outer.hidden ? 'true' : 'false');
 
         const inner = document.createElement('div');
         inner.className = getCategoryRailNativeClasses();
@@ -2100,12 +2118,12 @@
             const active = desiredCategory === cat.id;
             return `
                 <button type="button"
-                    class="paper-icon-button-light emby-button kefin-home-category-btn${active ? ' is-active' : ''}"
+                    class="paper-icon-button-light emby-button kefin-home-category-btn${active ? ' is-active emby-tab-button-active' : ''}"
                     data-category-id="${id}"
                     title="${name}"
                     aria-label="${name}"
                     aria-pressed="${active ? 'true' : 'false'}">
-                    <span class="material-icons" aria-hidden="true">${icon}</span>
+                    <span class="material-icons emby-button-foreground ${icon}" aria-hidden="true"></span>
                 </button>
             `;
         }).join('');
@@ -2121,16 +2139,32 @@
 
         document.body.appendChild(outer);
         homeChromeCategoryMounted = true;
-        ensureMuiAppBarClassObserver();
         applyActiveHomeCategory(desiredCategory);
+    }
+
+    function getMountedRailCategoryIds() {
+        const rail = document.getElementById(HOME_CHROME_CATEGORY_RAIL_ID);
+        if (!rail) return null;
+        return Array.from(rail.querySelectorAll('.kefin-home-category-btn'))
+            .map((btn) => btn.dataset.categoryId);
     }
 
     function refreshHomeCategoryChrome() {
         ensureCategoryFilterStyles();
-        const rail = document.getElementById(HOME_CHROME_CATEGORY_RAIL_ID);
-        if (rail) rail.remove();
-        homeChromeCategoryMounted = false;
-        mountCategoryRail();
+        const desired = getRailCategories().map((c) => String(c?.id || ''));
+        const mounted = getMountedRailCategoryIds();
+        const same = Array.isArray(mounted)
+            && mounted.length === desired.length
+            && mounted.every((id, i) => id === desired[i]);
+
+        if (!same) {
+            const rail = document.getElementById(HOME_CHROME_CATEGORY_RAIL_ID);
+            if (rail) rail.remove();
+            homeChromeCategoryMounted = false;
+            mountCategoryRail();
+        } else {
+            applyActiveHomeCategory(homeChromeActiveCategory || 'none');
+        }
         syncHomeScreenChromeVisibility();
     }
 

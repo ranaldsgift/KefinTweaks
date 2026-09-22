@@ -14,7 +14,8 @@
     const SPOTLIGHT_WINDOW_NEXT = 4;
 
     const state = {
-        defaultCardBackgroundNumber: 1
+        defaultCardBackgroundNumber: 1,
+        useBlurhash: false
     }
 
     function getSpotlightWindowIndices(currentIndex, totalLength) {
@@ -2223,13 +2224,14 @@
 
             // Append one section per frame so scroll/compositor get frames between paints.
             // Build already happened in the fragment; only the container append is paced.
-            const sectionNodes = Array.from(fragment.childNodes);
+            /* const sectionNodes = Array.from(fragment.childNodes);
             for (let i = 0; i < sectionNodes.length; i++) {
                 container.appendChild(sectionNodes[i]);
                 if (i + 1 < sectionNodes.length) {
                     await new Promise((resolve) => requestAnimationFrame(resolve));
                 }
-            }
+            } */
+            container.appendChild(fragment);
             syncAttachedGridTilesLayouts(container);
 
             // Update the scroll buttons for all scrollable containers
@@ -4454,7 +4456,7 @@
             
             // Watchlist button (material icon span button with bookmark icon)
             const watchlistButton = document.createElement('button');
-            watchlistButton.className = 'emby-button button-flat';
+            watchlistButton.className = 'emby-button button-flat btnWatchlist';
             
             // Check watchlist status - try to get from cache or API
             let isInWatchlist = false;
@@ -5152,8 +5154,8 @@
         grid: 'grid_view'
     };
     const ITEMS_LAYOUT_NEXT_TITLE = {
-        row: 'Show as grid',
-        grid: 'Show as scrollable row'
+        row: 'Grid layout',
+        grid: 'Row layout'
     };
 
     function resolveItemsLayout(sectionConfig) {
@@ -5526,7 +5528,7 @@
         definitions.push({
             id: 'refresh',
             icon: 'refresh',
-            label: 'Refresh Section',
+            label: 'Refresh',
             className: 'section-refresh-button',
             isVisible: () => true,
             onClick: async (e) => {
@@ -5541,7 +5543,7 @@
                 id: 'showAll',
                 icon: 'grid_view',
                 getLabel: () => getShowAllControlLabel(sectionElement),
-                label: 'Show as grid',
+                label: 'Grid layout',
                 className: 'show-all-button',
                 isVisible: () => true,
                 onClick: (e) => {
@@ -5591,26 +5593,23 @@
         const newMoreButton = moreButton.cloneNode(true);
         moreButton.replaceWith(newMoreButton);
 
+        const MORE_CONTROLS_MODAL_ID = 'kefin-section-controls-more';
         let activeMorePopover = null;
         const closeMorePopover = () => {
+            if (window.ModalSystem?.isOpen?.(MORE_CONTROLS_MODAL_ID)) {
+                window.ModalSystem.close(MORE_CONTROLS_MODAL_ID);
+            }
             if (activeMorePopover) {
                 activeMorePopover.remove();
                 activeMorePopover = null;
             }
         };
 
-        newMoreButton.addEventListener('click', (e) => {
-            e.stopPropagation();
-            e.preventDefault();
-
-            if (activeMorePopover) {
-                closeMorePopover();
-                return;
-            }
-
+        const buildMorePopoverContent = (onActivate, { forModal = false } = {}) => {
             const popover = document.createElement('div');
-            popover.className = 'kefinTweaks-popover section-controls-more-popover itemDetailsGroup';
-
+            popover.className = forModal
+                ? 'kefinTweaks-popover section-controls-more-menu'
+                : 'kefinTweaks-popover section-controls-more-popover';
             visibleDefinitions.forEach((def) => {
                 const label = typeof def.getLabel === 'function' ? def.getLabel() : def.label;
                 const item = document.createElement('div');
@@ -5632,7 +5631,7 @@
                 const activate = (ev) => {
                     ev.preventDefault();
                     ev.stopPropagation();
-                    closeMorePopover();
+                    onActivate();
                     def.onClick(ev, newMoreButton);
                 };
                 item.addEventListener('click', activate);
@@ -5643,7 +5642,82 @@
                 });
                 popover.appendChild(item);
             });
+            return popover;
+        };
 
+        const positionMoreModal = (modal, anchorBtn) => {
+            if (!modal?.dialog || !anchorBtn) return;
+            modal.dialog.classList.remove('centeredDialog', 'formDialog', 'smoothScrollY', 'dialog-fixedSize');
+            modal.dialog.style.position = 'fixed';
+            modal.dialog.style.margin = '0';
+            modal.dialog.style.maxHeight = 'none';
+            modal.dialog.style.height = 'auto';
+            modal.dialog.style.minHeight = 'auto';
+            modal.dialog.style.minWidth = '12rem';
+            modal.dialog.style.width = 'auto';
+            modal.dialog.style.padding = '0.25em 0';
+            modal.dialog.style.animation = '160ms ease-out 0s 1 normal both running scaleup';
+            if (modal.dialogContent) {
+                modal.dialogContent.style.padding = '0';
+                modal.dialogContent.style.overflow = 'visible';
+                modal.dialogContent.style.minHeight = 'auto';
+                modal.dialogContent.style.height = 'auto';
+                modal.dialogContent.style.flex = '0 0 auto';
+            }
+            if (modal.backdrop) {
+                modal.backdrop.style.background = 'transparent';
+            }
+            if (modal.dialogContainer) {
+                modal.dialogContainer.style.pointerEvents = 'none';
+            }
+            modal.dialog.style.pointerEvents = 'auto';
+
+            const btnRect = anchorBtn.getBoundingClientRect();
+            const margin = 8;
+            const gap = 4;
+            requestAnimationFrame(() => {
+                const menuHeight = modal.dialog.offsetHeight || 0;
+                const menuWidth = Math.max(modal.dialog.offsetWidth || 0, 180);
+                let top = btnRect.bottom + gap;
+                if (top + menuHeight > window.innerHeight - margin) {
+                    top = Math.max(margin, btnRect.top - menuHeight - gap);
+                }
+                let left = btnRect.right - menuWidth;
+                left = Math.min(Math.max(left, margin), window.innerWidth - menuWidth - margin);
+                modal.dialog.style.top = `${top}px`;
+                modal.dialog.style.left = `${left}px`;
+            });
+        };
+
+        newMoreButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+
+            if (activeMorePopover || window.ModalSystem?.isOpen?.(MORE_CONTROLS_MODAL_ID)) {
+                closeMorePopover();
+                return;
+            }
+
+            if (isMobileLayout() && window.ModalSystem?.create) {
+                const content = buildMorePopoverContent(() => closeMorePopover(), { forModal: true });
+                window.ModalSystem.create({
+                    id: MORE_CONTROLS_MODAL_ID,
+                    title: '',
+                    content,
+                    showCloseButton: false,
+                    closeOnBackdrop: true,
+                    closeOnEscape: true,
+                    fixedSize: false,
+                    onOpen: (modal) => {
+                        if (modal?.dialogHeader) modal.dialogHeader.style.display = 'none';
+                        if (modal?.dialogFooter) modal.dialogFooter.style.display = 'none';
+                        positionMoreModal(modal, newMoreButton);
+                    }
+                });
+                return;
+            }
+
+            const popover = buildMorePopoverContent(() => closeMorePopover());
             titleContainer.style.position = 'relative';
             newMoreButton.parentNode.insertBefore(popover, newMoreButton.nextSibling);
 
@@ -5816,13 +5890,68 @@
             }
         }
 
-        leftButton.addEventListener('click', () => {
+        function getScrollCards() {
             const itemsContainer = scroller.querySelector('.itemsContainer');
-            if (!itemsContainer) return;
-            const scrollAmount = itemsContainer.clientWidth - itemsContainer.offsetLeft;
+            if (!itemsContainer) return [];
+            return Array.from(itemsContainer.querySelectorAll(':scope > .card:not(.card-layout-dummy):not(.skeleton-card)'));
+        }
+
+        const scrollerPadding = (() => {
+            const style = window.getComputedStyle(scroller);
+            return {
+                left: parseFloat(style.paddingLeft) || 0,
+                right: parseFloat(style.paddingRight) || 0
+            };
+        })();
+
+        function getCardScrollLeft(card) {
+            // Scroller + cards share the same translateX, so this delta is layout offset
+            // within the border box. Subtract paddingLeft so snap aligns to the padded
+            // content gutter (same inset as card 0 at scroll 0), not the page edge.
+            const scrollerRect = scroller.getBoundingClientRect();
+            const cardRect = card.getBoundingClientRect();
+            return cardRect.left - scrollerRect.left - scrollerPadding.left;
+        }
+
+        /**
+         * Cards fully inside the padded content clip (not the browser viewport / border box).
+         * Undo translateX, then inset by scroller padding so visibility matches snap targets.
+         */
+        function getFullyVisibleCardIndices(cards) {
+            const fullyVisible = [];
+            const epsilon = 1;
+            const scrollerRect = scroller.getBoundingClientRect();
             const currentPosition = getCurrentPosition();
-            const newPosition = scrollAmount > currentPosition ? 0 : currentPosition - scrollAmount;
-            setPosition(newPosition, { animate: true });
+            const contentWidth = Math.max(
+                0,
+                scroller.clientWidth - scrollerPadding.left - scrollerPadding.right
+            );
+            const visibleLeft = scrollerRect.left + currentPosition + scrollerPadding.left;
+            const visibleRight = visibleLeft + contentWidth;
+            cards.forEach((card, index) => {
+                const cardRect = card.getBoundingClientRect();
+                if (cardRect.width <= 0) return;
+                if (cardRect.left >= visibleLeft - epsilon && cardRect.right <= visibleRight + epsilon) {
+                    fullyVisible.push(index);
+                }
+            });
+            return fullyVisible;
+        }
+
+        function snapScrollToCardIndex(cards, targetIndex) {
+            if (!cards.length) return;
+            const clampedIndex = Math.max(0, Math.min(targetIndex, cards.length - 1));
+            const targetLeft = getCardScrollLeft(cards[clampedIndex]);
+            setPosition(targetLeft, { animate: true });
+        }
+
+        leftButton.addEventListener('click', () => {
+            const cards = getScrollCards();
+            if (!cards.length) return;
+            const fullyVisible = getFullyVisibleCardIndices(cards);
+            const firstVisible = fullyVisible.length ? fullyVisible[0] : 0;
+            const step = Math.max(1, fullyVisible.length);
+            snapScrollToCardIndex(cards, firstVisible - step);
         });
 
         scrollButtons.appendChild(leftButton);
@@ -5839,11 +5968,16 @@
         rightButton.appendChild(rightSpan);
 
         rightButton.addEventListener('click', () => {
-            const itemsContainer = scroller.querySelector('.itemsContainer');
-            if (!itemsContainer) return;
-            const scrollAmount = itemsContainer.clientWidth - itemsContainer.offsetLeft;
-            const currentPosition = getCurrentPosition();
-            setPosition(currentPosition + scrollAmount, { animate: true });
+            const cards = getScrollCards();
+            if (!cards.length) return;
+            const fullyVisible = getFullyVisibleCardIndices(cards);
+            const lastVisible = fullyVisible.length ? fullyVisible[fullyVisible.length - 1] : -1;
+            const nextIndex = lastVisible + 1;
+            if (nextIndex >= cards.length) {
+                setPosition(getMaxPosition(), { animate: true });
+                return;
+            }
+            snapScrollToCardIndex(cards, nextIndex);
         });
 
         scrollButtons.appendChild(rightButton);
@@ -7631,6 +7765,7 @@
             await window.userHelper.waitForLogin();
         }
         startCardUserDataListener();
+        state.useBlurhash = localStorage.getItem(`${ApiClient.getCurrentUserId()}-blurhash`) === 'true' || false;
     }
 
     initialize();

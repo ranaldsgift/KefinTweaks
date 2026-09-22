@@ -72,7 +72,7 @@
             off: 'Person appearance data is limited to only Movies and Series.'
         },
         'home-showCreateSectionButtonOnHome': {
-            on: 'Adds a hidden button to the bottom left corner of the home screen so that you can quickly create a new section directly from the Home Screen. Only admins will see this button.',
+            on: 'Adds a button to the bottom left corner of the home screen so that you can quickly create a new section directly from the Home Screen. Only admins will see this button. The button is hidden on mobile.',
             off: 'You must use the KefinTweaks Configuration > Home Screen > New Section flow to create new Home Screen sections.'
         },
         'home-showCategoryFilters': {
@@ -2247,7 +2247,7 @@
         const D = GENERAL_TOGGLE_DESCRIPTIONS;
         const maxPeopleCount = homeSettings.maxPeopleCount ?? 100;
         const maxPeopleOptions = MAX_PEOPLE_COUNT_OPTIONS.map((n) => ({ value: String(n), label: String(n) }));
-        const settingsGroupStyle = 'margin-bottom: 1.5em; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 1em;';
+        const settingsGroupStyle = 'margin-top: 0.75em; margin-bottom: 1.5em; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 1em;';
         return `
             <div class="hsc-settings-grid hsc-settings-grid-2">
                 ${hscToggleCard('userHome-inlineConfigure', userHomeScreen.inlineConfigure !== false, 'Inline Section Configuration', D)}
@@ -2263,12 +2263,19 @@
                     ${hscToggleCard('home-ensureThumbsForPopularTVNetworks', homeSettings.ensureThumbsForPopularTVNetworks === true, 'Require Studio Thumbs', D)}
                 </div>
                 <div class="hsc-settings-span-2">
-                    ${hscToggleCard('home-showCreateSectionButtonOnHome', homeSettings.showCreateSectionButtonOnHome === true, 'Create Section button on Home Screen', D)}
+                    ${hscToggleCard('home-showCreateSectionButtonOnHome', homeSettings.showCreateSectionButtonOnHome === true, 'Quick Create Button', D)}
                 </div>
                 <div class="hsc-settings-span-2">
-                    ${buildTextInput('home-dismissEmptySectionTimer', homeSettings.dismissEmptySectionTimer ?? 0, 'Empty Section Dismiss Timer (ms)', 'number')}
-                    <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-top: 0.35em;">
-                        When a section loads with no items: <code>0</code> removes it immediately. Any other value shows “No items found” for that many milliseconds, then fades the section out.
+                    <div class="kefin-toggle-card kefin-settings-input-card">
+                        <div class="kefin-toggle-card-text">
+                            <label class="listItemBodyText kefin-toggle-card-label" for="home-dismissEmptySectionTimer">Empty Section Dismiss Timer (ms)</label>
+                            <div class="listItemBodyText secondary kefin-toggle-card-desc">
+                                When a section loads with no items: 0 removes it immediately. Any other value shows “No items found” for that many milliseconds, then fades the section out.
+                            </div>
+                        </div>
+                        <div class="kefin-settings-input-card-control">
+                            <input type="number" id="home-dismissEmptySectionTimer" class="fld emby-input" value="${homeSettings.dismissEmptySectionTimer ?? 0}" min="0" step="1" aria-label="Empty Section Dismiss Timer (ms)">
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2621,6 +2628,22 @@
         const dialog = document.querySelector(`.dialogContainer[data-modal-id="${MAIN_MODAL_ID}"]`);
         const root = dialog?.querySelector('#global-settings-content') || dialog;
         if (!root) return;
+
+        if (root.querySelector('#home-showCategoryFilters')
+            || root.querySelector('#home-renderCategoriesSeparately')
+            || root.querySelector('#kefin-home-category-list')) {
+            currentConfig.HOME_SETTINGS = {
+                ...(currentConfig.HOME_SETTINGS || {}),
+                showCategoryFilters: root.querySelector('#home-showCategoryFilters')?.checked === true,
+                renderCategoriesSeparately: root.querySelector('#home-renderCategoriesSeparately')?.checked === true,
+                ...(root.querySelector('#kefin-home-category-list')
+                    ? { categories: normalizeHomeCategories(collectCategoriesFromForm(root)) }
+                    : {})
+            };
+            try {
+                window.homeScreen3?.refreshHomeCategoryChrome?.();
+            } catch (_) { /* ignore */ }
+        }
 
         if (root.querySelector('#discovery-enabled')) {
             currentConfig.DISCOVERY_SETTINGS = {
@@ -5101,11 +5124,91 @@
     }
 
     /**
+     * Discovery templates need a source pick before queries are concrete.
+     */
+    function sectionNeedsDiscoveryResolve(section) {
+        if (!section) return false;
+        if (Array.isArray(section.items) && section.items.length > 0) return false;
+        if (Array.isArray(section.externalListUrls) && section.externalListUrls.length > 0) return false;
+        if (section.discoveryType) return true;
+        if (section.discoveryEnabled === true) return true;
+        const type = String(section.type || '').toLowerCase();
+        return ['genre', 'studio', 'person', 'collection', 'similar', 'watchlist', 'tag'].includes(type);
+    }
+
+    function snapshotDiscoveryDedupeState(discoveryState) {
+        if (!discoveryState?.renderedDiscoveryIds) return null;
+        const renderedDiscoveryIds = {};
+        Object.keys(discoveryState.renderedDiscoveryIds).forEach((key) => {
+            const set = discoveryState.renderedDiscoveryIds[key];
+            renderedDiscoveryIds[key] = set instanceof Set ? new Set(set) : new Set();
+        });
+        return {
+            renderedDiscoveryIds,
+            currentDiscoveryGenre: discoveryState.currentDiscoveryGenre ?? null,
+            currentDiscoveryStudio: discoveryState.currentDiscoveryStudio ?? null
+        };
+    }
+
+    function restoreDiscoveryDedupeState(discoveryState, snapshot) {
+        if (!discoveryState?.renderedDiscoveryIds || !snapshot?.renderedDiscoveryIds) return;
+        Object.keys(discoveryState.renderedDiscoveryIds).forEach((key) => {
+            const live = discoveryState.renderedDiscoveryIds[key];
+            if (!(live instanceof Set)) return;
+            live.clear();
+            const saved = snapshot.renderedDiscoveryIds[key];
+            if (saved instanceof Set) saved.forEach((id) => live.add(id));
+        });
+        discoveryState.currentDiscoveryGenre = snapshot.currentDiscoveryGenre ?? null;
+        discoveryState.currentDiscoveryStudio = snapshot.currentDiscoveryStudio ?? null;
+    }
+
+    async function resolveDiscoverySectionForPreview(section) {
+        const helper = window.sectionHelper;
+        if (!helper?.buildDiscoverySectionInstance) {
+            throw new Error('Discovery resolver unavailable for preview');
+        }
+        const discoveryState = helper.getDiscoveryState?.();
+        const snapshot = snapshotDiscoveryDedupeState(discoveryState);
+        try {
+            const resolved = await helper.buildDiscoverySectionInstance(section, {
+                pairSpotlight: false,
+                resolveViewMore: false
+            });
+            if (!resolved?.queries?.length && !resolved?.items?.length) {
+                throw new Error('Could not resolve discovery source for preview');
+            }
+            return resolved;
+        } finally {
+            restoreDiscoveryDedupeState(discoveryState, snapshot);
+        }
+    }
+
+    /**
+     * Overlay resolved discovery display fields onto a live draft so appearance
+     * edits stay on the draft while titles/captions come from resolve.
+     * @param {Object} draft
+     * @param {Object|null|undefined} resolved
+     * @returns {Object}
+     */
+    function mergeDraftWithResolvedPreview(draft, resolved) {
+        if (!draft) return draft;
+        if (!resolved) return draft;
+        const merged = { ...draft };
+        if (resolved.name != null) merged.name = resolved.name;
+        if (resolved.caption != null) merged.caption = resolved.caption;
+        if (resolved.captionUrl != null) merged.captionUrl = resolved.captionUrl;
+        if (resolved.viewMoreUrl != null) merged.viewMoreUrl = resolved.viewMoreUrl;
+        if (resolved.metadata != null) merged.metadata = resolved.metadata;
+        return merged;
+    }
+
+    /**
      * Fetch items for a section preview (shared by modal preview and wizard inline preview).
      * @param {Object} section
      * @param {Object} [options]
      * @param {boolean} [options.useSpotlightFields] - Request spotlight-grade Fields regardless of renderMode
-     * @returns {Promise<{ items: Array, limit: number }>}
+     * @returns {Promise<{ items: Array, limit: number, section: Object }>}
      */
     async function fetchSectionPreviewItems(section, options = {}) {
         if (!window.ApiClient || !window.apiHelper || !window.cardBuilder) {
@@ -5119,27 +5222,32 @@
             throw new Error('Unable to get user ID or server URL');
         }
 
-        const queries = section.queries || [];
-        if (Array.isArray(section.externalListUrls) && section.externalListUrls.length > 0) {
+        let previewSection = section;
+        if (sectionNeedsDiscoveryResolve(section)) {
+            previewSection = await resolveDiscoverySectionForPreview(section);
+        }
+
+        const queries = previewSection.queries || [];
+        if (Array.isArray(previewSection.externalListUrls) && previewSection.externalListUrls.length > 0) {
             if (!window.KefinExternalList?.resolveExternalListItems) {
                 throw new Error('External list module not available for preview');
             }
-            const listResult = await window.KefinExternalList.resolveExternalListItems(section);
+            const listResult = await window.KefinExternalList.resolveExternalListItems(previewSection);
             const items = listResult?.Items || [];
             const processed = window.cardBuilder.postProcessItems
-                ? window.cardBuilder.postProcessItems(section, items)
+                ? window.cardBuilder.postProcessItems(previewSection, items)
                 : items;
-            return { items: processed, limit: processed.length };
+            return { items: processed, limit: processed.length, section: previewSection };
         }
 
-        if (section.items?.length) {
+        if (previewSection.items?.length) {
             const kefinTweaksRoot = window.KefinTweaksConfig?.kefinTweaksRoot || '';
             const serverId = ApiClient.serverId();
             const normalizeTemplate = (value) => (value || '')
                 .replace(/\$\{kefinTweaksRoot\}/g, kefinTweaksRoot)
                 .replace(/\$\{serverId\}/g, serverId);
 
-            const items = section.items.map((item, index) => {
+            const items = previewSection.items.map((item, index) => {
                 const posterUrl = normalizeTemplate(item.posterUrl);
                 const thumbUrl = normalizeTemplate(item.thumbUrl);
                 const squareUrl = normalizeTemplate(item.squareUrl);
@@ -5151,7 +5259,7 @@
 
                 return {
                     Name: item.Name,
-                    Id: item.Id || 'static-preview-' + (section.id || 'draft') + '-' + index,
+                    Id: item.Id || 'static-preview-' + (previewSection.id || 'draft') + '-' + index,
                     Type: item.Type || 'Folder',
                     posterUrl,
                     thumbUrl,
@@ -5166,9 +5274,9 @@
             });
 
             const processed = window.cardBuilder.postProcessItems
-                ? window.cardBuilder.postProcessItems(section, items)
+                ? window.cardBuilder.postProcessItems(previewSection, items)
                 : items;
-            return { items: processed, limit: processed.length };
+            return { items: processed, limit: processed.length, section: previewSection };
         }
 
         if (queries.length === 0) {
@@ -5176,7 +5284,7 @@
         }
 
         const useSpotlightFields = options.useSpotlightFields === true
-            || section.renderMode === 'Spotlight';
+            || previewSection.renderMode === 'Spotlight';
 
         let allItems = [];
         for (const query of queries) {
@@ -5186,7 +5294,7 @@
             if (previewQuery.dataSource) {
                 queryUrl = null;
             } else {
-                queryUrl = window.apiHelper.buildQueryFromSection(previewQuery, userId, serverUrl, useSpotlightFields, { sectionType: section.type });
+                queryUrl = window.apiHelper.buildQueryFromSection(previewQuery, userId, serverUrl, useSpotlightFields, { sectionType: previewSection.type });
             }
 
             try {
@@ -5206,16 +5314,16 @@
         }
 
         if (allItems.length === 0) {
-            return { items: [], limit: 0 };
+            return { items: [], limit: 0, section: previewSection };
         }
 
         const limit = withPreviewQueryOptions(queries[0]).queryOptions.Limit
-            || section.itemLimit
+            || previewSection.itemLimit
             || PREVIEW_DEFAULT_LIMIT;
-        allItems = window.cardBuilder.postProcessItems(section, allItems);
+        allItems = window.cardBuilder.postProcessItems(previewSection, allItems);
         const limitedItems = allItems.slice(0, parseInt(limit, 10));
 
-        return { items: limitedItems, limit: parseInt(limit, 10) };
+        return { items: limitedItems, limit: parseInt(limit, 10), section: previewSection };
     }
 
     const EDITOR_PREVIEW_SECTION_ID = 'hsae-editor-preview';
@@ -5280,8 +5388,9 @@
 
             try {
                 const draft = getDraftSection();
-                const { items } = await fetchSectionPreviewItems(draft);
-                await renderSectionPreviewInto(draft, items, containerEl, { getDraftSection });
+                const { items, section: resolvedSection } = await fetchSectionPreviewItems(draft);
+                const previewSection = mergeDraftWithResolvedPreview(draft, resolvedSection);
+                await renderSectionPreviewInto(previewSection, items, containerEl, { getDraftSection });
             } catch (err) {
                 console.error('[Preview] Refresh failed:', err);
                 containerEl.innerHTML = `<p class="listItemBodyText secondary" style="text-align:center;padding:1.5em 0;">${err.message || 'Preview refresh failed'}</p>`;
@@ -5363,7 +5472,8 @@
         Dashboard.showLoadingMsg();
 
         try {
-            const { items } = await fetchSectionPreviewItems(section);
+            const { items, section: resolvedSection } = await fetchSectionPreviewItems(section);
+            const previewSection = mergeDraftWithResolvedPreview(section, resolvedSection);
 
             if (items.length === 0) {
                 showToast('No items found for preview');
@@ -5388,7 +5498,7 @@
             content.style.cssText = 'padding: 1em; max-width: 1400px; width: 100%;';
             content.innerHTML = `
                 <div class="listItemBodyText" style="margin-bottom: 1em;">
-                    Preview: ${section.name || 'Unnamed Section'} (${items.length} item${items.length !== 1 ? 's' : ''})
+                    Preview: ${previewSection.name || 'Unnamed Section'} (${items.length} item${items.length !== 1 ? 's' : ''})
                 </div>
                 <div id="preview-container" style="min-height: 400px;"></div>
             `;
@@ -5407,7 +5517,7 @@
                 onOpen: async (modalInstance) => {
                     const container = modalInstance.dialogContent.querySelector('#preview-container');
                     modalInstance.dialog.style.width = '1400px';
-                    await renderSectionPreviewInto(section, items, container);
+                    await renderSectionPreviewInto(previewSection, items, container);
                 }
             });
 
@@ -5427,6 +5537,7 @@
     window.KefinHomeScreen.getConfig = getConfig;
     window.KefinHomeScreen.getSections = getSections;
     window.KefinHomeScreen.fetchSectionPreviewItems = fetchSectionPreviewItems;
+    window.KefinHomeScreen.mergeDraftWithResolvedPreview = mergeDraftWithResolvedPreview;
     window.KefinHomeScreen.renderSectionPreviewInto = renderSectionPreviewInto;
     window.KefinHomeScreen.buildEditorPreviewProgressiveSection = buildEditorPreviewProgressiveSection;
     window.KefinHomeScreen.canOpenSectionEditor = canOpenSectionEditor;

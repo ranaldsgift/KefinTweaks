@@ -1381,43 +1381,6 @@
         `;
     }
 
-    function hsseBuildToggleSlider(id, checked, label, labelTooltip) {
-        const isEnabled = checked === true;
-        const checkboxId = id ? `${id}-checkbox` : `toggle-${Math.random().toString(36).slice(2)}-checkbox`;
-        const labelHtml = labelTooltip
-            ? `<div class="listItemBodyText hsse-label-with-info">
-                <label for="${escapeHtml(checkboxId)}" style="cursor: pointer;">${escapeHtml(label)}</label>
-                <span class="material-icons hsse-info-icon" title="${escapeHtml(labelTooltip)}" aria-label="${escapeHtml(labelTooltip)}">info</span>
-               </div>`
-            : `<label class="listItemBodyText" for="${escapeHtml(checkboxId)}" style="cursor: pointer;">${escapeHtml(label)}</label>`;
-
-        return `
-            <div class="hsse-section-block" style="display: flex; align-items: center; justify-content: space-between; padding: 0.75em 1em; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;">
-                ${labelHtml}
-                <input type="checkbox" id="${escapeHtml(checkboxId)}" class="hide" ${isEnabled ? 'checked' : ''} data-hsse-toggle="${escapeHtml(id || checkboxId)}">
-                <button type="button" class="toggle-slider" data-checkbox-id="${escapeHtml(checkboxId)}" data-enabled="${isEnabled}" aria-pressed="${isEnabled}" style="
-                    position: relative; width: 52px; height: 28px; border-radius: 14px; border: none; cursor: pointer;
-                    background: ${isEnabled ? 'rgba(0, 164, 220, 0.8)' : 'rgba(158, 158, 158, 0.5)'};
-                ">
-                    <span style="position:absolute; top:50%; left:${isEnabled ? '8px' : '6px'}; transform:translateY(-50%); font-size:9px; font-weight:700; color:white; opacity:${isEnabled ? '1' : '0'};">ON</span>
-                    <span style="position:absolute; top:50%; right:${isEnabled ? '6px' : '8px'}; transform:translateY(-50%); font-size:9px; font-weight:700; color:white; opacity:${isEnabled ? '0' : '1'};">OFF</span>
-                    <span style="position:absolute; top:3px; left:${isEnabled ? 'calc(100% - 26px)' : '3px'}; width:22px; height:22px; border-radius:50%; background:white; transition:left 0.2s;"></span>
-                </button>
-            </div>
-        `;
-    }
-
-    function updateToggleSliderUI(btn, checked) {
-        const isOn = checked === true;
-        btn.dataset.enabled = isOn;
-        btn.setAttribute('aria-pressed', String(isOn));
-        btn.style.background = isOn ? 'rgba(0, 164, 220, 0.8)' : 'rgba(158, 158, 158, 0.5)';
-        const spans = btn.querySelectorAll('span');
-        if (spans[0]) spans[0].style.opacity = isOn ? '1' : '0';
-        if (spans[1]) spans[1].style.opacity = isOn ? '0' : '1';
-        if (spans[2]) spans[2].style.left = isOn ? 'calc(100% - 26px)' : '3px';
-    }
-
     function getExistingGroupNames(config) {
         const groups = config?.CUSTOM_SECTION_GROUPS || [];
         return [...new Set(groups.map(g => g.name).filter(Boolean))];
@@ -1544,7 +1507,7 @@
     function collectQueryStepFromForm(root, wizardState) {
         const sortByEl = root.querySelector('#hsse-wizard-sortBy');
         const sortOrderEl = root.querySelector('#hsse-wizard-sortOrder');
-        const unwatchedEl = root.querySelector('#hsse-wizard-unwatched-checkbox');
+        const unwatchedEl = root.querySelector('#hsse-wizard-unwatched');
         if (sortByEl) wizardState.sortBy = sortByEl.value;
         if (sortOrderEl) wizardState.sortOrder = sortOrderEl.value;
         if (unwatchedEl) wizardState.unwatchedOnly = unwatchedEl.checked;
@@ -1555,7 +1518,7 @@
         const layoutEl = root.querySelector('#hsse-wizard-spotlightLayout');
         const sizeEl = root.querySelector('#hsse-wizard-spotlightSize');
         const tileEl = root.querySelector('#hsse-wizard-tileCount');
-        const animatedEl = root.querySelector('#hsse-wizard-animated-checkbox');
+        const animatedEl = root.querySelector('#hsse-wizard-animated');
         if (layoutEl) wizardState.spotlightLayout = layoutEl.value;
         if (sizeEl) wizardState.spotlightSize = sizeEl.value;
         if (tileEl) wizardState.tileCount = tileEl.value;
@@ -2106,7 +2069,7 @@
                         ${hsseBuildSelect('hsse-wizard-sortOrder', getSortOrderDirections(), wizardState.sortOrder, 'Sort order')}
                     </div>
                 </div>
-                ${hsseBuildToggleSlider('hsse-wizard-unwatched', wizardState.unwatchedOnly, 'Hide Watched Items')}
+                ${buildToggleCard('hsse-wizard-unwatched', wizardState.unwatchedOnly === true, 'Hide Watched Items', '')}
             `;
         }
 
@@ -2146,7 +2109,7 @@
                             ${hsseBuildSelect('hsse-wizard-tileCount', getSpotlightTileCountOptions(), wizardState.tileCount, 'Tiled Backdrop Count', 'Set the number of backdrops that will be tiled next to each other in a single slide of the Spotlight.')}
                         </div>
                     </div>
-                    ${hsseBuildToggleSlider('hsse-wizard-animated', wizardState.panAnimation, 'Animated Slides')}
+                    ${buildToggleCard('hsse-wizard-animated', wizardState.panAnimation !== false, 'Animated Slides', '')}
                 ` : ''}
                 ${renderAppearancePreviewHTML()}
             `;
@@ -2255,10 +2218,22 @@
     }
 
     function attachToggleHandlers(root) {
-        if (root.dataset.hsseToggleHandlersAttached === 'true') return;
+        if (root.dataset.hsseToggleHandlersAttached === 'true') {
+            if (typeof window.KefinTweaksUI?.bindToggleCards === 'function') {
+                window.KefinTweaksUI.bindToggleCards(root);
+            }
+            return;
+        }
         root.dataset.hsseToggleHandlersAttached = 'true';
 
+        if (typeof window.KefinTweaksUI?.bindToggleCards === 'function') {
+            window.KefinTweaksUI.bindToggleCards(root);
+        }
+
         root.addEventListener('click', (e) => {
+            const switchBtn = e.target.closest('.kefin-toggle-switch');
+            if (switchBtn && root.contains(switchBtn)) return;
+
             const btn = e.target.closest('.toggle-slider');
             if (!btn || !root.contains(btn)) return;
             const checkboxId = btn.dataset.checkboxId;
@@ -2275,7 +2250,12 @@
 
         root.addEventListener('change', (e) => {
             const checkbox = e.target;
-            if (!checkbox.matches('input[type="checkbox"][data-hsse-toggle]') || !root.contains(checkbox)) return;
+            if (!checkbox.matches?.('input[type="checkbox"]') || !root.contains(checkbox)) return;
+            const switchBtn = root.querySelector(`.kefin-toggle-switch[data-checkbox-id="${checkbox.id}"]`);
+            if (switchBtn && typeof window.KefinTweaksUI?.updateToggleSwitchUI === 'function') {
+                window.KefinTweaksUI.updateToggleSwitchUI(switchBtn, checkbox.checked);
+                return;
+            }
             const btn = root.querySelector(`.toggle-slider[data-checkbox-id="${checkbox.id}"]`);
             if (btn) updateToggleSliderUI(btn, checkbox.checked);
         });
@@ -4000,7 +3980,7 @@
         let appearancePreviewDebounceTimer = null;
         let appearancePreviewRequestId = 0;
         let parentLoadRequestId = 0;
-        let appearancePreviewCache = { queryKey: null, items: null };
+        let appearancePreviewCache = { queryKey: null, items: null, resolvedSection: null };
 
         async function loadParentItemsForType(wizardState, root) {
             if (!wizardState.parentType) return;
@@ -4074,6 +4054,7 @@
 
                 const fetchPreview = window.KefinHomeScreen?.fetchSectionPreviewItems;
                 const renderPreview = window.KefinHomeScreen?.renderSectionPreviewInto;
+                const mergeResolved = window.KefinHomeScreen?.mergeDraftWithResolvedPreview;
                 if (typeof fetchPreview !== 'function' || typeof renderPreview !== 'function') {
                     container.innerHTML = '<p class="listItemBodyText secondary" style="text-align:center;padding:1.5em 0;">Preview unavailable.</p>';
                     return;
@@ -4092,16 +4073,19 @@
 
                 try {
                     if (!cacheHit) {
-                        const { items } = await fetchPreview(draft, { useSpotlightFields: true });
+                        const { items, section: resolvedSection } = await fetchPreview(draft, { useSpotlightFields: true });
                         if (requestId !== appearancePreviewRequestId) return;
-                        appearancePreviewCache = { queryKey, items };
+                        appearancePreviewCache = { queryKey, items, resolvedSection: resolvedSection || null };
                     }
 
                     if (requestId !== appearancePreviewRequestId) return;
-                    renderPreview(draft, appearancePreviewCache.items, container);
+                    const previewSection = typeof mergeResolved === 'function'
+                        ? mergeResolved(draft, appearancePreviewCache.resolvedSection)
+                        : draft;
+                    renderPreview(previewSection, appearancePreviewCache.items, container);
                 } catch (err) {
                     if (requestId !== appearancePreviewRequestId) return;
-                    appearancePreviewCache = { queryKey: null, items: null };
+                    appearancePreviewCache = { queryKey: null, items: null, resolvedSection: null };
                     container.innerHTML = `<p class="listItemBodyText secondary" style="text-align:center;padding:1.5em 0;">${escapeHtml(err.message || 'Preview failed')}</p>`;
                 }
             }, WIZARD_PARENT_DATA.APPEARANCE_PREVIEW_DEBOUNCE_MS);
@@ -4659,7 +4643,7 @@
                         e.target.id === 'hsse-wizard-spotlightLayout' ||
                         e.target.id === 'hsse-wizard-spotlightSize' ||
                         e.target.id === 'hsse-wizard-tileCount' ||
-                        e.target.id === 'hsse-wizard-animated-checkbox'
+                        e.target.id === 'hsse-wizard-animated'
                     )) {
                         collectAppearanceStepFromForm(root, wizardState);
                         scheduleAppearancePreview(root);

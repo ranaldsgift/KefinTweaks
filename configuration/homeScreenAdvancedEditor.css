@@ -1596,7 +1596,7 @@
 .hsae-root[data-editor-profile="normal"] .hsae-toggle-card-grid > [data-hsae-profiles~="normal"],
 .hsae-root[data-editor-profile="dateCutoffs"] .hsae-toggle-card-grid > [data-hsae-profiles~="dateCutoffs"],
 .hsae-root[data-editor-profile="postProcessing"] .hsae-toggle-card-grid > [data-hsae-profiles~="postProcessing"] {
-	display: block !important;
+	display: grid !important;
 }
 
 /* Item source — show only the panel matching the active source (profile rules still gate custom items on non-full profiles) */
@@ -1624,7 +1624,7 @@
 .hsae-root[data-editor-profile] .hsae-query-row-sort .hsae-query-sort-by,
 .hsae-root[data-editor-profile] .hsae-query-row-sort .hsae-query-sort-order,
 .hsae-root[data-editor-profile] .hsae-query-row-sort .hsae-query-limit {
-	display: block !important;
+	display: grid !important;
 }
 
 .hsae-root[data-editor-profile="minimal"] .hsae-query-row-sort .hsae-query-sort-by,
