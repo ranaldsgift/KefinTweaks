@@ -211,17 +211,32 @@
                 transition: background 0.3s ease-in-out !important;
             }
 
-            .cardScalable:has(.kefin-hover-preview-sibling) .cardOverlayButton[data-action="resume"],
-            .cardScalable:has(.kefin-hover-preview-frame[style]:not([style=""])) .cardOverlayButton[data-action="resume"] {
-                display: none !important;
+            /* Same-duration top+left (+ transform/margin) so the play button moves diagonally,
+               not axis-by-axis (top/margin → bottom/left produces an L-shaped path). */
+            .cardOverlayButton[data-action="resume"].cardOverlayFab-primary,
+            .cardOverlayButton[data-action="resume"] {
+                transition:
+                    top 0.28s ease,
+                    left 0.28s ease,
+                    right 0.28s ease,
+                    bottom 0.28s ease,
+                    margin 0.28s ease,
+                    transform 0.28s ease,
+                    opacity 0.28s ease;
             }
 
             .cardScalable:has(.kefin-hover-preview-sibling) .cardOverlayButton[data-action="resume"],
             .cardScalable:has(.kefin-hover-preview-frame[style]:not([style=""])) .cardOverlayButton[data-action="resume"] {
-                opacity: 0;
-                visibility: hidden;
-                pointer-events: none;
-                transition: opacity 0.3s ease-in-out, visibility 0.3s ease-in-out;
+                top: calc(100% - 1.3em) !important;
+                left: 1.3em !important;
+                right: auto !important;
+                bottom: auto !important;
+                margin: 0 !important;
+                transform: translateY(-100%);
+                opacity: 1;
+                visibility: visible;
+                pointer-events: auto;
+                display: inline-flex;
             }
         `;
         document.head.appendChild(style);
@@ -1340,9 +1355,14 @@
         if (!currentCardState) return;
         const state = currentCardState;
 
-        // Do not activate scrubber when hovering overlay action button (play, etc.)
-        if (e.target && e.target.closest && e.target.closest('.cardOverlayButton-br')) {
+        // Do not activate scrubber when hovering overlay action buttons (play/resume, watched, watchlist, etc.)
+        if (e.target && e.target.closest && e.target.closest('.cardOverlayButton, .cardOverlayButton-br')) {
             clearActivationTimer();
+            const overlay = state.overlay;
+            if (overlay && !overlay._popoverOpen) {
+                overlay.classList.remove('is-zone-active');
+                if (overlay._progressFill) overlay._progressFill.style.width = '0%';
+            }
             return;
         }
 
