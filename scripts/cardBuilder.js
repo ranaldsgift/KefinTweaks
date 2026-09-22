@@ -3711,6 +3711,56 @@
                 footerText.appendChild(footerBdi);
                 cardTextFragment.appendChild(footerText);
             }
+        } else if (itemType === 'Season') {
+            // Seasons: Series name as primary, season title as secondary
+            const seriesLink = document.createElement('a');
+            seriesLink.href = `${ApiClient._serverAddress}/web/#/details?id=${item.SeriesId || itemId}&serverId=${serverId}`;
+            seriesLink.className = 'itemAction textActionButton';
+            if (!isCustomCard) seriesLink.setAttribute('data-id', item.SeriesId || itemId);
+            seriesLink.setAttribute('data-serverid', serverId);
+            seriesLink.setAttribute('data-type', 'Series');
+            seriesLink.setAttribute('data-mediatype', 'undefined');
+            seriesLink.setAttribute('data-channelid', 'undefined');
+            seriesLink.setAttribute('data-isfolder', 'true');
+            seriesLink.setAttribute('data-action', 'link');
+            seriesLink.title = item.SeriesName || 'Unknown Series';
+            seriesLink.textContent = item.SeriesName || 'Unknown Series';
+
+            const seriesBdi = document.createElement('bdi');
+            seriesBdi.appendChild(seriesLink);
+            cardTextContainer.appendChild(seriesBdi);
+            cardTextFragment.appendChild(cardTextContainer);
+
+            // Season title as secondary
+            const secondaryText = document.createElement('div');
+            secondaryText.className = 'cardText cardTextCentered cardText-secondary';
+            const seasonLink = document.createElement('a');
+            seasonLink.href = `${ApiClient._serverAddress}/web/#/details?id=${itemId}&serverId=${serverId}`;
+            seasonLink.className = 'itemAction textActionButton';
+            if (!isCustomCard) seasonLink.setAttribute('data-id', itemId);
+            seasonLink.setAttribute('data-serverid', serverId);
+            seasonLink.setAttribute('data-type', 'Season');
+            seasonLink.setAttribute('data-mediatype', 'undefined');
+            seasonLink.setAttribute('data-channelid', 'undefined');
+            seasonLink.setAttribute('data-isfolder', 'false');
+            seasonLink.setAttribute('data-action', 'link');
+            seasonLink.title = item.Name || 'Unknown Season';
+            seasonLink.textContent = item.Name || 'Unknown Season';
+
+            const seasonBdi = document.createElement('bdi');
+            seasonBdi.appendChild(seasonLink);
+            secondaryText.appendChild(seasonBdi);
+            cardTextFragment.appendChild(secondaryText);
+
+            // Add custom footer text if provided (e.g., air date)
+            if (customFooterText) {
+                const footerText = document.createElement('div');
+                footerText.className = 'cardText cardTextCentered cardText-secondary';
+                const footerBdi = document.createElement('bdi');
+                footerBdi.textContent = customFooterText;
+                footerText.appendChild(footerBdi);
+                cardTextFragment.appendChild(footerText);
+            }
         } else {
             // Default: Item name as primary, year as secondary
             const titleLink = document.createElement('a');
@@ -3737,7 +3787,15 @@
             cardTextFragment.appendChild(cardTextContainer);
 
             // Secondary text (year)
-            const secondaryTextContent = item.ProductionYear || item.PremiereDate?.substring(0, 4) || '';
+            // For Series items, also list their end date or Present if it's continuing aka Start Year - End Year
+            let secondaryTextContent = item.ProductionYear || item.PremiereDate?.substring(0, 4) || '';
+
+            if (itemType === 'Series' && item.Status === 'Continuing') {
+                secondaryTextContent = item.ProductionYear + ' - Present';
+            } else if (itemType === 'Series' && item.EndDate) {
+                secondaryTextContent = item.ProductionYear + ' - ' + item.EndDate.substring(0, 4);
+            }
+
             const secondaryText = document.createElement('div');
             secondaryText.className = 'cardText cardTextCentered cardText-secondary';
             const yearBdi = document.createElement('bdi');
@@ -5941,7 +5999,7 @@
         function snapScrollToCardIndex(cards, targetIndex) {
             if (!cards.length) return;
             const clampedIndex = Math.max(0, Math.min(targetIndex, cards.length - 1));
-            const targetLeft = getCardScrollLeft(cards[clampedIndex]);
+            const targetLeft = clampedIndex === 0 ? 0 : getCardScrollLeft(cards[clampedIndex]);
             setPosition(targetLeft, { animate: true });
         }
 
