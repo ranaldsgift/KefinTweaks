@@ -43,10 +43,6 @@
         const style = document.createElement('style');
         style.id = 'kefin-watch-together-styles';
         style.textContent = `
-            .headerUserButton[data-watch-together] .material-icons.person::before,
-            [data-watch-together].material-icons.person::before {
-                content: "\\e7ef";
-            }
             .mus-watch-together-avatars {
                 display: flex;
                 flex-wrap: wrap;
@@ -149,7 +145,10 @@
             .material-icons.group_off::before {
                 content: "\\e747";
             }
-            #videoOsdPage:not(.hide) button.btnWatchTogether {
+            .skinHeader:not(.osdHeader) button.btnWatchTogether {
+                display: none !important;
+            }
+            .skinHeader.osdHeader button.btnWatchTogether {
                 margin: 0;
             }
         `;
@@ -608,6 +607,14 @@
         } else {
             stopSync();
         }
+        updateWatchTogetherOsdButtonActiveState();
+    }
+
+    function updateWatchTogetherOsdButtonActiveState() {
+        const active = getEnabledSessionUsers().length > 0;
+        document.querySelectorAll('button.btnWatchTogether').forEach((btn) => {
+            btn.classList.toggle('buttonActive', active);
+        });
     }
 
     function getUserAvatarUrl(userId) {
@@ -800,7 +807,7 @@
             title = 'Watch Together',
             showRemove = false,
             applyImmediately = false,
-            hint = 'Watch state will sync to the selected accounts in your group as you watch new content.'
+            hint = 'Watch state will sync to the selected accounts in your group as you watch new content. Tap an account to enable/disable it.'
         } = options;
 
         if (!window.ModalSystem?.create) {
@@ -1267,7 +1274,25 @@
         return true;
     }
 
+    function showWatchTogetherSessionToast() {
+        const names = getEnabledSessionUsers()
+            .map((u) => u.name || u.userId)
+            .filter(Boolean);
+        if (!names.length) return;
+        const result = window.KefinTweaksToaster?.toast?.(`You are watching with ${names.join(', ')}`);
+        if (result?.element) {
+            // Sit above the video OSD controls
+            result.element.style.marginBottom = '140px';
+        }
+    }
+
     function handleVideoPageEnter() {
+        // If the WatchTogether button doesn't exist, show the toast as we can assume it's the start of a new session
+        if (!watchTogetherOsdButtonExists()) {
+            showWatchTogetherSessionToast();
+            return;
+        }
+
         addWatchTogetherOsdButton();
 
         if (!shouldPromptWatchTogether()) {
@@ -1275,13 +1300,9 @@
             return;
         }
 
-        openWatchTogetherPrompt({
-            onComplete: () => {
-                updateSyncListenerState();
-                addWatchTogetherOsdButton();
-            }
-        });
-
+        stampLastSelectionAt(getEnabledSessionUsers().map((u) => u.userId));
+        updateSyncListenerState();
+        addWatchTogetherOsdButton();
         inContinuousVideoSession = true;
     }
 
@@ -1290,19 +1311,34 @@
     }
 
     function watchTogetherOsdButtonExists() {
-        return !!document.querySelector('#videoOsdPage:not(.hide) button.btnWatchTogether');
+        return !!document.querySelector('.skinBody .skinHeader button.btnWatchTogether');
     }
 
-    function createWatchTogetherOsdButton() {
+    function createWatchTogetherOsdButton(anchor = null) {
         const button = document.createElement('button');
-        button.setAttribute('is', 'paper-icon-button-light');
-        button.className = 'btnWatchTogether autoSize paper-icon-button-light';
+        button.type = 'button';
         button.title = 'Watch Together';
 
-        const icon = document.createElement('span');
-        icon.className = 'xlargePaperIconButton material-icons group';
-        icon.setAttribute('aria-hidden', 'true');
-        button.appendChild(icon);
+        const ariaControls = anchor?.getAttribute?.('aria-controls');
+        const isMuiAnchor = ariaControls === 'app-sync-play-menu'
+            || ariaControls === 'app-remote-play-menu';
+
+        if (isMuiAnchor && anchor.className) {
+            // v12: copy MuiIconButton + emotion hash (e.g. css-i2hxb6) from Sync/Cast
+            button.className = `${anchor.className} btnWatchTogether`.trim();
+            const icon = document.createElement('span');
+            icon.className = 'material-icons';
+            icon.setAttribute('aria-hidden', 'true');
+            icon.textContent = 'group';
+            button.appendChild(icon);
+        } else {
+            button.setAttribute('is', 'paper-icon-button-light');
+            button.className = 'btnWatchTogether autoSize paper-icon-button-light';
+            const icon = document.createElement('span');
+            icon.className = 'xlargePaperIconButton material-icons group';
+            icon.setAttribute('aria-hidden', 'true');
+            button.appendChild(icon);
+        }
 
         button.addEventListener('click', (e) => {
             e.preventDefault();
@@ -1314,19 +1350,42 @@
 
     function addWatchTogetherOsdButton() {
         if (isAddingOsdButton) return;
-        if (watchTogetherOsdButtonExists()) return;
-        if (!getSessionUsers().length && !getEnabledSessionUsers().length) {
-            // Still show button if group empty so users can manage from OSD after adding via prefs;
-            // only skip when feature has no group AND we're not on video — actually always show if hydrated group could be empty.
-        }
+
         isAddingOsdButton = true;
+
+        // Drop any legacy bottom-OSD button from older builds
+        const existingButtons = document.querySelectorAll('#videoOsdPage button.btnWatchTogether');
+        if (existingButtons && existingButtons.length > 0) {
+            isAddingOsdButton = false;
+            return;
+        }
+
+        if (watchTogetherOsdButtonExists()) {
+            updateWatchTogetherOsdButtonActiveState();
+            isAddingOsdButton = false;
+            return;
+        }
+
+        const osdHeader = document.querySelector('.skinBody .skinHeader.osdHeader, #reactRoot > div:not([style*="display: none"]) > .skinHeader.osdHeader');
+        if (!osdHeader) {
+            isAddingOsdButton = false;
+            return;
+        }
+
         try {
-            const buttonsContainer = document.querySelector('#videoOsdPage:not(.hide) .osdControls > .buttons');
-            if (!buttonsContainer) return;
-            const ratingButton = buttonsContainer.querySelector('.btnUserRating');
-            if (!ratingButton) return;
-            const btn = createWatchTogetherOsdButton();
-            buttonsContainer.insertBefore(btn, ratingButton);
+            // v10/v11: header*Button classes; v12 MUI: aria-controls menu ids
+            const anchor = osdHeader.querySelector('.headerSyncButton, [aria-controls="app-sync-play-menu"]')
+                || osdHeader.querySelector('.headerCastButton, [aria-controls="app-remote-play-menu"]')
+                || osdHeader.querySelector('.headerSearchButton');
+
+            const btn = createWatchTogetherOsdButton(anchor);
+            if (anchor?.parentNode) {
+                anchor.parentNode.insertBefore(btn, anchor);
+            } else {
+                const headerRight = osdHeader.querySelector('.headerRight');
+                (headerRight || osdHeader).appendChild(btn);
+            }
+            updateWatchTogetherOsdButtonActiveState();
         } finally {
             isAddingOsdButton = false;
         }
@@ -1343,8 +1402,8 @@
             const previousOnVideo = previousHash && (previousHash.includes('#/video') || previousHash.includes('/video'));
 
             if (onVideo && !previousOnVideo) {
-                setTimeout(handleVideoPageEnter, 400);
-                setTimeout(addWatchTogetherOsdButton, 900);
+                handleVideoPageEnter();
+                addWatchTogetherOsdButton();
             } else if (inContinuousVideoSession) {
                 handleVideoPageLeave();
             }
@@ -1353,7 +1412,7 @@
         });
 
         if (window.location.hash.includes('#/video') || window.location.hash.includes('/video')) {
-            setTimeout(handleVideoPageEnter, 500);
+            handleVideoPageEnter();
         }
 
         LOG('Video onViewPage handler registered');
