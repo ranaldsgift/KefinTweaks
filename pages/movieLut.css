@@ -39,7 +39,7 @@ body.mlut-body {
 
 .mlut-header {
 	text-align: center;
-	margin-bottom: 1.25rem;
+	margin: 1.25rem 0;
 }
 
 .mlut-header h1 {
