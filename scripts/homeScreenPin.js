@@ -251,10 +251,8 @@
 
     function getDetailPageItemId(detailButtons) {
         if (!detailButtons) return null;
-        const playstateBtn = detailButtons.querySelector(
-            'button.button-flat.btnPlaystate.detailButton.emby-button[data-id]'
-        ) || detailButtons.querySelector('button.btnPlaystate.detailButton[data-id]');
-        return playstateBtn?.getAttribute('data-id') || playstateBtn?.dataset?.id || null;
+        const itemBtn = detailButtons.querySelector('button.btnPlaystate[data-id], button.btnUserRating[data-id]');
+        return itemBtn?.getAttribute('data-id') || itemBtn?.dataset?.id || null;
     }
 
     function capturePinTargetFromTrigger(trigger) {
@@ -689,11 +687,11 @@
             <div class="kefin-pin-choice-flow">
                 <div class="kefin-pin-choice-grid">
                     <button type="button" class="kefin-pin-choice-card" id="kefin-pin-choice-it">
-                        <h2 class="listItemBodyText kefin-pin-choice-title">Pin It</h2>
+                        <h2 class="listItemBodyText kefin-pin-choice-title">Pin ${item.Name}</h2>
                         <p class="listItemBodyText secondary kefin-pin-choice-desc">Pin this item to a list on your home screen.</p>
                     </button>
                     <button type="button" class="kefin-pin-choice-card" id="kefin-pin-choice-children">
-                        <h2 class="listItemBodyText kefin-pin-choice-title">Pin Children</h2>
+                        <h2 class="listItemBodyText kefin-pin-choice-title">Pin ${item.Name}&apos;s Children</h2>
                         <p class="listItemBodyText secondary kefin-pin-choice-desc">Show this item&apos;s children in a home section.</p>
                     </button>
                 </div>
@@ -701,6 +699,7 @@
         `;
         window.ModalSystem.create({
             id: modalId,
+            title: `Pin To Home Screen`,
             content,
             closeOnBackdrop: true,
             closeOnEscape: true,
@@ -1299,6 +1298,43 @@
         }
     }
 
+    async function unpinPinnedListSection(sectionId, sectionElement) {
+        if (!sectionId?.startsWith('pinned-list-')) return false;
+        try {
+            const api = getConfigApi();
+            let hs = await loadHomeScreen();
+            const restoreHomeScreen = cloneHomeScreen(hs);
+            const listEntry = (hs.pinnedLists || []).find((str) => {
+                const parsed = api.parsePinnedListString(str);
+                return parsed && api.getPinnedListSectionId(parsed.name) === sectionId;
+            });
+            const parsed = api.parsePinnedListString(listEntry);
+            if (!parsed) return false;
+            const sectionName = getSectionDisplayName(sectionElement, parsed.name);
+            hs.pinnedLists = (hs.pinnedLists || []).filter((str) => {
+                const p = api.parsePinnedListString(str);
+                return !(p && api.getPinnedListSectionId(p.name) === sectionId);
+            });
+            const ok = await saveHomeScreen(hs, { refreshHome: !sectionElement });
+            if (!ok) return false;
+            if (sectionElement) {
+                await beginSectionUnpin({
+                    sectionId,
+                    sectionEl: sectionElement,
+                    sectionName,
+                    restoreHomeScreen
+                });
+            } else {
+                window.KefinHomeScreenSectionRuntime?.unregister?.(sectionId);
+                window.homeScreen3?.refreshHomeSections?.();
+            }
+            return true;
+        } catch (err) {
+            WARN('Unpin pinned list failed:', err);
+            return false;
+        }
+    }
+
     function escapeHtml(str) {
         return String(str || '')
             .replace(/&/g, '&amp;')
@@ -1319,7 +1355,8 @@
     window.KefinHomeScreenPin = {
         isEnabled,
         isPinnedParentSection,
-        unpinParentSection
+        unpinParentSection,
+        unpinPinnedListSection
     };
 
     LOG('Module loaded');
