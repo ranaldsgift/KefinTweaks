@@ -998,7 +998,8 @@
                         { Name: 'Moonfin', Type: 'Folder', cardUrl: 'https://moonfin.io/', imageUrl: '${kefinTweaksRoot}pages/images/clients/moonfin.png' },
                         { Name: 'Neptune', Type: 'Folder', cardUrl: 'https://neptuneplayer.com/', imageUrl: '${kefinTweaksRoot}pages/images/clients/neptune.png' },
                         { Name: 'Pelagica', Type: 'Folder', cardUrl: 'https://pelagica.app/', imageUrl: '${kefinTweaksRoot}pages/images/clients/pelagica.png' },
-                        { Name: 'Streamyfin', Type: 'Folder', cardUrl: 'https://streamyfin.app/', imageUrl: '${kefinTweaksRoot}pages/images/clients/streamyfin.png' }
+                        { Name: 'Streamyfin', Type: 'Folder', cardUrl: 'https://streamyfin.app/', imageUrl: '${kefinTweaksRoot}pages/images/clients/streamyfin.png' },
+                        { Name: 'Wholphin', Type: 'Folder', cardUrl: 'https://github.com/damontecres/Wholphin', imageUrl: '${kefinTweaksRoot}pages/images/clients/wholphin.png' }
                     ]
                 }
             ]
@@ -1718,7 +1719,7 @@
             name: 'Collections',
             sections: [
                 {
-                    id: 'collections',
+                    id: 'discoveryCollections',
                     type: 'discovery',
                     discoveryType: 'Collection',
                     discoveryItemType: 'Movie',
@@ -1887,7 +1888,7 @@
                     discoverySourceQuery: {
                         path: '/Items',
                         queryOptions: {
-                            IncludeItemTypes: ['Episode'],
+                            IncludeItemTypes: ['Series'],
                             Recursive: true,
                             Filters: 'Likes',
                             SortBy: 'Random',
@@ -1952,7 +1953,7 @@
                         queryOptions: { ItemType: 'Series', Limit: 100 }
                     },
                     name: 'Directed by {Person}',
-                    enabled: true,
+                    enabled: false,
                     userConfigurable: true,
                     itemLimit: 20,
                     sortOrder: 'Random',
@@ -1962,6 +1963,7 @@
                         queryOptions: {
                             Recursive: true,
                             IncludeItemTypes: ['Episode'],
+                            ExcludeLocationTypes: ['Virtual'],
                             SortBy: 'Random',
                             Limit: 20,
                             Fields: DISCOVERY_CONTENT_FIELDS
@@ -1979,7 +1981,7 @@
                         queryOptions: { ItemType: 'Series', Limit: 100 }
                     },
                     name: 'Written by {Person}',
-                    enabled: true,
+                    enabled: false,
                     userConfigurable: true,
                     itemLimit: 20,
                     sortOrder: 'Random',
@@ -1989,6 +1991,7 @@
                         queryOptions: {
                             Recursive: true,
                             IncludeItemTypes: ['Episode'],
+                            ExcludeLocationTypes: ['Virtual'],
                             SortBy: 'Random',
                             Limit: 20,
                             Fields: DISCOVERY_CONTENT_FIELDS
@@ -2095,6 +2098,7 @@
                         queryOptions: {
                             Recursive: true,
                             IncludeItemTypes: ['Episode'],
+                            ExcludeLocationTypes: ['Virtual'],
                             SortBy: 'Random',
                             Limit: 20,
                             Fields: DISCOVERY_CONTENT_FIELDS
@@ -2131,6 +2135,7 @@
                         queryOptions: {
                             Recursive: true,
                             IncludeItemTypes: ['Episode'],
+                            ExcludeLocationTypes: ['Virtual'],
                             SortBy: 'Random',
                             Limit: 20,
                             Fields: DISCOVERY_CONTENT_FIELDS
@@ -2174,6 +2179,7 @@
                         queryOptions: {
                             Recursive: true,
                             IncludeItemTypes: ['Episode'],
+                            ExcludeLocationTypes: ['Virtual'],
                             SortBy: 'Random',
                             Limit: 20,
                             Fields: DISCOVERY_CONTENT_FIELDS
