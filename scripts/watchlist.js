@@ -7092,7 +7092,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		});
 
 		function checkForEmptyWatchlist() {
-			const onWatchlistPage = window.location.pathname.includes(window.KefinTweaksUtils._watchlistUrl || '#/watchlist');
+			const onWatchlistPage = window.location.pathname.includes(window.KefinTweaksUtils._watchlistUrl) || window.location.hash.includes(window.KefinTweaksUtils._watchlistUrl);
 			
 			if (!onWatchlistPage) {
 				return;
@@ -7398,9 +7398,8 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	// Optional onViewPage backup (primary mount path is MutationObserver + addCustomPage)
 	if (window.KefinTweaksUtils && window.KefinTweaksUtils.onViewPage) {
 		window.KefinTweaksUtils.onViewPage(async (view, element, hash) => {
-			const path = String(hash || '').split('?')[0];
 			const watchlistPath =  window.KefinTweaksUtils._watchlistUrl || '#/watchlist';
-			if (path.includes(watchlistPath)) {
+			if (hash.includes(watchlistPath)) {
 				LOG('onViewPage: Watchlist');
 				renderWatchlist();
 			}
@@ -7412,13 +7411,14 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		WARN('KefinTweaksUtils.onViewPage not available');
 	}
 
-	function addCustomWatchlistPage() {
+	async function addCustomWatchlistPage() {
 		if (!window.KefinTweaksUtils?.addCustomPage) {
 			WARN('addCustomPage not available yet');
 			return false;
 		}
+		const watchlistUrl = await window.KefinTweaksUtils.getWatchlistUrl();
 		window.KefinTweaksUtils.addCustomPage(
-			'#/watchlist',
+			watchlistUrl,
 			'Watchlist',
 			'<div class="sections watchlist"></div>'
 		);
@@ -7433,21 +7433,32 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			return;
 		}
 
+		const watchlistCfg = window.KefinTweaksFeatureConfigs?.watchlist?.normalizeConfig?.(
+			window.KefinTweaksConfig?.watchlist
+		) || {
+			sideMenu: window.KefinTweaksConfig?.watchlist?.sideMenu !== false,
+			topNavigation: window.KefinTweaksConfig?.watchlist?.topNavigation !== false
+				&& window.KefinTweaksConfig?.watchlist?.topNavigation !== 'none',
+			userMenu: window.KefinTweaksConfig?.watchlist?.userMenu !== false
+		};
+
 		const watchlistTabIndex = await getWatchlistTabIndex();
 		const options = {
-			userMenu: true,
+			sideMenu: watchlistCfg.sideMenu !== false,
+			userMenu: watchlistCfg.userMenu === true,
 			order: 2
 		};
 
 		let watchlistUrl = '#/watchlist';
 
-		// Major version of Jellyfin
-		const jellyfinVersion = await window.KefinTweaks.getJellyfinMajorVersion();
-		const isModernUI = document.querySelector('.MuiBox-root') !== null || localStorage.getItem('layout')?.length === 0;
+		const isModernUI = window.KefinTweaksUtils.isModernUI();
 
+		const wantTopNav = watchlistCfg.topNavigation !== false && watchlistCfg.topNavigation !== 'none';
 		// If watchlist tab index is null or undefined, add to top navigation
-		if (watchlistTabIndex === null || watchlistTabIndex === undefined || isModernUI) {
+		if (wantTopNav && (watchlistTabIndex === null || watchlistTabIndex === undefined || isModernUI)) {
 			options.topNavigation = 'main';
+		} else if (!wantTopNav) {
+			options.topNavigation = 'none';
 		} else {
 			watchlistUrl = `#/home?tab=${watchlistTabIndex}`;
 		}

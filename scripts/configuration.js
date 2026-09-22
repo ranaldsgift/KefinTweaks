@@ -1177,7 +1177,7 @@
     // Build script toggle switches
     function buildScriptToggles(scripts) {
         // Features that have configuration options (not just toggles)
-        const featuresWithConfig = new Set(['homeScreen', 'search', 'flattenSingleSeasonShows', 'skinManager', 'customMenuLinks', 'seriesInfo', 'versionPreferences', 'thumbnailScrubber', 'watchTogether', 'userManager']);
+        const featuresWithConfig = new Set(['homeScreen', 'search', 'flattenSingleSeasonShows', 'skinManager', 'customMenuLinks', 'seriesInfo', 'versionPreferences', 'thumbnailScrubber', 'watchTogether', 'watchlist', 'userManager']);
         
         const scriptNames = [
             { key: 'watchlist', label: 'Watchlist', desc: 'Allows your users to add items to their Watchlist. The Watchlist page shows an overview of all items on a user\'s Watchlist, as well as their Series Progress and Movie History. It also includes a Statistics page with an overview of your user watched stats.' },
