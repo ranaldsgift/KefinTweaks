@@ -845,6 +845,8 @@
         if (isLast) dataAttrs.push('data-is-last="true"');
         const dataAttrsStr = dataAttrs.join(' ');
 
+        const isPinnedSection = sectionId.startsWith('pinned-parent-') || sectionId.startsWith('pinned-list-');
+
         return `
             <div class="listItem viewItem section-row" data-section-id="${sectionId}" data-section-type="${sectionType}" ${draggableAttr} ${dataAttrsStr}>
                 <span class="material-icons drag_handle"></span>
@@ -858,14 +860,24 @@
                         <span>${sectionName.replace(/"/g, '&quot;')}</span>
                     </div>
                 </div>
-                ${showUpDownButtons ? `
+                <div class="section-row-actions">
+                    ${isPinnedSection ? `
+                    <button type="button" is="paper-icon-button-light" class="btnSectionUnpin autoSize paper-icon-button-light section-unpin-btn" data-section-id="${sectionId}" title="Unpin from Home Screen" aria-label="Unpin from Home Screen">
+                        <span class="material-icons push_pin" aria-hidden="true"></span>
+                    </button>
+                    ` : ''}
+                    <button type="button" is="paper-icon-button-light" class="btnSectionConfigure autoSize paper-icon-button-light section-configure-gear-btn" data-section-id="${sectionId}" title="Configure" aria-label="Configure">
+                        <span class="material-icons settings" aria-hidden="true"></span>
+                    </button>
+                    ${showUpDownButtons ? `
                     <button type="button" is="paper-icon-button-light" class="btnViewItemUp btnViewItemMove autoSize paper-icon-button-light section-move-up-btn" data-section-id="${sectionId}" title="Up">
                         <span class="material-icons keyboard_arrow_up" aria-hidden="true"></span>
                     </button>
                     <button type="button" is="paper-icon-button-light" class="btnViewItemDown btnViewItemMove autoSize paper-icon-button-light section-move-down-btn" data-section-id="${sectionId}" title="Down">
                         <span class="material-icons keyboard_arrow_down" aria-hidden="true"></span>
                     </button>
-                ` : ''}
+                    ` : ''}
+                </div>
             </div>
         `;
     }
@@ -1147,6 +1159,21 @@
                     align-items: center;
                     gap: 0.5em;
                 }
+                .section-row .listItemBody {
+                    flex: 1 1 auto;
+                    min-width: 0;
+                }
+                .section-row-actions {
+                    display: flex;
+                    align-items: center;
+                    flex: 0 0 auto;
+                    margin-left: auto;
+                    gap: 0.1em;
+                }
+                .section-row-actions .paper-icon-button-light {
+                    margin: 0;
+                    padding: 0.5em;
+                }
                 /* Type filtering - hide sections when their type toggle is off */
                 /* This will be dynamically generated for each section type, but we include common ones */
                 .sections-container[data-section-type-jellyfin="false"] .section-row[data-section-type="jellyfin"],
@@ -1174,6 +1201,20 @@
                     pointer-events: auto;
                     cursor: pointer;
                 }
+                .disabled-sections-list .section-row .section-configure-gear-btn,
+                .disabled-sections-list .section-row .section-unpin-btn {
+                    pointer-events: auto;
+                    cursor: pointer;
+                }
+                .section-configure-gear-btn,
+                .section-unpin-btn {
+                    flex: 0 0 auto;
+                    opacity: 0.75;
+                }
+                .section-configure-gear-btn:hover,
+                .section-unpin-btn:hover {
+                    opacity: 1;
+                }
                 /* Disable/grey-out up button for first item in enabled list */
                 .enabled-sections-list .section-row[data-is-first="true"] .section-move-up-btn {
                     opacity: 0.4;
@@ -1186,12 +1227,69 @@
                     pointer-events: none;
                     cursor: not-allowed;
                 }
+                .layout-mobile .section-row .drag_handle {
+                    display: none !important;
+                }
+                @media (max-width: 899px) {
+                    .section-row .drag_handle {
+                        display: none !important;
+                    }
+                }
             `;
             document.head.appendChild(style);
         }
 
-        // Up/Down button handlers
-        container.addEventListener('click', (e) => {
+        // Up/Down / gear / pin / admin row-click handlers
+        container.addEventListener('click', async (e) => {
+            const configureBtn = e.target.closest('.section-configure-gear-btn');
+            if (configureBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                const sectionId = configureBtn.dataset.sectionId;
+                if (!sectionId) return;
+                const sectionConfig = sections.find((s) => (s.id || '') === sectionId) || { id: sectionId };
+                const liveEl = document.querySelector(`[data-section-id="${CSS.escape(sectionId)}"]`);
+                const open = window.KefinHomeScreenSectionConfigure?.openConfigurePopover;
+                if (typeof open === 'function') {
+                    open(sectionConfig, liveEl || configureBtn.closest('.section-row'), configureBtn);
+                }
+                return;
+            }
+
+            const unpinBtn = e.target.closest('.section-unpin-btn');
+            if (unpinBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                const sectionId = unpinBtn.dataset.sectionId;
+                if (!sectionId) return;
+                unpinBtn.disabled = true;
+                try {
+                    const liveEl = document.querySelector(`[data-section-id="${CSS.escape(sectionId)}"]`);
+                    let ok = false;
+                    if (sectionId.startsWith('pinned-parent-')) {
+                        ok = !!(await window.KefinHomeScreenPin?.unpinParentSection?.(sectionId, liveEl));
+                    } else if (sectionId.startsWith('pinned-list-')) {
+                        ok = !!(await window.KefinHomeScreenPin?.unpinPinnedListSection?.(sectionId, liveEl));
+                    }
+                    if (ok) {
+                        const row = unpinBtn.closest('.section-row');
+                        const enabledList = row?.closest('.enabled-sections-list');
+                        row?.remove();
+                        if (enabledList) updateFirstLastAttributes(enabledList);
+                        const idx = sections.findIndex((s) => (s.id || '') === sectionId);
+                        if (idx >= 0) sections.splice(idx, 1);
+                        if (typeof onSave === 'function') {
+                            await onSave();
+                        }
+                    }
+                } catch (err) {
+                    console.error('Error unpinning section from order editor:', err);
+                } finally {
+                    unpinBtn.disabled = false;
+                }
+                return;
+            }
+
             const upBtn = e.target.closest('.section-move-up-btn');
             const downBtn = e.target.closest('.section-move-down-btn');
             
@@ -1280,6 +1378,25 @@
                         });
                     }
                 }
+                return;
+            }
+
+            // Admin: clicking the row (not interactive controls) opens the section editor
+            const sectionRow = e.target.closest('.section-row');
+            if (!sectionRow || !container.contains(sectionRow)) return;
+            if (e.target.closest('.toggle-slider, .section-toggle-switch, .section-move-up-btn, .section-move-down-btn, .section-configure-gear-btn, .section-unpin-btn, .drag_handle, button, input')) {
+                return;
+            }
+            const sectionId = sectionRow.dataset.sectionId;
+            if (!sectionId || typeof window.KefinHomeScreen?.openSectionEditorForId !== 'function') return;
+            try {
+                const isAdmin = !!(await window.apiHelper?.isAdmin?.());
+                if (!isAdmin) return;
+                e.preventDefault();
+                e.stopPropagation();
+                await window.KefinHomeScreen.openSectionEditorForId(sectionId);
+            } catch (err) {
+                console.error('Error opening section editor from order row:', err);
             }
         });
 
@@ -1682,6 +1799,11 @@
             btn.addEventListener('click', () => {
                 const next = btn.dataset.enabled !== 'true';
                 updateToggleSwitchUI(btn, next);
+                const checkboxId = btn.dataset.checkboxId;
+                const checkbox = checkboxId ? document.getElementById(checkboxId) : null;
+                if (checkbox) {
+                    checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+                }
             });
         });
     }
