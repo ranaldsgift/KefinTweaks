@@ -1,5 +1,5 @@
 // KefinTweaks People Cache
-// Built from MoviesCache + SeriesCache; episode credits via /Shows/{id}/Episodes (not a global episode store).
+// Built from MoviesCache + SeriesCache; episode credits via global /Items?IncludeItemTypes=Episode pager.
 (function() {
     'use strict';
 
@@ -7,16 +7,24 @@
     const WARN = (...args) => console.warn('[KefinTweaks PeopleCache]', ...args);
     const ERR = (...args) => console.error('[KefinTweaks PeopleCache]', ...args);
 
-    const CACHE_NAME = 'library_top_people_v2';
+    const CACHE_NAME = 'library_top_people_v3';
     const DEFAULT_MIN = 10;
     const DEFAULT_PER_TYPE_MAX = 100;
-    const EPISODE_FETCH_CONCURRENCY = 6;
+    const EPISODE_CHUNK_SIZE = 500;
+    const EPISODE_APPLY_YIELD_EVERY = 50;
+    const CREDIT_ONLY_KEYS = new Set(['Type', 'Role']);
 
     let peopleMap = null; // Map<personId, Person>
     let filteredLists = null; // { actors, directors, writers }
     let isComplete = false;
+    let episodePeopleComplete = false;
+    let episodePeopleWatermark = null;
+    let episodeCrawl = null; // { startIndex, newestAt, oldestApplied } while partial
+    let lastEpisodeSyncAt = null;
     let fetchPromise = null;
     let initPromise = null;
+    let episodeSyncPromise = null;
+    let episodeSyncPendingForceFull = false;
 
     function getHomeSettings() {
         return window.KefinHomeScreen?.getConfig?.()?.HOME_SETTINGS
@@ -49,11 +57,27 @@
         return itemType == null || itemType === '' || itemType === 'All';
     }
 
+    function emptyMovieCounts() {
+        return { directorCount: 0, writerCount: 0, actorCount: 0 };
+    }
+
+    function emptySeriesCounts() {
+        return { count: 0, actorCount: 0, directorCount: 0, writerCount: 0 };
+    }
+
     function movieRoleCount(person, role) {
         const m = person.movies || {};
         if (role === 'Actor') return m.actorCount || 0;
         if (role === 'Director') return m.directorCount || 0;
         if (role === 'Writer') return m.writerCount || 0;
+        return 0;
+    }
+
+    function seriesRoleCount(person, role) {
+        const s = person.series || {};
+        if (role === 'Actor') return s.count || 0;
+        if (role === 'Director') return episodeRoleCount(person, role);
+        if (role === 'Writer') return episodeRoleCount(person, role);
         return 0;
     }
 
@@ -119,40 +143,48 @@
         return map;
     }
 
+    function personIdentityFields(person) {
+        const out = {};
+        if (!person || typeof person !== 'object') return out;
+        Object.keys(person).forEach((key) => {
+            if (key === 'movies' || key === 'series') return;
+            if (CREDIT_ONLY_KEYS.has(key)) return;
+            out[key] = person[key];
+        });
+        return out;
+    }
+
     function ensurePerson(map, person) {
         const key = person?.Id;
         if (!key) return null;
         if (!map.has(key)) {
             map.set(key, {
+                ...personIdentityFields(person),
                 Id: person.Id,
                 Name: person.Name,
-                movies: {
-                    directorCount: 0,
-                    writerCount: 0,
-                    actorCount: 0,
-                    directorItems: [],
-                    writerItems: [],
-                    actorItems: []
-                },
-                series: {
-                    count: 0,
-                    items: [],
-                    actorCount: 0,
-                    directorCount: 0,
-                    writerCount: 0
+                movies: emptyMovieCounts(),
+                series: emptySeriesCounts()
+            });
+        } else {
+            const existing = map.get(key);
+            const incoming = personIdentityFields(person);
+            Object.keys(incoming).forEach((keyName) => {
+                if (keyName === 'Id') return;
+                const value = incoming[keyName];
+                if (value == null || value === '') return;
+                if (existing[keyName] == null || existing[keyName] === '') {
+                    existing[keyName] = value;
                 }
             });
-        } else if (person.Name && !map.get(key).Name) {
-            map.get(key).Name = person.Name;
         }
         return map.get(key);
     }
 
-    function pushUniqueId(arr, id) {
-        if (!id) return false;
-        if (arr.includes(id)) return false;
-        arr.push(id);
-        return true;
+    function bumpMovieRole(movies, type) {
+        if (!movies) return;
+        if (type === 'Director') movies.directorCount = (movies.directorCount || 0) + 1;
+        else if (type === 'Writer') movies.writerCount = (movies.writerCount || 0) + 1;
+        else if (type === 'Actor') movies.actorCount = (movies.actorCount || 0) + 1;
     }
 
     function bumpEpisodeRole(series, type, delta) {
@@ -167,34 +199,25 @@
     }
 
     function applyMoviePeople(map, movie) {
-        if (!movie?.People || !movie.Id) return;
+        if (!movie?.People) return;
         movie.People.forEach((person) => {
             const personData = ensurePerson(map, person);
             if (!personData) return;
-            const m = personData.movies;
-            if (person.Type === 'Director') {
-                if (pushUniqueId(m.directorItems, movie.Id)) m.directorCount = m.directorItems.length;
-            } else if (person.Type === 'Writer') {
-                if (pushUniqueId(m.writerItems, movie.Id)) m.writerCount = m.writerItems.length;
-            } else if (person.Type === 'Actor') {
-                if (pushUniqueId(m.actorItems, movie.Id)) m.actorCount = m.actorItems.length;
-            }
+            bumpMovieRole(personData.movies, person.Type);
         });
     }
 
     function applySeriesPeople(map, seriesItem) {
-        if (!seriesItem?.People || !seriesItem.Id) return;
+        if (!seriesItem?.People) return;
         seriesItem.People.forEach((person) => {
             const personData = ensurePerson(map, person);
             if (!personData) return;
-            if (pushUniqueId(personData.series.items, seriesItem.Id)) {
-                personData.series.count = personData.series.items.length;
-            }
+            personData.series.count = (personData.series.count || 0) + 1;
         });
     }
 
-    function applyEpisodePeople(map, seriesId, episode) {
-        if (!episode?.People || !episode.Id || !seriesId) return;
+    function applyEpisodePeople(map, episode) {
+        if (!episode?.People) return;
         episode.People.forEach((person) => {
             const personData = ensurePerson(map, person);
             if (!personData) return;
@@ -202,80 +225,17 @@
         });
     }
 
-    function decrementEpisodePeople(map, episode) {
-        if (!episode?.People || !map) return;
-        episode.People.forEach((person) => {
-            const personData = person?.Id ? map.get(person.Id) : null;
-            if (!personData) return;
-            bumpEpisodeRole(personData.series, person.Type, -1);
-        });
-    }
-
-    function removeMovieFromPeople(map, movieId) {
-        if (!map || !movieId) return;
+    function clearMovieCounts(map) {
+        if (!map) return;
         map.forEach((person) => {
-            const m = person.movies;
-            ['directorItems', 'writerItems', 'actorItems'].forEach((key) => {
-                const before = m[key].length;
-                m[key] = m[key].filter((id) => id !== movieId);
-                if (m[key].length !== before) {
-                    if (key === 'directorItems') m.directorCount = m[key].length;
-                    if (key === 'writerItems') m.writerCount = m[key].length;
-                    if (key === 'actorItems') m.actorCount = m[key].length;
-                }
-            });
+            person.movies = emptyMovieCounts();
         });
     }
 
-    function removeSeriesMembership(map, seriesId) {
-        if (!map || !seriesId) return;
+    function clearSeriesMembershipCounts(map) {
+        if (!map) return;
         map.forEach((person) => {
-            person.series.items = person.series.items.filter((id) => id !== seriesId);
-            person.series.count = person.series.items.length;
-        });
-    }
-
-    async function fetchEpisodesForSeries(seriesId) {
-        const api = window.apiHelper || window.ApiHelper;
-        const server = window.ApiClient.serverAddress();
-        const url = `${server}/Shows/${seriesId}/Episodes?Fields=People&EnableTotalRecordCount=false`;
-        const data = await api.getQuery(url, { useCache: false });
-        return data?.Items || [];
-    }
-
-    /**
-     * Fetch episodes for many series with limited concurrency.
-     * @param {Array<{Id: string}|string>} seriesList
-     * @param {(seriesId: string, episodes: Array) => void} onSeriesEpisodes
-     */
-    async function fetchEpisodesForSeriesBatched(seriesList, onSeriesEpisodes) {
-        const list = (seriesList || [])
-            .map((s) => (typeof s === 'string' ? { Id: s } : s))
-            .filter((s) => s?.Id);
-        let completed = 0;
-        for (let i = 0; i < list.length; i += EPISODE_FETCH_CONCURRENCY) {
-            const chunk = list.slice(i, i + EPISODE_FETCH_CONCURRENCY);
-            await Promise.all(chunk.map(async (s) => {
-                try {
-                    const episodes = await fetchEpisodesForSeries(s.Id);
-                    onSeriesEpisodes(s.Id, episodes);
-                } catch (e) {
-                    WARN(`Failed episodes for series ${s.Id}:`, e);
-                }
-            }));
-            completed += chunk.length;
-            const prev = completed - chunk.length;
-            if (completed === list.length || Math.floor(prev / 25) !== Math.floor(completed / 25)) {
-                LOG(`Episode people progress: ${completed}/${list.length} series`);
-            }
-        }
-    }
-
-    async function subtractEpisodeCreditsForSeriesIds(map, seriesIds) {
-        const ids = (seriesIds || []).filter(Boolean);
-        if (!ids.length || !map) return;
-        await fetchEpisodesForSeriesBatched(ids, (_seriesId, episodes) => {
-            episodes.forEach((ep) => decrementEpisodePeople(map, ep));
+            person.series.count = 0;
         });
     }
 
@@ -288,40 +248,27 @@
         });
     }
 
-    async function rebuildAllEpisodeRoleCounts(map) {
-        clearEpisodeRoleCounts(map);
+    async function recountMoviePeopleFromCache(map) {
+        clearMovieCounts(map);
+        const movies = await window.MoviesCache?.getMovies?.() || [];
+        (movies || []).forEach((movie) => applyMoviePeople(map, movie));
+    }
+
+    async function recountSeriesMembershipFromCache(map) {
+        clearSeriesMembershipCounts(map);
         const seriesList = await window.SeriesCache?.getSeries?.() || [];
-        await fetchEpisodesForSeriesBatched(seriesList, (seriesId, episodes) => {
-            episodes.forEach((ep) => applyEpisodePeople(map, seriesId, ep));
-        });
+        (seriesList || []).forEach((s) => applySeriesPeople(map, s));
     }
 
     function roleCount(person, role, itemType) {
         const movieCount = movieRoleCount(person, role);
-        const seriesCount = person.series?.count || 0;
+        const seriesCount = seriesRoleCount(person, role);
         const episodeCount = episodeRoleCount(person, role);
         if (itemType === 'Movie') return movieCount;
         if (itemType === 'Series') return seriesCount;
         if (itemType === 'Episode') return episodeCount;
         if (isAggregateItemType(itemType)) return movieCount + seriesCount + episodeCount;
         return 0;
-    }
-
-    function roleItems(person, role, itemType) {
-        if (itemType === 'Movie') {
-            if (role === 'Actor') return person.movies.actorItems || [];
-            if (role === 'Director') return person.movies.directorItems || [];
-            if (role === 'Writer') return person.movies.writerItems || [];
-            return [];
-        }
-        if (itemType === 'Series') return person.series.items || [];
-        if (itemType === 'Episode') return [];
-        if (isAggregateItemType(itemType)) {
-            const movieItems = roleItems(person, role, 'Movie');
-            const seriesItems = person.series.items || [];
-            return [...movieItems, ...seriesItems];
-        }
-        return [];
     }
 
     function filterRoleList(role, itemType, minCount) {
@@ -339,10 +286,8 @@
             .map((person) => {
                 const count = roleCount(person, role, type);
                 return {
-                    Id: person.Id,
-                    Name: person.Name,
+                    ...person,
                     count,
-                    items: roleItems(person, role, type),
                     movies: person.movies,
                     series: person.series
                 };
@@ -356,19 +301,396 @@
             actors: filterRoleList('Actor', null),
             directors: filterRoleList('Director', null),
             writers: filterRoleList('Writer', null),
-            isComplete: true
+            isComplete: true,
+            episodePeopleComplete: episodePeopleComplete === true
         };
     }
 
-    async function persistPeople() {
+    function yieldToMain() {
+        return new Promise((resolve) => {
+            if (typeof requestIdleCallback === 'function') {
+                requestIdleCallback(() => resolve(), { timeout: 500 });
+            } else {
+                requestAnimationFrame(() => setTimeout(resolve, 0));
+            }
+        });
+    }
+
+    async function waitWhileCacheNetworkPaused() {
+        const wait = window.LibraryCacheUtils?.waitWhileCacheNetworkPaused;
+        if (typeof wait === 'function') {
+            await wait();
+            return;
+        }
+        // Fallback if utils not loaded yet
+        while (typeof document !== 'undefined' && document.hidden) {
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+    }
+
+    function getApiHelper() {
+        return window.apiHelper || window.ApiHelper;
+    }
+
+    function buildEpisodePeopleUrl(startIndex) {
+        const server = window.ApiClient.serverAddress();
+        const params = new URLSearchParams({
+            IncludeItemTypes: 'Episode',
+            Recursive: 'true',
+            Fields: 'People',
+            ExcludeLocationTypes: 'Virtual',
+            EnableTotalRecordCount: 'false',
+            SortBy: 'DateCreated',
+            SortOrder: 'Descending',
+            StartIndex: String(startIndex || 0),
+            Limit: String(EPISODE_CHUNK_SIZE)
+        });
+        return `${server}/Items?${params.toString()}`;
+    }
+
+    async function fetchEpisodePeoplePage(startIndex) {
+        const api = getApiHelper();
+        const url = buildEpisodePeopleUrl(startIndex);
+        const data = await api.getQuery(url, { useCache: false });
+        return data?.Items || [];
+    }
+
+    function compareIsoDates(a, b) {
+        if (!a && !b) return 0;
+        if (!a) return -1;
+        if (!b) return 1;
+        if (a === b) return 0;
+        return a < b ? -1 : 1;
+    }
+
+    async function applyEpisodeBatchWithYield(map, episodes) {
+        for (let i = 0; i < episodes.length; i++) {
+            applyEpisodePeople(map, episodes[i]);
+            if ((i + 1) % EPISODE_APPLY_YIELD_EVERY === 0) {
+                await yieldToMain();
+            }
+        }
+    }
+
+    function clearEpisodeCrawl() {
+        episodeCrawl = null;
+    }
+
+    function setEpisodeCrawl(startIndex, newestAt, oldestApplied) {
+        episodeCrawl = {
+            startIndex: Math.max(0, Number(startIndex) || 0),
+            newestAt: newestAt || null,
+            oldestApplied: oldestApplied || null
+        };
+        episodePeopleComplete = false;
+    }
+
+    /**
+     * Apply episodes newer than newestAt from the head of the DateCreated-desc list.
+     * @returns {{ applied: number, newestAt: string|null }}
+     */
+    async function runEpisodeHeadCatchup(newestAt) {
+        let startIndex = 0;
+        let applied = 0;
+        let page0Newest = null;
+
+        while (true) {
+            await waitWhileCacheNetworkPaused();
+            let batch = [];
+            try {
+                batch = await fetchEpisodePeoplePage(startIndex);
+            } catch (e) {
+                ERR('Episode head catchup page failed:', e);
+                break;
+            }
+            if (!batch.length) break;
+
+            if (!page0Newest && batch[0]?.DateCreated) {
+                page0Newest = batch[0].DateCreated;
+            }
+
+            const toApply = [];
+            let hitBoundary = false;
+            for (const ep of batch) {
+                const created = ep?.DateCreated;
+                if (newestAt && created && compareIsoDates(created, newestAt) <= 0) {
+                    hitBoundary = true;
+                    break;
+                }
+                toApply.push(ep);
+            }
+
+            if (toApply.length) {
+                await applyEpisodeBatchWithYield(peopleMap, toApply);
+                applied += toApply.length;
+            }
+
+            await yieldToMain();
+            if (hitBoundary || batch.length < EPISODE_CHUNK_SIZE) break;
+            startIndex += batch.length;
+        }
+
+        return { applied, newestAt: page0Newest || newestAt || null };
+    }
+
+    /**
+     * Full descending crawl, or resume from episodeCrawl (after optional head catchup).
+     */
+    async function runEpisodeFullOrResumeCrawl({ resume }) {
+        let startIndex = 0;
+        let newestAt = null;
+        let oldestApplied = null;
+        let stillSkipping = false;
+
+        if (resume && episodeCrawl) {
+            startIndex = episodeCrawl.startIndex || 0;
+            newestAt = episodeCrawl.newestAt || null;
+            oldestApplied = episodeCrawl.oldestApplied || null;
+            stillSkipping = !!oldestApplied;
+
+            LOG(`Episode people sync: resume (startIndex=${startIndex}, newestAt=${newestAt}, oldestApplied=${oldestApplied})`);
+
+            if (newestAt) {
+                const head = await runEpisodeHeadCatchup(newestAt);
+                if (head.applied > 0) {
+                    startIndex += head.applied;
+                    LOG(`Episode head catchup applied ${head.applied}; startIndex → ${startIndex}`);
+                }
+                if (head.newestAt) newestAt = head.newestAt;
+                setEpisodeCrawl(startIndex, newestAt, oldestApplied);
+                await persistPeople({ prune: false });
+            }
+        } else {
+            LOG('Episode people sync: full crawl…');
+            startIndex = 0;
+            newestAt = null;
+            oldestApplied = null;
+            stillSkipping = false;
+        }
+
+        let pages = 0;
+        let applied = 0;
+
+        while (true) {
+            await waitWhileCacheNetworkPaused();
+            let batch = [];
+            try {
+                batch = await fetchEpisodePeoplePage(startIndex);
+            } catch (e) {
+                ERR('Episode people page failed:', e);
+                setEpisodeCrawl(startIndex, newestAt, oldestApplied);
+                await persistPeople({ prune: false });
+                return;
+            }
+            pages += 1;
+
+            if (!batch.length) break;
+
+            if (!newestAt && batch[0]?.DateCreated) {
+                newestAt = batch[0].DateCreated;
+            }
+
+            const toApply = [];
+            for (const ep of batch) {
+                const created = ep?.DateCreated;
+                if (stillSkipping && oldestApplied && created) {
+                    if (compareIsoDates(created, oldestApplied) >= 0) {
+                        continue;
+                    }
+                    stillSkipping = false;
+                }
+                toApply.push(ep);
+            }
+
+            if (toApply.length) {
+                await applyEpisodeBatchWithYield(peopleMap, toApply);
+                applied += toApply.length;
+                const last = toApply[toApply.length - 1];
+                if (last?.DateCreated) oldestApplied = last.DateCreated;
+            }
+
+            startIndex += batch.length;
+            setEpisodeCrawl(startIndex, newestAt, oldestApplied);
+            await persistPeople({ prune: false });
+            await yieldToMain();
+
+            if (pages % 5 === 0) {
+                LOG(`Episode people progress: applied=${applied}, page=${pages}, startIndex=${startIndex}`);
+            }
+
+            if (batch.length < EPISODE_CHUNK_SIZE) break;
+        }
+
+        episodePeopleWatermark = newestAt;
+        clearEpisodeCrawl();
+        episodePeopleComplete = true;
+        lastEpisodeSyncAt = new Date().toISOString();
+        prunePeopleMap(peopleMap);
+        rebuildFilteredLists();
+        await persistPeople({ prune: true });
+        LOG(`Episode people sync done: applied=${applied}, pages=${pages}, watermark=${episodePeopleWatermark}`);
+    }
+
+    /** Incremental update when a prior full crawl completed (watermark set, no partial cursor). */
+    async function runEpisodeIncrementalSync() {
+        const watermark = episodePeopleWatermark;
+        LOG(`Episode people sync: incremental (watermark=${watermark})…`);
+
+        let startIndex = 0;
+        let newestSeen = null;
+        let pages = 0;
+        let applied = 0;
+
+        while (true) {
+            await waitWhileCacheNetworkPaused();
+            let batch = [];
+            try {
+                batch = await fetchEpisodePeoplePage(startIndex);
+            } catch (e) {
+                ERR('Episode people page failed:', e);
+                break;
+            }
+            pages += 1;
+
+            if (!batch.length) break;
+
+            if (!newestSeen && batch[0]?.DateCreated) {
+                newestSeen = batch[0].DateCreated;
+            }
+
+            const toApply = [];
+            let hitWatermark = false;
+            for (const ep of batch) {
+                const created = ep?.DateCreated;
+                if (watermark && created && compareIsoDates(created, watermark) <= 0) {
+                    hitWatermark = true;
+                    break;
+                }
+                toApply.push(ep);
+            }
+
+            if (toApply.length) {
+                await applyEpisodeBatchWithYield(peopleMap, toApply);
+                applied += toApply.length;
+            }
+
+            await yieldToMain();
+
+            if (hitWatermark || batch.length < EPISODE_CHUNK_SIZE) break;
+            startIndex += batch.length;
+        }
+
+        if (newestSeen) {
+            episodePeopleWatermark = newestSeen;
+        }
+        clearEpisodeCrawl();
+        episodePeopleComplete = true;
+        lastEpisodeSyncAt = new Date().toISOString();
+        prunePeopleMap(peopleMap);
+        rebuildFilteredLists();
+        await persistPeople({ prune: true });
+        LOG(`Episode people incremental done: applied=${applied}, pages=${pages}, watermark=${episodePeopleWatermark}`);
+    }
+
+    async function runEpisodePeopleSync(options = {}) {
+        if (!shouldLoadPeopleEpisodeData()) {
+            clearEpisodeRoleCounts(peopleMap);
+            clearEpisodeCrawl();
+            episodePeopleComplete = true;
+            episodePeopleWatermark = null;
+            lastEpisodeSyncAt = new Date().toISOString();
+            rebuildFilteredLists();
+            await persistPeople({ prune: true });
+            return;
+        }
+        if (!peopleMap) return;
+
+        const forceFull = options.forceFull === true;
+
+        if (forceFull) {
+            clearEpisodeRoleCounts(peopleMap);
+            clearEpisodeCrawl();
+            episodePeopleWatermark = null;
+            episodePeopleComplete = false;
+            await runEpisodeFullOrResumeCrawl({ resume: false });
+            return;
+        }
+
+        if (episodeCrawl && !episodePeopleComplete) {
+            await runEpisodeFullOrResumeCrawl({ resume: true });
+            return;
+        }
+
+        if (episodePeopleWatermark) {
+            await runEpisodeIncrementalSync();
+            return;
+        }
+
+        // No watermark and no partial cursor: start a fresh full crawl
+        clearEpisodeRoleCounts(peopleMap);
+        clearEpisodeCrawl();
+        episodePeopleComplete = false;
+        await runEpisodeFullOrResumeCrawl({ resume: false });
+    }
+
+    function scheduleEpisodePeopleSync(options = {}) {
+        if (!shouldLoadPeopleEpisodeData()) {
+            if (peopleMap) {
+                clearEpisodeRoleCounts(peopleMap);
+                clearEpisodeCrawl();
+                episodePeopleComplete = true;
+                episodePeopleWatermark = null;
+            }
+            return Promise.resolve();
+        }
+
+        if (options.forceFull) {
+            episodeSyncPendingForceFull = true;
+        }
+
+        if (episodeSyncPromise) {
+            return episodeSyncPromise;
+        }
+
+        episodeSyncPromise = (async () => {
+            try {
+                do {
+                    const forceFull = episodeSyncPendingForceFull;
+                    episodeSyncPendingForceFull = false;
+                    await runEpisodePeopleSync({ forceFull });
+                } while (episodeSyncPendingForceFull);
+            } catch (e) {
+                ERR('Episode people sync failed:', e);
+            } finally {
+                episodeSyncPromise = null;
+            }
+        })();
+
+        return episodeSyncPromise;
+    }
+
+    async function persistPeople(options = {}) {
         const cache = window.IndexedDBCache;
         if (!cache || !peopleMap) return;
-        prunePeopleMap(peopleMap);
+        const doPrune = options.prune !== false;
+        if (doPrune) {
+            prunePeopleMap(peopleMap);
+        }
         const userId = window.ApiClient.getCurrentUserId();
         const ttl = window.LibraryCacheUtils?.getLibraryCacheSettings?.().CACHE_TTL || (14 * 24 * 60 * 60 * 1000);
         const payload = {
             isComplete: true,
             loadPeopleEpisodeData: shouldLoadPeopleEpisodeData(),
+            episodePeopleComplete: episodePeopleComplete === true,
+            episodePeopleWatermark,
+            episodeCrawl: episodeCrawl
+                ? {
+                    startIndex: episodeCrawl.startIndex,
+                    newestAt: episodeCrawl.newestAt,
+                    oldestApplied: episodeCrawl.oldestApplied
+                }
+                : null,
+            lastEpisodeSyncAt,
             peopleData: Array.from(peopleMap.entries())
         };
         try {
@@ -390,20 +712,23 @@
                 (movies || []).forEach((movie) => applyMoviePeople(map, movie));
                 (seriesList || []).forEach((s) => applySeriesPeople(map, s));
 
+                peopleMap = map;
+                prunePeopleMap(map);
+                isComplete = true;
+                episodePeopleComplete = !shouldLoadPeopleEpisodeData();
+                episodePeopleWatermark = null;
+                clearEpisodeCrawl();
+                lastEpisodeSyncAt = null;
+                rebuildFilteredLists();
+                await persistPeople({ prune: true });
+                LOG(`People cache Phase A complete: ${peopleMap.size} people`);
+
                 if (shouldLoadPeopleEpisodeData()) {
-                    await fetchEpisodesForSeriesBatched(seriesList, (seriesId, episodes) => {
-                        episodes.forEach((ep) => applyEpisodePeople(map, seriesId, ep));
-                    });
+                    scheduleEpisodePeopleSync({ forceFull: true });
                 } else {
                     LOG('Skipping episode people fetch (loadPeopleEpisodeData disabled)');
                 }
 
-                peopleMap = map;
-                prunePeopleMap(map);
-                isComplete = true;
-                rebuildFilteredLists();
-                await persistPeople();
-                LOG(`People cache complete: ${peopleMap.size} people`);
                 return filteredLists;
             } catch (err) {
                 ERR('fetchAndCachePeople failed:', err);
@@ -426,22 +751,45 @@
                     const cached = await cache.get(CACHE_NAME, userId);
                     if (cached?.isComplete && Array.isArray(cached.peopleData)) {
                         const currentMode = shouldLoadPeopleEpisodeData();
-                        // Legacy caches (no flag) always included episode data
                         const cachedMode = typeof cached.loadPeopleEpisodeData === 'boolean'
                             ? cached.loadPeopleEpisodeData
-                            : true;
+                            : false;
                         if (cachedMode !== currentMode) {
                             LOG(`People cache episode mode mismatch (cached=${cachedMode}, current=${currentMode}); rebuilding`);
                             await cache.clear?.(CACHE_NAME, userId);
                         } else {
                             peopleMap = new Map(cached.peopleData);
+                            episodePeopleWatermark = cached.episodePeopleWatermark || null;
+                            lastEpisodeSyncAt = cached.lastEpisodeSyncAt || null;
+                            if (cached.episodeCrawl
+                                && typeof cached.episodeCrawl === 'object'
+                                && cached.episodePeopleComplete !== true) {
+                                episodeCrawl = {
+                                    startIndex: Math.max(0, Number(cached.episodeCrawl.startIndex) || 0),
+                                    newestAt: cached.episodeCrawl.newestAt || null,
+                                    oldestApplied: cached.episodeCrawl.oldestApplied || null
+                                };
+                                episodePeopleComplete = false;
+                            } else {
+                                clearEpisodeCrawl();
+                                episodePeopleComplete = cached.episodePeopleComplete === true
+                                    || !currentMode;
+                            }
                             const before = peopleMap.size;
-                            prunePeopleMap(peopleMap);
+                            // Avoid pruning away mid-crawl people that only meet mins after more pages
+                            if (episodePeopleComplete) {
+                                prunePeopleMap(peopleMap);
+                            }
                             isComplete = true;
                             rebuildFilteredLists();
-                            LOG('Loaded people cache from IndexedDB');
-                            if (peopleMap.size < before) {
-                                await persistPeople();
+                            LOG('Loaded people cache from IndexedDB'
+                                + (episodeCrawl ? ` (partial episode crawl startIndex=${episodeCrawl.startIndex})` : ''));
+                            if (episodePeopleComplete && peopleMap.size < before) {
+                                await persistPeople({ prune: true });
+                            }
+                            if (currentMode) {
+                                // Resume partial, incremental watermark, or start full — never wipe on missing watermark alone
+                                scheduleEpisodePeopleSync();
                             }
                             return;
                         }
@@ -455,58 +803,36 @@
         return initPromise;
     }
 
-    async function applyMovieDelta(changedMovies, removedIds) {
+    async function applyMovieDelta(_changedMovies, _removedIds) {
         if (!peopleMap) await initialize();
         if (!peopleMap) return;
-        (removedIds || []).forEach((id) => removeMovieFromPeople(peopleMap, id));
-        (changedMovies || []).forEach((movie) => {
-            removeMovieFromPeople(peopleMap, movie.Id);
-            applyMoviePeople(peopleMap, movie);
-        });
+        await recountMoviePeopleFromCache(peopleMap);
         prunePeopleMap(peopleMap);
         rebuildFilteredLists();
-        await persistPeople();
+        await persistPeople({ prune: true });
     }
 
-    async function applySeriesDelta(changedSeries, removedIds) {
+    async function applySeriesDelta(_changedSeries, removedIds) {
         if (!peopleMap) await initialize();
         if (!peopleMap) return;
 
         const removed = (removedIds || []).filter(Boolean);
-        const changed = (changedSeries || []).filter((s) => s?.Id);
-        const loadEpisodes = shouldLoadPeopleEpisodeData();
+        await recountSeriesMembershipFromCache(peopleMap);
 
-        if (removed.length) {
-            removed.forEach((id) => removeSeriesMembership(peopleMap, id));
-            changed.forEach((s) => {
-                removeSeriesMembership(peopleMap, s.Id);
-                applySeriesPeople(peopleMap, s);
-            });
-            if (loadEpisodes) {
-                // Without per-series episode indexes, any removal requires a full episode recount.
-                await rebuildAllEpisodeRoleCounts(peopleMap);
-            } else {
-                clearEpisodeRoleCounts(peopleMap);
-            }
+        if (!shouldLoadPeopleEpisodeData()) {
+            clearEpisodeRoleCounts(peopleMap);
+            clearEpisodeCrawl();
+            episodePeopleComplete = true;
+            episodePeopleWatermark = null;
+        } else if (removed.length) {
+            scheduleEpisodePeopleSync({ forceFull: true });
         } else {
-            if (loadEpisodes) {
-                // Changed-only: decrement this series' episode credits, refresh membership, re-apply episodes.
-                await subtractEpisodeCreditsForSeriesIds(peopleMap, changed.map((s) => s.Id));
-            }
-            changed.forEach((s) => {
-                removeSeriesMembership(peopleMap, s.Id);
-                applySeriesPeople(peopleMap, s);
-            });
-            if (loadEpisodes) {
-                await fetchEpisodesForSeriesBatched(changed, (seriesId, episodes) => {
-                    episodes.forEach((ep) => applyEpisodePeople(peopleMap, seriesId, ep));
-                });
-            }
+            scheduleEpisodePeopleSync({ forceFull: false });
         }
 
         prunePeopleMap(peopleMap);
         rebuildFilteredLists();
-        await persistPeople();
+        await persistPeople({ prune: true });
     }
 
     async function invalidate() {
@@ -514,8 +840,14 @@
         peopleMap = null;
         filteredLists = null;
         isComplete = false;
+        episodePeopleComplete = false;
+        episodePeopleWatermark = null;
+        clearEpisodeCrawl();
+        lastEpisodeSyncAt = null;
         fetchPromise = null;
         initPromise = null;
+        episodeSyncPromise = null;
+        episodeSyncPendingForceFull = false;
         try {
             const cache = window.IndexedDBCache;
             const userId = window.ApiClient?.getCurrentUserId?.();
@@ -525,7 +857,6 @@
         } catch (e) {
             WARN('Failed to clear people IDB cache:', e);
         }
-        // Rebuild on next demand; kick off in background if caches are ready
         try {
             initialize();
         } catch (e) {
@@ -598,7 +929,6 @@
         bootstrapStarted = true;
         try {
             await waitForLoginReady();
-            // Wait for library caches to finish first crawl
             if (window.MoviesCache?.getMovies) await window.MoviesCache.getMovies();
             if (window.SeriesCache?.getSeries) await window.SeriesCache.getSeries();
             await initialize();
@@ -644,6 +974,8 @@
         applySeriesDelta,
         invalidate,
         isComplete: () => isComplete === true,
+        isEpisodePeopleComplete: () => episodePeopleComplete === true,
+        scheduleEpisodePeopleSync,
         bootstrap,
         scheduleBootstrap
     };

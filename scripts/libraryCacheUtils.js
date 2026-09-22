@@ -252,6 +252,45 @@
         return (existingItems || []).filter((item) => item?.Id && !removeIds.has(item.Id));
     }
 
+    function isVideoPlaybackRoute() {
+        const hash = String(window.location?.hash || '');
+        return hash.includes('#/video') || hash.includes('/video');
+    }
+
+    /**
+     * Wait while Jellyfin video playback is active or the tab is hidden,
+     * so library cache crawls do not compete for network during playback.
+     */
+    async function waitWhileCacheNetworkPaused() {
+        while (isVideoPlaybackRoute() || (typeof document !== 'undefined' && document.hidden)) {
+            await new Promise((resolve) => {
+                let settled = false;
+                const done = () => {
+                    if (settled) return;
+                    settled = true;
+                    cleanup();
+                    resolve();
+                };
+                const cleanup = () => {
+                    window.removeEventListener('hashchange', onHash);
+                    document.removeEventListener('visibilitychange', onVis);
+                    clearTimeout(timer);
+                };
+                const onHash = () => {
+                    if (!isVideoPlaybackRoute() && !(typeof document !== 'undefined' && document.hidden)) {
+                        done();
+                    }
+                };
+                const onVis = () => {
+                    if (!document.hidden && !isVideoPlaybackRoute()) done();
+                };
+                window.addEventListener('hashchange', onHash);
+                document.addEventListener('visibilitychange', onVis);
+                const timer = setTimeout(done, 1000);
+            });
+        }
+    }
+
     window.LibraryCacheUtils = {
         stripMovieForCache,
         stripSeriesForCache,
@@ -263,6 +302,8 @@
         buildProviderIdIndex,
         getLibraryCacheSettings,
         upsertById,
-        removeByIds
+        removeByIds,
+        isVideoPlaybackRoute,
+        waitWhileCacheNetworkPaused
     };
 })();

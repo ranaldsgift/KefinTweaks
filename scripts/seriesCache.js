@@ -76,6 +76,7 @@
     }
 
     async function queryItems(url) {
+        await window.LibraryCacheUtils?.waitWhileCacheNetworkPaused?.();
         const api = getApiHelper();
         if (!api?.getQuery) throw new Error('apiHelper.getQuery unavailable');
         return (await api.getQuery(url, { useCache: false })) || { Items: [], TotalRecordCount: 0 };
