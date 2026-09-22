@@ -84,6 +84,22 @@
         return null;
     }
 
+    function getMoviesCache() {
+        if (window.MoviesCache) return window.MoviesCache;
+        if (window.parent && window.parent !== window && window.parent.MoviesCache) {
+            return window.parent.MoviesCache;
+        }
+        return null;
+    }
+
+    function getApiHelper() {
+        if (window.apiHelper || window.ApiHelper) return window.apiHelper || window.ApiHelper;
+        if (window.parent && window.parent !== window) {
+            return window.parent.apiHelper || window.parent.ApiHelper || null;
+        }
+        return null;
+    }
+
     async function waitForApiClient(maxMs) {
         const limit = maxMs || 15000;
         const start = Date.now();
@@ -149,12 +165,78 @@
         return null;
     }
 
-    function actorFilmography(actor) {
-        const items = actor.items || actor.actorItems || [];
-        // PeopleCache may return raw movie Id strings; normalize to { Id } for gatherThreeTrickplayMovies
-        return items
-            .map((m) => (typeof m === 'string' || typeof m === 'number' ? { Id: String(m) } : m))
-            .filter((m) => m && m.Id);
+    /**
+     * Resolve movie stubs for an actor on demand (PeopleCache no longer stores item ids).
+     * Prefers MoviesCache People arrays; falls back to Items?PersonIds=.
+     * @returns {Promise<Array<{ Id: string }>>}
+     */
+    async function actorFilmography(actor) {
+        const actorId = actor?.Id;
+        if (!actorId) return [];
+
+        const moviesCache = getMoviesCache();
+        if (moviesCache?.getMovies) {
+            try {
+                const movies = await moviesCache.getMovies();
+                const fromCache = (movies || [])
+                    .filter((m) => {
+                        if (!m?.Id || !Array.isArray(m.People)) return false;
+                        return m.People.some((p) => p?.Id === actorId
+                            && (!p.Type || p.Type === 'Actor'));
+                    })
+                    .map((m) => ({ Id: m.Id }));
+                if (fromCache.length) return fromCache;
+            } catch (e) {
+                WARN('MoviesCache filmography lookup failed', e);
+            }
+        }
+
+        const api = getApiHelper();
+        const apiClient = getApiClient();
+        if (api?.getItems) {
+            try {
+                const data = await api.getItems({
+                    PersonIds: actorId,
+                    IncludeItemTypes: 'Movie',
+                    Recursive: true,
+                    Fields: '',
+                    EnableTotalRecordCount: false,
+                    Limit: 100
+                }, false);
+                const items = data?.Items || [];
+                return items.filter((m) => m?.Id).map((m) => ({ Id: m.Id }));
+            } catch (e) {
+                WARN('PersonIds filmography fetch failed', e);
+            }
+        }
+
+        if (apiClient?.getItems) {
+            try {
+                const userId = apiClient.getCurrentUserId();
+                const data = await apiClient.getItems(userId, {
+                    PersonIds: actorId,
+                    IncludeItemTypes: 'Movie',
+                    Recursive: true,
+                    Fields: '',
+                    EnableTotalRecordCount: false,
+                    Limit: 100
+                });
+                const items = data?.Items || [];
+                return items.filter((m) => m?.Id).map((m) => ({ Id: m.Id }));
+            } catch (e) {
+                WARN('ApiClient filmography fetch failed', e);
+            }
+        }
+
+        return [];
+    }
+
+    function actorLikelyHasEnoughMovies(actor) {
+        const movieCount = actor?.movies?.actorCount;
+        if (Number.isFinite(movieCount) && movieCount >= 3) return true;
+        const count = actor?.count;
+        if (Number.isFinite(count) && count >= 3) return true;
+        return false;
     }
 
     async function fetchFullItem(apiClient, itemId) {
@@ -526,7 +608,7 @@
     }
 
     async function gatherThreeTrickplayMovies(apiClient, actor) {
-        const filmography = shuffle(actorFilmography(actor));
+        const filmography = shuffle(await actorFilmography(actor));
         const found = [];
         let probes = 0;
         for (const entry of filmography) {
@@ -543,7 +625,8 @@
     }
 
     async function pickRound(apiClient, actors) {
-        const actorPool = shuffle(actors.filter((a) => actorFilmography(a).length >= 3));
+        const preferred = actors.filter(actorLikelyHasEnoughMovies);
+        const actorPool = shuffle(preferred.length ? preferred : actors);
         let tries = 0;
         for (const actor of actorPool) {
             if (tries >= MAX_ACTOR_TRIES) break;
