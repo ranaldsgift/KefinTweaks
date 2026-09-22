@@ -49,7 +49,7 @@ window.ModalSystem = (function() {
             || (fixedSize !== false && typeof window !== 'undefined' && window.innerWidth < 900);
 
         let _showCloseButton = showCloseButton;
-        if (window.innerWidth < 900) {
+        if (window.innerWidth < 900 && useFixedSize) {
             _showCloseButton = true;
         }
 
@@ -111,7 +111,9 @@ window.ModalSystem = (function() {
             dialogHeader.appendChild(closeButton);
         }
 
-        dialog.appendChild(dialogHeader);
+        if (dialogHeader.childNodes.length > 0) {
+            dialog.appendChild(dialogHeader);
+        }
 
         // Create scrollable content area
         const dialogContent = document.createElement('div');
