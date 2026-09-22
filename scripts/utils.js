@@ -16,10 +16,12 @@
     let originalOnViewShow = null;
     const state = {
         previousHash: null,
+        hookAttempts: 0,
+        maxHookAttempts: 60,
     }
     
     // Initialize the utils by hooking into Emby.Page.onViewShow
-    function initialize() {
+    async function initialize() {
         // Store the original onViewShow if it exists
         if (window.Emby && window.Emby.Page && window.Emby.Page.onViewShow) {
             originalOnViewShow = window.Emby.Page.onViewShow;
@@ -48,6 +50,13 @@
             LOG('Hooked into Emby.Page.onViewShow');
         } else {
             WARN('Emby.Page.onViewShow not found - utils may not work correctly');
+            // Retry in 1 second
+            state.hookAttempts++;
+            if (state.hookAttempts < state.maxHookAttempts) {
+                setTimeout(initialize, 1000);
+            } else {
+                WARN('Failed to hook into Emby.Page.onViewShow after ' + state.maxHookAttempts + ' attempts');
+            }
         }
     }
 
@@ -1111,7 +1120,7 @@
     }
 
     function isModernUI() {
-        return document.querySelector('.MuiBox-root') !== null ||  localStorage.getItem('layout')?.length === 0;
+        return !!document.querySelector('main.MuiBox-root') || (localStorage.getItem('layout')?.length === 0 && isJellyfinWebAtLeast12());
     }
 
     function injectIntoTopNavMain(entry) {
@@ -2321,6 +2330,22 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
         }
     }
 
+    async function getWatchlistUrl() {
+		if (window.KefinTweaksUtils._watchlistUrl) {
+			return window.KefinTweaksUtils._watchlistUrl;
+		}
+		const isModernUI = window.KefinTweaksUtils.isModernUI();
+		const watchlistTabIndex = await getWatchlistTabIndex() || null;
+
+        let watchlistUrl = '#/watchlist';
+
+		if (watchlistTabIndex !== null && watchlistTabIndex !== undefined && !isModernUI) {
+			watchlistUrl = `#/home?tab=${watchlistTabIndex}`;
+		}
+		window.KefinTweaksUtils._watchlistUrl = watchlistUrl;
+		return watchlistUrl;
+	}
+
 	/**
 	 * Get watchlist tab index, fetching if not yet set
 	 * @returns {number|null} The watchlist tab index or null if not found
@@ -2749,7 +2774,9 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
         clearPluginIdCache,
         getWatchlistTabIndex,
         waitForApiClient,
-        waitForLogin
+        waitForLogin,
+        isModernUI,
+        getWatchlistUrl
     };
     
     LOG('Initialized successfully');
