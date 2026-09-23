@@ -661,7 +661,8 @@
         { name: 'Universal Pictures', file: 'Universal_Pictures.svg' },
         { name: 'Walt Disney Pictures', file: 'Walt_Disney_Pictures.svg' },
         { name: 'Warner Bros.', file: 'Warner_Bros..svg' },
-        { name: 'HBO Max', file: 'HBO_Max.svg' }
+        { name: 'HBO Max', file: 'HBO_Max.svg' },
+        { name: 'Prime Video', file: 'Prime_Video.svg' }
     ];
 
     const BROWSE_BY_STUDIO_SECTION_ID = 'browse-by-studio';
