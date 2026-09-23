@@ -2460,6 +2460,13 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
 	top: 1em;
 }
 
+#reactRoot:has(.customPage.mainAnimatedPage:not(.hide)) .backdropImage {
+    background: none !important;
+}
+
+header.MuiPaper-root + main.MuiBox-root .customPage {
+	margin-top: 3rem;
+}
 `;
         (document.head || document.documentElement).appendChild(style);
     }

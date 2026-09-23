@@ -1718,10 +1718,6 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
 	transform: translateX(-50%);
 	top: 1em;
 }
-
-#reactRoot:has(main.MuiBox-root) .libraryPage:not(.noSecondaryNavPage).customPage {
-  padding-top: 0 !important;
-}
 `;
         (document.head || document.documentElement).appendChild(style);
     }

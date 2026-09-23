@@ -2277,10 +2277,6 @@ html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"
 	width: 37.5%;
 }
 
-.emby-scroller-container:has([data-direction="right"]:disabled):has([data-direction="left"]:disabled) button.show-all-button {
-	display: none;
-}
-
 .emby-scroller-container .emby-scrollbuttons:has([data-direction="right"]:disabled):has([data-direction="left"]:disabled) {
 	display: none;
 }
@@ -2315,14 +2311,6 @@ html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"
 
 .spotlight-section:not(.hide) span.emby-tab-button.emby-tab-button-active:not(:has(a)) {
 	cursor: default;
-}
-
-.emby-scroller-container:has(.itemsContainer[data-layout="grid"]) button.show-all-button::after {
-	content: "Collapse";
-}
-
-.layout-mobile .emby-scroller-container:has(.itemsContainer[data-layout="grid"]) button.show-all-button::after {
-	content: "keyboard_arrow_up";
 }
 
 .layout-mobile .spotlight-section .spotlight-section-title.sectionTabs:has(.emby-tab-button:not(.hide)) {
