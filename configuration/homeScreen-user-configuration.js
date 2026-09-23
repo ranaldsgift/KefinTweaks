@@ -201,6 +201,10 @@
     }
 
     function appendBoolPrefField(fields, value, serverValue) {
+        if (value === undefined) {
+            fields.push('');
+            return;
+        }
         const normalized = value === true;
         const serverNormalized = serverValue === true;
         fields.push(normalized === serverNormalized ? '' : (normalized ? 'true' : 'false'));
