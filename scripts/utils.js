@@ -2427,25 +2427,24 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
         return slug || 'page';
     }
 
-    /** Idempotent fallback if plugin did not early-inject #kefin-custom-page-styles. */
+    /** Install scoped styles, replacing an older installer's unscoped copy if present. */
     function ensureCustomPageStyles() {
-        if (document.getElementById('kefin-custom-page-styles')) return;
-        const style = document.createElement('style');
+        const style = document.getElementById('kefin-custom-page-styles') || document.createElement('style');
         style.id = 'kefin-custom-page-styles';
-        style.textContent = `
-#reactRoot .skinBody:has(.customPage:not(.hide)) #fallbackPage {
+        const css = `
+html.kefin-custom-page-route #reactRoot .skinBody:has(.customPage:not(.hide)) #fallbackPage {
 	display: none;
 }
 
-#reactRoot:not(:has(.skinBody .customPage:not(.hide))) .pageTitle {
+html.kefin-custom-page-route #reactRoot:not(:has(.skinBody .customPage:not(.hide))) .pageTitle {
     display: none !important;
 }
 
-#reactRoot .skinBody:not(:has(.customPage:not(.hide))) #fallbackPage > * {
+html.kefin-custom-page-route #reactRoot .skinBody:not(:has(.customPage:not(.hide))) #fallbackPage > * {
     display: none;
 }
 
-#reactRoot:not(:has(.skinBody .customPage:not(.hide))) #fallbackPage::after {
+html.kefin-custom-page-route #reactRoot:not(:has(.skinBody .customPage:not(.hide))) #fallbackPage::after {
 	content:'';
 	display: inline-block;
 	width: 20px;
@@ -2453,16 +2452,23 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
 	border: 3px solid #f3f3f3;
 	border-top: 3px solid #4ecdc4;
 	border-radius: 50%;
-	animation: spin 1s linear infinite;  
+	animation: spin 1s linear infinite;
 	position: relative;
 	left: 50%;
 	transform: translateX(-50%);
 	top: 1em;
 }
 
+#reactRoot:has(main.MuiBox-root) .libraryPage:not(.noSecondaryNavPage).customPage {
+  padding-top: 0 !important;
+}
 `;
-        (document.head || document.documentElement).appendChild(style);
+        if (style.textContent !== css) style.textContent = css;
+        if (!style.parentNode) (document.head || document.documentElement).appendChild(style);
     }
+
+    // The stable installer can load Experimental utils; fix its early stylesheet too.
+    if (document.getElementById('kefin-custom-page-styles')) ensureCustomPageStyles();
 
     function findCustomPageHost() {
         return document.querySelector('.skinBody:not(.mainAnimatedPages):has(.page:not(.hide))')
@@ -2632,6 +2638,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
 
     function syncAllCustomPages() {
         const currentPath = getCustomPagePathFromHash();
+        document.documentElement.classList.toggle('kefin-custom-page-route', customPageRegistry.has(currentPath));
         let matched = null;
         customPageRegistry.forEach((entry) => {
             if (currentPath && currentPath === entry.hrefPath) {
@@ -2715,14 +2722,12 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
                 if (!entry) return;
                 hideCustomPageEntry(entry);
                 customPageRegistry.delete(hrefPath);
+                syncAllCustomPages();
                 if (customPageRegistry.size === 0) {
-                    stopCustomPageTitleGuard();
                     if (customPageViewHandlerUnregister) {
                         customPageViewHandlerUnregister();
                         customPageViewHandlerUnregister = null;
                     }
-                } else {
-                    syncAllCustomPages();
                 }
             };
         }
@@ -2746,14 +2751,12 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
             if (!current) return;
             hideCustomPageEntry(current);
             customPageRegistry.delete(hrefPath);
+            syncAllCustomPages();
             if (customPageRegistry.size === 0) {
-                stopCustomPageTitleGuard();
                 if (customPageViewHandlerUnregister) {
                     customPageViewHandlerUnregister();
                     customPageViewHandlerUnregister = null;
                 }
-            } else {
-                syncAllCustomPages();
             }
         };
     }

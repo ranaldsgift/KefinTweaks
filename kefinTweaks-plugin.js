@@ -1687,24 +1687,23 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
 
     function injectCustomPageStyles(config) {
         if (!shouldInjectCustomPageStyles(config)) return;
-        if (document.getElementById('kefin-custom-page-styles')) return;
 
-        const style = document.createElement('style');
+        const style = document.getElementById('kefin-custom-page-styles') || document.createElement('style');
         style.id = 'kefin-custom-page-styles';
-        style.textContent = `
-#reactRoot .skinBody:has(.customPage:not(.hide)) #fallbackPage {
+        const css = `
+html.kefin-custom-page-route #reactRoot .skinBody:has(.customPage:not(.hide)) #fallbackPage {
 	display: none;
 }
 
-#reactRoot:not(:has(.skinBody .customPage:not(.hide))) .pageTitle {
+html.kefin-custom-page-route #reactRoot:not(:has(.skinBody .customPage:not(.hide))) .pageTitle {
     display: none !important;
 }
 
-#reactRoot .skinBody:not(:has(.customPage:not(.hide))) #fallbackPage > * {
+html.kefin-custom-page-route #reactRoot .skinBody:not(:has(.customPage:not(.hide))) #fallbackPage > * {
     display: none;
 }
 
-#reactRoot:not(:has(.skinBody .customPage:not(.hide))) #fallbackPage::after {
+html.kefin-custom-page-route #reactRoot:not(:has(.skinBody .customPage:not(.hide))) #fallbackPage::after {
 	content:'';
 	display: inline-block;
 	width: 20px;
@@ -1723,7 +1722,8 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
   padding-top: 0 !important;
 }
 `;
-        (document.head || document.documentElement).appendChild(style);
+        if (style.textContent !== css) style.textContent = css;
+        if (!style.parentNode) (document.head || document.documentElement).appendChild(style);
     }
 
     // Initialize the installer (no login/admin gate — admin is checked when rendering the card)
@@ -1874,7 +1874,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             const config = await getKefinTweaksConfig();
             const root = config?.kefinTweaksRoot || '';
 
-            // Before injector/utils: hide fallback page chrome for custom routes
+            // Prepare styles; utils enables fallback suppression for registered custom routes.
             injectCustomPageStyles(config);
 
             if (!root || root === '') {
