@@ -12,7 +12,7 @@
     LOG('Script loaded');
 
     function getRoot() {
-        const raw = window.KefinTweaksConfig?.kefinTweaksRoot;
+        const raw = window.KefinTweaksConfig?.kefinTweaksRootResolved;
         if (!raw) return null;
         return raw.endsWith('/') ? raw : `${raw}/`;
     }
