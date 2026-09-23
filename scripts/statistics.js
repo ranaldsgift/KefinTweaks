@@ -648,6 +648,24 @@
         const seriesWatched = list.filter((p) => p.percentage === 100).length;
         const episodesWatched = list.reduce((total, p) => total + (p.watchedCount || 0), 0);
         const moviesWatched = (movies || []).length;
+
+        let totalTicks = 0;
+        (movies || []).forEach((movie) => {
+            totalTicks += Number(movie.RunTimeTicks) || 0;
+        });
+        list.forEach((progress) => {
+            const source = Array.isArray(progress.episodes) && progress.episodes.length
+                ? progress.episodes
+                : (progress.playEvents || []);
+            source.forEach((ep) => {
+                const key = ep?.UserData?.LastPlayedDate || ep?.LastPlayedDate;
+                const played = ep?.UserData ? ep.UserData.Played === true : !!key;
+                if (!played) return;
+                totalTicks += Number(ep.RunTimeTicks) || 0;
+            });
+        });
+        const hoursWatched = Math.round(totalTicks / 10000000 / 3600);
+
         const topShows = list
             .map((progress) => ({
                 name: progress.series?.Name || 'Unknown',
@@ -663,7 +681,7 @@
             })
             .slice(0, 5);
 
-        return { seriesStarted, seriesWatched, episodesWatched, moviesWatched, topShows };
+        return { seriesStarted, seriesWatched, episodesWatched, moviesWatched, hoursWatched, topShows };
     }
 
     function updateSummaryCards(root, stats) {
@@ -675,6 +693,7 @@
         setText('stat-series-watched', stats.seriesWatched);
         setText('stat-episodes-watched', stats.episodesWatched);
         setText('stat-movies-watched', stats.moviesWatched);
+        setText('stat-hours-watched', stats.hoursWatched);
 
         const topShowsList = root.querySelector('#top-shows-list') || document.getElementById('top-shows-list');
         if (!topShowsList) return;
@@ -967,7 +986,7 @@
         renderFavoritesList(root, computeFavoriteRecents(progressList, movieList));
 
         resizeCharts();
-        LOG(`Statistics updated: ${summary.seriesStarted} started, ${summary.seriesWatched} watched, ${summary.episodesWatched} episodes, ${summary.moviesWatched} movies`);
+        LOG(`Statistics updated: ${summary.seriesStarted} started, ${summary.seriesWatched} watched, ${summary.episodesWatched} episodes, ${summary.moviesWatched} movies, ${summary.hoursWatched} hours`);
     }
 
     function resizeCharts() {

@@ -2747,6 +2747,25 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	}
 
 	// Statistics calculation functions
+	function sumWatchedRuntimeHours(progressData, movies) {
+		let totalTicks = 0;
+		(movies || []).forEach((movie) => {
+			totalTicks += Number(movie.RunTimeTicks) || 0;
+		});
+		(progressData || []).forEach((progress) => {
+			const source = Array.isArray(progress.episodes) && progress.episodes.length
+				? progress.episodes
+				: (progress.playEvents || []);
+			source.forEach((ep) => {
+				const key = ep?.UserData?.LastPlayedDate || ep?.LastPlayedDate;
+				const played = ep?.UserData ? ep.UserData.Played === true : !!key;
+				if (!played) return;
+				totalTicks += Number(ep.RunTimeTicks) || 0;
+			});
+		});
+		return Math.round(totalTicks / 10000000 / 3600);
+	}
+
 	async function calculateProgressStatistics(progressData) {
 		if (!progressData || progressData.length === 0) {
 			// Still try to get movie count even if no series data
@@ -2756,6 +2775,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				seriesWatched: 0,
 				episodesWatched: 0,
 				moviesWatched: movieCache.data.length,
+				hoursWatched: sumWatchedRuntimeHours([], movieCache.data),
 				topShows: []
 			};
 		}
@@ -2768,6 +2788,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		// Get movie count from cache
 		await fetchWatchedMovies(true); // Use cached data
 		const moviesWatched = movieCache.data.length;
+		const hoursWatched = sumWatchedRuntimeHours(progressData, movieCache.data);
 
 		// Calculate top 5 shows by completion percentage, then by episode count
 		const topShows = progressData
@@ -2794,6 +2815,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			seriesWatched,
 			episodesWatched,
 			moviesWatched,
+			hoursWatched,
 			topShows
 		};
 	}
@@ -2806,16 +2828,18 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		const seriesWatchedEl = getElementByIdSafe('stat-series-watched');
 		const episodesWatchedEl = getElementByIdSafe('stat-episodes-watched');
 		const moviesWatchedEl = getElementByIdSafe('stat-movies-watched');
+		const hoursWatchedEl = getElementByIdSafe('stat-hours-watched');
 		
 		if (seriesStartedEl) seriesStartedEl.textContent = stats.seriesStarted.toLocaleString();
 		if (seriesWatchedEl) seriesWatchedEl.textContent = stats.seriesWatched.toLocaleString();
 		if (episodesWatchedEl) episodesWatchedEl.textContent = stats.episodesWatched.toLocaleString();
 		if (moviesWatchedEl) moviesWatchedEl.textContent = stats.moviesWatched.toLocaleString();
+		if (hoursWatchedEl) hoursWatchedEl.textContent = stats.hoursWatched.toLocaleString();
 		
 		// Update top shows list
 		updateTopShowsList(stats.topShows);
 		
-		LOG(`Statistics updated: ${stats.seriesStarted} started, ${stats.seriesWatched} watched, ${stats.episodesWatched} episodes, ${stats.moviesWatched} movies`);
+		LOG(`Statistics updated: ${stats.seriesStarted} started, ${stats.seriesWatched} watched, ${stats.episodesWatched} episodes, ${stats.moviesWatched} movies, ${stats.hoursWatched} hours`);
 	}
 
 	function updateTopShowsList(topShows) {
@@ -3450,11 +3474,11 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 					<div class="progress-stats-grid">
 						<div class="stat-card">
 							<div class="stat-icon">
-								<span class="material-icons play_circle"></span>
+								<span class="material-icons movie"></span>
 							</div>
 							<div class="stat-content">
-								<div class="stat-value" id="stat-series-started">0</div>
-								<div class="stat-label">Series Started</div>
+								<div class="stat-value" id="stat-movies-watched">0</div>
+								<div class="stat-label">Movies Watched</div>
 							</div>
 						</div>
 						<div class="stat-card">
@@ -3477,11 +3501,20 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 						</div>
 						<div class="stat-card">
 							<div class="stat-icon">
-								<span class="material-icons movie"></span>
+								<span class="material-icons play_circle"></span>
 							</div>
 							<div class="stat-content">
-								<div class="stat-value" id="stat-movies-watched">0</div>
-								<div class="stat-label">Movies Watched</div>
+								<div class="stat-value" id="stat-series-started">0</div>
+								<div class="stat-label">Series Started</div>
+							</div>
+						</div>
+						<div class="stat-card">
+							<div class="stat-icon">
+								<span class="material-icons schedule"></span>
+							</div>
+							<div class="stat-content">
+								<div class="stat-value" id="stat-hours-watched">0</div>
+								<div class="stat-label">Hours Watched</div>
 							</div>
 						</div>
 					</div>
