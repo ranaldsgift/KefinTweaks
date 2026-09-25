@@ -130,9 +130,10 @@
 /* Single backdrop (when tileCount is 1 or only one image) */
 .spotlight-background-single {
 	position: absolute;
-	inset: 0;
 	z-index: 1;
 	overflow: hidden;
+	width: 100%;
+	height: 100%;
 }
 
 .spotlight-background-single img {
@@ -157,16 +158,16 @@
 
 @keyframes kenBurnsZoomIn {
 	from {
-		transform: scale3d(1, 1, 0);
+		transform: scale3d(1, 1, 1);
 	}
 	to {
-		transform: scale3d(1.12, 1.12, 0.1);
+		transform: scale3d(1.12, 1.12, 1);
 	}
 }
 
 @keyframes kenBurnsZoomOut {
 	from {
-		transform: scale3d(1.15, 1.15, 0.1);
+		transform: scale3d(1.15, 1.15, 1);
 	}
 	to {
 		transform: scale3d(1.02, 1.02, 1);
@@ -176,16 +177,16 @@
 /* Full-screen: start images pre-scaled so they extend past edges from the start (no hard edge before zoom) */
 @keyframes kenBurnsZoomInFullscreen {
 	from {
-		transform: scale3d(1.08, 1.08, 0);
+		transform: scale3d(1.08, 1.08, 1);
 	}
 	to {
-		transform: scale3d(1.12, 1.12, 0.1);
+		transform: scale3d(1.12, 1.12, 1);
 	}
 }
 
 @keyframes kenBurnsZoomOutFullscreen {
 	from {
-		transform: scale3d(1.15, 1.15, 0.1);
+		transform: scale3d(1.15, 1.15, 1);
 	}
 	to {
 		transform: scale3d(1.08, 1.08, 1);
@@ -225,7 +226,7 @@
 
 @keyframes kenBurnsPanRight {
 	from {
-		transform: scale3d(1.1, 1.1, 0) translateX(-5%);
+		transform: scale3d(1.1, 1.1, 1) translateX(-5%);
 	}
 	to {
 		transform: scale3d(1.1, 1.1, 1) translateX(5%);
@@ -234,7 +235,7 @@
 
 @keyframes kenBurnsPanLeft {
 	from {
-		transform: scale3d(1.1, 1.1, 0) translateX(5%);
+		transform: scale3d(1.1, 1.1, 1) translateX(5%);
 	}
 	to {
 		transform: scale3d(1.1, 1.1, 1) translateX(-5%);
@@ -243,7 +244,7 @@
 
 @keyframes kenBurnsPanUp {
 	from {
-		transform: scale3d(1.1, 1.1, 0) translateY(5%);
+		transform: scale3d(1.1, 1.1, 1) translateY(5%);
 	}
 	to {
 		transform: scale3d(1.1, 1.1, 1) translateY(-5%);
@@ -252,7 +253,7 @@
 
 @keyframes kenBurnsDiagonal {
 	from {
-		transform: scale3d(1.08, 1.08, 0) translate(-5%, 5%);
+		transform: scale3d(1.08, 1.08, 1) translate(-5%, 5%);
 	}
 	to {
 		transform: scale3d(1.13, 1.13, 1) translate(5%, -5%);
@@ -853,7 +854,7 @@
 	opacity: 1;
 }
 
-.spotlight-section:is([data-section-id]):not(.hide) .spotlight-nav-container {
+.spotlight-section:not(.hide)[data-section-id] .spotlight-nav-container {
 	position: absolute !important;
 	display: flex;
 	gap: 8px;
@@ -1740,7 +1741,7 @@
 }
 
 .layout-mobile .spotlight-section[data-layout="Borderless"] .spotlight-section-title-container {
-	top: 4rem;
+	top: 5rem;
 }
 
 .layout-mobile .spotlight-section .spotlight-section-title-container {
@@ -1791,13 +1792,18 @@
 .spotlight-section .spotlight-buttons-container.mainDetailButtons .btnPlay {
 	right: 0px !important;
 	margin-top: 0 !important;
+	margin-left: 0 !important;
+	margin-bottom: 0 !important;
+	margin-right: 1em !important;
 	min-width: unset;
 	flex: unset !important;
-	margin-right: 0 !important;
 }
-
+.spotlight-buttons-container > * {
+	margin: 0 !important;
+}
 .spotlight-section .spotlight-buttons-container.mainDetailButtons {
 	margin: 0px !important;
+	padding: 0px !important;
 }
 
 .spotlight-section:not(.hide) .headerTabs,
@@ -2338,9 +2344,6 @@ html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"
 .layout-mobile .emby-scroller-container:has(.overflowBackdropCard:nth-child(3)) button.show-all-button {
 	display: flex;
 }
-.emby-scroller-container:has([data-custom-card="true"]) .section-refresh-button {
-	display: none;
-}
 
 /* Section-level card title presentation */
 .verticalSection .cardText,
@@ -2593,7 +2596,7 @@ html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"
 .emby-scroller-container[data-card-title-position="overlay-top-center"] .cardTextStack,
 .emby-scroller-container[data-card-title-position="overlay-top-right"] .cardTextStack {
 	/* Solid at top → fade out toward bottom */
-	padding: 0.6em 1em 1.75em;
+	padding: 0.9em 1.1em;
 	border-top-left-radius: var(--kefin-card-radius, 0);
 	border-top-right-radius: var(--kefin-card-radius, 0);
 	overflow: hidden;
@@ -2606,7 +2609,7 @@ html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"
 .emby-scroller-container[data-card-title-position="overlay-bottom-center"] .cardTextStack,
 .emby-scroller-container[data-card-title-position="overlay-bottom-right"] .cardTextStack {
 	/* Solid at bottom → fade out toward top */
-	padding: 1.75em 1em 0.85em;
+	padding: 0.9em 1.1em;
 	border-bottom-left-radius: var(--kefin-card-radius, 0);
 	border-bottom-right-radius: var(--kefin-card-radius, 0);
 	overflow: hidden;
@@ -2619,7 +2622,7 @@ html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"
 .emby-scroller-container[data-card-title-position="overlay-center-center"] .cardTextStack,
 .emby-scroller-container[data-card-title-position="overlay-center-right"] .cardTextStack {
 	/* Solid at bottom → fade out toward top */
-	padding: 0 1em;
+	padding: 0 1.1em;
 	overflow: hidden;
 }
 
@@ -4119,4 +4122,11 @@ html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"
 	font-weight: 500;
 	margin: 0 0.25em;
 	padding: 0.25em 0.5em;
+}
+
+.custom-scroller-container .sectionCaption.sectionTitleTextButton:not(.padded-left) {
+	padding-top: 0 !important;
+	padding-bottom: 0 !important;
+	margin-top: 0 !important;
+	margin-bottom: 0 !important;
 }
