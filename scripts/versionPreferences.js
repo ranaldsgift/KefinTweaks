@@ -259,7 +259,6 @@
         applyScheduled = true;
         requestAnimationFrame(() => {
             applyScheduled = false;
-            if (!observer) return;
             tryApply();
         });
     }
@@ -287,26 +286,26 @@
         return false;
     }
 
-    function observeForSelect() {
-        disconnectObserver();
+    /** Long-lived document observer; gates on unbound visible details select. */
+    function ensureDocumentObserver() {
+        if (observer) return;
 
         tryApply();
 
-        const container = document.querySelector(CONTAINER_SELECTOR);
-        if (!container) {
-            return;
-        }
+        const root = document.body || document.documentElement;
+        if (!root) return;
 
         observer = new MutationObserver((mutations) => {
             if (isApplying) return;
             if (!isRelevantMutation(mutations)) return;
             scheduleTryApply();
         });
-        observer.observe(container, { childList: true, subtree: true });
+        observer.observe(root, { childList: true, subtree: true });
     }
 
     function onDetailsPage() {
-        observeForSelect();
+        ensureDocumentObserver();
+        tryApply();
     }
 
     function init() {
@@ -315,6 +314,8 @@
             return;
         }
 
+        ensureDocumentObserver();
+
         window.KefinTweaksUtils.onViewPage(() => {
             try {
                 onDetailsPage();
@@ -322,12 +323,6 @@
                 WARN('Failed to apply version preferences', err);
             }
         }, { pages: ['details'] });
-
-        window.KefinTweaksUtils.onViewPage((_view, _element, hash) => {
-            if (!isDetailsHash(hash)) {
-                disconnectObserver();
-            }
-        });
 
         LOG('Initialized');
     }
