@@ -378,11 +378,11 @@
      */
     async function resolveQueryPayload(result) {
         if (!result) return null;
-        if (typeof result.ensureData === 'function' || result.dataPromise != null) {
-            if (result.data != null) return result.data;
-            return await (typeof result.ensureData === 'function'
-                ? result.ensureData()
-                : result.dataPromise);
+        if (typeof result.ensureData === 'function') {
+            return await result.ensureData();
+        }
+        if (result.dataPromise != null) {
+            return await result.dataPromise;
         }
         return result;
     }

@@ -74,13 +74,18 @@
 	padding-right: 1em;
 }
 
-[data-modal-id="kefin-homescreen-config-main"] div#section-content {
+[data-modal-id="kefin-homescreen-config-main"] div#section-content,
+[data-modal-id="kefin-homescreen-config-main"] div#global-settings-content,
+[data-modal-id="kefin-homescreen-config-main"] #home-screen-benchmark-root {
 	max-height: calc(90vh - 19em);
 	overflow: auto;
 	scrollbar-width: none;
 }
-[data-modal-id="kefin-homescreen-config-main"] #section-content > div > div:last-child {
-	margin-bottom: 6em;
+
+[data-modal-id="kefin-homescreen-config-main"] div#global-settings-content > *:last-child,
+[data-modal-id="kefin-homescreen-config-main"] #home-screen-benchmark-root > *:last-child,
+[data-modal-id="kefin-homescreen-config-main"] #section-content > div > *:last-child {
+	margin-bottom: 4em !important;
 }
 
 div#order-sections-container .editable-group-name {
@@ -362,5 +367,20 @@ span.listItemBodyText.secondary.seasonal-tag {
 }
 
 .section-row-actions .btnSectionConfigure {
+	display: none;
+}
+
+.dialogContainer[data-modal-id="kefin-homescreen-config-main"] .formDialogHeader + div > div {
+	padding: 1.25em 1.5em;
+	height: calc(100% - 2.5em);
+}
+.dialogContainer[data-modal-id="kefin-homescreen-config-main"] .formDialogHeader + div {
+	padding: 0 !important;
+	overflow-y: hidden !important;
+}
+.dialogContainer[data-modal-id="kefin-homescreen-config-main"] .formDialogHeader + div > div > div #section-content > div {
+	padding-bottom: 4em;
+}
+.config-tab-nav button[data-tab="order"] {
 	display: none;
 }

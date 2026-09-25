@@ -91,11 +91,6 @@
     }
     state.getDisplayPrefernces = fetchDisplayPreferences;
 
-    const performanceTimer = {
-        loadTimeStart: null,
-        loadTimeEnd: null,
-    };
-
     // Cache used to support re-rendering our sections after Jellyfin overwrites the container
     const sectionCache = {
         renderedSections: [],      // Array of section configs + results
@@ -103,14 +98,6 @@
         isInitialRender: true,     // Track if this is first render for the current view
         jellyfinHasRendered: false, // Track if Jellyfin has rendered native home sections
         pendingJellyfinSectionObservers: []
-    };
-
-    // Basic performance metrics for measuring initial and recovery renders
-    const performanceMetrics = {
-        initialRenderStart: null,
-        initialRenderEnd: null,
-        jellyfinDetected: null,
-        recoveryRenderEnd: null
     };
 
     // Create loading indicator element (always last child of the sections container)
@@ -420,7 +407,10 @@
             document.body.dataset.seasonalAnimations = 'true';
 
             // Add the animation script to the head
-            const animation = seasonalThemes[activeSeasonalThemeGroup.id]?.animation;
+            const theme = seasonalThemes[activeSeasonalThemeGroup.id] || {};
+            const animation = theme.animation;
+            document.body.dataset.seasonalShape = theme.shape || 'snowflake';
+            document.body.dataset.seasonalAnimationStyle = theme.animationStyle || 'fall';
             if (animation) {
                 const animationScript = document.querySelector(`script[src*="${animation}.js"]`);
                 if (!animationScript) {
@@ -439,26 +429,16 @@
      */
     async function enhanceHomeScreen() {
         LOG('Initializing Home Screen v3...');
-        performanceTimer.loadTimeStart = performance.now();
-        performanceMetrics.initialRenderStart = performance.now();
 
         mountCreateSectionButton();
         // Defer mountCategoryRail until pinned availability is known (avoids first-load tab jump)
         syncHomeScreenChromeVisibility();
 
-        // Reset cache/metrics for a new initialization cycle
+        // Reset cache for a new initialization cycle
         sectionCache.renderedSections = [];
         sectionCache.fragmentCache = null;
         sectionCache.isInitialRender = true;
         sectionCache.jellyfinHasRendered = false;
-        performanceMetrics.initialRenderEnd = null;
-        performanceMetrics.jellyfinDetected = null;
-        performanceMetrics.recoveryRenderEnd = null;
-
-        // Run migration if needed (check for legacy homeScreen config)
-        if (window.migrateHomeScreenConfig) {
-            await window.migrateHomeScreenConfig();
-        }
         
         const container = document.querySelector(HOME_SECTIONS_SELECTOR);
         if (!container) {
@@ -501,18 +481,10 @@
             return;
         }
 
-        let performanceStartTime = performance.now();
-        
         // Fetch display preferences
         //state.userDisplayPreferences = await fetchDisplayPreferences();
-        
-        let performanceEndTime = performance.now();
-        let performanceDuration = performanceEndTime - performanceStartTime;
-        LOG(`Home Screen v3 Fetch display preferences initialization time: ${performanceDuration.toFixed(2)}ms`);
 
         // Load user preferences and apply filtering/ordering
-        performanceStartTime = performance.now();
-
         const userHomeConfig = window.KefinUserHomeScreenConfig;
         let filteredHomeSections;
         let homeScreen;
@@ -545,10 +517,6 @@
         updatePinnedCategoryAvailability(filteredHomeSections, homeScreen);
         mountCategoryRail();
         syncHomeScreenChromeVisibility();
-
-        performanceEndTime = performance.now();
-        performanceDuration = performanceEndTime - performanceStartTime;
-        LOG(`Home Screen v3 Load user home screen sections initialization time: ${performanceDuration.toFixed(2)}ms`);
 
         const nextupSectionConfig = filteredHomeSections.find(s => s.id === 'nextUp');
         const continueWatchingSectionConfig = filteredHomeSections.find(s => s.id === 'continueWatching');
@@ -589,11 +557,6 @@
                     observeSectionUntilChildrenThenClone(sectionEl, kefinHome);
                 }
             });
-
-            performanceMetrics.recoveryRenderEnd = performance.now();
-            if (performanceMetrics.jellyfinDetected) {
-                LOG(`Home Screen v3 Jellyfin section mirroring duration: ${(performanceMetrics.recoveryRenderEnd - performanceMetrics.jellyfinDetected).toFixed(2)}ms`);
-            }
         }; */
 
         //let containerForRender = container;
@@ -607,18 +570,9 @@
         //containerForRender.dataset.kefinHomeScreen = 'true';
 
         // Initial render directly into Kefin container (no waiting for Jellyfin)
-        performanceStartTime = performance.now();
         LOG('Rendering Standard/Seasonal Sections (initial render)...');
         await renderHomeSections(filteredHomeSections, container, false);
-        performanceEndTime = performance.now();
-        performanceDuration = performanceEndTime - performanceStartTime;
-        LOG(`Home Screen v3 Render home sections (initial) initialization time: ${performanceDuration.toFixed(2)}ms`);
 
-        performanceMetrics.initialRenderEnd = performanceEndTime;
-
-        performanceTimer.loadTimeEnd = performance.now();
-        LOG(`Home Screen v3 load time initialization: ${(performanceTimer.loadTimeEnd - performanceTimer.loadTimeStart).toFixed(2)}ms`);
-        
         LOG('Initializing Discovery Sections...');
         setupDiscoveryInteraction(container);
 
@@ -653,13 +607,7 @@
      * Now reads from all 4 groups: HOME, SEASONAL, DISCOVERY, CUSTOM
      */
     async function mergeHomeSectionConfigs(defaultSections) {
-
-        const performanceStartTime = performance.now();
         const kefinSections = await window.KefinHomeScreen.getSections();
-        const performanceEndTime = performance.now();
-        const performanceDuration = performanceEndTime - performanceStartTime;
-        LOG(`Home Screen v3 Get kefin home screen config initialization time: ${performanceDuration.toFixed(2)}ms`);
-
         return kefinSections.enabledHomeSections;
 
         // Return all enabled sections from HOME_SECTION_GROUPS
@@ -1195,14 +1143,7 @@
     
             const sectionPromises = [];
 
-            let performanceStartTime = performance.now();
-            let performanceEndTime;
-            let performanceDuration;
-
-            const performanceTimes = [];
-
             for (const sectionConfig of sortedSections) {
-                const loopStartTime = performance.now();
                 if (sectionConfig.enabled === false) {
                     LOG(`Skipping disabled section: ${sectionConfig.id}`);
                     continue;
@@ -1223,29 +1164,12 @@
                 }
                 
                 sectionPromises.push(loadSectionForRendering(sectionConfig));
-
-                const loopEndTime = performance.now();
-                const loopDuration = loopEndTime - loopStartTime;
-                performanceTimes.push(loopDuration);
-                LOG(`Section ${sectionConfig.id} initialization time: ${loopDuration.toFixed(2)}ms`);
             }
-
-            performanceEndTime = performance.now();
-            performanceDuration = performanceEndTime - performanceStartTime;
-            LOG(`Render home sections configs loaded initialization time: ${performanceDuration.toFixed(2)}ms`);
-
-            LOG(`Total performance time: ${performanceTimes.reduce((a, b) => a + b, 0).toFixed(2)}ms`);
-
-            performanceStartTime = performance.now();
 
             // Resolve all section promises
             let sectionResults = await Promise.all(sectionPromises);
             sectionResults = sectionResults.filter(result => result !== null);
             sectionsToRender.push(...sectionResults);
-
-            performanceEndTime = performance.now();
-            performanceDuration = performanceEndTime - performanceStartTime;
-            LOG(`Home Screen v3 Resolve all section promises initialization time: ${performanceDuration.toFixed(2)}ms`);
 
             // Cache the rendered sections for potential re-render after Jellyfin overwrites the container
             sectionCache.renderedSections = [...sectionsToRender];
@@ -1263,7 +1187,6 @@
         }
 
         if (!state.isRenderingHome && !kefinSections) {
-            const renderStartTime = performance.now();
             state.isRenderingHome = true;
 
             await window.cardBuilder.renderProgressiveSections(targetContainer, sectionsToRender, {
@@ -1274,10 +1197,6 @@
 
             state.isRenderingHome = false;
 
-            const renderEndTime = performance.now();
-            const renderDuration = renderEndTime - renderStartTime;
-            LOG(`Home Screen v3 Render progressive sections initialization time: ${renderDuration.toFixed(2)}ms`);
-            
             // If MediaBar plugin is in use, call LayoutSync.update() to update the layout
             if (typeof LayoutSync !== 'undefined' && LayoutSync && typeof LayoutSync.update === 'function') {
                 LayoutSync.update();
@@ -1374,7 +1293,7 @@
                 const isDynamic = !!(sectionConfig.discoveryType || sectionConfig.source === 'Dynamic');
                 if (isDynamic) {
                     // Sync stub + lazy resolve; do not await ensureData here
-                    return window.sectionHelper.buildDiscoverySectionPromise(sectionConfig, {
+                    return await window.sectionHelper.buildDiscoverySectionPromise(sectionConfig, {
                         order: sectionConfig.order,
                         pairSpotlight: true
                     });
@@ -1869,6 +1788,70 @@
     let homeChromeCategoryMounted = false;
     let homeChromeHasPinnedContent = false;
     let homeChromeVisibilityObserver = null;
+    let homeChromeRailScrollBound = false;
+    let homeChromeRailLastY = 0;
+    const HOME_CHROME_RAIL_SCROLL_DELTA = 8;
+    const HOME_CHROME_RAIL_MOBILE_MQ = '(max-width: 899px)';
+
+    function isHomeCategoryRailMobile() {
+        return typeof window.matchMedia === 'function'
+            ? window.matchMedia(HOME_CHROME_RAIL_MOBILE_MQ).matches
+            : window.innerWidth < 900;
+    }
+
+    function setHomeCategoryRailScrollHidden(hidden) {
+        const rail = document.getElementById(HOME_CHROME_CATEGORY_RAIL_ID);
+        if (!rail) return;
+        rail.classList.toggle('is-scroll-hidden', !!hidden);
+    }
+
+    function clearHomeCategoryRailScrollHidden() {
+        setHomeCategoryRailScrollHidden(false);
+    }
+
+    function handleHomeCategoryRailScroll() {
+        const rail = document.getElementById(HOME_CHROME_CATEGORY_RAIL_ID);
+        if (!rail || rail.classList.contains('hide') || !isHomeCategoryRailMobile()) {
+            clearHomeCategoryRailScrollHidden();
+            return;
+        }
+        const y = window.pageYOffset || document.documentElement.scrollTop || 0;
+        if (y <= HOME_CHROME_RAIL_SCROLL_DELTA) {
+            clearHomeCategoryRailScrollHidden();
+            homeChromeRailLastY = y;
+            return;
+        }
+        const delta = y - homeChromeRailLastY;
+        if (Math.abs(delta) < HOME_CHROME_RAIL_SCROLL_DELTA) return;
+        if (delta > 0) {
+            setHomeCategoryRailScrollHidden(true);
+        } else {
+            setHomeCategoryRailScrollHidden(false);
+        }
+        homeChromeRailLastY = y;
+    }
+
+    function syncHomeCategoryRailScrollListener() {
+        const rail = document.getElementById(HOME_CHROME_CATEGORY_RAIL_ID);
+        const showFilters = getHomeSettings().showCategoryFilters !== false;
+        const shouldListen = !!(rail && !rail.classList.contains('hide') && isHomePageVisible() && showFilters && isHomeCategoryRailMobile());
+        if (shouldListen) {
+            if (!homeChromeRailScrollBound) {
+                homeChromeRailLastY = window.pageYOffset || document.documentElement.scrollTop || 0;
+                window.addEventListener('scroll', handleHomeCategoryRailScroll, { passive: true });
+                window.addEventListener('resize', syncHomeCategoryRailScrollListener, { passive: true });
+                homeChromeRailScrollBound = true;
+            }
+            if (!isHomeCategoryRailMobile()) clearHomeCategoryRailScrollHidden();
+            return;
+        }
+        if (homeChromeRailScrollBound) {
+            window.removeEventListener('scroll', handleHomeCategoryRailScroll);
+            window.removeEventListener('resize', syncHomeCategoryRailScrollListener);
+            homeChromeRailScrollBound = false;
+        }
+        clearHomeCategoryRailScrollHidden();
+    }
 
     function getHomeSettings() {
         return window.KefinTweaksConfig?.homeScreenConfig?.HOME_SETTINGS
@@ -1915,26 +1898,32 @@
     }
 
     function isHomePageVisible() {
-        return !!document.querySelector('.homePage:not(.hide)');
+        const active = document.documentElement.getAttribute('data-active-page');
+        if (active !== null) {
+            return active === 'home';
+        }
+        return !!document.querySelector('.homePage:not(.hide) #homeTab.is-active');
     }
 
     function syncHomeScreenChromeVisibility() {
         const onHome = isHomePageVisible();
         const createBtn = document.getElementById(HOME_CHROME_CREATE_ID);
         if (createBtn) {
-            createBtn.hidden = !onHome;
+            createBtn.classList.toggle('hide', !onHome);
             createBtn.setAttribute('aria-hidden', onHome ? 'false' : 'true');
         }
         const showFilters = getHomeSettings().showCategoryFilters !== false;
         const rail = document.getElementById(HOME_CHROME_CATEGORY_RAIL_ID);
         if (rail) {
             const visible = onHome && showFilters;
-            rail.hidden = !visible;
+            rail.classList.toggle('hide', !visible);
             rail.setAttribute('aria-hidden', visible ? 'false' : 'true');
+            if (!visible) clearHomeCategoryRailScrollHidden();
         }
         if (onHome) {
             applyActiveHomeCategory(homeChromeActiveCategory || 'none');
         }
+        syncHomeCategoryRailScrollListener();
     }
 
     function ensureHomeChromeVisibilityObserver() {
@@ -1980,7 +1969,8 @@
             const wrap = document.createElement('div');
             wrap.id = HOME_CHROME_CREATE_ID;
             wrap.className = 'kefin-home-chrome kefin-home-create-section';
-            wrap.hidden = !isHomePageVisible();
+            wrap.classList.toggle('hide', !isHomePageVisible());
+            wrap.setAttribute('aria-hidden', isHomePageVisible() ? 'false' : 'true');
             wrap.innerHTML = `
                 <button type="button" class="paper-icon-button-light emby-button kefin-home-create-section-btn" title="Create Section" aria-label="Create Section">
                     <span class="material-icons" aria-hidden="true">add_circle</span>
@@ -2085,6 +2075,7 @@
             ensureCategoryFilterStyles();
             homeChromeActiveCategory = 'none';
             applyActiveHomeCategory('none');
+            syncHomeCategoryRailScrollListener();
             return;
         }
 
@@ -2104,10 +2095,10 @@
         const outer = document.createElement('div');
         outer.id = HOME_CHROME_CATEGORY_RAIL_ID;
         outer.className = 'sectionTabs';
-        outer.hidden = !isHomePageVisible();
+        outer.classList.toggle('hide', !isHomePageVisible());
         outer.setAttribute('role', 'toolbar');
         outer.setAttribute('aria-label', 'Home categories');
-        //outer.setAttribute('aria-hidden', outer.hidden ? 'true' : 'false');
+        outer.setAttribute('aria-hidden', isHomePageVisible() ? 'false' : 'true');
 
         const inner = document.createElement('div');
         inner.className = getCategoryRailNativeClasses();
@@ -2140,6 +2131,7 @@
         document.body.appendChild(outer);
         homeChromeCategoryMounted = true;
         applyActiveHomeCategory(desiredCategory);
+        syncHomeCategoryRailScrollListener();
     }
 
     function getMountedRailCategoryIds() {
@@ -2198,6 +2190,10 @@
     //initHomeScreenChrome();
 
     if (window.KefinTweaksUtils && typeof window.KefinTweaksUtils.onViewPage === 'function') {
+        window.KefinTweaksUtils.onViewPage(() => {
+            syncHomeScreenChromeVisibility();
+        }, { pages: [] });
+
         window.KefinTweaksUtils.onViewPage((view, element, hash) => {
             // Get selected tab from hash
             const hashParams = hash.includes('?') ? hash.split('?')[1] :     '';
@@ -2205,8 +2201,9 @@
             const currentTab = urlParams.get('tab');
             const currentTabIndex = currentTab ? parseInt(currentTab, 10) : 0;
 
-            // If the tab isn't 0, don't render the home screen
+            // If the tab isn't 0, don't render the home screen (still sync chrome)
             if (currentTabIndex !== 0) {
+                syncHomeScreenChromeVisibility();
                 return;
             }
 
