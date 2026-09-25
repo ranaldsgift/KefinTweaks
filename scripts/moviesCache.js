@@ -13,7 +13,7 @@
     const IMDB_TOP_250_CACHE_TTL = 24 * 60 * 60 * 1000;
     const MOVIE_FIELDS = [
         'ProviderIds', 'People', 'Studios', 'Taglines', 'Genres', 'Overview', 'PrimaryImageAspectRatio',
-        'DateCreated'
+        'DateCreated', 'DateLastMediaAdded'
     ].join(',');
 
     let movies = null;
@@ -53,6 +53,24 @@
         } catch (e) {
             WARN('Failed to store lastDateFetchedMovieCache:', e);
         }
+    }
+
+    /** Max DateLastMediaAdded || DateCreated among movies; null if none usable. */
+    function watermarkFromMovies(list) {
+        let best = null;
+        for (const m of list || []) {
+            const raw = m?.DateLastMediaAdded || m?.DateCreated;
+            if (!raw) continue;
+            const t = new Date(raw).getTime();
+            if (!Number.isFinite(t)) continue;
+            if (best == null || t > best) best = t;
+        }
+        return best != null ? new Date(best).toISOString() : null;
+    }
+
+    function setLastDateFetchedFromMovies(list) {
+        const iso = watermarkFromMovies(list);
+        if (iso) setLastDateFetched(iso);
     }
 
     function getApiHelper() {
@@ -158,7 +176,7 @@
             rebuildProviderIndex(movies);
             await cache.set(CACHE_NAME, movies, userId, getTtl());
             await cache.clear(PARTIAL_CACHE_NAME, userId);
-            setLastDateFetched(new Date().toISOString());
+            setLastDateFetchedFromMovies(movies);
             LOG(`Movie crawl complete: ${movies.length} items`);
             return movies;
         } catch (err) {
@@ -286,7 +304,7 @@
 
             rebuildProviderIndex(movies);
             await cache.set(CACHE_NAME, movies, userId, getTtl());
-            setLastDateFetched(new Date().toISOString());
+            setLastDateFetchedFromMovies(movies);
             // Notify people cache of deltas when available
             if ((incoming.length || removedIds.length) && window.PeopleCache?.applyMovieDelta) {
                 try {
@@ -314,8 +332,21 @@
         return fetchPromise;
     }
 
-    function isCacheComplete() {
-        return isComplete === true && Array.isArray(movies);
+    async function isCacheComplete() {
+        if (isComplete === true && Array.isArray(movies)) return true;
+        const cache = window.IndexedDBCache;
+        const userId = window.ApiClient?.getCurrentUserId?.();
+        if (!cache || !userId) return false;
+        const complete = await cache.get(CACHE_NAME, userId);
+        if (complete && Array.isArray(complete)) {
+            if (!movies) {
+                movies = complete;
+                rebuildProviderIndex(movies);
+            }
+            isComplete = true;
+            return true;
+        }
+        return false;
     }
 
     async function getMoviesByProviderIds(ids) {
@@ -372,7 +403,7 @@
         if (cached) return cached;
 
         if (!imdbTop250Movies) {
-            if (!isCacheComplete()) {
+            if (!(await isCacheComplete())) {
                 LOG('IMDb Top 250 waiting for movie cache…');
             }
             const imdbIds = await fetchImdbTop250Data();
@@ -389,7 +420,7 @@
 
     async function initialize() {
         await getMovies();
-        if (isCacheComplete() && getLastDateFetched()) {
+        if ((await isCacheComplete()) && getLastDateFetched()) {
             await syncMoviesCache();
         }
         return movies || [];

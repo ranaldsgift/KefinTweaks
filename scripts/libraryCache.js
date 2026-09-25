@@ -12,14 +12,14 @@
         return type;
     }
 
-    function isComplete(type) {
+    async function isComplete(type) {
         const t = normalizeType(type);
-        if (t === 'Movie') return window.MoviesCache?.isComplete?.() === true;
+        if (t === 'Movie') return (await window.MoviesCache?.isComplete?.()) === true;
         if (t === 'Series') return window.SeriesCache?.isComplete?.() === true;
         return false;
     }
 
-    function isReady(type) {
+    async function isReady(type) {
         return isComplete(type);
     }
 
@@ -38,11 +38,11 @@
     /**
      * Whether a dataSource string depends on an incomplete Movies/Series/People cache.
      */
-    function dataSourceDependsOnIncompleteCache(dataSource) {
+    async function dataSourceDependsOnIncompleteCache(dataSource) {
         const ds = typeof dataSource === 'string' ? dataSource : '';
         if (!ds) return false;
-        if (ds.startsWith('MoviesCache.') && !isComplete('Movie')) return true;
-        if (ds.startsWith('SeriesCache.') && !isComplete('Series')) return true;
+        if (ds.startsWith('MoviesCache.') && !(await isComplete('Movie'))) return true;
+        if (ds.startsWith('SeriesCache.') && !(await isComplete('Series'))) return true;
         if (ds.startsWith('PeopleCache.') && window.PeopleCache?.isComplete && !window.PeopleCache.isComplete()) {
             return true;
         }
@@ -52,17 +52,17 @@
     /**
      * Whether a home section depends on a library/people/external cache that is not ready.
      */
-    function sectionDependsOnIncompleteCache(section) {
+    async function sectionDependsOnIncompleteCache(section) {
         if (!section) return false;
         if (Array.isArray(section.externalListUrls) && section.externalListUrls.length) {
-            return !(isComplete('Movie') && isComplete('Series'));
+            return !((await isComplete('Movie')) && (await isComplete('Series')));
         }
-        if (dataSourceDependsOnIncompleteCache(section.discoverySourceQuery?.dataSource)) {
+        if (await dataSourceDependsOnIncompleteCache(section.discoverySourceQuery?.dataSource)) {
             return true;
         }
         const queries = section.queries || [];
         for (const q of queries) {
-            if (dataSourceDependsOnIncompleteCache(q?.dataSource)) return true;
+            if (await dataSourceDependsOnIncompleteCache(q?.dataSource)) return true;
         }
         return false;
     }
