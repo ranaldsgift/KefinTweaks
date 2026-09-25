@@ -1117,85 +1117,90 @@
             return;
         }
 
-        // Check if children with [data-section-id] are present
-        const children = container.children;
-        const hasSections = Array.from(children).some(child => child.dataset && child.dataset.sectionId);
-        if (hasSections) {
-            LOG('Sections already rendered, skipping');
+        if (state.isRenderingHome) {
+            LOG('Home render already in progress, skipping');
             return;
         }
 
-        container.dataset.sectionsRendered = 'true';
-        applyActiveHomeCategory(homeChromeActiveCategory || 'none');
-        syncHomeScreenChromeVisibility();
-
-        const sectionsToRender = [];
-
-        if (useCache && sectionCache.renderedSections.length > 0) {
-            LOG('Re-rendering home sections from cache');
-            sectionsToRender.push(...sectionCache.renderedSections);
-        } else {
-            const sortedSections = [...sections].sort((a, b) => {
-                const orderA = (a.order !== undefined && a.order !== null) ? a.order : 99;
-                const orderB = (b.order !== undefined && b.order !== null) ? b.order : 99;
-                return orderA - orderB;
-            });
-    
-            const sectionPromises = [];
-
-            for (const sectionConfig of sortedSections) {
-                if (sectionConfig.enabled === false) {
-                    LOG(`Skipping disabled section: ${sectionConfig.id}`);
-                    continue;
-                }
-                
-                if (sectionConfig.startDate && sectionConfig.endDate) {
-                    if (!isInSeasonalPeriod(sectionConfig.startDate, sectionConfig.endDate)) {
-                        LOG(`Skipping seasonal section (out of date): ${sectionConfig.id}`);
-                        continue;
-                    }
-                }
-
-                const existingSection = container.querySelector(`[data-section-id="${sectionConfig.id}"]`);
-
-                if (existingSection) {
-                    LOG(`Section already rendered: ${sectionConfig.id}`);
-                    continue;
-                }
-                
-                sectionPromises.push(loadSectionForRendering(sectionConfig));
+        state.isRenderingHome = true;
+        try {
+            // Check if children with [data-section-id] are present
+            const children = container.children;
+            const hasSections = Array.from(children).some(child => child.dataset && child.dataset.sectionId);
+            if (hasSections) {
+                LOG('Sections already rendered, skipping');
+                return;
             }
 
-            // Resolve all section promises
-            let sectionResults = await Promise.all(sectionPromises);
-            sectionResults = sectionResults.filter(result => result !== null);
-            sectionsToRender.push(...sectionResults);
+            container.dataset.sectionsRendered = 'true';
+            applyActiveHomeCategory(homeChromeActiveCategory || 'none');
+            syncHomeScreenChromeVisibility();
 
-            // Cache the rendered sections for potential re-render after Jellyfin overwrites the container
-            sectionCache.renderedSections = [...sectionsToRender];
-        }
+            const sectionsToRender = [];
 
-        const homeConfig = await window.KefinHomeScreen.getConfig();
-        const showStaleDataBeforeRefresh = homeConfig?.HOME_SETTINGS?.showStaleDataBeforeRefresh === true;
+            if (useCache && sectionCache.renderedSections.length > 0) {
+                LOG('Re-rendering home sections from cache');
+                sectionsToRender.push(...sectionCache.renderedSections);
+            } else {
+                const sortedSections = [...sections].sort((a, b) => {
+                    const orderA = (a.order !== undefined && a.order !== null) ? a.order : 99;
+                    const orderB = (b.order !== undefined && b.order !== null) ? b.order : 99;
+                    return orderA - orderB;
+                });
 
-        const targetContainer = container;
+                const sectionPromises = [];
 
-        const kefinSections = Array.from(children).some(child => child.dataset && child.dataset.sectionId);
-        if (kefinSections) {
-            LOG('Sections already rendered, skipping');
-            return;
-        }
+                for (const sectionConfig of sortedSections) {
+                    if (sectionConfig.enabled === false) {
+                        LOG(`Skipping disabled section: ${sectionConfig.id}`);
+                        continue;
+                    }
 
-        if (!state.isRenderingHome && !kefinSections) {
-            state.isRenderingHome = true;
+                    if (sectionConfig.startDate && sectionConfig.endDate) {
+                        if (!isInSeasonalPeriod(sectionConfig.startDate, sectionConfig.endDate)) {
+                            LOG(`Skipping seasonal section (out of date): ${sectionConfig.id}`);
+                            continue;
+                        }
+                    }
+
+                    const sectionIdAttr = (typeof CSS !== 'undefined' && typeof CSS.escape === 'function')
+                        ? CSS.escape(String(sectionConfig.id))
+                        : String(sectionConfig.id).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+                    const existingSection = container.querySelector(`[data-section-id="${sectionIdAttr}"]`);
+
+                    if (existingSection) {
+                        LOG(`Section already rendered: ${sectionConfig.id}`);
+                        continue;
+                    }
+
+                    sectionPromises.push(loadSectionForRendering(sectionConfig));
+                }
+
+                // Resolve all section promises
+                let sectionResults = await Promise.all(sectionPromises);
+                sectionResults = sectionResults.filter(result => result !== null);
+                sectionsToRender.push(...sectionResults);
+
+                // Cache the rendered sections for potential re-render after Jellyfin overwrites the container
+                sectionCache.renderedSections = [...sectionsToRender];
+            }
+
+            const homeConfig = await window.KefinHomeScreen.getConfig();
+            const showStaleDataBeforeRefresh = homeConfig?.HOME_SETTINGS?.showStaleDataBeforeRefresh === true;
+
+            const targetContainer = container;
+
+            const kefinSections = Array.from(children).some(child => child.dataset && child.dataset.sectionId);
+            if (kefinSections) {
+                LOG('Sections already rendered, skipping');
+                return;
+            }
 
             await window.cardBuilder.renderProgressiveSections(targetContainer, sectionsToRender, {
                 waitForContainerClass: 'homeSectionsContainer',
                 enhanceOnVisible: true,
                 showStaleDataBeforeRefresh
             });
-
-            state.isRenderingHome = false;
 
             // If MediaBar plugin is in use, call LayoutSync.update() to update the layout
             if (typeof LayoutSync !== 'undefined' && LayoutSync && typeof LayoutSync.update === 'function') {
@@ -1209,11 +1214,13 @@
                     document.dispatchEvent(new CustomEvent('kefinTweaksHomePainted'));
                 } catch (_) { /* ignore */ }
             }
-    
+
             // Check if target container is homeSectionsContainer
             if (!targetContainer.classList.contains('homeSectionsContainer')) {
                 targetContainer.dataset.sectionsPrerendered = 'true';
             }
+        } finally {
+            state.isRenderingHome = false;
         }
     }
 

@@ -2122,6 +2122,15 @@
                     continue;
                 }
 
+                // Skip if this section id is already in the container (overlapping home renders)
+                const sectionIdAttr = (typeof CSS !== 'undefined' && typeof CSS.escape === 'function')
+                    ? CSS.escape(String(sectionConfig.id))
+                    : String(sectionConfig.id).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+                if (container.querySelector(`[data-section-id="${sectionIdAttr}"]`)) {
+                    console.log(`[KefinTweaks CardBuilder] Section ${sectionConfig.id} already exists in the container, skipping...`);
+                    continue;
+                }
+
                 // Handle Random card format - pick one format for entire section
                 let finalCardFormat = sectionConfig.cardFormat;
                 if (finalCardFormat === 'random' || finalCardFormat === 'Random') {
