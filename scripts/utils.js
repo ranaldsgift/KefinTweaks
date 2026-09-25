@@ -24,12 +24,15 @@
     }
 
     /**
-     * Notify onViewPage handlers once per location change (shared by Emby hook + History bridge).
+     * Notify onViewPage handlers (shared by Emby onViewShow + History bridge).
+     * No cross-source dedupe: history and Emby each always invoke handlers for the same
+     * navigation. Handlers may run 2–3 times (pushState/hashchange/onViewShow), sometimes
+     * before the new page DOM is visible; they must be idempotent. On a repeat call for the
+     * same URL, previousHash often equals the current hash.
      */
     function notifyViewChange(view, element) {
         const hash = window.location.hash;
         const href = window.location.href;
-        if (hash === state.previousHash && href === state.previousHref) return;
         const previousHash = state.previousHash;
         notifyHandlers(view ?? getCurrentView(), element || document, hash, previousHash);
         state.previousHash = hash;
