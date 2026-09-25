@@ -596,15 +596,35 @@
             });
 
             // 3. Lazy data promise — do not start fetchData until ensureData()/dataPromise is used
+            // Stale-while-revalidate: return usable cache immediately; refresh in _refreshPromise
+            const hasUsableCachedPayload = (data) => {
+                if (!data) return false;
+                if (Array.isArray(data)) return data.length > 0;
+                if (Array.isArray(data.Items)) return data.Items.length > 0;
+                return false;
+            };
+
             result.ensureData = function() {
                 if (!result._dataPromise) {
                     result._dataPromise = result.isStalePromise.then(isStale => {
-                        if (isStale) {
-                            LOG(`[Fetch] Refreshing data for: ${url}...`);
-                            return fetchData();
+                        if (!isStale) {
+                            LOG(`[Fetch] Using cached data for: ${url}...`);
+                            return result.data;
                         }
-                        LOG(`[Fetch] Using cached data for: ${url}...`);
-                        return result.data;
+
+                        const refreshPromise = fetchData().then((fresh) => {
+                            if (fresh != null) result.data = fresh;
+                            return fresh;
+                        });
+
+                        if (hasUsableCachedPayload(result.data)) {
+                            result._refreshPromise = refreshPromise;
+                            LOG(`[Fetch] Returning stale cache; refreshing in background: ${url}...`);
+                            return result.data;
+                        }
+
+                        LOG(`[Fetch] Refreshing data for: ${url}...`);
+                        return refreshPromise;
                     });
                 }
                 return result._dataPromise;

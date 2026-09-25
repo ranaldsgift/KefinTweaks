@@ -255,6 +255,12 @@
         };
 
         let mappedDataPromise = null;
+        const result = {
+            data: { Items: [] },
+            isStale: true,
+            ensureData: null
+        };
+
         const ensureData = () => {
             if (!mappedDataPromise) {
                 mappedDataPromise = (async () => {
@@ -300,6 +306,24 @@
                         const raw = typeof merged.result?.ensureData === 'function'
                             ? await merged.result.ensureData()
                             : await merged.result?.dataPromise;
+
+                        const hasRefresh = results.some((r) => r && r._refreshPromise);
+                        if (hasRefresh) {
+                            result.refreshPromise = Promise.all(
+                                results.map((r) => r._refreshPromise || Promise.resolve(r.data))
+                            ).then((allData) => {
+                                const itemsByFreshQuery = [];
+                                allData.forEach((data) => {
+                                    if (data?.Items) itemsByFreshQuery.push(data.Items);
+                                    else if (Array.isArray(data)) itemsByFreshQuery.push(data);
+                                });
+                                const mergedFresh = window.cardBuilder?.postProcessItemsByQuery
+                                    ? window.cardBuilder.postProcessItemsByQuery(sectionConfig, itemsByFreshQuery)
+                                    : itemsByFreshQuery.flat();
+                                return postProcess(sectionConfig, mergedFresh);
+                            });
+                        }
+
                         return postProcess(sectionConfig, raw);
                     }
 
@@ -307,17 +331,20 @@
                     const raw = typeof queryResult.ensureData === 'function'
                         ? await queryResult.ensureData()
                         : await queryResult.dataPromise;
+
+                    if (queryResult._refreshPromise) {
+                        result.refreshPromise = queryResult._refreshPromise.then((fresh) =>
+                            postProcess(sectionConfig, fresh)
+                        );
+                    }
+
                     return postProcess(sectionConfig, raw);
                 })();
             }
             return mappedDataPromise;
         };
 
-        const result = {
-            data: { Items: [] },
-            isStale: true,
-            ensureData
-        };
+        result.ensureData = ensureData;
         Object.defineProperty(result, 'dataPromise', {
             configurable: true,
             enumerable: true,

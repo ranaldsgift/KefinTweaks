@@ -7915,7 +7915,11 @@
         dataPromise.then(result => {
             if (!sectionElement.isConnected) return;
 
-            sectionElement.dataset.refreshing = 'false';
+            const refreshPromise = section.result?.refreshPromise;
+            const hasPendingRefresh = !!refreshPromise;
+
+            // Keep refreshing indicator while a background revalidate is in flight
+            sectionElement.dataset.refreshing = hasPendingRefresh ? 'true' : 'false';
 
             let items = result?.Items ?? result ?? [];
             if (!Array.isArray(items)) items = [];
@@ -7929,17 +7933,34 @@
             const margin = sectionEnhanceObserverRootMargin || '30% 0px 30% 0px';
             if (!deferUntilVisible || isSectionWithinEnhanceMargin(sectionElement, margin)) {
                 applyProgressiveEnhancement(sectionElement, section, result, enhanceOptions);
-                return;
+            } else {
+                // Data ready but section left the enhance margin — wait until it re-enters
+                delete sectionElement.dataset.enhanceScheduled;
+                sectionEnhancePending.set(sectionElement, {
+                    section,
+                    options: enhanceOptions,
+                    pendingResult: result
+                });
+                observeSectionForEnhance(sectionElement);
             }
 
-            // Data ready but section left the enhance margin — wait until it re-enters
-            delete sectionElement.dataset.enhanceScheduled;
-            sectionEnhancePending.set(sectionElement, {
-                section,
-                options: enhanceOptions,
-                pendingResult: result
+            if (!hasPendingRefresh) return;
+
+            refreshPromise.then((fresh) => {
+                if (!sectionElement.isConnected) return;
+                sectionElement.dataset.refreshing = 'false';
+                // Prefer live DOM apply; if still pending observe, update pending snapshot
+                const pending = sectionEnhancePending.get(sectionElement);
+                if (pending && pending.pendingResult !== undefined) {
+                    pending.pendingResult = fresh;
+                    return;
+                }
+                applyProgressiveEnhancement(sectionElement, section, fresh, enhanceOptions);
+            }).catch((err) => {
+                console.warn('[KefinTweaks CardBuilder] Background refresh failed:', section?.config?.id, err);
+                if (!sectionElement.isConnected) return;
+                sectionElement.dataset.refreshing = 'false';
             });
-            observeSectionForEnhance(sectionElement);
         }).catch((err) => {
             console.error('[KefinTweaks CardBuilder] Progressive enhance failed:', section?.config?.id, err);
             if (!sectionElement.isConnected) return;
