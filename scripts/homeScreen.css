@@ -500,3 +500,10 @@ body:not(:has(#slides-container)):has(.MuiBox-root) .homeSectionsContainer:has([
 html:not([data-active-page="home"]) .snowverlay {
 	display: none;
 }
+
+// Hide the seasonal animations on mobile by default
+@media (max-width: 899px) {
+	.snowverlay {
+		display: none !important;
+	}
+}
