@@ -691,7 +691,7 @@
                         <p class="listItemBodyText secondary kefin-pin-choice-desc">Pin this item to a list on your home screen.</p>
                     </button>
                     <button type="button" class="kefin-pin-choice-card" id="kefin-pin-choice-children">
-                        <h2 class="listItemBodyText kefin-pin-choice-title">Pin ${item.Name}&apos;s Children</h2>
+                        <h2 class="listItemBodyText kefin-pin-choice-title">Pin Items from ${item.Name}</h2>
                         <p class="listItemBodyText secondary kefin-pin-choice-desc">Show this item&apos;s children in a home section.</p>
                     </button>
                 </div>
