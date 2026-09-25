@@ -702,7 +702,7 @@
 
     /**
      * Processes a series page to add episodes section
-     * @param {string} seriesId - The series ID
+     * @param {Object} series - The series item
      */
     async function processSeriesPage(series) {
         const seriesId = series.Id;
@@ -712,9 +712,11 @@
             return;
         }
 
-        // Check if already processed
-        if (activePage.dataset.seriesEpisodesProcessed === 'true') {
-            LOG('Series page already processed, skipping');
+        // Already processed for this series on this page instance
+        if (activePage.dataset.seriesEpisodesItemId === seriesId
+            && (activePage.dataset.seriesEpisodesProcessed === 'true'
+                || activePage.querySelector('.series-episodes-section'))) {
+            LOG('Series page already processed for this item, skipping');
             return;
         }
 
@@ -786,7 +788,8 @@
 
         // Extract NextUp header text
         let nextUpHeaderText = 'Next Up';
-        const nextUpSection = activePage.querySelector('.nextUpSection');
+        const pageForUi = document.querySelector('.libraryPage:not(.hide)') || activePage;
+        const nextUpSection = pageForUi.querySelector('.nextUpSection');
         if (nextUpSection) {
             const nextUpHeader = nextUpSection.querySelector('.sectionTitle, h2, h3');
             if (nextUpHeader) {
@@ -804,8 +807,10 @@
             LOG('Hid season container for single-season show');
         }
 
-        // Mark as processed
-        activePage.dataset.seriesEpisodesProcessed = 'true';
+        // Mark as processed for this series id (item-scoped for double onViewPage invokes)
+        const pageToMark = document.querySelector('.libraryPage:not(.hide)') || pageForUi;
+        pageToMark.dataset.seriesEpisodesProcessed = 'true';
+        pageToMark.dataset.seriesEpisodesItemId = seriesId;
     }
 
     async function verifyNextUpItem(seriesId) {
@@ -817,6 +822,10 @@
         }
 
         const currentNextUpItem = document.querySelector('.libraryPage:not(.hide) .nextUpEpisode');
+        if (!currentNextUpItem) {
+            LOG('No Next Up episode element found, skipping');
+            return;
+        }
 
         if (currentNextUpItem.dataset.id === nextUpItem.Id) {
             LOG('Next Up item is the same as the current one, skipping');
@@ -838,6 +847,15 @@
         updateNextUpItem(targetEpisodeNumber, scrollerContainer);
     }
 
+    function getSeriesIdFromHash(hash = window.location.hash) {
+        try {
+            const match = String(hash || window.location.href).match(/[\?&]id=([^&]+)/);
+            return match ? decodeURIComponent(match[1]) : null;
+        } catch (_) {
+            return null;
+        }
+    }
+
     /**
      * Initialize the series episodes hook
      */
@@ -852,18 +870,19 @@
 
         window.KefinTweaksUtils.onViewPage(
             async (view, element, hash, itemPromise) => {
+                const currentItemId = getSeriesIdFromHash(hash);
                 const activePage = document.querySelector('.libraryPage:not(.hide)');
                 if (!activePage) return;
 
                 const existingSection = activePage.querySelector('.series-episodes-section');
+                const processedForId = activePage.dataset.seriesEpisodesItemId;
 
-                if (activePage.dataset.seriesEpisodesProcessed || existingSection) {
-                    LOG('Existing episodes section found, only verifying NextUp item');
-                    const itemId = document.querySelector('.libraryPage:not(.hide) .btnPlaystate')?.dataset?.id;
-
-                    if (itemId) {
-                        verifyNextUpItem(itemId);
-                    }
+                // Only treat as already done when this page was processed for the current item
+                if (currentItemId
+                    && processedForId === currentItemId
+                    && (activePage.dataset.seriesEpisodesProcessed === 'true' || existingSection)) {
+                    LOG('Existing episodes section for current item, only verifying NextUp item');
+                    verifyNextUpItem(currentItemId);
                     return;
                 }
 
@@ -873,14 +892,12 @@
                     return;
                 }
 
-                if (item && item.Type === 'Series') {
-                    LOG(`Found series: ${item.Id} (${item.Name})`);
-                    
-                    // Small delay to ensure page is ready
-                    setTimeout(async () => {
-                        await processSeriesPage(item);
-                    }, 100);
-                }
+                LOG(`Found series: ${item.Id} (${item.Name})`);
+
+                // Small delay to ensure page is ready (Emby may still be swapping pages)
+                setTimeout(async () => {
+                    await processSeriesPage(item);
+                }, 100);
             },
             {
                 pages: ['details']
