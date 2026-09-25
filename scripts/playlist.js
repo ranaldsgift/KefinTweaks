@@ -1289,7 +1289,6 @@
         // Register handler for details pages
         window.KefinTweaksUtils.onViewPage(async (view, element, hash, itemPromise) => {
             // Await the item promise to get the actual item data
-            const testItem = Emby.Page.promiseShow ? await Emby.Page.promiseShow() : null;
             const item = await itemPromise;
             if (item && item.Type === 'Playlist') {
                 // Run both original functionality and sorting functionality
