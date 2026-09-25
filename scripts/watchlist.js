@@ -4880,81 +4880,33 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 
 		await window.userHelper.waitForLogin();
 
-		const maxRetries = 10;
-		let retries = 0;
-		// Use WebSocket to listen for UserDataChanged messages instead of intercepting fetch
-		// This is more reliable and doesn't interfere with fetch requests
-		function setupWebSocketMonitoring() {
-			try {
-				// Grab the actual socket
-				const socket = (window.ApiClient && (window.ApiClient.webSocket || window.ApiClient._webSocket)) || null;
+		function startWatchlistUserDataListener() {
+			if (playbackMonitorInitialized) {
+				return;
+			}
 
-				if (!socket) {
-					if (retries >= maxRetries) {
-						ERR('Max retries reached, giving up on WebSocket monitoring');
-						return false;
+			if (window.websocketHelper?.listen) {
+				window.websocketHelper.listen('UserDataChanged', (msg) => {
+					const entries = msg?.Data?.UserDataList;
+					if (!Array.isArray(entries) || !entries.length) return;
+
+					for (const userData of entries) {
+						if (!userData?.ItemId) continue;
+						LOG(`Detected UserDataChanged for item: ${userData.ItemId}, Played: ${userData.Played}`);
+						handleItemWatchedStatusChange(userData.ItemId, userData.Played, userData.Likes).catch(err => {
+							ERR('Error handling UserDataChanged event:', err);
+						});
 					}
-					retries++;
-					setTimeout(() => {
-						if (!playbackMonitorInitialized) {
-							setupWebSocketMonitoring();
-						}
-					}, 1000);
-					return;
-				}
-
-				// Store original handler if it exists
-				const originalHandler = socket.onmessage;
-
-				// Hook into onmessage
-				socket.onmessage = function(event) {
-					try {
-						// Pass it through so Jellyfin still works normally
-						if (originalHandler) {
-							originalHandler.call(this, event);
-						}
-
-						const messageData = event.Data || event.data;
-						const data = typeof messageData === 'string' ? JSON.parse(messageData) : messageData;
-
-						// Check if this is a UserDataChanged message
-						if (data.MessageType === 'UserDataChanged' && data.Data && data.Data.UserDataList && data.Data.UserDataList.length > 0) {
-							const userData = data.Data.UserDataList[0];
-							if (userData.ItemId) {
-								LOG(`Detected UserDataChanged for item: ${userData.ItemId}, Played: ${userData.Played}`);
-								// Handle the watched status change (works for both played and unplayed)
-								handleItemWatchedStatusChange(userData.ItemId, userData.Played, userData.Likes).catch(err => {
-									ERR('Error handling UserDataChanged event:', err);
-								});
-							}
-						}
-					} catch (err) {
-						// Log parse errors but don't break the original handler
-						WARN('WebSocket message parse error:', err);
-					}
-				};
-
+				});
 				playbackMonitorInitialized = true;
 				LOG('Playback and watch status monitoring initialized via WebSocket');
-				return true;
-			} catch (err) {
-				ERR('Error setting up WebSocket monitoring:', err);
-				return false;
+				return;
 			}
+
+			setTimeout(startWatchlistUserDataListener, 1000);
 		}
 
-		//setupWebSocketMonitoring();
-
-		// Try to set up immediately
-		if (!setupWebSocketMonitoring()) {
-			// If WebSocket isn't available yet, retry after a short delay
-			// This can happen if the page loads before the WebSocket connection is established
-			setTimeout(() => {
-				if (!playbackMonitorInitialized) {
-					setupWebSocketMonitoring();
-				}
-			}, 1000);
-		}
+		startWatchlistUserDataListener();
 	}
 
 	let watchedItems = [];
@@ -7428,21 +7380,25 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		}
 	}
 
-	// Optional onViewPage backup (primary mount path is MutationObserver + addCustomPage)
-	if (window.KefinTweaksUtils && window.KefinTweaksUtils.onViewPage) {
-		window.KefinTweaksUtils.onViewPage(async (view, element, hash) => {
-			const watchlistPath =  window.KefinTweaksUtils._watchlistUrl || '#/watchlist';
-			if (hash.includes(watchlistPath)) {
-				LOG('onViewPage: Watchlist');
-				renderWatchlist();
-			}
-		}, {
-			pages: []
-		});
-		LOG('Registered onViewPage handler for Watchlist');
-	} else {
-		WARN('KefinTweaksUtils.onViewPage not available');
+	async function addWatchlistPageHandler() {
+		// Primary init is addCustomPage onShow + kefin:custompage-show; keep onViewPage as backup for home-tab URLs
+		if (window.KefinTweaksUtils && window.KefinTweaksUtils.onViewPage) {
+			window.KefinTweaksUtils.onViewPage(async (view, element, hash) => {
+				const watchlistUrl = await window.KefinTweaksUtils.getWatchlistUrl();
+				if (watchlistUrl && hash.includes(watchlistUrl)) {
+					LOG('onViewPage: Watchlist (backup)');
+					renderWatchlist();
+				}
+			}, {
+				pages: []
+			});
+			LOG('Registered onViewPage handler for Watchlist');
+		} else {
+			WARN('KefinTweaksUtils.onViewPage not available');
+		}
 	}
+
+	let watchlistCustomPageShowBound = false;
 
 	async function addCustomWatchlistPage() {
 		if (!window.KefinTweaksUtils?.addCustomPage) {
@@ -7453,8 +7409,27 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		window.KefinTweaksUtils.addCustomPage(
 			watchlistUrl,
 			'Watchlist',
-			'<div class="sections watchlist"></div>'
+			'<div class="sections watchlist"></div>',
+			() => {
+				LOG('onShow: Watchlist');
+				renderWatchlist();
+			}
 		);
+
+		if (!watchlistCustomPageShowBound) {
+			watchlistCustomPageShowBound = true;
+			document.addEventListener('kefin:custompage-show', async (e) => {
+				const hrefPath = e.detail?.hrefPath;
+				if (!hrefPath) return;
+				const url = await window.KefinTweaksUtils.getWatchlistUrl();
+				const normalized = url && String(url).split('?')[0];
+				if (hrefPath === normalized || (url && hrefPath === url)) {
+					LOG('kefin:custompage-show: Watchlist');
+					renderWatchlist();
+				}
+			});
+		}
+
 		LOG('Registered custom page Watchlist');
 		return true;
 	}
@@ -7470,33 +7445,19 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			window.KefinTweaksConfig?.watchlist
 		) || {
 			sideMenu: window.KefinTweaksConfig?.watchlist?.sideMenu !== false,
-			topNavigation: window.KefinTweaksConfig?.watchlist?.topNavigation !== false
-				&& window.KefinTweaksConfig?.watchlist?.topNavigation !== 'none',
-			userMenu: window.KefinTweaksConfig?.watchlist?.userMenu !== false
+			topNavigation: window.KefinTweaksConfig?.watchlist?.topNavigation === undefined ? 'main' : window.KefinTweaksConfig?.watchlist?.topNavigation,
+			userMenu: window.KefinTweaksConfig?.watchlist?.userMenu !== false,
+			order: window.KefinTweaksConfig?.watchlist?.order !== undefined ? window.KefinTweaksConfig?.watchlist?.order : 2
 		};
 
-		const watchlistTabIndex = await getWatchlistTabIndex();
+		const watchlistUrl = await window.KefinTweaksUtils.getWatchlistUrl();
+
 		const options = {
 			sideMenu: watchlistCfg.sideMenu !== false,
 			userMenu: watchlistCfg.userMenu === true,
-			order: 2
+			topNavigation: watchlistCfg.topNavigation,
+			order: watchlistCfg.order
 		};
-
-		let watchlistUrl = '#/watchlist';
-
-		const isModernUI = window.KefinTweaksUtils.isModernUI();
-
-		const wantTopNav = watchlistCfg.topNavigation !== false && watchlistCfg.topNavigation !== 'none';
-		// If watchlist tab index is null or undefined, add to top navigation
-		if (wantTopNav && (watchlistTabIndex === null || watchlistTabIndex === undefined || isModernUI)) {
-			options.topNavigation = 'main';
-		} else if (!wantTopNav) {
-			options.topNavigation = 'none';
-		} else {
-			watchlistUrl = `#/home?tab=${watchlistTabIndex}`;
-		}
-
-		window.KefinTweaksUtils._watchlistUrl = watchlistUrl;
 
 		window.KefinTweaksUtils.addCustomMenuLink(
 			'Watchlist',
@@ -7510,18 +7471,16 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 
 	function waitForUtilsAndRegisterWatchlist() {
 		const ready = () => {
-			if (!window.KefinTweaksUtils?.addCustomPage || !window.KefinTweaksUtils?.addCustomMenuLink) {
+			if (!window.KefinTweaksUtils?.addCustomPage || !window.KefinTweaksUtils?.addCustomMenuLink || !window.KefinTweaksUtils?.onViewPage) {
 				return false;
 			}
-			const api = (typeof ApiClient !== 'undefined' && ApiClient) || window.ApiClient || null;
-			if (!api) return false;
-			const serverAddress = api._serverAddress || (typeof api.serverAddress === 'function' ? api.serverAddress() : null);
-			return !!serverAddress;
+			return true;
 		};
 
-		const run = () => {
-			addCustomWatchlistPage();
-			addCustomMenuLink();
+		const run = async () => {
+			await addCustomWatchlistPage();
+			await addCustomMenuLink();
+			await addWatchlistPageHandler();
 		};
 
 		if (ready()) {

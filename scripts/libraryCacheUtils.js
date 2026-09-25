@@ -76,6 +76,7 @@
             Chapters: Array.isArray(item.Chapters) ? item.Chapters.map(stripChapter).filter(Boolean) : [],
             Trickplay: item.Trickplay || undefined,
             DateCreated: item.DateCreated,
+            DateLastMediaAdded: item.DateLastMediaAdded,
             DateLastSaved: item.DateLastSaved,
             UserData: item.UserData || {}
         };

@@ -16,41 +16,78 @@
     let originalOnViewShow = null;
     const state = {
         previousHash: null,
+        previousHref: null,
         hookAttempts: 0,
         maxHookAttempts: 60,
+        historyBridgeInstalled: false,
+        embyViewHookInstalled: false,
     }
-    
+
+    /**
+     * Notify onViewPage handlers once per location change (shared by Emby hook + History bridge).
+     */
+    function notifyViewChange(view, element) {
+        const hash = window.location.hash;
+        const href = window.location.href;
+        if (hash === state.previousHash && href === state.previousHref) return;
+        const previousHash = state.previousHash;
+        notifyHandlers(view ?? getCurrentView(), element || document, hash, previousHash);
+        state.previousHash = hash;
+        state.previousHref = href;
+    }
+
+    function installHistoryViewBridge() {
+        if (state.historyBridgeInstalled) return;
+        state.historyBridgeInstalled = true;
+
+        const fire = () => {
+            notifyViewChange(getCurrentView(), document);
+        };
+
+        const wrap = (method) => {
+            const orig = history[method];
+            if (typeof orig !== 'function' || orig.__kefinViewBridge) return;
+            function wrapped(...args) {
+                const ret = orig.apply(this, args);
+                queueMicrotask(fire);
+                return ret;
+            }
+            wrapped.__kefinViewBridge = true;
+            history[method] = wrapped;
+        };
+
+        wrap('pushState');
+        wrap('replaceState');
+        window.addEventListener('popstate', fire);
+        window.addEventListener('hashchange', fire);
+        LOG('Installed History API view bridge (pushState/replaceState/popstate/hashchange)');
+    }
+
     // Initialize the utils by hooking into Emby.Page.onViewShow
     async function initialize() {
+        installHistoryViewBridge();
+
         // Store the original onViewShow if it exists
-        if (window.Emby && window.Emby.Page && window.Emby.Page.onViewShow) {
+        if (window.Emby && window.Emby.Page && window.Emby.Page.onViewShow && !state.embyViewHookInstalled) {
             originalOnViewShow = window.Emby.Page.onViewShow;
             LOG('Stored original Emby.Page.onViewShow');
-        }
-        
-        // Override onViewShow to maintain original functionality
-        if (window.Emby && window.Emby.Page) {
+
             window.Emby.Page.onViewShow = function (...args) {
-                // Call original handler if it exists
                 if (originalOnViewShow) {
                     try {
-                        originalOnViewShow.apply(this, ...args);
+                        originalOnViewShow.apply(this, args);
                     } catch (err) {
                         ERR('Error in original onViewShow handler:', err);
                     }
                 }
 
                 const view = getCurrentView() ?? args[0];
-                
-                // Call our registered handlers
-                notifyHandlers(view, args[1], window.location.hash, state.previousHash);
-                state.previousHash = window.location.hash;
+                notifyViewChange(view, args[1]);
             };
-            
+            state.embyViewHookInstalled = true;
             LOG('Hooked into Emby.Page.onViewShow');
-        } else {
-            WARN('Emby.Page.onViewShow not found - utils may not work correctly');
-            // Retry in 1 second
+        } else if (!window.Emby || !window.Emby.Page) {
+            WARN('Emby.Page.onViewShow not found - using History bridge; retrying Emby hook');
             state.hookAttempts++;
             if (state.hookAttempts < state.maxHookAttempts) {
                 setTimeout(initialize, 1000);
@@ -1040,8 +1077,13 @@
     }
 
     function findLegacyTabsSlider() {
-        return document.querySelector('.headerTabs.sectionTabs .emby-tabs-slider')
-            || document.querySelector('.emby-tabs-slider');
+        return document.querySelector('.headerTabs.sectionTabs .emby-tabs-slider');
+    }
+
+    function removeLegacyTopNavCustomTabLinks() {
+        document.querySelectorAll(
+            '.headerTabs.sectionTabs [data-kefin-custom-menu-top-link], .emby-tabs-slider > [data-kefin-custom-menu-top-link]'
+        ).forEach((el) => el.remove());
     }
 
     function getNativeLegacyTabButton(slider) {
@@ -1052,6 +1094,11 @@
     }
 
     function injectIntoTopNavLegacyTabs(entry) {
+        if (!document.querySelector('.homePage:not(.hide)')) {
+            removeLegacyTopNavCustomTabLinks();
+            return false;
+        }
+
         const slider = findLegacyTabsSlider();
         if (!slider) return false;
 
@@ -1466,6 +1513,9 @@
     }
 
     function reapplyAllCustomMenuLinks() {
+        if (!document.querySelector('.homePage:not(.hide)')) {
+            removeLegacyTopNavCustomTabLinks();
+        }
         customMenuLinkRegistry.forEach((entry) => {
             try {
                 injectOneCustomMenuLink(entry);
@@ -2355,21 +2405,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
 			return _watchlistTabIndex;
 		}
 
-        // Check if the tab index is already stored in local storage
-        const storedTabIndex = localStorage.getItem(`kefinTweaks_watchlistTabIndex_${ApiClient.serverId()}`);
-        if (storedTabIndex) {
-            _watchlistTabIndex = Number(storedTabIndex);
-            LOG('Loaded watchlist tab index from local storage:', _watchlistTabIndex);
-
-            // Fetch tab in the background in case it has changed
-            fetchWatchlistTabIndex();
-            return _watchlistTabIndex;
-        }
-
         _watchlistTabIndex = await fetchWatchlistTabIndex();
-
-        // Save to local storage
-        localStorage.setItem(`kefinTweaks_watchlistTabIndex_${ApiClient.serverId()}`, _watchlistTabIndex);
 		return _watchlistTabIndex;
 	}
 
@@ -2377,14 +2413,19 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
     const DISALLOWED_CUSTOM_PAGE_SEGMENTS = new Set([
         'home', 'shows', 'movies', 'list', 'playlists', 'collections', 'books', 'livetv', 'music'
     ]);
-    /** @type {Map<string, { hrefPath: string, title: string, contentHtml: string, pageEl: HTMLElement|null, safeTitle: string }>} */
+    /** @type {Map<string, { hrefPath: string, title: string, contentHtml: string, pageEl: HTMLElement|null, safeTitle: string, onShow: Function|null }>} */
     const customPageRegistry = new Map();
     let customPageViewHandlerUnregister = null;
     let customPageHashChangeBound = false;
+    let navigationChromeHandlerInstalled = false;
     /** @type {string|null} */
     let activeCustomPageTitle = null;
     let customPageTitleGuardObserver = null;
     let customPageTitleGuardApplying = false;
+    let fallbackReadyTimer = null;
+    const FALLBACK_READY_MS = 3000;
+    /** @type {string|null} */
+    let activePageWatchlistUrl = null;
 
     function normalizeCustomPageHref(href) {
         let raw = String(href || '').trim();
@@ -2427,25 +2468,17 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
         return slug || 'page';
     }
 
-    /** Install scoped styles, replacing an older installer's unscoped copy if present. */
-    function ensureCustomPageStyles() {
-        const style = document.getElementById('kefin-custom-page-styles') || document.createElement('style');
-        style.id = 'kefin-custom-page-styles';
-        const css = `
-html.kefin-custom-page-route #reactRoot .skinBody:has(.customPage:not(.hide)) #fallbackPage {
+    const CUSTOM_PAGE_STYLES_CSS = `
+#reactRoot.kefin-custom-page-active .skinBody #fallbackPage {
 	display: none;
 }
 
-html.kefin-custom-page-route #reactRoot:not(:has(.skinBody .customPage:not(.hide))) .pageTitle {
-    display: none !important;
+#reactRoot:not(.kefin-custom-page-active):not([data-kefin-fallback-ready]) .skinBody #fallbackPage > * {
+	display: none;
 }
 
-html.kefin-custom-page-route #reactRoot .skinBody:not(:has(.customPage:not(.hide))) #fallbackPage > * {
-    display: none;
-}
-
-html.kefin-custom-page-route #reactRoot:not(:has(.skinBody .customPage:not(.hide))) #fallbackPage::after {
-	content:'';
+#reactRoot:not(.kefin-custom-page-active):not([data-kefin-fallback-ready]) #fallbackPage::after {
+	content: '';
 	display: inline-block;
 	width: 20px;
 	height: 20px;
@@ -2459,20 +2492,151 @@ html.kefin-custom-page-route #reactRoot:not(:has(.skinBody .customPage:not(.hide
 	top: 1em;
 }
 
-#reactRoot:has(main.MuiBox-root) .libraryPage:not(.noSecondaryNavPage).customPage {
-  padding-top: 0 !important;
+#reactRoot[data-kefin-fallback-ready] #fallbackPage::after {
+	display: none !important;
+	content: none !important;
+}
+
+#reactRoot.kefin-custom-page-active .backdropImage {
+	background: none !important;
+}
+
+
+header.MuiPaper-root + main.MuiBox-root .customPage {
+	margin-top: 3rem;
+}
+
+.layout-mobile .kefin-custom-page-active .MuiToolbar-root > .MuiStack-root > :nth-child(n+2),
+.layout-mobile .kefin-custom-page-active .MuiToolbar-root > .MuiStack-root > :first-child .MuiButton-icon img {
+  display: none;
+}
+.layout-mobile .kefin-custom-page-active .MuiToolbar-root > .MuiStack-root > :first-child .MuiButton-icon::after {
+  content: '\\e88a';
+  font-family: 'Material Icons';
+  font-size: 1.2rem;
+}
+.layout-mobile .kefin-custom-page-active .MuiToolbar-root > .MuiStack-root > :first-child {
+  font-size: 0px;
+}
+main.MuiBox-root .customPage.libraryPage:not(.noSecondaryNavPage)[data-kefin-custom-page] {
+  padding-top:  1rem !important;
+}
+.layout-mobile :not(main.MuiBox-root) > .skinBody > .customPage.libraryPage:not(.noSecondaryNavPage)[data-kefin-custom-page] {
+  padding-top:  5rem !important;
 }
 `;
-        if (style.textContent !== css) style.textContent = css;
-        if (!style.parentNode) (document.head || document.documentElement).appendChild(style);
+
+    /** Always refresh textContent so early-inject :has() rules get replaced on JMP. */
+    function ensureCustomPageStyles() {
+        let style = document.getElementById('kefin-custom-page-styles');
+        if (!style) {
+            style = document.createElement('style');
+            style.id = 'kefin-custom-page-styles';
+            (document.head || document.documentElement).appendChild(style);
+        }
+        style.textContent = CUSTOM_PAGE_STYLES_CSS;
     }
 
-    // The stable installer can load Experimental utils; fix its early stylesheet too.
-    if (document.getElementById('kefin-custom-page-styles')) ensureCustomPageStyles();
+    function syncCustomPageActiveClass(active) {
+        const root = document.getElementById('reactRoot') || document.documentElement;
+        if (!root) return;
+        root.classList.toggle('kefin-custom-page-active', !!active);
+    }
+
+    function clearFallbackReadyTimer() {
+        if (fallbackReadyTimer != null) {
+            clearTimeout(fallbackReadyTimer);
+            fallbackReadyTimer = null;
+        }
+    }
+
+    function setFallbackReadyAttr(ready) {
+        const root = document.getElementById('reactRoot') || document.documentElement;
+        if (!root) return;
+        if (ready) {
+            root.setAttribute('data-kefin-fallback-ready', 'true');
+        } else {
+            root.removeAttribute('data-kefin-fallback-ready');
+        }
+    }
+
+    /** Reset attr on nav; if no custom page active, show native fallback after 3s. */
+    function syncFallbackPageReadyState(customPageActive) {
+        clearFallbackReadyTimer();
+        setFallbackReadyAttr(false);
+        if (customPageActive) return;
+        fallbackReadyTimer = setTimeout(() => {
+            fallbackReadyTimer = null;
+            const root = document.getElementById('reactRoot') || document.documentElement;
+            if (root && !root.classList.contains('kefin-custom-page-active')) {
+                setFallbackReadyAttr(true);
+            }
+        }, FALLBACK_READY_MS);
+    }
+
+    function updateActivePage() {
+        const hash = String(window.location.hash || '');
+        let watchlistUrl = activePageWatchlistUrl || window.KefinTweaksUtils?._watchlistUrl || null;
+
+        if (!watchlistUrl) {
+            getWatchlistUrl().then((url) => {
+                activePageWatchlistUrl = url;
+                updateActivePage();
+            }).catch(() => { /* ignore */ });
+        }
+
+        let page = '';
+        const homeTabMatch = hash.match(/[?&]tab=(\d+)/);
+        const homeTab = homeTabMatch ? homeTabMatch[1] : null;
+
+        if (hash.includes('/home') && homeTab === '1') {
+            page = 'favorites';
+        } else if (watchlistUrl && hash.includes(watchlistUrl)) {
+            page = 'watchlist';
+        } else if (hash.includes('#/home') || hash === '#/' || hash === '#' || hash === '') {
+            page = 'home';
+        } else if (hash.includes('#/tv')) {
+            page = 'tv';
+        } else if (hash.includes('#/movies')) {
+            page = 'movies';
+        } else if (hash.includes('#/playlists')) {
+            page = 'playlists';
+        } else if (hash.includes('#/collections')) {
+            page = 'collections';
+        } else if (hash.includes('#/music')) {
+            page = 'music';
+        } else if (hash.includes('#/games')) {
+            page = 'games';
+        }
+
+        document.documentElement.dataset.activePage = page;
+    }
+
+    function emitCustomPageShow(entry, page) {
+        try {
+            if (typeof entry.onShow === 'function') {
+                entry.onShow(page);
+            }
+        } catch (err) {
+            WARN('custom page onShow failed', entry.hrefPath, err);
+        }
+        try {
+            document.dispatchEvent(new CustomEvent('kefin:custompage-show', {
+                detail: {
+                    hrefPath: entry.hrefPath,
+                    title: entry.title,
+                    page
+                }
+            }));
+        } catch (err) {
+            WARN('kefin:custompage-show dispatch failed', err);
+        }
+    }
 
     function findCustomPageHost() {
-        return document.querySelector('.skinBody:not(.mainAnimatedPages):has(.page:not(.hide))')
-            || document.querySelector('.skinBody:not(.mainAnimatedPages)');
+        const candidates = Array.from(document.querySelectorAll('.skinBody:not(.mainAnimatedPages)'));
+        const withVisiblePage = candidates.find((body) => body.querySelector('.page:not(.hide)'));
+        return withVisiblePage || candidates[0] || null;
     }
 
     function applyCustomPageTitles(title) {
@@ -2618,6 +2782,8 @@ html.kefin-custom-page-route #reactRoot:not(:has(.skinBody .customPage:not(.hide
         page.classList.remove('hide');
         page.setAttribute('data-title', entry.title);
         ensureCustomPageTitleGuard(entry.title);
+        syncCustomPageActiveClass(true);
+        emitCustomPageShow(entry, page);
         return true;
     }
 
@@ -2638,7 +2804,6 @@ html.kefin-custom-page-route #reactRoot:not(:has(.skinBody .customPage:not(.hide
 
     function syncAllCustomPages() {
         const currentPath = getCustomPagePathFromHash();
-        document.documentElement.classList.toggle('kefin-custom-page-route', customPageRegistry.has(currentPath));
         let matched = null;
         customPageRegistry.forEach((entry) => {
             if (currentPath && currentPath === entry.hrefPath) {
@@ -2648,9 +2813,11 @@ html.kefin-custom-page-route #reactRoot:not(:has(.skinBody .customPage:not(.hide
                 hideCustomPageEntry(entry);
             }
         });
+        syncCustomPageActiveClass(!!matched);
         if (!matched) {
             stopCustomPageTitleGuard();
         }
+        syncFallbackPageReadyState(!!matched);
     }
 
     function syncCustomPagesAndTopNavActive() {
@@ -2658,24 +2825,24 @@ html.kefin-custom-page-route #reactRoot:not(:has(.skinBody .customPage:not(.hide
         syncCustomTopNavActiveState();
     }
 
-    function ensureCustomPageViewHandler() {
-        if (customPageViewHandlerUnregister) return;
-        // onViewShow misses custom→custom hash changes (no real Jellyfin view);
-        // hashchange covers those; both are fine when they double-fire.
-        const unregView = onViewPage(() => {
+    function ensureNavigationChromeHandler() {
+        if (navigationChromeHandlerInstalled) return;
+        navigationChromeHandlerInstalled = true;
+        const sync = () => {
+            updateActivePage();
             syncCustomPagesAndTopNavActive();
-        }, { pages: [] });
-        if (!customPageHashChangeBound) {
-            window.addEventListener('hashchange', syncCustomPagesAndTopNavActive);
-            customPageHashChangeBound = true;
-        }
-        customPageViewHandlerUnregister = () => {
-            if (typeof unregView === 'function') unregView();
-            if (customPageHashChangeBound) {
-                window.removeEventListener('hashchange', syncCustomPagesAndTopNavActive);
-                customPageHashChangeBound = false;
-            }
         };
+        onViewPage(() => {
+            sync();
+        }, { pages: [] });
+        window.addEventListener('hashchange', sync);
+        customPageHashChangeBound = true;
+        sync();
+        LOG('Navigation chrome handler installed (active-page + custom pages + fallback)');
+    }
+
+    function ensureCustomPageViewHandler() {
+        ensureNavigationChromeHandler();
     }
 
     /**
@@ -2683,9 +2850,10 @@ html.kefin-custom-page-route #reactRoot:not(:has(.skinBody .customPage:not(.hide
      * @param {string} href - e.g. "#/watchlist" (exact path match; query ignored)
      * @param {string} title - document / page title
      * @param {string} contentHtml - HTML string for the padded content area
+     * @param {function(HTMLElement): void} [onShow] - called each time the page is shown
      * @returns {Function|null} unregister function, or null if rejected
      */
-    function addCustomPage(href, title, contentHtml) {
+    function addCustomPage(href, title, contentHtml, onShow) {
         const hrefPath = normalizeCustomPageHref(href);
         if (!hrefPath) {
             WARN('addCustomPage: invalid href');
@@ -2705,12 +2873,14 @@ html.kefin-custom-page-route #reactRoot:not(:has(.skinBody .customPage:not(.hide
 
         const pageTitle = String(title || segment).trim() || segment;
         const safeTitle = slugifyCustomPageTitle(pageTitle);
+        const onShowFn = typeof onShow === 'function' ? onShow : null;
 
         const existing = customPageRegistry.get(hrefPath);
         if (existing) {
             existing.title = pageTitle;
             existing.contentHtml = contentHtml;
             existing.safeTitle = safeTitle;
+            if (onShowFn) existing.onShow = onShowFn;
             // Do not rewrite innerHTML on update if page already mounted (JS may have rendered into it)
             if (existing.pageEl) {
                 existing.pageEl.setAttribute('data-title', pageTitle);
@@ -2722,12 +2892,12 @@ html.kefin-custom-page-route #reactRoot:not(:has(.skinBody .customPage:not(.hide
                 if (!entry) return;
                 hideCustomPageEntry(entry);
                 customPageRegistry.delete(hrefPath);
-                syncAllCustomPages();
                 if (customPageRegistry.size === 0) {
-                    if (customPageViewHandlerUnregister) {
-                        customPageViewHandlerUnregister();
-                        customPageViewHandlerUnregister = null;
-                    }
+                    syncCustomPageActiveClass(false);
+                    stopCustomPageTitleGuard();
+                    syncFallbackPageReadyState(false);
+                } else {
+                    syncAllCustomPages();
                 }
             };
         }
@@ -2737,7 +2907,8 @@ html.kefin-custom-page-route #reactRoot:not(:has(.skinBody .customPage:not(.hide
             title: pageTitle,
             contentHtml,
             pageEl: null,
-            safeTitle
+            safeTitle,
+            onShow: onShowFn
         };
         customPageRegistry.set(hrefPath, entry);
         ensureCustomPageStyles();
@@ -2751,12 +2922,12 @@ html.kefin-custom-page-route #reactRoot:not(:has(.skinBody .customPage:not(.hide
             if (!current) return;
             hideCustomPageEntry(current);
             customPageRegistry.delete(hrefPath);
-            syncAllCustomPages();
             if (customPageRegistry.size === 0) {
-                if (customPageViewHandlerUnregister) {
-                    customPageViewHandlerUnregister();
-                    customPageViewHandlerUnregister = null;
-                }
+                syncCustomPageActiveClass(false);
+                stopCustomPageTitleGuard();
+                syncFallbackPageReadyState(false);
+            } else {
+                syncAllCustomPages();
             }
         };
     }
@@ -2771,6 +2942,7 @@ html.kefin-custom-page-route #reactRoot:not(:has(.skinBody .customPage:not(.hide
         addCustomMenuLink,
         ensureCustomMenuLinkStyles,
         addCustomPage,
+        updateActivePage,
         saveConfigToJavaScriptInjector,
         resolvePluginId,
         getPluginConfiguration,
@@ -2782,6 +2954,9 @@ html.kefin-custom-page-route #reactRoot:not(:has(.skinBody .customPage:not(.hide
         getWatchlistUrl
     };
     
+    // Refresh an older installer's stylesheet even when no custom page registers.
+    if (document.getElementById('kefin-custom-page-styles')) ensureCustomPageStyles();
+    ensureNavigationChromeHandler();
     LOG('Initialized successfully');
     LOG('Available at window.KefinTweaksUtils');
 })();

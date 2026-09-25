@@ -33,6 +33,8 @@
 
     let inContinuousVideoSession = false;
     let isAddingOsdButton = false;
+    let osdButtonObserver = null;
+    let osdButtonObserverTimeout = null;
 
     function getUi() {
         return window.KefinTweaksUI || {};
@@ -1290,10 +1292,9 @@
         // If the WatchTogether button doesn't exist, show the toast as we can assume it's the start of a new session
         if (!watchTogetherOsdButtonExists()) {
             showWatchTogetherSessionToast();
-            return;
         }
 
-        addWatchTogetherOsdButton();
+        ensureWatchTogetherOsdButton();
 
         if (!shouldPromptWatchTogether()) {
             updateSyncListenerState();
@@ -1302,16 +1303,51 @@
 
         stampLastSelectionAt(getEnabledSessionUsers().map((u) => u.userId));
         updateSyncListenerState();
-        addWatchTogetherOsdButton();
         inContinuousVideoSession = true;
     }
 
     function handleVideoPageLeave() {
         inContinuousVideoSession = false;
+        disconnectOsdButtonObserver();
     }
 
     function watchTogetherOsdButtonExists() {
         return !!document.querySelector('.skinBody .skinHeader button.btnWatchTogether');
+    }
+
+    function disconnectOsdButtonObserver() {
+        if (osdButtonObserver) {
+            osdButtonObserver.disconnect();
+            osdButtonObserver = null;
+        }
+        if (osdButtonObserverTimeout != null) {
+            clearTimeout(osdButtonObserverTimeout);
+            osdButtonObserverTimeout = null;
+        }
+    }
+
+    function ensureWatchTogetherOsdButton() {
+        addWatchTogetherOsdButton();
+        if (watchTogetherOsdButtonExists()) {
+            disconnectOsdButtonObserver();
+            return;
+        }
+        if (osdButtonObserver) return;
+
+        const root = document.getElementById('reactRoot') || document.body;
+        if (!root) return;
+
+        osdButtonObserver = new MutationObserver(() => {
+            if (!document.querySelector('.skinHeader.osdHeader')) return;
+            addWatchTogetherOsdButton();
+            if (watchTogetherOsdButtonExists()) {
+                disconnectOsdButtonObserver();
+            }
+        });
+        osdButtonObserver.observe(root, { childList: true, subtree: true });
+        osdButtonObserverTimeout = setTimeout(() => {
+            disconnectOsdButtonObserver();
+        }, 30000);
     }
 
     function createWatchTogetherOsdButton(anchor = null) {
@@ -1403,8 +1439,7 @@
 
             if (onVideo && !previousOnVideo) {
                 handleVideoPageEnter();
-                addWatchTogetherOsdButton();
-            } else if (inContinuousVideoSession) {
+            } else if (!onVideo && (previousOnVideo || inContinuousVideoSession)) {
                 handleVideoPageLeave();
             }
         }, {

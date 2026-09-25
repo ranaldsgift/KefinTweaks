@@ -10,16 +10,21 @@
 
     const DEFAULTS = {
         sideMenu: true,
-        topNavigation: true,
-        userMenu: true
+        topNavigation: 'main',
+        userMenu: true,
+        order: 2
     };
 
     function normalizeConfig(raw) {
         const cfg = raw && typeof raw === 'object' ? raw : {};
+        const orderRaw = parseInt(cfg.order, 10);
         return {
             sideMenu: cfg.sideMenu !== false,
-            topNavigation: cfg.topNavigation !== false && cfg.topNavigation !== 'none',
-            userMenu: cfg.userMenu !== false
+            topNavigation: typeof cfg.topNavigation === 'boolean'
+                ? (cfg.topNavigation ? 'main' : 'none')
+                : cfg.topNavigation === undefined ? 'main' : cfg.topNavigation,
+            userMenu: cfg.userMenu !== false,
+            order: Number.isFinite(orderRaw) ? orderRaw : DEFAULTS.order
         };
     }
 
@@ -72,6 +77,7 @@
     }
 
     function buildConfigHTML(config) {
+        const order = Number.isFinite(config.order) ? config.order : DEFAULTS.order;
         return `
             <div style="max-width: 640px;">
                 ${buildToggleCard(
@@ -82,7 +88,7 @@
                 )}
                 ${buildToggleCard(
                     'wl-top-navigation',
-                    config.topNavigation,
+                    config.topNavigation !== false && config.topNavigation !== 'none',
                     'Top navigation',
                     'Show Watchlist in the main top navigation bar (or via Custom Tabs when available).'
                 )}
@@ -92,6 +98,18 @@
                     'User menu',
                     'Show a Watchlist link in the user settings menu.'
                 )}
+                <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 0.75em;">
+                    <div class="listItemContent">
+                        <div class="listItemBodyText" style="margin-bottom: 0.5em;">Menu order</div>
+                        <div class="listItemBodyText secondary" style="margin-bottom: 0.75em; font-size: 0.9em;">
+                            Lower values appear earlier in the side menu and top navigation.
+                        </div>
+                        <div class="hsae-field-wrap">
+                            <input type="number" id="wl-order" class="fld emby-input"
+                                min="0" step="1" value="${order}">
+                        </div>
+                    </div>
+                </div>
             </div>
         `;
     }
@@ -100,10 +118,14 @@
         const side = document.getElementById('wl-side-menu');
         const top = document.getElementById('wl-top-navigation');
         const user = document.getElementById('wl-user-menu');
+        const orderRaw = parseInt(document.getElementById('wl-order')?.value || String(DEFAULTS.order), 10);
         return {
             sideMenu: side ? side.checked : DEFAULTS.sideMenu,
-            topNavigation: top ? top.checked : DEFAULTS.topNavigation,
-            userMenu: user ? user.checked : DEFAULTS.userMenu
+            topNavigation: top
+                ? (top.checked ? 'main' : 'none')
+                : DEFAULTS.topNavigation,
+            userMenu: user ? user.checked : DEFAULTS.userMenu,
+            order: Number.isFinite(orderRaw) ? orderRaw : DEFAULTS.order
         };
     }
 

@@ -385,7 +385,7 @@
          * @param {Object} options - Cache options
          * @param {boolean} options.useCache - Whether to return cached data first (default: false)
          * @param {number} options.ttl - Cache time to live in milliseconds (default: 300000)
-         * @returns {Promise<Object>|Object} - If useCache is true, returns { data, dataPromise, isStalePromise }. Otherwise returns Promise<data>.
+         * @returns {Object|Promise<Object>} - If useCache is true, returns progressive stub { data, ensureData, isStalePromise } synchronously. Otherwise returns Promise<data>.
          */
         getQuery: function(url, options = {}) {
             ensureApiClient();
@@ -596,15 +596,35 @@
             });
 
             // 3. Lazy data promise — do not start fetchData until ensureData()/dataPromise is used
+            // Stale-while-revalidate: return usable cache immediately; refresh in _refreshPromise
+            const hasUsableCachedPayload = (data) => {
+                if (!data) return false;
+                if (Array.isArray(data)) return data.length > 0;
+                if (Array.isArray(data.Items)) return data.Items.length > 0;
+                return false;
+            };
+
             result.ensureData = function() {
                 if (!result._dataPromise) {
                     result._dataPromise = result.isStalePromise.then(isStale => {
-                        if (isStale) {
-                            LOG(`[Fetch] Refreshing data for: ${url}...`);
-                            return fetchData();
+                        if (!isStale) {
+                            LOG(`[Fetch] Using cached data for: ${url}...`);
+                            return result.data;
                         }
-                        LOG(`[Fetch] Using cached data for: ${url}...`);
-                        return result.data;
+
+                        const refreshPromise = fetchData().then((fresh) => {
+                            if (fresh != null) result.data = fresh;
+                            return fresh;
+                        });
+
+                        if (hasUsableCachedPayload(result.data)) {
+                            result._refreshPromise = refreshPromise;
+                            LOG(`[Fetch] Returning stale cache; refreshing in background: ${url}...`);
+                            return result.data;
+                        }
+
+                        LOG(`[Fetch] Refreshing data for: ${url}...`);
+                        return refreshPromise;
                     });
                 }
                 return result._dataPromise;
@@ -616,14 +636,49 @@
                     return result.ensureData();
                 }
             });
-            
-            return (async () => {
-                // Initial check for cached data
-                const entry = await cachePromise;
-                result.data = entry ? entry.payload : null;
-                result.isStale = forceRefresh || !entry || (Date.now() - entry.timestamp > ttl);
-                return result;
-            })();
+
+            // Sync stub: do not await IndexedDB before return (home first paint).
+            // cachePromise / isStalePromise hydrate result.data in the background.
+            // Thenable waits for hydrate but must NOT fulfill with `result` itself
+            // (Promise assimilation would recurse on result.then forever).
+            result.data = { Items: [] };
+            result.isStale = true;
+            const readyPromise = cachePromise.then((entry) => {
+                if (entry) {
+                    result.data = entry.payload;
+                    result.isStale = forceRefresh || (Date.now() - entry.timestamp > ttl);
+                } else {
+                    // Cache miss: clear placeholder so data?.Items cannot fake a hit
+                    result.data = null;
+                    result.isStale = true;
+                }
+            }).catch(() => {
+                result.data = null;
+                result.isStale = true;
+            });
+
+            function toSettledView() {
+                return {
+                    data: result.data,
+                    isStale: result.isStale,
+                    isStalePromise: result.isStalePromise,
+                    ensureData: result.ensureData,
+                    get dataPromise() {
+                        return result.ensureData();
+                    }
+                };
+            }
+
+            result.then = function (onFulfilled, onRejected) {
+                return readyPromise.then(
+                    () => (typeof onFulfilled === 'function' ? onFulfilled(toSettledView()) : toSettledView()),
+                    onRejected
+                );
+            };
+            result.catch = function (onRejected) {
+                return result.then(undefined, onRejected);
+            };
+            return result;
         },
 
         invalidateCache: function(url) {
@@ -721,7 +776,7 @@
                 throw new Error('Invalid watchlist query URL');
             }
 
-            const queryResult = await this.getQuery(url, {
+            const queryResult = this.getQuery(url, {
                 useCache: true,
                 ttl,
                 forceRefresh
@@ -744,8 +799,8 @@
             };
 
             const result = {
-                data: normalize(queryResult.data),
-                isStale: queryResult.isStale === true,
+                data: { Items: [] },
+                isStale: true,
                 isStalePromise: queryResult.isStalePromise || Promise.resolve(false),
                 ensureData,
                 urls: [url]

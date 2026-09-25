@@ -1688,23 +1688,17 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
     function injectCustomPageStyles(config) {
         if (!shouldInjectCustomPageStyles(config)) return;
 
-        const style = document.getElementById('kefin-custom-page-styles') || document.createElement('style');
-        style.id = 'kefin-custom-page-styles';
         const css = `
-html.kefin-custom-page-route #reactRoot .skinBody:has(.customPage:not(.hide)) #fallbackPage {
+#reactRoot.kefin-custom-page-active .skinBody #fallbackPage {
 	display: none;
 }
 
-html.kefin-custom-page-route #reactRoot:not(:has(.skinBody .customPage:not(.hide))) .pageTitle {
-    display: none !important;
+#reactRoot:not(.kefin-custom-page-active):not([data-kefin-fallback-ready]) .skinBody #fallbackPage > * {
+	display: none;
 }
 
-html.kefin-custom-page-route #reactRoot .skinBody:not(:has(.customPage:not(.hide))) #fallbackPage > * {
-    display: none;
-}
-
-html.kefin-custom-page-route #reactRoot:not(:has(.skinBody .customPage:not(.hide))) #fallbackPage::after {
-	content:'';
+#reactRoot:not(.kefin-custom-page-active):not([data-kefin-fallback-ready]) #fallbackPage::after {
+	content: '';
 	display: inline-block;
 	width: 20px;
 	height: 20px;
@@ -1718,12 +1712,45 @@ html.kefin-custom-page-route #reactRoot:not(:has(.skinBody .customPage:not(.hide
 	top: 1em;
 }
 
-#reactRoot:has(main.MuiBox-root) .libraryPage:not(.noSecondaryNavPage).customPage {
-  padding-top: 0 !important;
+#reactRoot[data-kefin-fallback-ready] #fallbackPage::after {
+	display: none !important;
+	content: none !important;
+}
+
+#reactRoot.kefin-custom-page-active .backdropImage {
+	background: none !important;
+}
+
+header.MuiPaper-root + main.MuiBox-root .customPage {
+	margin-top: 3rem;
+}
+
+.layout-mobile .kefin-custom-page-active .MuiToolbar-root > .MuiStack-root > :nth-child(n+2),
+.layout-mobile .kefin-custom-page-active .MuiToolbar-root > .MuiStack-root > :first-child .MuiButton-icon img {
+  display: none;
+}
+.layout-mobile .kefin-custom-page-active .MuiToolbar-root > .MuiStack-root > :first-child .MuiButton-icon::after {
+  content: '\\e88a';
+  font-family: 'Material Icons';
+  font-size: 1.2rem;
+}
+.layout-mobile .kefin-custom-page-active .MuiToolbar-root > .MuiStack-root > :first-child {
+  font-size: 0px;
+}
+main.MuiBox-root .customPage.libraryPage:not(.noSecondaryNavPage)[data-kefin-custom-page] {
+  padding-top:  1rem !important;
+}
+.layout-mobile :not(main.MuiBox-root) .customPage.libraryPage:not(.noSecondaryNavPage)[data-kefin-custom-page] {
+  padding-top:  5rem !important;
 }
 `;
-        if (style.textContent !== css) style.textContent = css;
-        if (!style.parentNode) (document.head || document.documentElement).appendChild(style);
+        let style = document.getElementById('kefin-custom-page-styles');
+        if (!style) {
+            style = document.createElement('style');
+            style.id = 'kefin-custom-page-styles';
+            (document.head || document.documentElement).appendChild(style);
+        }
+        style.textContent = css;
     }
 
     // Initialize the installer (no login/admin gate — admin is checked when rendering the card)
@@ -1874,7 +1901,7 @@ html.kefin-custom-page-route #reactRoot:not(:has(.skinBody .customPage:not(.hide
             const config = await getKefinTweaksConfig();
             const root = config?.kefinTweaksRoot || '';
 
-            // Prepare styles; utils enables fallback suppression for registered custom routes.
+            // Before injector/utils: hide fallback page chrome for custom routes
             injectCustomPageStyles(config);
 
             if (!root || root === '') {

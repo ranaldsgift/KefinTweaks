@@ -398,7 +398,7 @@
         const renderMode = defaults.renderMode || 'Normal';
         cfg.renderMode = renderMode;
         cfg.spotlight = renderMode === 'Spotlight';
-        cfg.order = defaults.order;
+        // Keep cfg.order — restore should not move the section on the page
         cfg.ttl = defaults.ttl;
         cfg.cardFormat = defaults.cardFormat;
         cfg.cardTitlePosition = defaults.cardTitlePosition;
@@ -542,7 +542,11 @@
 
     async function restoreSectionToServerDefaults(entry, serverDefaults) {
         const defaults = serverDefaults || entry.serverDefaults || {};
+        const preservedOrder = entry.effectiveConfig?.order;
         applyServerDefaultsToConfig(entry.effectiveConfig, defaults);
+        if (preservedOrder != null) {
+            entry.effectiveConfig.order = preservedOrder;
+        }
 
         pendingSaves.delete(entry.sectionId);
         clearTimeout(saveTimeout);
@@ -562,18 +566,16 @@
             });
             pendingSaves.clear();
         }
-        const storedId = resolveStoredSectionPrefId(entry.sectionId, entry.effectiveConfig);
-        homeScreen.sections = (homeScreen.sections || []).filter(
-            (s) => api.parseSectionPrefString?.(s)?.id !== storedId
+        const prefStr = api.serializeSectionPref(
+            resolveStoredSectionPrefId(entry.sectionId, entry.effectiveConfig),
+            entry.effectiveConfig.enabled !== false,
+            buildPrefOverrides(entry.effectiveConfig),
+            defaults
         );
+        homeScreen = api.upsertSectionPref(homeScreen, prefStr);
         pendingHomeScreen = homeScreen;
         await api.saveKefinTweaksHomeScreen(homeScreen);
         pendingHomeScreen = null;
-
-        if (entry.element && defaults.order != null) {
-            entry.element.style.order = defaults.order;
-            entry.element.dataset.order = String(defaults.order);
-        }
 
         applyPresentationToElement(entry);
         rerenderSection(entry);

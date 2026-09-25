@@ -68,8 +68,8 @@
             off: 'Studios without any image may be rendered in Popular Studios sections. You can enable the Optional CSS Module "Studio Thumbnails" to overlay a background with the Studio Name on items without an image.'
         },
         'home-loadPeopleEpisodeData': {
-            on: 'Loads all Person appearances from all episodes in your library. This data takes much longer to cache than just the Movies/Series level data.',
-            off: 'Person appearance data is limited to only Movies and Series.'
+            on: 'Not Recommended for larger libraries. Loads all Person appearances from all episodes in your library. This data takes much longer to cache than just the Movies/Series level data.',
+            off: 'This is recommended. Person appearance data is limited to only Movies and Series.'
         },
         'home-showCreateSectionButtonOnHome': {
             on: 'Adds a button to the bottom left corner of the home screen so that you can quickly create a new section directly from the Home Screen. Only admins will see this button. The button is hidden on mobile.',
@@ -661,7 +661,8 @@
         { name: 'Universal Pictures', file: 'Universal_Pictures.svg' },
         { name: 'Walt Disney Pictures', file: 'Walt_Disney_Pictures.svg' },
         { name: 'Warner Bros.', file: 'Warner_Bros..svg' },
-        { name: 'HBO Max', file: 'HBO_Max.svg' }
+        { name: 'HBO Max', file: 'HBO_Max.svg' },
+        { name: 'Prime Video', file: 'Prime_Video.svg' }
     ];
 
     const BROWSE_BY_STUDIO_SECTION_ID = 'browse-by-studio';
@@ -679,7 +680,7 @@
         return BROWSE_BY_STUDIO_CATALOG.every((entry) => resolvedNames.has(entry.name));
     }
 
-    async function fetchAllStudiosForBrowseSection() {
+    function fetchAllStudiosForBrowseSection() {
         if (browseStudiosFetchPromise) {
             return browseStudiosFetchPromise;
         }
@@ -959,7 +960,8 @@
                 if (browseSection && isBrowseByStudioCatalogFullyResolved(existingItems)) {
                     LOG('Browse by Studio catalog fully resolved; skipping /Studios fetch');
                 } else {
-                    const studios = await fetchAllStudiosForBrowseSection();
+                    const studiosPromise = fetchAllStudiosForBrowseSection();
+                    const studios = await studiosPromise;
 
                     if (!browseSection) {
                         const items = buildBrowseByStudioItems(studios, []);
@@ -998,14 +1000,182 @@
         queryOptions: ['Fields', 'Filters', 'IncludeItemTypes', 'MediaTypes', 'IsActive', 'IsScheduled', 'IsAiring', 'HasAired', 'IsInProgress'],
     };
 
-    function buildCanonicalHomeSectionMap() {
+    function buildCanonicalSectionMapForGroups(groupKey) {
         const defaults = window.KefinHomeConfig2;
         const map = new Map();
-        if (!defaults?.HOME_SECTION_GROUPS) return map;
-        flattenSectionGroups(defaults.HOME_SECTION_GROUPS).forEach(section => {
+        flattenSectionGroups(defaults?.[groupKey] || []).forEach((section) => {
             if (section?.id) map.set(section.id, section);
         });
         return map;
+    }
+
+    function buildCanonicalHomeSectionMap() {
+        return buildCanonicalSectionMapForGroups('HOME_SECTION_GROUPS');
+    }
+
+    function getAllKefinDefaultSectionIds() {
+        const ids = new Set();
+        ['HOME_SECTION_GROUPS', 'SEASONAL_SECTION_GROUPS', 'DISCOVERY_SECTION_GROUPS'].forEach((key) => {
+            buildCanonicalSectionMapForGroups(key).forEach((_, id) => ids.add(id));
+        });
+        return ids;
+    }
+
+    const KEFIN_DEFAULT_GROUP_KEYS = ['HOME_SECTION_GROUPS', 'SEASONAL_SECTION_GROUPS', 'DISCOVERY_SECTION_GROUPS'];
+    const LIBRARY_RESOLVED_ID_PREFIXES = ['recently-added-', 'popular-genres-'];
+    const FIXED_TEMPLATE_SECTION_IDS = new Set([BROWSE_BY_STUDIO_SECTION_ID]);
+
+    function isLibraryResolvedSectionId(sectionId) {
+        if (!sectionId) return false;
+        return LIBRARY_RESOLVED_ID_PREFIXES.some((prefix) => sectionId.startsWith(prefix));
+    }
+
+    function shouldKeepDefaultSurfaceSection(section, defaultSectionIds) {
+        if (!section?.id) return false;
+        if (section.deleted === true) return true;
+        if (defaultSectionIds.has(section.id)) return true;
+        if (FIXED_TEMPLATE_SECTION_IDS.has(section.id)) return true;
+        if (isLibraryResolvedSectionId(section.id)) return true;
+        return false;
+    }
+
+    function addMissingKefinDefaultSections(config) {
+        const defaults = window.KefinHomeConfig2;
+        if (!defaults) return false;
+        let hasChanges = false;
+
+        KEFIN_DEFAULT_GROUP_KEYS.forEach((groupKey) => {
+            const defaultGroups = defaults[groupKey] || [];
+            if (!Array.isArray(config[groupKey])) config[groupKey] = [];
+
+            defaultGroups.forEach((defaultGroup) => {
+                let savedGroup = null;
+                if (defaultGroup.id) {
+                    savedGroup = config[groupKey].find((g) => g.id === defaultGroup.id) || null;
+                }
+                if (!savedGroup && defaultGroup.name) {
+                    savedGroup = config[groupKey].find((g) => g.name === defaultGroup.name) || null;
+                }
+
+                if (!savedGroup) {
+                    config[groupKey].push(JSON.parse(JSON.stringify(defaultGroup)));
+                    hasChanges = true;
+                    return;
+                }
+
+                if (!Array.isArray(savedGroup.sections)) savedGroup.sections = [];
+                const existingIds = new Set(savedGroup.sections.map((s) => s?.id).filter(Boolean));
+                (defaultGroup.sections || []).forEach((defaultSection) => {
+                    if (!defaultSection?.id || existingIds.has(defaultSection.id)) return;
+                    const tombstone = savedGroup.sections.find((s) => s?.id === defaultSection.id && s.deleted === true);
+                    if (tombstone) return;
+                    savedGroup.sections.push(JSON.parse(JSON.stringify(defaultSection)));
+                    existingIds.add(defaultSection.id);
+                    hasChanges = true;
+                    LOG(`Added missing default section: ${defaultSection.id}`);
+                });
+            });
+        });
+
+        return hasChanges;
+    }
+
+    function countOrphanKefinDefaultSections(config) {
+        const defaultSectionIds = getAllKefinDefaultSectionIds();
+        let count = 0;
+        KEFIN_DEFAULT_GROUP_KEYS.forEach((groupKey) => {
+            (config[groupKey] || []).forEach((group) => {
+                (group.sections || []).forEach((section) => {
+                    if (!shouldKeepDefaultSurfaceSection(section, defaultSectionIds)) count += 1;
+                });
+            });
+        });
+        return count;
+    }
+
+    function pruneOrphanKefinDefaultSections(config) {
+        const defaultSectionIds = getAllKefinDefaultSectionIds();
+        let hasChanges = false;
+
+        KEFIN_DEFAULT_GROUP_KEYS.forEach((groupKey) => {
+            (config[groupKey] || []).forEach((group) => {
+                if (!Array.isArray(group.sections)) return;
+                const before = group.sections.length;
+                group.sections = group.sections.filter((section) => {
+                    const keep = shouldKeepDefaultSurfaceSection(section, defaultSectionIds);
+                    if (!keep) LOG(`Pruning orphan default-surface section: ${section?.id}`);
+                    return keep;
+                });
+                if (group.sections.length !== before) hasChanges = true;
+            });
+        });
+
+        return hasChanges;
+    }
+
+    async function backupConfigBeforeDefaultPrune(configToBackup) {
+        try {
+            if (!window.ApiClient || !window.ApiClient._serverAddress || !window.ApiClient.accessToken) {
+                WARN('ApiClient not available, cannot create pre-prune backup');
+                return false;
+            }
+            if (!window.KefinTweaksUtils?.resolvePluginId || !window.KefinTweaksUtils?.getPluginConfiguration) {
+                WARN('Cannot create pre-prune backup: plugin helpers unavailable');
+                return false;
+            }
+            if (!window.apiHelper?.getAuthHeader) {
+                WARN('Cannot create pre-prune backup: apiHelper unavailable');
+                return false;
+            }
+
+            const injectorAliases = ['JavaScript Injector', 'JS Injector'];
+            const pluginId = await window.KefinTweaksUtils.resolvePluginId(injectorAliases);
+            if (!pluginId) {
+                WARN('Cannot create pre-prune backup: Injector plugin not found');
+                return false;
+            }
+
+            const injectorConfig = await window.KefinTweaksUtils.getPluginConfiguration(injectorAliases);
+            if (!injectorConfig.CustomJavaScripts) injectorConfig.CustomJavaScripts = [];
+
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+            const backupName = `KefinTweaks-Config-Backup-${timestamp}`;
+            const backupScriptContent = `// KefinTweaks Configuration Backup
+// Automatically created before default-section prune sync
+// Created: ${new Date().toISOString()}
+// Do not edit manually
+
+window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
+
+            injectorConfig.CustomJavaScripts.push({
+                Name: backupName,
+                Script: backupScriptContent,
+                Enabled: false,
+                RequiresAuthentication: false
+            });
+
+            const server = window.ApiClient._serverAddress;
+            const configUrl = `${server}/Plugins/${pluginId}/Configuration`;
+            const saveResponse = await fetch(configUrl, {
+                method: 'POST',
+                headers: {
+                    'Authorization': window.apiHelper.getAuthHeader(),
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(injectorConfig)
+            });
+
+            if (!saveResponse.ok) {
+                WARN(`Failed to save pre-prune backup: ${saveResponse.statusText}`);
+                return false;
+            }
+
+            LOG(`Created pre-prune backup: ${backupName}`);
+            return true;
+        } catch (error) {
+            ERR('Error creating pre-prune config backup:', error);
+            return false;
+        }
     }
 
     function getRecentlyAddedCanonicalQuery() {
@@ -1058,35 +1228,52 @@
     }
 
     function syncKefinTweaksDefaultSections(config) {
-        const canonicalMap = buildCanonicalHomeSectionMap();
         const recentlyAddedTemplate = getRecentlyAddedCanonicalQuery();
         let hasChanges = false;
 
-        const groups = config.HOME_SECTION_GROUPS || [];
-        for (const group of groups) {
-            for (const section of group.sections || []) {
-                if (!section?.id) continue;
+        KEFIN_DEFAULT_GROUP_KEYS.forEach((groupKey) => {
+            const canonicalMap = buildCanonicalSectionMapForGroups(groupKey);
+            const groups = config[groupKey] || [];
+            for (const group of groups) {
+                for (const section of group.sections || []) {
+                    if (!section?.id) continue;
 
-                let canonical = canonicalMap.get(section.id);
-                if (!canonical && section.id.startsWith('recently-added-')) {
-                    canonical = { queries: [recentlyAddedTemplate] };
-                }
-                if (!canonical?.queries?.length) continue;
-
-                if (!Array.isArray(section.queries)) section.queries = [];
-
-                for (let i = 0; i < canonical.queries.length; i++) {
-                    if (!section.queries[i]) {
-                        section.queries[i] = { queryOptions: {} };
+                    let canonical = canonicalMap.get(section.id);
+                    if (!canonical && section.id.startsWith('recently-added-')) {
+                        canonical = { queries: [recentlyAddedTemplate] };
                     }
-                    if (syncQueryFromCanonical(section.queries[i], canonical.queries[i])) {
-                        hasChanges = true;
+                    if (!canonical?.queries?.length) continue;
+
+                    if (!Array.isArray(section.queries)) section.queries = [];
+
+                    for (let i = 0; i < canonical.queries.length; i++) {
+                        if (!section.queries[i]) {
+                            section.queries[i] = { queryOptions: {} };
+                        }
+                        if (syncQueryFromCanonical(section.queries[i], canonical.queries[i])) {
+                            hasChanges = true;
+                        }
                     }
                 }
             }
-        }
+        });
 
         return hasChanges;
+    }
+
+    /**
+     * Always overwrite seasonalThemes from KefinHomeConfig2 (not user-editable yet).
+     * Preserves enableSeasonalAnimations / enableSeasonalBackground / seasonToggles / enabled.
+     */
+    function syncSeasonalThemesFromDefaults(config) {
+        const defaults = window.KefinHomeConfig2?.SEASONAL_THEME_SETTINGS;
+        if (!defaults?.seasonalThemes) return false;
+        const next = JSON.parse(JSON.stringify(defaults.seasonalThemes));
+        const prev = config.SEASONAL_THEME_SETTINGS?.seasonalThemes;
+        const changed = JSON.stringify(prev) !== JSON.stringify(next);
+        if (!config.SEASONAL_THEME_SETTINGS) config.SEASONAL_THEME_SETTINGS = {};
+        config.SEASONAL_THEME_SETTINGS.seasonalThemes = next;
+        return changed;
     }
 
     async function ensureKefinTweaksDefaultSections() {
@@ -1105,11 +1292,31 @@
 
             const config = loadConfig();
             const { hasChanges: libraryChanges } = await verifyLibrarySectionsConfig(config);
-            const queryChanges = syncKefinTweaksDefaultSections(config);
+            const addedDefaults = addMissingKefinDefaultSections(config);
 
-            if (libraryChanges || queryChanges) {
+            const orphanCount = countOrphanKefinDefaultSections(config);
+            let prunedOrphans = false;
+            if (orphanCount > 0) {
+                const snapshot = JSON.parse(JSON.stringify(window.KefinTweaksConfig || {}));
+                if (!snapshot.homeScreenConfig) {
+                    snapshot.homeScreenConfig = JSON.parse(JSON.stringify(config));
+                }
+                await backupConfigBeforeDefaultPrune(snapshot);
+                prunedOrphans = pruneOrphanKefinDefaultSections(config);
+            }
+
+            const queryChanges = syncKefinTweaksDefaultSections(config);
+            const seasonalThemeChanges = syncSeasonalThemesFromDefaults(config);
+
+            if (libraryChanges || addedDefaults || prunedOrphans || queryChanges || seasonalThemeChanges) {
                 await saveConfig(config);
-                LOG('KefinTweaks default home sections synced on startup');
+                LOG('KefinTweaks default home sections synced on startup', {
+                    libraryChanges,
+                    addedDefaults,
+                    prunedOrphans,
+                    queryChanges,
+                    seasonalThemeChanges
+                });
             }
         } catch (error) {
             ERR('Error ensuring KefinTweaks default sections:', error);
@@ -1132,6 +1339,15 @@
         }
 
         try {
+            let admin = false;
+            try {
+                admin = !!(await window.apiHelper?.isAdmin?.());
+            } catch {
+                return;
+            }
+            if (!admin) return;
+
+            // Legacy homeScreen → homeScreenConfig (no-ops once homeScreenConfig exists)
             if (window.migrateHomeScreenConfig) {
                 await window.migrateHomeScreenConfig();
             }
@@ -1178,7 +1394,13 @@
                     'custom'
                 ),
                 DISCOVERY_SETTINGS: { ...defaults.DISCOVERY_SETTINGS, ...(existingConfig.DISCOVERY_SETTINGS || {}) },
-                SEASONAL_THEME_SETTINGS: { ...defaults.SEASONAL_THEME_SETTINGS, ...(existingConfig.SEASONAL_THEME_SETTINGS || {}) },
+                SEASONAL_THEME_SETTINGS: {
+                    ...defaults.SEASONAL_THEME_SETTINGS,
+                    ...(existingConfig.SEASONAL_THEME_SETTINGS || {}),
+                    seasonalThemes: JSON.parse(JSON.stringify(
+                        defaults.SEASONAL_THEME_SETTINGS?.seasonalThemes || {}
+                    ))
+                },
                 CACHE: { ...defaults.CACHE, ...(existingConfig.CACHE || {}) },
                 SPOTLIGHT_SETTINGS: { ...defaults.SPOTLIGHT_SETTINGS, ...(existingConfig.SPOTLIGHT_SETTINGS || {}) },
                 HOME_SETTINGS: { ...defaults.HOME_SETTINGS, ...(existingConfig.HOME_SETTINGS || {}) },

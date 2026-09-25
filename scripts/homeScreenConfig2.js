@@ -1073,6 +1073,26 @@
                             }
                         }
                     ]
+                },
+                {
+                    id: 'seasonal.halloween.halloween-episodes',
+                    name: 'Halloween Episodes',
+                    enabled: true,
+                    userConfigurable: true,
+                    startDate: '10-01',
+                    endDate: '10-31',
+                    order: 53,
+                    cardFormat: 'Series Thumb',
+                    queries: [
+                        {
+                            queryOptions: {
+                                SearchTerm: 'halloween',
+                                IncludeItemTypes: ['Episode'],
+                                SortBy: 'Random',
+                                Limit: 20
+                            }
+                        }
+                    ]
                 }
             ]
         },
@@ -2210,19 +2230,27 @@
         enableSeasonalBackground: false,
         seasonalThemes: {
             'seasonal-halloween': {
-                animation: 'snowverlay',
+                animation: 'seasonalOverlay',
+                shape: 'bat',
+                animationStyle: 'fly',
                 backgroundImage: 'url(../pages/images/halloween.jpg)'
             },
             'seasonal-christmas': {
-                animation: 'snowverlay',
+                animation: 'seasonalOverlay',
+                shape: 'snowflake',
+                animationStyle: 'fall',
                 backgroundImage: 'url(../pages/images/christmas.jpg)'
             },
             'seasonal-new-years': {
-                animation: 'snowverlay',
+                animation: 'seasonalOverlay',
+                shape: 'bell',
+                animationStyle: 'fall',
                 backgroundImage: 'url(../pages/images/new-years.jpg)'
             },
             'seasonal-valentines': {
-                animation: 'valentinesOverlay',
+                animation: 'seasonalOverlay',
+                shape: 'heart',
+                animationStyle: 'fall',
                 backgroundImage: 'url(../pages/images/valentines.jpg)'
             }
         }

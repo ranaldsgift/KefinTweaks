@@ -569,7 +569,7 @@
 
 :is([data-modal-id="kefin-homescreen-section-editor"], [data-modal-id="kefin-homescreen-section-create-flow"]) .hsse-custom-item-tile,
 :is([data-modal-id="kefin-homescreen-section-editor"], [data-modal-id="kefin-homescreen-section-create-flow"]) .hsse-custom-item-add-tile {
-	width: 6.5rem;
+	width: auto;
 	display: flex;
 	flex-direction: column;
 	align-items: center;
@@ -578,7 +578,7 @@
 
 :is([data-modal-id="kefin-homescreen-section-editor"], [data-modal-id="kefin-homescreen-section-create-flow"]) .hsse-custom-item-tile-image,
 :is([data-modal-id="kefin-homescreen-section-editor"], [data-modal-id="kefin-homescreen-section-create-flow"]) .hsse-custom-item-add-tile {
-	width: 6.5rem;
+	width: auto;
 	height: 9.75rem;
 	border-radius: 8px;
 	border: 1px solid rgba(255, 255, 255, 0.12);

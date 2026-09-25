@@ -23,34 +23,88 @@
         }
     }
 
-    // Poll until ApiClient reports logged in. Uses one Promise so callers always settle.
-    // requestIdleCallback (with setTimeout fallback) avoids busy-looping the main thread.
-    async function waitForLogin(maxWaitMs = 60000) {
-        const startTime = Date.now();
-        const schedule = (fn) => {
-            if (typeof requestIdleCallback === 'function') {
-                requestIdleCallback(fn);
-            } else {
-                setTimeout(fn, 0);
-            }
-        };
+    // Poll until ApiClient reports logged in. Singleton in-flight Promise.
+    // Prefer localusersignedin; fall back to setInterval (no requestIdleCallback).
+    let loginWaitPromise = null;
 
-        return new Promise((resolve) => {
-            const tick = () => {
-                if (window.ApiClient && window.ApiClient._loggedIn) {
+    function isUserLoggedIn() {
+        try {
+            return !!(window.ApiClient && window.ApiClient._loggedIn);
+        } catch (_) {
+            return false;
+        }
+    }
+
+    function getConnectionManager() {
+        return window.ServerConnections || window.ConnectionManager || null;
+    }
+
+    function getEventsApi() {
+        return window.Events || window.events || null;
+    }
+
+    async function waitForLogin(maxWaitMs = 60000) {
+        if (isUserLoggedIn()) {
+            return true;
+        }
+        if (loginWaitPromise) {
+            return loginWaitPromise;
+        }
+
+        loginWaitPromise = new Promise((resolve) => {
+            let settled = false;
+            let intervalId = null;
+            const startTime = Date.now();
+            const conn = getConnectionManager();
+            const eventsApi = getEventsApi();
+
+            const cleanup = () => {
+                if (intervalId != null) {
+                    clearInterval(intervalId);
+                    intervalId = null;
+                }
+                if (conn && eventsApi?.off) {
+                    try {
+                        eventsApi.off(conn, 'localusersignedin', onSignedIn);
+                    } catch (_) { /* ignore */ }
+                }
+            };
+
+            const done = (ok) => {
+                if (settled) return;
+                settled = true;
+                cleanup();
+                loginWaitPromise = null;
+                resolve(ok);
+            };
+
+            const onSignedIn = () => {
+                LOG('waitForLogin: localusersignedin');
+                done(true);
+            };
+
+            if (conn && eventsApi?.on) {
+                try {
+                    eventsApi.on(conn, 'localusersignedin', onSignedIn);
+                } catch (e) {
+                    WARN('waitForLogin: could not subscribe localusersignedin', e);
+                }
+            }
+
+            intervalId = setInterval(() => {
+                if (isUserLoggedIn()) {
                     LOG('waitForLogin: logged in');
-                    resolve(true);
+                    done(true);
                     return;
                 }
                 if (Date.now() - startTime >= maxWaitMs) {
                     WARN('waitForLogin: timed out after', maxWaitMs, 'ms');
-                    resolve(false);
-                    return;
+                    done(false);
                 }
-                setTimeout(() => schedule(tick), 100);
-            };
-            schedule(tick);
+            }, 200);
         });
+
+        return loginWaitPromise;
     }
     
     /**

@@ -15,7 +15,7 @@
 
     const state = {
         defaultCardBackgroundNumber: 1,
-        useBlurhash: false
+        useBlurhash: true
     }
 
     function getSpotlightWindowIndices(currentIndex, totalLength) {
@@ -40,6 +40,20 @@
             [arr[i], arr[j]] = [arr[j], arr[i]];
         }
         return arr;
+    }
+
+    /** Element.replaceChildren polyfill (missing in JMP Qt5 WebEngine / Chromium ~83). */
+    function replaceChildren(node, ...nodes) {
+        if (!node) return;
+        if (typeof node.replaceChildren === 'function') {
+            node.replaceChildren(...nodes);
+            return;
+        }
+        while (node.firstChild) node.removeChild(node.firstChild);
+        for (const child of nodes) {
+            if (child == null) continue;
+            node.appendChild(typeof child === 'string' ? document.createTextNode(child) : child);
+        }
     }
 
     /** Cream deco border styles that need injected child pieces on `.cardBorder`. */
@@ -298,7 +312,7 @@
                 circle.setAttribute('r', String(r));
                 frag.appendChild(circle);
             });
-            g.replaceChildren(frag);
+            replaceChildren(g, frag);
         });
     }
 
@@ -346,7 +360,7 @@
         }
         disconnectRetroPosterBulbs(host);
         host.dataset.style = next;
-        host.replaceChildren();
+        replaceChildren(host);
         if (!needsChildren) return;
 
         if (isVintage) {
@@ -2685,6 +2699,7 @@
     }
 
     function shouldSkipBlurhashDecode() {
+        if (!state.useBlurhash) return true;
         try {
             if (navigator.connection && navigator.connection.saveData === true) return true;
         } catch (e) { /* ignore */ }
@@ -3434,6 +3449,7 @@
             // Use data-src for lazy loading instead of immediate backgroundImage
             cardImageContainer.setAttribute('data-src', imageUrl);
             if (blurhashStr
+                && state.useBlurhash
                 && cardFormat !== 'logo'
                 && cardFormat !== 'clear art'
                 && cardFormat !== 'disc') {
@@ -6695,9 +6711,209 @@
     // Smart Lazy Image Loading with Global Observers
     let lazyImageObserver = null;
     let lazyMutationObserver = null;
+    /** @type {WeakMap<Element, IntersectionObserver>} */
+    const lazyObserversByScroller = new WeakMap();
+    const lazyImageApplyQueue = [];
+    let lazyImageApplyRaf = null;
+    const LAZY_IMAGE_APPLY_PER_FRAME = 3;
 
     // Run updateScrollButtonStateForSection once when a section becomes visible (so --max-scroll is computed after layout)
     let scrollSectionVisibilityObserver = null;
+
+    function getLazyScrollerRoot(el) {
+        if (!el || typeof el.closest !== 'function') return null;
+        return el.closest('.emby-scroller, .custom-scroller, [data-horizontal="true"]');
+    }
+
+    function clearLazyImagePaint(cardImageContainer) {
+        if (!cardImageContainer) return;
+        cardImageContainer.style.backgroundImage = '';
+        cardImageContainer.style.webkitMaskImage = '';
+        cardImageContainer.style.maskImage = '';
+        cardImageContainer.style.webkitMaskRepeat = '';
+        cardImageContainer.style.maskRepeat = '';
+        cardImageContainer.style.webkitMaskPosition = '';
+        cardImageContainer.style.maskPosition = '';
+        cardImageContainer.style.webkitMaskSize = '';
+        cardImageContainer.style.maskSize = '';
+        cardImageContainer.classList.remove('lazy-masked-svg');
+    }
+
+    function ensureLazyUnloadPlaceholder(cardImageContainer) {
+        const canvas = cardImageContainer.previousElementSibling;
+        const hasBlurhashCanvas = canvas
+            && canvas.tagName === 'CANVAS'
+            && canvas.classList.contains('blurhash-canvas');
+        const blurhash = cardImageContainer.getAttribute('data-blurhash');
+
+        if (state.useBlurhash && hasBlurhashCanvas && blurhash) {
+            // Unload restore: always prefer blurhash when available (ignore reduced-motion / saveData)
+            if (!canvas.hasAttribute('data-blurhash-pending') && canvas.classList.contains('lazy-hidden')) {
+                // Re-show existing painted blurhash, or re-queue decode
+                const hasPixels = (() => {
+                    try {
+                        const ctx = canvas.getContext('2d');
+                        if (!ctx) return false;
+                        const sample = ctx.getImageData(0, 0, 1, 1).data;
+                        return sample[3] > 0;
+                    } catch (e) {
+                        return false;
+                    }
+                })();
+                if (!hasPixels) {
+                    canvas.setAttribute('data-blurhash-pending', blurhash);
+                    observeBlurhashCanvas(canvas);
+                }
+            }
+            canvas.classList.remove('lazy-hidden');
+            cardImageContainer.classList.add('lazy-hidden');
+            return;
+        }
+
+        if (hasBlurhashCanvas) {
+            canvas.classList.add('lazy-hidden');
+        }
+        cardImageContainer.classList.remove('lazy-hidden');
+        let icon = cardImageContainer.querySelector('.cardImageIcon');
+        if (!icon) {
+            icon = document.createElement('span');
+            icon.className = 'cardImageIcon material-icons';
+            icon.setAttribute('aria-hidden', 'true');
+            icon.textContent = 'movie';
+            cardImageContainer.appendChild(icon);
+        }
+        if (!/\bdefaultCardBackground\d\b/.test(cardImageContainer.className)) {
+            cardImageContainer.classList.add('defaultCardBackground1');
+        }
+    }
+
+    function applyLazyImageToContainer(cardImageContainer, imageUrl, isSvg) {
+        if (!cardImageContainer?.isConnected) return;
+        if (cardImageContainer.getAttribute('data-src') !== imageUrl) return;
+        // Cancelled / unloaded before apply drained
+        if (!cardImageContainer.hasAttribute('data-loading')) return;
+        if (isSvg) {
+            const maskUrl = `url("${imageUrl}")`;
+            cardImageContainer.style.webkitMaskImage = maskUrl;
+            cardImageContainer.style.maskImage = maskUrl;
+            cardImageContainer.style.webkitMaskRepeat = 'no-repeat';
+            cardImageContainer.style.maskRepeat = 'no-repeat';
+            cardImageContainer.style.webkitMaskPosition = 'center';
+            cardImageContainer.style.maskPosition = 'center';
+            cardImageContainer.style.webkitMaskSize = 'contain';
+            cardImageContainer.style.maskSize = 'contain';
+            cardImageContainer.style.backgroundColor = 'white';
+            cardImageContainer.classList.add('lazy-masked-svg');
+        } else {
+            cardImageContainer.style.backgroundImage = `url("${imageUrl}")`;
+        }
+        cardImageContainer.classList.remove('lazy');
+        cardImageContainer.classList.add('lazy-loaded');
+        cardImageContainer.removeAttribute('data-loading');
+        cardImageContainer.classList.remove('lazy-hidden');
+        const icon = cardImageContainer.querySelector('.cardImageIcon');
+        if (icon) icon.remove();
+        const canvas = cardImageContainer.previousElementSibling;
+        if (canvas && canvas.tagName === 'CANVAS' && canvas.classList.contains('blurhash-canvas')) {
+            canvas.classList.add('lazy-hidden');
+            canvas.removeAttribute('data-blurhash-pending');
+        }
+    }
+
+    function drainLazyImageApplyQueue() {
+        lazyImageApplyRaf = null;
+        let n = 0;
+        while (n < LAZY_IMAGE_APPLY_PER_FRAME && lazyImageApplyQueue.length) {
+            const job = lazyImageApplyQueue.shift();
+            if (!job) continue;
+            applyLazyImageToContainer(job.container, job.url, job.isSvg);
+            n++;
+        }
+        if (lazyImageApplyQueue.length) {
+            lazyImageApplyRaf = requestAnimationFrame(drainLazyImageApplyQueue);
+        }
+    }
+
+    function enqueueLazyImageApply(container, url, isSvg) {
+        lazyImageApplyQueue.push({ container, url, isSvg });
+        if (lazyImageApplyRaf == null) {
+            lazyImageApplyRaf = requestAnimationFrame(drainLazyImageApplyQueue);
+        }
+    }
+
+    function unloadLazyImage(cardImageContainer) {
+        if (!cardImageContainer?.classList?.contains('lazy-loaded')) return;
+        clearLazyImagePaint(cardImageContainer);
+        cardImageContainer.classList.remove('lazy-loaded');
+        cardImageContainer.classList.add('lazy');
+        cardImageContainer.removeAttribute('data-loading');
+        ensureLazyUnloadPlaceholder(cardImageContainer);
+    }
+
+    function startLazyImageLoad(cardImageContainer) {
+        const imageUrl = cardImageContainer.getAttribute('data-src');
+        if (!imageUrl) return;
+        if (cardImageContainer.hasAttribute('data-loading')) return;
+        if (cardImageContainer.classList.contains('lazy-loaded')) return;
+
+        cardImageContainer.setAttribute('data-loading', 'true');
+        const img = new Image();
+        const finishError = () => {
+            if (cardImageContainer.getAttribute('data-src') !== imageUrl) return;
+            cardImageContainer.removeAttribute('data-loading');
+            cardImageContainer.classList.remove('lazy');
+            cardImageContainer.classList.add('lazy-loaded');
+            cardImageContainer.classList.remove('lazy-hidden');
+            const canvas = cardImageContainer.previousElementSibling;
+            if (canvas && canvas.tagName === 'CANVAS' && canvas.classList.contains('blurhash-canvas')) {
+                canvas.classList.add('lazy-hidden');
+                canvas.removeAttribute('data-blurhash-pending');
+            }
+        };
+        img.onload = async () => {
+            if (cardImageContainer.getAttribute('data-src') !== imageUrl) return;
+            if (!cardImageContainer.isConnected) return;
+            try {
+                if (typeof img.decode === 'function') {
+                    await img.decode();
+                }
+            } catch (e) { /* apply anyway */ }
+            if (cardImageContainer.getAttribute('data-src') !== imageUrl) return;
+            if (!cardImageContainer.isConnected) return;
+            // Unloaded or cancelled while decoding
+            if (!cardImageContainer.hasAttribute('data-loading')) return;
+            const isSvg = /\.svg(?:[?#]|$)/i.test(imageUrl);
+            enqueueLazyImageApply(cardImageContainer, imageUrl, isSvg);
+        };
+        img.onerror = finishError;
+        img.src = imageUrl;
+    }
+
+    function handleLazyImageIntersection(entries, observer) {
+        const mobile = isMobileLayout();
+        entries.forEach(entry => {
+            const cardImageContainer = entry.target;
+            if (entry.isIntersecting) {
+                startLazyImageLoad(cardImageContainer);
+                if (!mobile) {
+                    observer.unobserve(cardImageContainer);
+                }
+                return;
+            }
+            if (mobile && cardImageContainer.classList.contains('lazy-loaded')) {
+                unloadLazyImage(cardImageContainer);
+            }
+        });
+    }
+
+    function createLazyImageObserver(root) {
+        const mobile = isMobileLayout();
+        return new IntersectionObserver(handleLazyImageIntersection, {
+            root: root || null,
+            threshold: mobile ? 0 : 0.1,
+            rootMargin: mobile ? '0px' : '800px'
+        });
+    }
 
     /**
      * Initialize the global IntersectionObserver for lazy loading images
@@ -6705,70 +6921,27 @@
      */
     function initLazyImageObserver() {
         if (lazyImageObserver) return; // Already initialized
+        lazyImageObserver = createLazyImageObserver(null);
+    }
 
-        // Mobile: tighter prefetch so image downloads don't stampede during discovery paint
-        const rootMargin = isMobileLayout() ? '300px' : '800px';
-        
-        const observerOptions = {
-            threshold: 0.1, // Trigger when 10% of element is visible
-            rootMargin
-        };
-        
-        lazyImageObserver = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (!entry.isIntersecting) return;
-                const cardImageContainer = entry.target;
-                const imageUrl = cardImageContainer.getAttribute('data-src');
-                if (!imageUrl) return;
-                if (cardImageContainer.hasAttribute('data-loading')) return;
+    function observeLazyImage(cardImageContainer) {
+        if (!cardImageContainer || !cardImageContainer.hasAttribute('data-src')) return;
+        initLazyImageObserver();
 
-                cardImageContainer.setAttribute('data-loading', 'true');
-                const img = new Image();
-                img.onload = () => {
-                    const isSvg = /\.svg(?:[?#]|$)/i.test(imageUrl);
-                    if (isSvg) {
-                        const maskUrl = `url("${imageUrl}")`;
-                        cardImageContainer.style.webkitMaskImage = maskUrl;
-                        cardImageContainer.style.maskImage = maskUrl;
-                        cardImageContainer.style.webkitMaskRepeat = 'no-repeat';
-                        cardImageContainer.style.maskRepeat = 'no-repeat';
-                        cardImageContainer.style.webkitMaskPosition = 'center';
-                        cardImageContainer.style.maskPosition = 'center';
-                        cardImageContainer.style.webkitMaskSize = 'contain';
-                        cardImageContainer.style.maskSize = 'contain';
-                        cardImageContainer.style.backgroundColor = 'white';
-                        cardImageContainer.classList.add('lazy-masked-svg');
-                    } else {
-                        cardImageContainer.style.backgroundImage = `url("${imageUrl}")`;
-                    }
-                    cardImageContainer.classList.remove('lazy');
-                    cardImageContainer.classList.add('lazy-loaded');
-                    cardImageContainer.removeAttribute('data-src');
-                    cardImageContainer.removeAttribute('data-loading');
-                    cardImageContainer.classList.remove('lazy-hidden');
-                    const canvas = cardImageContainer.previousElementSibling;
-                    if (canvas && canvas.tagName === 'CANVAS' && canvas.classList.contains('blurhash-canvas')) {
-                        canvas.classList.add('lazy-hidden');
-                        canvas.removeAttribute('data-blurhash-pending');
-                    }
-                    lazyImageObserver.unobserve(cardImageContainer);
-                };
-                img.onerror = () => {
-                    cardImageContainer.removeAttribute('data-loading');
-                    cardImageContainer.removeAttribute('data-src');
-                    cardImageContainer.classList.remove('lazy');
-                    cardImageContainer.classList.add('lazy-loaded');
-                    cardImageContainer.classList.remove('lazy-hidden');
-                    const canvas = cardImageContainer.previousElementSibling;
-                    if (canvas && canvas.tagName === 'CANVAS' && canvas.classList.contains('blurhash-canvas')) {
-                        canvas.classList.add('lazy-hidden');
-                        canvas.removeAttribute('data-blurhash-pending');
-                    }
-                    lazyImageObserver.unobserve(cardImageContainer);
-                };
-                img.src = imageUrl;
-            });
-        }, observerOptions);
+        if (isMobileLayout()) {
+            const scroller = getLazyScrollerRoot(cardImageContainer);
+            if (scroller) {
+                let observer = lazyObserversByScroller.get(scroller);
+                if (!observer) {
+                    observer = createLazyImageObserver(scroller);
+                    lazyObserversByScroller.set(scroller, observer);
+                }
+                observer.observe(cardImageContainer);
+                return;
+            }
+        }
+
+        lazyImageObserver.observe(cardImageContainer);
     }
     
     /**
@@ -6790,14 +6963,14 @@
                         node.classList && 
                         node.classList.contains('cardImageContainer') &&
                         node.hasAttribute('data-src')) {
-                        lazyImageObserver.observe(node);
+                        observeLazyImage(node);
                     }
                     
                     // Check for cardImageContainer descendants
                     if (node.nodeType === 1 && node.querySelectorAll) {
                         const lazyImages = node.querySelectorAll('.cardImageContainer[data-src]');
                         lazyImages.forEach(img => {
-                            lazyImageObserver.observe(img);
+                            observeLazyImage(img);
                         });
                     }
 
@@ -6882,7 +7055,7 @@
         
         const existingLazyImages = document.querySelectorAll('.cardImageContainer[data-src]');
         existingLazyImages.forEach(img => {
-            lazyImageObserver.observe(img);
+            observeLazyImage(img);
         });
 
         document.querySelectorAll('canvas.blurhash-canvas[data-blurhash-pending]').forEach(observeBlurhashCanvas);
@@ -7398,7 +7571,7 @@
             });
         }
 
-        itemsContainer.replaceChildren(fragment);
+        replaceChildren(itemsContainer, fragment);
 
         applyItemsLayoutState(sectionElement, layout, gapless);
         ensureCardBorders(sectionElement);
@@ -7582,15 +7755,156 @@
         return result.dataPromise || null;
     }
 
-    function setupSectionProgressiveEnhancement(sectionElement, section, { revealSectionsSequentially = false } = {}) {
+    function applyProgressiveEnhancement(sectionElement, section, result, { revealSectionsSequentially = false } = {}) {
+        if (!sectionElement?.isConnected || !section?.config) return;
+
+        sectionElement.dataset.refreshing = 'false';
+        sectionElement.dataset.enhanceApplied = 'true';
+
+        const sectionConfig = section.config;
+        let items = result?.Items ?? result ?? [];
+        if (!Array.isArray(items)) items = [];
+
+        const dataItems = section.result?.data?.Items ?? section.result?.data ?? [];
+        const isSpotlight = sectionConfig.spotlight || sectionConfig.renderMode === 'Spotlight';
+        const isSkeleton = !!(sectionElement.querySelector('.skeleton-card, .skeleton-spotlight-item'));
+        const hasSkeletonTitle = !!sectionElement.querySelector('.skeleton-section-title');
+
+        if (items.length === 0) {
+            const holdMs = getDismissEmptySectionTimerMs();
+            if (holdMs > 0) {
+                dismissEmptyProgressiveSection(sectionElement, { holdMs });
+            } else {
+                sectionElement.remove();
+            }
+            return;
+        }
+
+        // Discovery pending (and any skeleton with placeholder title) needs a full rebuild for title/viewMore/caption
+        if (isSkeleton && (isSpotlight || hasSkeletonTitle)) {
+            const content = replaceSectionWithFreshCards(sectionElement, items, sectionConfig, dataItems, revealSectionsSequentially);
+            markSectionEnhanced(content, sectionConfig);
+            return;
+        }
+
+        if (!isSkeleton && isSpotlight) {
+            const staleIds = (Array.isArray(dataItems) ? dataItems : [])
+                .map((item) => item?.Id)
+                .filter(Boolean);
+            const paintedIds = staleIds.length
+                ? staleIds
+                : Array.from(sectionElement.querySelectorAll('.spotlight-item[data-id]:not(.skeleton-spotlight-item)'))
+                    .map((el) => el.getAttribute('data-id'))
+                    .filter(Boolean);
+            const freshIds = sectionConfig?.useParentCard ? items.map((item) => item?.ParentId || item?.SeriesId || item?.Id).filter(Boolean) : items.map((item) => item?.Id).filter(Boolean);
+            const match = classifyIdSequence(paintedIds, freshIds);
+            if (match.type === 'perfect') {
+                markSectionEnhanced(sectionElement, sectionConfig);
+                return;
+            }
+            // Soft-replace without fading the section to black (avoids visible→black→image blink on load)
+            const spotlightContent = replaceSectionWithFreshCards(sectionElement, items, sectionConfig, dataItems, revealSectionsSequentially);
+            markSectionEnhanced(spotlightContent, sectionConfig);
+            return;
+        }
+
+        if (!isSkeleton && !isSpotlight) {
+            const paintedIds = getPaintedCardIds(sectionElement);
+            const freshIds = sectionConfig?.useParentCard ? items.map((item) => item?.ParentId || item?.SeriesId || item?.Id).filter(Boolean) : items.map((item) => item?.Id).filter(Boolean);
+            const match = classifyIdSequence(paintedIds, freshIds);
+
+            if (match.type === 'perfect') {
+                patchCardsUserData(sectionElement, items);
+                markSectionEnhanced(sectionElement, sectionConfig);
+                return;
+            }
+
+            const itemsContainer = sectionElement.querySelector('.itemsContainer');
+            const layoutFromDom = itemsContainer?.getAttribute('data-layout');
+            const layout = (layoutFromDom === 'grid' || layoutFromDom === 'row')
+                ? layoutFromDom
+                : resolveItemsLayout(sectionConfig);
+
+            if (match.type === 'reconcile' && layout === 'row') {
+                reconcileRowItems(sectionElement, items, sectionConfig, () => {
+                    markSectionEnhanced(sectionElement, sectionConfig);
+                });
+                return;
+            }
+
+            const cardFormat = sectionElement.getAttribute('data-card-format') || sectionConfig.cardFormat;
+            if (isButtonCardFormat(cardFormat) && match.type === 'replace') {
+                replaceItemsContainerContents(sectionElement, items, sectionConfig);
+                markSectionEnhanced(sectionElement, sectionConfig);
+                return;
+            }
+
+            fadeReplaceRowItems(sectionElement, items, sectionConfig, () => {
+                markSectionEnhanced(sectionElement, sectionConfig);
+            });
+            return;
+        }
+
+        if (isSkeleton && isSpotlight) {
+            const spotlightContent = replaceSectionWithFreshCards(sectionElement, items, sectionConfig, dataItems, revealSectionsSequentially);
+            markSectionEnhanced(spotlightContent, sectionConfig);
+            return;
+        }
+
+        replaceItemsContainerContents(sectionElement, items, sectionConfig);
+        markSectionEnhanced(sectionElement, sectionConfig);
+    }
+
+    function parseEnhanceRootMargin(rootMargin) {
+        const raw = String(rootMargin || '30% 0px 30% 0px').trim().split(/\s+/);
+        const top = raw[0] || '0px';
+        const right = raw[1] || top;
+        const bottom = raw[2] || top;
+        const left = raw[3] || right;
+        const toPx = (token, axisSize) => {
+            const t = String(token || '0').trim();
+            if (t.endsWith('%')) {
+                const pct = parseFloat(t) || 0;
+                return (pct / 100) * axisSize;
+            }
+            return parseFloat(t) || 0;
+        };
+        return {
+            top: toPx(top, window.innerHeight || 0),
+            right: toPx(right, window.innerWidth || 0),
+            bottom: toPx(bottom, window.innerHeight || 0),
+            left: toPx(left, window.innerWidth || 0)
+        };
+    }
+
+    function isSectionWithinEnhanceMargin(el, rootMargin) {
+        if (!el?.isConnected || typeof el.getBoundingClientRect !== 'function') return false;
+        const rect = el.getBoundingClientRect();
+        const m = parseEnhanceRootMargin(rootMargin || sectionEnhanceObserverRootMargin || '30% 0px 30% 0px');
+        const vw = window.innerWidth || 0;
+        const vh = window.innerHeight || 0;
+        return rect.bottom >= -m.top
+            && rect.top <= vh + m.bottom
+            && rect.right >= -m.left
+            && rect.left <= vw + m.right;
+    }
+
+    function setupSectionProgressiveEnhancement(sectionElement, section, options = {}) {
+        const {
+            revealSectionsSequentially = false,
+            deferUntilVisible = false
+        } = options;
         if (!sectionElement || !section?.result) return;
         if (!hasSectionDeferredData(section.result)) return;
+        if (sectionElement.dataset.enhanceApplied === 'true') return;
         if (sectionElement.dataset.enhanceScheduled === 'true') return;
 
         sectionElement.dataset.enhanceScheduled = 'true';
 
         const dataPromise = getSectionDataPromise(section.result);
         if (!dataPromise) return;
+
+        const enhanceOptions = { revealSectionsSequentially, deferUntilVisible };
 
         section.result.isStalePromise?.then(isStale => {
             if (isStale) {
@@ -7599,100 +7913,60 @@
         });
 
         dataPromise.then(result => {
-            sectionElement.dataset.refreshing = 'false';
+            if (!sectionElement.isConnected) return;
 
-            const sectionConfig = section.config;
+            const refreshPromise = section.result?.refreshPromise;
+            const hasPendingRefresh = !!refreshPromise;
+
+            // Keep refreshing indicator while a background revalidate is in flight
+            sectionElement.dataset.refreshing = hasPendingRefresh ? 'true' : 'false';
+
             let items = result?.Items ?? result ?? [];
             if (!Array.isArray(items)) items = [];
 
-            const dataItems = section.result?.data?.Items ?? section.result?.data ?? [];
-            const isSpotlight = sectionConfig.spotlight || sectionConfig.renderMode === 'Spotlight';
-            const isSkeleton = !!(sectionElement.querySelector('.skeleton-card, .skeleton-spotlight-item'));
-            const hasSkeletonTitle = !!sectionElement.querySelector('.skeleton-section-title');
-
+            // Empty sections: dismiss immediately even if scrolled away
             if (items.length === 0) {
-                const holdMs = getDismissEmptySectionTimerMs();
-                if (holdMs > 0) {
-                    dismissEmptyProgressiveSection(sectionElement, { holdMs });
-                } else {
-                    sectionElement.remove();
-                }
+                applyProgressiveEnhancement(sectionElement, section, result, enhanceOptions);
                 return;
             }
 
-            // Discovery pending (and any skeleton with placeholder title) needs a full rebuild for title/viewMore/caption
-            if (isSkeleton && (isSpotlight || hasSkeletonTitle)) {
-                const content = replaceSectionWithFreshCards(sectionElement, items, sectionConfig, dataItems, revealSectionsSequentially);
-                markSectionEnhanced(content, sectionConfig);
-                return;
-            }
-
-            if (!isSkeleton && isSpotlight) {
-                const staleIds = (Array.isArray(dataItems) ? dataItems : [])
-                    .map((item) => item?.Id)
-                    .filter(Boolean);
-                const paintedIds = staleIds.length
-                    ? staleIds
-                    : Array.from(sectionElement.querySelectorAll('.spotlight-item[data-id]:not(.skeleton-spotlight-item)'))
-                        .map((el) => el.getAttribute('data-id'))
-                        .filter(Boolean);
-                const freshIds = sectionConfig?.useParentCard ? items.map((item) => item?.ParentId || item?.SeriesId || item?.Id).filter(Boolean) : items.map((item) => item?.Id).filter(Boolean);
-                const match = classifyIdSequence(paintedIds, freshIds);
-                if (match.type === 'perfect') {
-                    markSectionEnhanced(sectionElement, sectionConfig);
-                    return;
-                }
-                // Soft-replace without fading the section to black (avoids visible→black→image blink on load)
-                const spotlightContent = replaceSectionWithFreshCards(sectionElement, items, sectionConfig, dataItems, revealSectionsSequentially);
-                markSectionEnhanced(spotlightContent, sectionConfig);
-                return;
-            }
-
-            if (!isSkeleton && !isSpotlight) {
-                const paintedIds = getPaintedCardIds(sectionElement);
-                const freshIds = sectionConfig?.useParentCard ? items.map((item) => item?.ParentId || item?.SeriesId || item?.Id).filter(Boolean) : items.map((item) => item?.Id).filter(Boolean);
-                const match = classifyIdSequence(paintedIds, freshIds);
-
-                if (match.type === 'perfect') {
-                    patchCardsUserData(sectionElement, items);
-                    markSectionEnhanced(sectionElement, sectionConfig);
-                    return;
-                }
-
-                const itemsContainer = sectionElement.querySelector('.itemsContainer');
-                const layoutFromDom = itemsContainer?.getAttribute('data-layout');
-                const layout = (layoutFromDom === 'grid' || layoutFromDom === 'row')
-                    ? layoutFromDom
-                    : resolveItemsLayout(sectionConfig);
-
-                if (match.type === 'reconcile' && layout === 'row') {
-                    reconcileRowItems(sectionElement, items, sectionConfig, () => {
-                        markSectionEnhanced(sectionElement, sectionConfig);
-                    });
-                    return;
-                }
-
-                const cardFormat = sectionElement.getAttribute('data-card-format') || sectionConfig.cardFormat;
-                if (isButtonCardFormat(cardFormat) && match.type === 'replace') {
-                    replaceItemsContainerContents(sectionElement, items, sectionConfig);
-                    markSectionEnhanced(sectionElement, sectionConfig);
-                    return;
-                }
-
-                fadeReplaceRowItems(sectionElement, items, sectionConfig, () => {
-                    markSectionEnhanced(sectionElement, sectionConfig);
+            const margin = sectionEnhanceObserverRootMargin || '30% 0px 30% 0px';
+            if (!deferUntilVisible || isSectionWithinEnhanceMargin(sectionElement, margin)) {
+                applyProgressiveEnhancement(sectionElement, section, result, enhanceOptions);
+            } else {
+                // Data ready but section left the enhance margin — wait until it re-enters
+                delete sectionElement.dataset.enhanceScheduled;
+                sectionEnhancePending.set(sectionElement, {
+                    section,
+                    options: enhanceOptions,
+                    pendingResult: result
                 });
-                return;
+                observeSectionForEnhance(sectionElement);
             }
 
-            if (isSkeleton && isSpotlight) {
-                const spotlightContent = replaceSectionWithFreshCards(sectionElement, items, sectionConfig, dataItems, revealSectionsSequentially);
-                markSectionEnhanced(spotlightContent, sectionConfig);
-                return;
-            }
+            if (!hasPendingRefresh) return;
 
-            replaceItemsContainerContents(sectionElement, items, sectionConfig);
-            markSectionEnhanced(sectionElement, sectionConfig);
+            refreshPromise.then((fresh) => {
+                if (!sectionElement.isConnected) return;
+                sectionElement.dataset.refreshing = 'false';
+                // Prefer live DOM apply; if still pending observe, update pending snapshot
+                const pending = sectionEnhancePending.get(sectionElement);
+                if (pending && pending.pendingResult !== undefined) {
+                    pending.pendingResult = fresh;
+                    return;
+                }
+                applyProgressiveEnhancement(sectionElement, section, fresh, enhanceOptions);
+            }).catch((err) => {
+                console.warn('[KefinTweaks CardBuilder] Background refresh failed:', section?.config?.id, err);
+                if (!sectionElement.isConnected) return;
+                sectionElement.dataset.refreshing = 'false';
+            });
+        }).catch((err) => {
+            console.error('[KefinTweaks CardBuilder] Progressive enhance failed:', section?.config?.id, err);
+            if (!sectionElement.isConnected) return;
+            sectionElement.dataset.refreshing = 'false';
+            delete sectionElement.dataset.enhanceScheduled;
+            applyProgressiveEnhancement(sectionElement, section, { Items: [] }, enhanceOptions);
         });
     }
 
@@ -7721,6 +7995,12 @@
                 if (!pending) return;
 
                 sectionEnhancePending.delete(target);
+
+                if (pending.pendingResult !== undefined) {
+                    applyProgressiveEnhancement(target, pending.section, pending.pendingResult, pending.options || {});
+                    return;
+                }
+
                 setupSectionProgressiveEnhancement(target, pending.section, pending.options);
             });
         }, {
@@ -7752,7 +8032,10 @@
             return;
         }
 
-        const enhanceOptions = { revealSectionsSequentially };
+        const enhanceOptions = {
+            revealSectionsSequentially,
+            deferUntilVisible: !!enhanceOnVisible
+        };
 
         if (!enhanceOnVisible) {
             setupSectionProgressiveEnhancement(sectionElement, section, enhanceOptions);
@@ -7823,7 +8106,20 @@
             await window.userHelper.waitForLogin();
         }
         startCardUserDataListener();
-        state.useBlurhash = localStorage.getItem(`${ApiClient.getCurrentUserId()}-blurhash`) === 'true' || false;
+        try {
+            const userId = typeof ApiClient !== 'undefined' && ApiClient.getCurrentUserId
+                ? ApiClient.getCurrentUserId()
+                : null;
+            if (userId) {
+                const raw = localStorage.getItem(`${userId}-blurhash`);
+                // Jellyfin enableBlurhash: default on when unset; only explicit 'false' disables
+                state.useBlurhash = raw !== 'false';
+            } else {
+                state.useBlurhash = true;
+            }
+        } catch (e) {
+            state.useBlurhash = true;
+        }
     }
 
     initialize();
