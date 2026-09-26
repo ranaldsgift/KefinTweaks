@@ -347,9 +347,11 @@ body[data-seasonal-background="true"]:has(.homePage:not(.hide))
 	opacity: 0.18;
 	transition: opacity 0.2s ease;
 }
-.kefin-home-chrome:hover,
-.kefin-home-chrome:focus-within {
-	opacity: 1;
+@media (hover: hover) and (pointer: fine) {
+	.kefin-home-chrome:hover,
+	.kefin-home-chrome:focus-within {
+		opacity: 1;
+	}
 }
 .kefin-home-chrome.hide,
 #kefin-home-category-rail.hide,
@@ -395,17 +397,32 @@ html:not([data-active-page="home"]) #kefin-home-create-section-btn {
 	pointer-events: auto;
 	display: flex;
 }
-#kefin-home-category-rail .kefin-home-category-rail:hover,
-#kefin-home-category-rail .kefin-home-category-rail:focus-within {
-	opacity: 1;
-	background: #0f0f0f !important;
-	border-radius: 0 25px 25px 0;
-	box-shadow: 1px 0px 5px -1px black;
+@media (hover: hover) and (pointer: fine) {
+	#kefin-home-category-rail .kefin-home-category-rail:hover,
+	#kefin-home-category-rail .kefin-home-category-rail:focus-within {
+		opacity: 1;
+		background: #0f0f0f !important;
+		border-radius: 0 25px 25px 0;
+		box-shadow: 1px 0px 5px -1px black;
+	}
+}
+.kefin-home-category-item {
+	display: inline-flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 0.15rem;
+	min-width: 0;
 }
 .kefin-home-category-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
 	opacity: 0.75;
+	-webkit-tap-highlight-color: transparent;
 }
-.kefin-home-category-btn.is-active {
+.kefin-home-category-btn.is-active,
+.kefin-home-category-item.is-active .kefin-home-category-btn {
 	opacity: 1;
 	color: var(--theme-primary-color, #00a4dc);
 	background: rgba(0, 164, 220, 0.18);
@@ -413,6 +430,22 @@ html:not([data-active-page="home"]) #kefin-home-create-section-btn {
 .kefin-home-category-btn .material-icons {
 	font-size: 1.35rem;
 	top: unset !important;
+}
+.kefin-home-category-btn-label {
+	display: none;
+	font-size: 0.65rem;
+	line-height: 1.1;
+	font-weight: 500;
+	letter-spacing: 0.01em;
+	max-width: 4.5rem;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	pointer-events: none;
+	text-align: center;
+}
+.kefin-home-category-item.is-active .kefin-home-category-btn-label {
+	color: var(--theme-primary-color, #00a4dc);
 }
 
 @media (max-width: 899px) {
@@ -437,6 +470,39 @@ html:not([data-active-page="home"]) #kefin-home-create-section-btn {
 		transition:
 			transform 0.25s ease,
 			opacity 0.25s ease;
+		background: var(--jf-palette-AppBar-darkBg, var(--AppBar-background));
+	}
+	#kefin-home-category-rail .kefin-home-category-rail:hover,
+	#kefin-home-category-rail .kefin-home-category-rail:focus-within {
+		opacity: 1;
+		background: var(--jf-palette-AppBar-darkBg, var(--AppBar-background)) !important;
+		border-radius: 0;
+		box-shadow: 1px 1px 1px 1px #fff !important;
+	}
+	.kefin-home-category-btn-label {
+		display: block;
+	}
+	.kefin-home-category-btn:hover,
+	.kefin-home-category-btn:focus,
+	.kefin-home-category-btn:focus-visible,
+	.kefin-home-category-btn:active {
+		opacity: 0.75;
+		background: transparent;
+		color: inherit;
+	}
+	.kefin-home-category-btn.is-active,
+	.kefin-home-category-btn.is-active:hover,
+	.kefin-home-category-btn.is-active:focus,
+	.kefin-home-category-btn.is-active:focus-visible,
+	.kefin-home-category-btn.is-active:active,
+	.kefin-home-category-item.is-active .kefin-home-category-btn,
+	.kefin-home-category-item.is-active .kefin-home-category-btn:hover,
+	.kefin-home-category-item.is-active .kefin-home-category-btn:focus,
+	.kefin-home-category-item.is-active .kefin-home-category-btn:focus-visible,
+	.kefin-home-category-item.is-active .kefin-home-category-btn:active {
+		opacity: 1;
+		color: var(--theme-primary-color, #00a4dc);
+		background: rgba(0, 164, 220, 0.18);
 	}
 	#kefin-home-category-rail.is-scroll-hidden .kefin-home-category-rail {
 		transform: translateY(100%);
@@ -448,7 +514,7 @@ html:not([data-active-page="home"]) #kefin-home-create-section-btn {
 		display: none !important;
 	}
 	.homePage:not(.hide) {
-		padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+		padding-bottom: calc(4.25rem + env(safe-area-inset-bottom, 0px));
 	}
 }
 

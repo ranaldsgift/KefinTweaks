@@ -2042,8 +2042,11 @@
 
         const rail = document.getElementById(HOME_CHROME_CATEGORY_RAIL_ID);
         if (rail) {
-            rail.querySelectorAll('.kefin-home-category-btn').forEach((btn) => {
-                const active = btn.dataset.categoryId === next;
+            rail.querySelectorAll('.kefin-home-category-item').forEach((item) => {
+                const active = item.dataset.categoryId === next;
+                item.classList.toggle('is-active', active);
+                const btn = item.querySelector('.kefin-home-category-btn');
+                if (!btn) return;
                 btn.classList.toggle('is-active', active);
                 btn.classList.toggle('emby-tab-button-active', active);
                 btn.setAttribute('aria-pressed', active ? 'true' : 'false');
@@ -2111,28 +2114,37 @@
         inner.className = getCategoryRailNativeClasses();
         inner.innerHTML = categories.map((cat) => {
             const id = escapeHtmlChrome(cat.id);
-            const name = escapeHtmlChrome(cat.name || cat.id);
+            const rawName = typeof cat.name === 'string' ? cat.name.trim() : '';
+            const name = escapeHtmlChrome(rawName || cat.id);
             const icon = escapeHtmlChrome(cat.icon || 'label');
             const active = desiredCategory === cat.id;
+            const labelHtml = rawName
+                ? `<span class="kefin-home-category-btn-label">${escapeHtmlChrome(rawName)}</span>`
+                : '';
             return `
-                <button type="button"
-                    class="paper-icon-button-light emby-button kefin-home-category-btn${active ? ' is-active emby-tab-button-active' : ''}"
-                    data-category-id="${id}"
-                    title="${name}"
-                    aria-label="${name}"
-                    aria-pressed="${active ? 'true' : 'false'}">
-                    <span class="material-icons emby-button-foreground ${icon}" aria-hidden="true"></span>
-                </button>
+                <div class="kefin-home-category-item${active ? ' is-active' : ''}" data-category-id="${id}">
+                    <button type="button"
+                        class="paper-icon-button-light emby-button kefin-home-category-btn${active ? ' is-active emby-tab-button-active' : ''}"
+                        data-category-id="${id}"
+                        title="${name}"
+                        aria-label="${name}"
+                        aria-pressed="${active ? 'true' : 'false'}">
+                        <span class="material-icons emby-button-foreground ${icon}" aria-hidden="true"></span>
+                    </button>
+                    ${labelHtml}
+                </div>
             `;
         }).join('');
 
         outer.appendChild(inner);
         outer.addEventListener('click', (e) => {
-            const btn = e.target.closest('.kefin-home-category-btn');
+            const item = e.target.closest('.kefin-home-category-item');
+            const btn = item?.querySelector('.kefin-home-category-btn') || e.target.closest('.kefin-home-category-btn');
             if (!btn) return;
             e.preventDefault();
             e.stopPropagation();
-            applyActiveHomeCategory(btn.dataset.categoryId || 'none');
+            applyActiveHomeCategory(btn.dataset.categoryId || item?.dataset.categoryId || 'none');
+            btn.blur();
         });
 
         document.body.appendChild(outer);
