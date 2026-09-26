@@ -610,7 +610,11 @@
         if (!leftButton || !rightButton) return;
 
         const currentPosition = Math.abs(new DOMMatrixReadOnly(window.getComputedStyle(scroller).transform)?.m41 || 0);
-        const maxPosition = scroller.scrollWidth - scroller.clientWidth;
+        const maxPosition = getMaxPositionFromPadding(
+            scroller,
+            readScrollerPadding(scroller),
+            readSampleCardPadding(scroller)
+        );
         leftButton.disabled = currentPosition === 0;
         rightButton.disabled = currentPosition >= maxPosition;
     }
@@ -2333,7 +2337,7 @@
             const renderProgressiveSectionsEndTime = performance.now();
             const renderProgressiveSectionsDuration = renderProgressiveSectionsEndTime - renderProgressiveSectionsStartTime;
             console.log(`Render progressive sections initialization time: ${renderProgressiveSectionsDuration.toFixed(2)}ms`);
-        },       
+        },
 
         /**
          * Unified function to render progressive sections (Cards or Spotlight)
@@ -4035,12 +4039,9 @@
                 }));
             }
 
-            // Set backdrop width based on client width either 1920 or 1280, 640 is the minimum
-            const clientWidth = window.innerWidth;
-            let backdropWidth = 1920;
-            if (clientWidth < 1280) {
-                backdropWidth = 1280;
-            } else if (clientWidth < 640) {
+            // Set backdrop width based on layout-mobile presence
+            let backdropWidth = 0;
+            if (document.querySelector('.layout-mobile')) {
                 backdropWidth = 640;
             }
 
@@ -5858,7 +5859,9 @@
 
     function inferSkeletonItemType(sectionConfig) {
         if (!sectionConfig) return null;
-        const query = sectionConfig.queries?.[0];
+        const queries = sectionConfig.queries || [];
+        const activeIndex = resolveActiveQueryIndex(sectionConfig, { initialize: false });
+        const query = queries[activeIndex] || queries[0];
         const path = typeof query?.path === 'string' ? query.path : '';
         if (path.includes('/Studios')) return 'Studio';
         if (path.includes('/Genres')) return 'Genre';
@@ -5881,6 +5884,83 @@
         const itemType = inferSkeletonItemType(sectionConfig);
         if (itemType && SKELETON_ONE_LINE_ITEM_TYPES.has(itemType)) return 1;
         return 2;
+    }
+
+    function readScrollerPadding(scroller) {
+        if (!scroller) return { left: 0, right: 0 };
+
+        // Return --scroller-padding if it exists, otherwise set it and return it
+        if (scroller.style.getPropertyValue('--scroller-padding-left') && scroller.style.getPropertyValue('--scroller-padding-right')) {
+            return {
+                left: parseFloat(scroller.style.getPropertyValue('--scroller-padding-left')),
+                right: parseFloat(scroller.style.getPropertyValue('--scroller-padding-right'))
+            };
+        }
+
+        const style = window.getComputedStyle(scroller);
+
+        const paddingLeft = parseFloat(style.paddingLeft) || 0;
+        const paddingRight = parseFloat(style.paddingRight) || 0;
+        scroller.style.setProperty('--scroller-padding-left', paddingLeft);
+        scroller.style.setProperty('--scroller-padding-right', paddingRight);
+
+        return {
+            left: paddingLeft,
+            right: paddingRight
+        };
+    }
+
+    function readCardPadding(card) {
+        if (!card) return { left: 0, right: 0 };
+
+        // Return --card-padding if it exists, otherwise set it and return it
+        if (card.style.getPropertyValue('--card-padding-left') && card.style.getPropertyValue('--card-padding-right')) {
+            return {
+                left: parseFloat(card.style.getPropertyValue('--card-padding-left')),
+                right: parseFloat(card.style.getPropertyValue('--card-padding-right'))
+            };
+        }
+        const style = window.getComputedStyle(card);
+        const paddingLeft = parseFloat(style.paddingLeft) || 0;
+        const paddingRight = parseFloat(style.paddingRight) || 0;
+        card.style.setProperty('--card-padding-left', paddingLeft);
+        card.style.setProperty('--card-padding-right', paddingRight);
+
+        return {
+            left: paddingLeft,
+            right: paddingRight
+        };
+    }
+
+    function readSampleCardPadding(scroller) {
+        const sampleCard = scroller?.querySelector?.(
+            '.itemsContainer > .card:not(.card-layout-dummy):not(.skeleton-card)'
+        );
+        return readCardPadding(sampleCard);
+    }
+
+    /**
+     * Max transform/scroll offset so the trailing content edge matches the leading
+     * gutter when the skin only pads the left (e.g. Fin --sidePadding), plus the
+     * sample card's horizontal padding so the last card's right padding clears the clip.
+     */
+    function getMaxPositionFromPadding(scroller, pad, cardPad) {
+        if (!scroller) return 0;
+
+        // Return --max-scroll if it exists, otherwise set it and return it
+        if (scroller.style.getPropertyValue('--max-scroll')) {
+            return parseFloat(scroller.style.getPropertyValue('--max-scroll'));
+        }
+
+
+        const { left, right } = pad || { left: 0, right: 0 };
+        const cp = cardPad || { left: 0, right: 0 };
+        const endInset = Math.max(right, left);
+        const base = Math.max(0, (scroller.scrollWidth - scroller.clientWidth) + endInset);
+        // Last-card right scroll: include card L+R padding in the end stop
+        const maxScroll = base + (cp.left || 0) + (cp.right || 0);
+        scroller.style.setProperty('--max-scroll', String(maxScroll));
+        return maxScroll;
     }
 
     function createScrollerElement() {
@@ -5941,14 +6021,38 @@
             return Math.abs(translateX);
         }
 
+        // Gesture-local padding: captured once per drag/wheel burst, cleared on end/idle
+        let gesturePad = null;
+        let gestureCardPad = null;
+        let wheelIdleTimer = null;
+
+        function ensureGestureInsets() {
+            if (!gesturePad) gesturePad = readScrollerPadding(scroller);
+            if (!gestureCardPad) gestureCardPad = readSampleCardPadding(scroller);
+        }
+
+        function clearGestureInsets() {
+            gesturePad = null;
+            gestureCardPad = null;
+        }
+
         function getMaxPosition() {
-            return scroller.scrollWidth - scroller.clientWidth;
+            ensureGestureInsets();
+            return getMaxPositionFromPadding(scroller, gesturePad, gestureCardPad);
+        }
+
+        function getMaxPositionFresh() {
+            return getMaxPositionFromPadding(
+                scroller,
+                readScrollerPadding(scroller),
+                readSampleCardPadding(scroller)
+            );
         }
 
         function setPosition(newPosition, options) {
             const opts = options || {};
-            const maxPosition = getMaxPosition() + 300;
-            const clampedPosition = Math.min(Math.max(newPosition, 0), Math.max(maxPosition, 0));
+            const maxPosition = Math.max(0, opts.freshMax ? getMaxPositionFresh() : getMaxPosition());
+            const clampedPosition = Math.min(Math.max(newPosition, 0), maxPosition);
 
             if (opts.animate) {
                 scroller.style.transition = 'transform 270ms ease-out';
@@ -5979,42 +6083,42 @@
             return Array.from(itemsContainer.querySelectorAll(':scope > .card:not(.card-layout-dummy):not(.skeleton-card)'));
         }
 
-        const scrollerPadding = (() => {
-            const style = window.getComputedStyle(scroller);
-            return {
-                left: parseFloat(style.paddingLeft) || 0,
-                right: parseFloat(style.paddingRight) || 0
-            };
-        })();
-
         function getCardScrollLeft(card) {
-            // Scroller + cards share the same translateX, so this delta is layout offset
-            // within the border box. Subtract paddingLeft so snap aligns to the padded
-            // content gutter (same inset as card 0 at scroll 0), not the page edge.
+            // Align card content edge (border-box left + card paddingLeft) to the
+            // scroller's padded content gutter.
+            const pad = readScrollerPadding(scroller);
+            const cardPad = readSampleCardPadding(scroller);
             const scrollerRect = scroller.getBoundingClientRect();
             const cardRect = card.getBoundingClientRect();
-            return cardRect.left - scrollerRect.left - scrollerPadding.left;
+            return cardRect.left - scrollerRect.left - pad.left + cardPad.left;
         }
 
         /**
          * Cards fully inside the padded content clip (not the browser viewport / border box).
-         * Undo translateX, then inset by scroller padding so visibility matches snap targets.
+         * Undo translateX, then inset by scroller + card padding so visibility matches snap targets.
+         * When the skin only pads the left, treat trailing inset as max(left, right).
          */
         function getFullyVisibleCardIndices(cards) {
             const fullyVisible = [];
             const epsilon = 1;
+            const pad = readScrollerPadding(scroller);
+            const cardPad = readSampleCardPadding(scroller);
+            const endInset = Math.max(pad.right, pad.left);
             const scrollerRect = scroller.getBoundingClientRect();
             const currentPosition = getCurrentPosition();
             const contentWidth = Math.max(
                 0,
-                scroller.clientWidth - scrollerPadding.left - scrollerPadding.right
+                scroller.clientWidth - pad.left - endInset
             );
-            const visibleLeft = scrollerRect.left + currentPosition + scrollerPadding.left;
+            const visibleLeft = scrollerRect.left + currentPosition + pad.left;
             const visibleRight = visibleLeft + contentWidth;
             cards.forEach((card, index) => {
                 const cardRect = card.getBoundingClientRect();
                 if (cardRect.width <= 0) return;
-                if (cardRect.left >= visibleLeft - epsilon && cardRect.right <= visibleRight + epsilon) {
+                // Use content box (inside card padding) for visibility
+                const cardContentLeft = cardRect.left + cardPad.left;
+                const cardContentRight = cardRect.right - cardPad.right;
+                if (cardContentLeft >= visibleLeft - epsilon && cardContentRight <= visibleRight + epsilon) {
                     fullyVisible.push(index);
                 }
             });
@@ -6024,8 +6128,13 @@
         function snapScrollToCardIndex(cards, targetIndex) {
             if (!cards.length) return;
             const clampedIndex = Math.max(0, Math.min(targetIndex, cards.length - 1));
-            const targetLeft = clampedIndex === 0 ? 0 : getCardScrollLeft(cards[clampedIndex]);
-            setPosition(targetLeft, { animate: true });
+            // Last card: use max (scroller end inset + card L+R padding), not left-align snap
+            if (clampedIndex === cards.length - 1) {
+                setPosition(getMaxPositionFresh(), { animate: true, freshMax: true });
+                return;
+            }
+            const targetLeft = getCardScrollLeft(cards[clampedIndex]);
+            setPosition(targetLeft, { animate: true, freshMax: true });
         }
 
         leftButton.addEventListener('click', () => {
@@ -6056,8 +6165,9 @@
             const fullyVisible = getFullyVisibleCardIndices(cards);
             const lastVisible = fullyVisible.length ? fullyVisible[fullyVisible.length - 1] : -1;
             const nextIndex = lastVisible + 1;
-            if (nextIndex >= cards.length) {
-                setPosition(getMaxPosition(), { animate: true });
+            const lastWillBeVisible = nextIndex + fullyVisible.length >= cards.length;
+            if (nextIndex >= cards.length || lastWillBeVisible) {
+                setPosition(getMaxPositionFresh(), { animate: true, freshMax: true });
                 return;
             }
             snapScrollToCardIndex(cards, nextIndex);
@@ -6104,6 +6214,7 @@
                     const dy = p.clientY - dragState.startY;
                     if (Math.abs(dx) < DRAG_THRESHOLD_PX && Math.abs(dy) < DRAG_THRESHOLD_PX) return;
 
+                    ensureGestureInsets();
                     dragState.isDragging = true;
                     dragState.startPosition = getCurrentPosition();
                     dragState.currentPosition = dragState.startPosition;
@@ -6117,6 +6228,7 @@
                     if (e.touches) {
                         document.addEventListener('touchmove', onDragMove, { passive: false });
                         document.addEventListener('touchend', onDragEnd, { passive: true });
+                        document.addEventListener('touchcancel', onDragEnd, { passive: true });
                     } else {
                         document.addEventListener('mousemove', onDragMove);
                         document.addEventListener('mouseup', onDragEnd);
@@ -6182,9 +6294,10 @@
             function onDragEnd(e) {
                 if (!dragState.isDragging) return;
 
-                if (e.type === 'touchend') {
+                if (e.type === 'touchend' || e.type === 'touchcancel') {
                     document.removeEventListener('touchmove', onDragMove);
                     document.removeEventListener('touchend', onDragEnd);
+                    document.removeEventListener('touchcancel', onDragEnd);
                 } else {
                     document.removeEventListener('mousemove', onDragMove);
                     document.removeEventListener('mouseup', onDragEnd);
@@ -6222,6 +6335,7 @@
                             if (currentPosition === 0 || currentPosition === maxPosition) {
                                 dragState.velocity = 0;
                                 dragState.momentumId = null;
+                                clearGestureInsets();
                                 return;
                             }
 
@@ -6230,6 +6344,7 @@
                         } else {
                             dragState.velocity = 0;
                             dragState.momentumId = null;
+                            clearGestureInsets();
                         }
                     };
 
@@ -6237,10 +6352,46 @@
                 } else {
                     dragState.velocity = 0;
                     dragState.momentumId = null;
+                    clearGestureInsets();
                 }
             }
 
             scroller.addEventListener('mousedown', onPointerDown);
+
+            // Trackpad / mouse wheel → custom transform scroll (native overflow scrollers handle this themselves)
+            const WHEEL_DELTA_MIN = 1;
+            const WHEEL_IDLE_MS = 150;
+            scroller.addEventListener('wheel', (e) => {
+                if (scroller.classList.contains('scrollX')) return;
+
+                let dx = e.deltaX;
+                let dy = e.deltaY;
+                if (e.deltaMode === 1) {
+                    dx *= 16;
+                    dy *= 16;
+                } else if (e.deltaMode === 2) {
+                    dx *= scroller.clientWidth;
+                    dy *= scroller.clientHeight;
+                }
+
+                const shiftHorizontal = e.shiftKey && Math.abs(dy) >= WHEEL_DELTA_MIN && Math.abs(dx) < WHEEL_DELTA_MIN;
+                if (shiftHorizontal) {
+                    dx = dy;
+                    dy = 0;
+                }
+
+                if (Math.abs(dx) < WHEEL_DELTA_MIN) return;
+                if (Math.abs(dx) < Math.abs(dy)) return;
+
+                e.preventDefault();
+                ensureGestureInsets();
+                if (wheelIdleTimer) clearTimeout(wheelIdleTimer);
+                wheelIdleTimer = setTimeout(() => {
+                    wheelIdleTimer = null;
+                    clearGestureInsets();
+                }, WHEEL_IDLE_MS);
+                setPosition(getCurrentPosition() + dx, { animate: false });
+            }, { passive: false });
         }
 
         return scrollButtons;
@@ -6420,7 +6571,6 @@
         verticalSection.appendChild(scrollButtons);
         verticalSection.appendChild(scroller);
 
-        registerScrollSectionScrollButtons(verticalSection);
 
         return verticalSection;
     }
@@ -6661,7 +6811,6 @@
         verticalSection.appendChild(scrollButtons);
         verticalSection.appendChild(scroller);
 
-        registerScrollSectionScrollButtons(verticalSection);
 
         return verticalSection;
     }
@@ -6999,7 +7148,19 @@
         const rightButton = scrollButtons && scrollButtons.querySelector('button[data-direction="right"]');
         if (!scroller || !scrollButtons || !leftButton || !rightButton) return;
         const scrollX = parseFloat(scroller.style.getPropertyValue('--scroll-x')) || 0;
-        const maxScroll = parseFloat(scroller.style.getPropertyValue('--max-scroll')) || 0;
+
+        let maxScroll = 0;
+
+        // Check if max-scroll is already set, if not then set it
+        if (scroller.style.getPropertyValue('--max-scroll')) {
+            maxScroll = parseFloat(scroller.style.getPropertyValue('--max-scroll')) || 0;
+        } else {
+            maxScroll = getMaxPositionFromPadding(
+                scroller,
+                readScrollerPadding(scroller),
+                readSampleCardPadding(scroller)
+            );
+        }
         leftButton.disabled = scrollX <= 0;
         rightButton.disabled = scrollX >= maxScroll - 1;
     }
@@ -7010,43 +7171,13 @@
     function updateScrollButtonStateForSection(verticalSection) {
         const scroller = verticalSection.querySelector('.emby-scroller');
         if (!scroller) return;
-        const maxScroll = Math.max(0, (scroller.scrollWidth - scroller.clientWidth) || 0);
+        const maxScroll = getMaxPositionFromPadding(
+            scroller,
+            readScrollerPadding(scroller),
+            readSampleCardPadding(scroller)
+        );
         scroller.style.setProperty('--max-scroll', String(maxScroll));
         applyScrollButtonState(verticalSection);
-    }
-
-    /**
-     * Ensure scroll section visibility observer exists. When a section becomes visible, runs updateScrollButtonStateForSection once then unobserves.
-     */
-    function getScrollSectionVisibilityObserver() {
-        if (scrollSectionVisibilityObserver) return scrollSectionVisibilityObserver;
-        scrollSectionVisibilityObserver = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (!entry.isIntersecting) return;
-                const verticalSection = entry.target;
-                scrollSectionVisibilityObserver.unobserve(verticalSection);
-                updateScrollButtonStateForSection(verticalSection);
-            });
-        }, { root: null, threshold: 0.01 });
-        return scrollSectionVisibilityObserver;
-    }
-
-    /**
-     * Register a scrollable section: when it becomes visible, set --max-scroll once and apply initial button state.
-     */
-    function registerScrollSectionScrollButtons(verticalSection) {
-        const itemsContainer = verticalSection.querySelector('.itemsContainer');
-        const scroller = verticalSection.querySelector('.emby-scroller');
-        const first = itemsContainer && itemsContainer.firstElementChild;
-        const last = itemsContainer && itemsContainer.lastElementChild;
-        if (!first || !last) {
-            if (scroller) {
-                scroller.style.setProperty('--max-scroll', '0');
-                applyScrollButtonState(verticalSection);
-            }
-            return;
-        }
-        getScrollSectionVisibilityObserver().observe(verticalSection);
     }
 
     /**
@@ -7354,8 +7485,12 @@
 
     function setScrollerPosition(scroller, position, animate) {
         if (!scroller) return;
-        const maxPosition = Math.max(0, (scroller.scrollWidth - scroller.clientWidth) || 0);
-        const clamped = Math.min(Math.max(position, 0), maxPosition + 300);
+        const maxPosition = getMaxPositionFromPadding(
+            scroller,
+            readScrollerPadding(scroller),
+            readSampleCardPadding(scroller)
+        );
+        const clamped = Math.min(Math.max(position, 0), maxPosition);
         if (scroller.classList.contains('scrollX')) {
             scroller.scrollTo({ left: clamped, behavior: animate ? 'smooth' : 'auto' });
             return;
@@ -7537,7 +7672,7 @@
                     invalidateLastRowPadding(itemsContainer);
                     patchCardsUserData(sectionElement, items);
                     ensureCardBorders(sectionElement);
-                    updateScrollButtonStateForSection(sectionElement);
+                    //updateScrollButtonStateForSection(sectionElement);
                     if (typeof onComplete === 'function') {
                         onComplete();
                     }
@@ -7585,7 +7720,7 @@
         applyItemsLayoutState(sectionElement, layout, gapless);
         ensureCardBorders(sectionElement);
         attachSectionControlButtons(sectionConfig, sectionElement, items);
-        requestAnimationFrame(() => updateScrollButtonStateForSection(sectionElement));
+        //requestAnimationFrame(() => updateScrollButtonStateForSection(sectionElement));
 
         return sectionElement;
     }
