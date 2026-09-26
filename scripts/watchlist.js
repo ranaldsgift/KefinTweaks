@@ -7606,45 +7606,71 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		});
 	}
 
-	// Set up MutationObserver to watch for new overlay containers
+	function processWatchlistOverlaysInRoot(root) {
+		if (!root || root.nodeType !== Node.ELEMENT_NODE) return;
+		if (root.classList?.contains('cardOverlayContainer')) {
+			const buttonContainer = root.querySelector('.cardOverlayButton-br');
+			if (buttonContainer) addWatchlistButton(root);
+			return;
+		}
+		const overlayContainers = root.querySelectorAll?.('.cardOverlayContainer');
+		if (!overlayContainers?.length) return;
+		overlayContainers.forEach((overlayContainer) => {
+			const buttonContainer = overlayContainer.querySelector('.cardOverlayButton-br');
+			if (buttonContainer) addWatchlistButton(overlayContainer);
+		});
+	}
+	
 	function setupWatchlistButtonObserver() {
-		const observer = new MutationObserver((mutations) => {
-			mutations.forEach((mutation) => {
-				if (mutation.type === 'childList') {
-					// Check for added nodes
-					mutation.addedNodes.forEach((node) => {
-						if (node.nodeType === Node.ELEMENT_NODE) {
-							// Check if the added node is an overlay container
-							if (node.classList && node.classList.contains('cardOverlayContainer')) {
-								const buttonContainer = node.querySelector('.cardOverlayButton-br');
-								if (buttonContainer) {
-									addWatchlistButton(node);
-								}
-							}
-							
-							// Check for overlay containers within the added node
-							const overlayContainers = node.querySelectorAll && node.querySelectorAll('.cardOverlayContainer');
-							if (overlayContainers && overlayContainers.length > 0) {
-								overlayContainers.forEach((overlayContainer) => {
-									const buttonContainer = overlayContainer.querySelector('.cardOverlayButton-br');
-									if (buttonContainer) {
-										addWatchlistButton(overlayContainer);
-									}
-								});
-							}
-						}
-					});
+		/** @type {WeakMap<Element, MutationObserver>} */
+		const itemsContainerObservers = new WeakMap();
+		/** @type {WeakSet<Element>} */
+		const observedContainers = new WeakSet();
+
+		function attachItemsContainerObserver(itemsContainer) {
+			if (!itemsContainer || observedContainers.has(itemsContainer)) return;
+			observedContainers.add(itemsContainer);
+
+			const shallow = new MutationObserver((mutations) => {
+				for (const mutation of mutations) {
+					for (const node of mutation.addedNodes) {
+						if (node.nodeType !== Node.ELEMENT_NODE) continue;
+						processWatchlistOverlaysInRoot(node);
+					}
 				}
 			});
+			shallow.observe(itemsContainer, { childList: true, subtree: false });
+			itemsContainerObservers.set(itemsContainer, shallow);
+			processWatchlistOverlaysInRoot(itemsContainer);
+		}
+
+		function discoverItemsContainers(root) {
+			if (!root || root.nodeType !== Node.ELEMENT_NODE) return;
+			if (root.classList?.contains('itemsContainer')) {
+				attachItemsContainerObserver(root);
+			}
+			root.querySelectorAll?.('.itemsContainer').forEach(attachItemsContainerObserver);
+		}
+
+		const discoveryObserver = new MutationObserver((mutations) => {
+			for (const mutation of mutations) {
+				for (const node of mutation.addedNodes) {
+					if (node.nodeType !== Node.ELEMENT_NODE) continue;
+					// Skip deep card-internal inserts (handled by shallow itemsContainer observers)
+					if (node.closest?.('.card') && !node.classList?.contains('itemsContainer')) {
+						continue;
+					}
+					discoverItemsContainers(node);
+				}
+			}
 		});
-		
-		// Start observing
-		observer.observe(document.body, {
+
+		discoveryObserver.observe(document.body, {
 			childList: true,
 			subtree: true
 		});
-		
-		// Process any existing overlay containers
+
+		discoverItemsContainers(document.body);
 		processExistingOverlayContainers();
 	}
 

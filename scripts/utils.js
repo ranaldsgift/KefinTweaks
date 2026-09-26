@@ -1613,13 +1613,24 @@
         syncCustomTopNavActiveState();
     }
 
+    function isCustomMenuCardTreeTarget(target) {
+        if (!target || target.nodeType !== 1 || typeof target.closest !== 'function') return false;
+        if (target.closest('.skinHeader, .mainDrawer, .navDrawer, #app-user-menu, .customMenuOptions, .adminMenuOptions, .userMenuOptions, .headerTabs, .headerRight')) {
+            return false;
+        }
+        return !!(target.closest('.itemsContainer') || target.closest('.card'));
+    }
+
     function ensureCustomMenuLinkObserver() {
         if (customMenuLinkObserver || typeof MutationObserver === 'undefined' || !document.body) {
             return;
         }
 
         let scheduled = false;
-        customMenuLinkObserver = new MutationObserver(() => {
+        customMenuLinkObserver = new MutationObserver((mutations) => {
+            const needsReapply = mutations.some((mutation) => !isCustomMenuCardTreeTarget(mutation.target));
+            if (!needsReapply) return;
+
             if (scheduled) return;
             scheduled = true;
             requestAnimationFrame(() => {
