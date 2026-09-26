@@ -204,14 +204,21 @@
                 display: block;
             }
 
-            .cardScalable:has(.kefin-hover-preview-sibling) .cardOverlayContainer,
-            .cardScalable:has(.kefin-hover-preview-frame[style]:not([style=""])) .cardOverlayContainer {
+            .cardScalable.kefin-hover-preview-active .cardOverlayContainer {
                 background: none !important;
                 pointer-events: none;
                 transition: background 0.3s ease-in-out !important;
             }
         `;
         document.head.appendChild(style);
+    }
+
+    function setHoverPreviewActiveClass(state, active) {
+        if (!state) return;
+        const scalable = state.cardImageContainer?.closest?.('.cardScalable')
+            || state.card?.querySelector?.('.cardScalable');
+        if (!scalable) return;
+        scalable.classList.toggle('kefin-hover-preview-active', !!active);
     }
 
     /**
@@ -929,14 +936,25 @@
                 box.style.width = '';
             }
         }
+        setHoverPreviewActiveClass(state, false);
     }
 
     function teardown() {
         if (!currentCardState) return;
         const state = currentCardState;
-        if (state._cardMouseLeaveHandler && state.card) {
-            state.card.removeEventListener('mouseleave', state._cardMouseLeaveHandler);
-            state._cardMouseLeaveHandler = null;
+        if (state.card) {
+            if (state._cardMouseLeaveHandler) {
+                state.card.removeEventListener('mouseleave', state._cardMouseLeaveHandler);
+                state._cardMouseLeaveHandler = null;
+            }
+            if (state._cardMouseMoveHandler) {
+                state.card.removeEventListener('mousemove', state._cardMouseMoveHandler);
+                state._cardMouseMoveHandler = null;
+            }
+            if (state._cardClickHandler) {
+                state.card.removeEventListener('click', state._cardClickHandler);
+                state._cardClickHandler = null;
+            }
         }
         clearActivationTimer();
         stopHoverPreview();
@@ -1009,6 +1027,7 @@
 
         container.after(wrapper);
         state._videoPreviewWrapper = wrapper;
+        setHoverPreviewActiveClass(state, true);
 
         const videoUrl = `${baseUrl}/Videos/${videoId}/stream?static=true&startTimeTicks=${startTimeTicks}&ApiKey=${token}`;
         const video = document.createElement('video');
@@ -1108,11 +1127,13 @@
                 box.appendChild(frame);
                 box._frame = frame;
                 container.appendChild(box);
+                setHoverPreviewActiveClass(state, true);
             }
             const frameEl = box._frame || box.firstElementChild || box;
 
             box.style.width = cw + 'px';
             box.style.height = ch + 'px';
+            setHoverPreviewActiveClass(state, true);
 
             const positionTicks = state.hoverPreviewPositionTicks || 0;
 
@@ -1235,7 +1256,15 @@
         function handleCardMouseLeave() {
             teardown();
         }
+        function handleCardMouseMove(e) {
+            onCardMouseMove(e);
+        }
+        function handleCardClick(e) {
+            onCardClick(e);
+        }
         card.addEventListener('mouseleave', handleCardMouseLeave);
+        card.addEventListener('mousemove', handleCardMouseMove);
+        card.addEventListener('click', handleCardClick);
         currentCardState = {
             card: card,
             cardImageContainer: ctx.cardImageContainer,
@@ -1250,7 +1279,9 @@
             hoverPreviewLastTs: 0,
             hoverPreviewPositionTicks: 0,
             hoverPreviewFrameAccumMs: 0,
-            _cardMouseLeaveHandler: handleCardMouseLeave
+            _cardMouseLeaveHandler: handleCardMouseLeave,
+            _cardMouseMoveHandler: handleCardMouseMove,
+            _cardClickHandler: handleCardClick
         };
         // Scrub overlay stays hidden when there is no trickplay; video hover still attaches.
         if (!noTrickplay) {
@@ -1307,6 +1338,7 @@
     }
 
     function onDelegatedMouseOver(e) {
+        if (!e.target?.closest?.('.itemsContainer, .detailImageContainer')) return;
         const ctx = resolveCardFromElement(e.target);
         if (!ctx) return;
         if (currentCardState && currentCardState.card === ctx.card) return;
@@ -1314,18 +1346,11 @@
         attachCard(ctx);
     }
 
-    function onDelegatedMouseMove(e) {
-        const ctx = resolveCardFromElement(e.target);
-        if (!ctx) {
-            if (currentCardState) teardown();
-            return;
-        }
-        if (currentCardState && ctx.card !== currentCardState.card) {
-            teardown();
-            attachCard(ctx);
-        }
+    function onCardMouseMove(e) {
         if (!currentCardState) return;
         const state = currentCardState;
+        const card = state.card;
+        if (!card || (e.target && card.contains && !card.contains(e.target))) return;
 
         // Do not activate scrubber when hovering overlay action buttons (play/resume, watched, watchlist, etc.)
         if (e.target && e.target.closest && e.target.closest('.cardOverlayButton, .cardOverlayButton-br')) {
@@ -1368,17 +1393,11 @@
         }
     }
 
-    function onDelegatedMouseOut(e) {
-        const related = resolveCardFromElement(e.relatedTarget);
-        if (related) return;
-        teardown();
-    }
-
-    function onDelegatedClick(e) {
-        const ctx = resolveCardFromElement(e.target);
-        if (!ctx || !currentCardState || ctx.card !== currentCardState.card) return;
+    function onCardClick(e) {
+        if (!currentCardState) return;
         const overlay = currentCardState.overlay;
         if (!overlay) return;
+        if (!currentCardState.card.contains(e.target)) return;
 
         if (overlay._popoverOpen && overlay._popover && !overlay._popover.contains(e.target) && currentCardState.card.contains(e.target)) {
             hidePopoverState();
@@ -1456,11 +1475,8 @@
 
     function init() {
         const root = getDelegationRoot();
-        root.addEventListener('mouseover', onDelegatedMouseOver, true);
-        root.addEventListener('mousemove', onDelegatedMouseMove, true);
-        root.addEventListener('mouseout', onDelegatedMouseOut, true);
-        root.addEventListener('click', onDelegatedClick, true);
-        LOG('Initialized (event delegation)');
+        root.addEventListener('mouseover', onDelegatedMouseOver, false);
+        LOG('Initialized (scoped enter + card-local move/click)');
     }
 
     if (document.readyState === 'loading') {
