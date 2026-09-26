@@ -967,14 +967,24 @@
 	}
 }
 
+/* Match .cardText line boxes so skeleton→real swap does not shift section height */
 .skeleton-text-line {
 	display: inline-block;
-	height: 1em;
-	max-width: 100%;
 	border-radius: 4px;
 	background: rgba(255, 255, 255, 0.12);
 	animation: skeleton-pulse 1.5s ease-in-out infinite;
-	vertical-align: middle;
+}
+.cardText-first .skeleton-text-line {
+	padding: 0 22.5% !important;
+}
+.cardText-secondary .skeleton-text-line {
+	padding: 0 15% !important;
+}
+.cardText-secondary:nth-child(3) .skeleton-text-line {
+	padding: 0 10% !important;
+}
+.skeleton-card .cardText-secondary {
+	opacity: 0.8;
 }
 
 .skeleton-section-title {
