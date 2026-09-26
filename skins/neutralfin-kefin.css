@@ -1,11 +1,18 @@
 .series-episodes-section {
-    grid-column: 1 / 5;
+	grid-column: 1 / 5;
 }
 
-.detailSection:has(.series-episodes-section)>#listChildrenCollapsible {
-    grid-column: 1 / 5;
+.detailSection:has(.series-episodes-section) > #listChildrenCollapsible {
+	grid-column: 1 / 5;
 }
 
 #slides-container {
-    top: calc(var(--appBarHeight) * 2 + 1.25em) !important;
+	top: calc(var(--appBarHeight) * 2 + 1.25em) !important;
+}
+
+.skinHeader
+	.headerTabs.sectionTabs
+	.emby-tabs-slider
+	> .emby-tab-button.kefin-custom-menu-top-link[data-kefin-custom-menu-top-link^="Watchlist||"]::before {
+	content: "bookmark";
 }

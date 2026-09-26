@@ -1,28 +1,35 @@
 .slide .watchlist-button:not(:hover) {
-    background: transparent;
+	background: transparent;
 }
 
 .docspinner {
-    contain: layout style size;
-    top: 1em;
-    right: calc(1em + 7px);
-    left: unset;
-    position: fixed;
-    width: 3em;
-    height: 3em;
-    z-index: 9999999;
-    margin: 0;
-    pointer-events: none;
+	contain: layout style size;
+	top: 1em;
+	right: calc(1em + 7px);
+	left: unset;
+	position: fixed;
+	width: 3em;
+	height: 3em;
+	z-index: 9999999;
+	margin: 0;
+	pointer-events: none;
 }
 
-:root{
-    --appBarHeight: 5em;
+:root {
+	--appBarHeight: 5em;
 }
 
 .series-episodes-section {
-    grid-column: 1 / 5;
+	grid-column: 1 / 5;
 }
 
-.detailSection:has(.series-episodes-section)>#listChildrenCollapsible {
-    grid-column: 1 / 5;
+.detailSection:has(.series-episodes-section) > #listChildrenCollapsible {
+	grid-column: 1 / 5;
+}
+
+.skinHeader
+	.headerTabs.sectionTabs
+	.emby-tabs-slider
+	> .emby-tab-button.kefin-custom-menu-top-link[data-kefin-custom-menu-top-link^="Watchlist||"]::before {
+	content: "bookmark";
 }

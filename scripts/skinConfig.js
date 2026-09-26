@@ -395,6 +395,7 @@
                         majorServerVersions: [10, 11, 12],
                         urls: [
                             'https://cdn.jsdelivr.net/gh/ya0903/NetFin@main/netfin.css',
+                            `${getKefinTweaksRoot()}skins/netfin-kefin.css`,
                         ]
                     },
                 ],
