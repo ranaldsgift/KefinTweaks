@@ -5665,8 +5665,17 @@
             return;
         }
 
+        let scheduled = false;
         appUserMenuConfigObserver = new MutationObserver(() => {
-            addConfigButtonToAppUserMenu();
+            if (document.querySelector('[data-kefintweaks-user-menu-config-button]')) {
+                return;
+            }
+            if (scheduled) return;
+            scheduled = true;
+            requestAnimationFrame(() => {
+                scheduled = false;
+                addConfigButtonToAppUserMenu();
+            });
         });
 
         appUserMenuConfigObserver.observe(document.body, {
