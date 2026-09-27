@@ -359,10 +359,28 @@
     // ----- Custom menu links (placements: side / top main|right / userMenu) -----
     const customMenuLinkRegistry = [];
     let customMenuLinkObserver = null;
+    let customMenuLinkReapplyDepth = 0;
     const FAVORITES_HREF = '#/home?tab=1';
     const DEFAULT_CUSTOM_MENU_SELECTOR = '.customMenuOptions';
     const ADMIN_MENU_SELECTOR = '.adminMenuOptions';
     const USER_MENU_SELECTOR = '.userMenuOptions';
+    const KEFIN_CUSTOM_MENU_OWNED_SEL = [
+        '[data-kefin-custom-menu-link]',
+        '[data-kefin-custom-menu-top-link]',
+        '[data-kefin-custom-menu-top-right]',
+        '[data-kefin-custom-menu-more]',
+        '[data-kefin-custom-overflow-menu]',
+        '.kefin-custom-menu-top-divider'
+    ].join(', ');
+
+    function withCustomMenuReapplySuppressed(fn) {
+        customMenuLinkReapplyDepth += 1;
+        try {
+            return fn();
+        } finally {
+            customMenuLinkReapplyDepth -= 1;
+        }
+    }
 
     function findByDataAttr(root, attr, value) {
         if (!root) return null;
@@ -987,35 +1005,39 @@
 
     function insertByMainOrder(parent, el, order) {
         const idx = Math.max(0, Math.floor(order));
-        const ref = parent.children[idx];
+        const siblings = Array.from(parent.children).filter((c) => c !== el);
+        const ref = siblings[idx] || null;
+        if (el.parentNode === parent && el.nextSibling === ref) return;
         if (ref) parent.insertBefore(el, ref);
         else parent.appendChild(el);
     }
 
     function insertByRightOrder(parent, el, order) {
         const n = Math.max(0, Math.floor(order));
+        const siblings = Array.from(parent.children).filter((c) => c !== el);
+        let ref = null;
+
         if (isModernUI()) {
             if (n === 0) {
-                parent.appendChild(el);
-                return;
+                ref = null; // append → last
+            } else {
+                const idx = Math.max(0, siblings.length - n);
+                ref = siblings[idx] || null;
             }
-            const idx = Math.max(0, parent.children.length - n);
-            const ref = parent.children[idx];
-            if (ref) parent.insertBefore(el, ref);
-            else parent.insertBefore(el, parent.firstChild);
-            return;
+        } else {
+            // Legacy headerRight: last two children are cast/user controls — keep them rightmost
+            const reserved = 2;
+            const idx = siblings.length - reserved - n;
+            if (idx <= 0) {
+                ref = siblings[0] || null;
+            } else {
+                ref = siblings[idx] || siblings[0] || null;
+            }
         }
 
-        // Legacy headerRight: last two children are cast/user controls — keep them rightmost
-        const reserved = 2;
-        const idx = parent.children.length - reserved - n;
-        if (idx <= 0) {
-            parent.insertBefore(el, parent.firstChild);
-            return;
-        }
-        const ref = parent.children[idx];
+        if (el.parentNode === parent && el.nextSibling === ref) return;
         if (ref) parent.insertBefore(el, ref);
-        else parent.insertBefore(el, parent.firstChild);
+        else parent.appendChild(el);
     }
 
     function injectIntoTopNavV12(entry) {
@@ -1223,8 +1245,11 @@
         if (Number.isFinite(entry.order)) {
             insertByRightOrder(headerRight, button, entry.order);
         } else if (searchButton) {
+            if (button.parentNode === headerRight && button.nextSibling === searchButton) {
+                return true;
+            }
             headerRight.insertBefore(button, searchButton);
-        } else {
+        } else if (button.parentNode !== headerRight || headerRight.lastElementChild !== button) {
             headerRight.appendChild(button);
         }
         return true;
@@ -1293,7 +1318,7 @@
 
         if (Number.isFinite(entry.order)) {
             insertByRightOrder(parent, el, entry.order);
-        } else {
+        } else if (el.parentNode !== parent || el !== parent.firstElementChild) {
             // Default: as first child of the parent element
             parent.insertBefore(el, parent.firstChild);
         }
@@ -1516,17 +1541,19 @@
     }
 
     function reapplyAllCustomMenuLinks() {
-        if (!document.querySelector('.homePage:not(.hide)')) {
-            removeLegacyTopNavCustomTabLinks();
-        }
-        customMenuLinkRegistry.forEach((entry) => {
-            try {
-                injectOneCustomMenuLink(entry);
-            } catch (err) {
-                ERR('Error re-applying custom menu link:', entry?.name, err);
+        withCustomMenuReapplySuppressed(() => {
+            if (!document.querySelector('.homePage:not(.hide)')) {
+                removeLegacyTopNavCustomTabLinks();
             }
+            customMenuLinkRegistry.forEach((entry) => {
+                try {
+                    injectOneCustomMenuLink(entry);
+                } catch (err) {
+                    ERR('Error re-applying custom menu link:', entry?.name, err);
+                }
+            });
+            syncCustomTopNavActiveState();
         });
-        syncCustomTopNavActiveState();
     }
 
     function parseNavHashParts(hash) {
@@ -1621,6 +1648,26 @@
         return !!(target.closest('.itemsContainer') || target.closest('.card'));
     }
 
+    function isKefinCustomMenuOwnedNode(node) {
+        if (!node) return false;
+        const el = node.nodeType === 1 ? node : node.parentElement;
+        if (!el || typeof el.closest !== 'function') return false;
+        if (el.matches?.(KEFIN_CUSTOM_MENU_OWNED_SEL)) return true;
+        return !!el.closest(KEFIN_CUSTOM_MENU_OWNED_SEL);
+    }
+
+    function mutationShouldTriggerCustomMenuReapply(mutation) {
+        if (isCustomMenuCardTreeTarget(mutation.target)) return false;
+        if (isKefinCustomMenuOwnedNode(mutation.target)) return false;
+
+        const addedEls = Array.from(mutation.addedNodes).filter((n) => n.nodeType === 1);
+        if (addedEls.length > 0 && addedEls.every((n) => isKefinCustomMenuOwnedNode(n))) {
+            return false;
+        }
+
+        return true;
+    }
+
     function ensureCustomMenuLinkObserver() {
         if (customMenuLinkObserver || typeof MutationObserver === 'undefined' || !document.body) {
             return;
@@ -1628,8 +1675,14 @@
 
         let scheduled = false;
         customMenuLinkObserver = new MutationObserver((mutations) => {
-            const needsReapply = mutations.some((mutation) => !isCustomMenuCardTreeTarget(mutation.target));
-            if (!needsReapply) return;
+            if (customMenuLinkReapplyDepth > 0) {
+                return;
+            }
+
+            const needsReapply = mutations.some(mutationShouldTriggerCustomMenuReapply);
+            if (!needsReapply) {
+                return;
+            }
 
             if (scheduled) return;
             scheduled = true;
@@ -1965,13 +2018,8 @@ button[data-kefin-custom-menu-more] .MuiSvgIcon-root {
         upsertCustomMenuLinkRegistry(entry);
         ensureCustomMenuLinkObserver();
 
-        return new Promise((resolve) => {
-            const success = injectOneCustomMenuLink(entry);
-            if (success) {
-                resolve(true);
-                return;
-            }
-        });
+        // Always settle: deferred inject still happens via registry + observer.
+        return withCustomMenuReapplySuppressed(() => !!injectOneCustomMenuLink(entry));
     }
 
     /**
