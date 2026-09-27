@@ -5484,6 +5484,7 @@
         const showAllButton = verticalSection.querySelector('.show-all-button');
         const scrollButtons = verticalSection.querySelector('.emby-scrollbuttons');
         itemsContainer.setAttribute('data-layout', resolved);
+        verticalSection.setAttribute('data-layout', resolved);
         itemsContainer.removeAttribute('data-expanded');
         if (gapless === true) {
             itemsContainer.setAttribute('data-gapless', 'true');
@@ -5939,6 +5940,42 @@
         return readCardPadding(sampleCard);
     }
 
+    function getFullyVisibleCardCount(scroller, cards) {
+        const epsilon = 1;
+        const pad = readScrollerPadding(scroller);
+        const cardPad = readSampleCardPadding(scroller);
+        const endInset = Math.max(pad.right, pad.left);
+        const scrollerRect = scroller.getBoundingClientRect();
+        const currentPosition = getCurrentPosition(scroller);
+        const contentWidth = Math.max(
+            0,
+            scroller.clientWidth - pad.left - endInset
+        );
+        const visibleLeft = scrollerRect.left + currentPosition + pad.left;
+        const visibleRight = visibleLeft + contentWidth;
+        let count = 0;
+        cards.forEach((card, index) => {
+            const cardRect = card.getBoundingClientRect();
+            if (cardRect.width <= 0) return;
+            // Use content box (inside card padding) for visibility
+            const cardContentLeft = cardRect.left + cardPad.left;
+            const cardContentRight = cardRect.right - cardPad.right;
+            if (cardContentLeft >= visibleLeft - epsilon && cardContentRight <= visibleRight + epsilon) {
+                count++;
+            }
+        });
+        return count;
+
+    }
+
+    function getCurrentPosition(scroller) {
+        const v = scroller.style.getPropertyValue('--scroll-x');
+        if (v !== '' && !isNaN(parseFloat(v))) return parseFloat(v);
+        const matrix = new DOMMatrixReadOnly(window.getComputedStyle(scroller).transform);
+        const translateX = matrix.m41 || 0;
+        return Math.abs(translateX);
+    }
+
     /**
      * Max transform/scroll offset so the trailing content edge matches the leading
      * gutter when the skin only pads the left (e.g. Fin --sidePadding), plus the
@@ -5950,6 +5987,13 @@
         // Return --max-scroll if it exists, otherwise set it and return it
         if (scroller.style.getPropertyValue('--max-scroll')) {
             return parseFloat(scroller.style.getPropertyValue('--max-scroll'));
+        }
+
+        // Check if all cards are visible
+        const cards = scroller.querySelectorAll('.itemsContainer > .card:not(.card-layout-dummy):not(.skeleton-card)');
+        const fullyVisible = getFullyVisibleCardCount(scroller, cards);
+        if (fullyVisible === cards.length) {
+            return 0;
         }
 
 
@@ -6571,7 +6615,7 @@
         verticalSection.appendChild(scrollButtons);
         verticalSection.appendChild(scroller);
 
-
+        registerScrollSectionScrollButtons(verticalSection);
         return verticalSection;
     }
 
@@ -7178,6 +7222,40 @@
         );
         scroller.style.setProperty('--max-scroll', String(maxScroll));
         applyScrollButtonState(verticalSection);
+    }
+
+    /**
+     * Ensure scroll section visibility observer exists. When a section becomes visible, runs updateScrollButtonStateForSection once then unobserves.
+     */
+    function getScrollSectionVisibilityObserver() {
+        if (scrollSectionVisibilityObserver) return scrollSectionVisibilityObserver;
+        scrollSectionVisibilityObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (!entry.isIntersecting) return;
+                const verticalSection = entry.target;
+                scrollSectionVisibilityObserver.unobserve(verticalSection);
+                updateScrollButtonStateForSection(verticalSection);
+            });
+        }, { root: null, threshold: 0.01 });
+        return scrollSectionVisibilityObserver;
+    }
+
+    /**
+     * Register a scrollable section: when it becomes visible, set --max-scroll once and apply initial button state.
+     */
+    function registerScrollSectionScrollButtons(verticalSection) {
+        const itemsContainer = verticalSection.querySelector('.itemsContainer');
+        const scroller = verticalSection.querySelector('.emby-scroller');
+        const first = itemsContainer && itemsContainer.firstElementChild;
+        const last = itemsContainer && itemsContainer.lastElementChild;
+        if (!first || !last) {
+            if (scroller) {
+                scroller.style.setProperty('--max-scroll', '0');
+                applyScrollButtonState(verticalSection);
+            }
+            return;
+        }
+        getScrollSectionVisibilityObserver().observe(verticalSection);
     }
 
     /**
