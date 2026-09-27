@@ -1693,15 +1693,11 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
 	display: none;
 }
 
-#reactRoot:not(.kefin-custom-page-active) .pageTitle {
-	display: none !important;
-}
-
-#reactRoot:not(.kefin-custom-page-active) .skinBody #fallbackPage > * {
+#reactRoot:not(.kefin-custom-page-active):not([data-kefin-fallback-ready]) .skinBody #fallbackPage > * {
 	display: none;
 }
 
-#reactRoot:not(.kefin-custom-page-active) #fallbackPage::after {
+#reactRoot:not(.kefin-custom-page-active):not([data-kefin-fallback-ready]) #fallbackPage::after {
 	content: '';
 	display: inline-block;
 	width: 20px;
@@ -1714,6 +1710,11 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
 	left: 50%;
 	transform: translateX(-50%);
 	top: 1em;
+}
+
+#reactRoot[data-kefin-fallback-ready] #fallbackPage::after {
+	display: none !important;
+	content: none !important;
 }
 
 #reactRoot.kefin-custom-page-active .backdropImage {

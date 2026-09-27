@@ -2535,10 +2535,6 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
 	display: none;
 }
 
-#reactRoot:not(.kefin-custom-page-active) .pageTitle {
-	display: none !important;
-}
-
 #reactRoot:not(.kefin-custom-page-active):not([data-kefin-fallback-ready]) .skinBody #fallbackPage > * {
 	display: none;
 }
@@ -3020,6 +3016,8 @@ main.MuiBox-root .customPage.libraryPage:not(.noSecondaryNavPage)[data-kefin-cus
         getWatchlistUrl
     };
     
+    // Refresh an older installer's stylesheet even when no custom page registers.
+    if (document.getElementById('kefin-custom-page-styles')) ensureCustomPageStyles();
     ensureNavigationChromeHandler();
     LOG('Initialized successfully');
     LOG('Available at window.KefinTweaksUtils');
