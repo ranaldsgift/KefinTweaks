@@ -472,7 +472,11 @@
     
     // DOM manipulation
     function isModernUI() {
-        return !!document.querySelector('main.MuiBox-root') || localStorage.getItem('layout')?.length === 0;
+        if (ApiClient._appVersion && ApiClient._appVersion.startsWith('12') && localStorage.getItem('layout')?.length === 0) {
+            return true;
+        }
+
+        return !!document.querySelector('main.MuiBox-root');
     }
 
     function resolveBreadcrumbMount() {
@@ -861,7 +865,7 @@
             }
             
             // Extract item ID
-            if (!item || !item.Id) {
+            if (!item || !item.Id || (item.Type !== 'Series' && item.Type !== 'Season' && item.Type !== 'Episode')) {
                 clearBreadcrumbs();
                 hideBreadcrumbs();
                 return;
