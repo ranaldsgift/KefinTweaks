@@ -4056,11 +4056,11 @@ html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"
 	display: none !important;
 }
 
-.spotlight-section .spotlight-item:has(.spotlight-background-layer-center) .spotlight-background-layer {
+.spotlight-section[data-tile-count="3"] .spotlight-background-layer {
 	width: 37.5%;
 }
 
-.emby-scroller-container .emby-scrollbuttons:has([data-direction="right"]:disabled):has([data-direction="left"]:disabled) {
+.emby-scroller-container[data-no-scroll="true"] .emby-scrollbuttons {
 	display: none;
 }
 
@@ -4072,7 +4072,7 @@ html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"
 	display: none !important;
 }
 
-.spotlight-section[data-size="full"] .spotlight-truncated-list.itemDetailsGroup:has(> .detailsGroupItem),
+/* .spotlight-section[data-size="full"] .spotlight-truncated-list.itemDetailsGroup:has(> .detailsGroupItem),
 .spotlight-section[data-size="full"] .spotlight-truncated-list.sectionTabs:has(> .emby-tab-button) {
 	font-size: large;
 	display: flex;
@@ -4105,7 +4105,7 @@ html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"
 
 .emby-scroller-container[data-border-style="profile"] .card .cardTextStack:has(.cardText:nth-child(2):last-child) .cardText-first {
 	margin-top: auto;
-}
+} */
 
 .layout-mobile .spotlight-section[data-hide-section-name="true"] .spotlight-section-title,
 .layout-mobile .spotlight-section[data-hide-section-name="true"] .spotlight-section-title.sectionTabs,

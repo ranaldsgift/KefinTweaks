@@ -540,18 +540,11 @@ html:not([data-active-page="home"]) .snowverlay {
 	}
 }
 
-main.MuiBox-root .homeSectionsContainer[data-sections-rendered] {
-	margin-top: 3rem;
-}
-
 html[data-active-page="home"] body[data-seasonal-background="true"] .backdropContainer .backdropImage {
 	background: none !important;
 }
 
-html[data-active-page="home"]
-	body[data-seasonal-background="true"]:has(.homePage:not(.hide))
-	#reactRoot:has(.homePage:not(.hide) #homeTab.is-active)
-	> .backgroundContainer::after {
+html[data-active-page="home"] body[data-seasonal-background="true"] #reactRoot > .backgroundContainer::after {
 	content: "";
 	position: absolute;
 	top: 0;
@@ -563,7 +556,8 @@ html[data-active-page="home"]
 	background-size: cover;
 }
 
-.homeSectionsContainer:has(> .verticalSection.section0:empty):has(> .verticalSection.section1:empty):has(
+/* Figure out a better way to do this without requiring :has() */
+/* .homeSectionsContainer:has(> .verticalSection.section0:empty):has(> .verticalSection.section1:empty):has(
 		> .verticalSection.section2:empty
 	):has(> .verticalSection.section3:empty):has(> .verticalSection.section4:empty):has(> .verticalSection.section5:empty):has(
 		> .verticalSection.section6:empty
@@ -578,3 +572,4 @@ html[data-active-page="home"]
 	opacity: 0;
 	visibility: hidden;
 }
+ */
