@@ -33,8 +33,12 @@
 
     let inContinuousVideoSession = false;
     let isAddingOsdButton = false;
-    let osdButtonObserver = null;
-    let osdButtonObserverTimeout = null;
+    /** Poll timer for injecting WT button once OSD header mounts (no MutationObserver). */
+    let osdButtonPollTimer = null;
+    const OSD_POLL_INTERVAL_MS = 100;
+    const OSD_POLL_MAX_MS = 10000;
+
+    const OSD_LOG = (...args) => console.log('[KefinTweaks WatchTogether][osd]', ...args);
 
     function getUi() {
         return window.KefinTweaksUI || {};
@@ -1308,46 +1312,45 @@
 
     function handleVideoPageLeave() {
         inContinuousVideoSession = false;
-        disconnectOsdButtonObserver();
+        clearOsdButtonPoll('leave');
     }
 
     function watchTogetherOsdButtonExists() {
-        return !!document.querySelector('.skinBody .skinHeader button.btnWatchTogether');
+        return !!document.querySelector('.skinHeader.osdHeader button.btnWatchTogether');
     }
 
-    function disconnectOsdButtonObserver() {
-        if (osdButtonObserver) {
-            osdButtonObserver.disconnect();
-            osdButtonObserver = null;
-        }
-        if (osdButtonObserverTimeout != null) {
-            clearTimeout(osdButtonObserverTimeout);
-            osdButtonObserverTimeout = null;
-        }
+    function clearOsdButtonPoll(reason) {
+        if (osdButtonPollTimer == null) return;
+        clearInterval(osdButtonPollTimer);
+        osdButtonPollTimer = null;
+        OSD_LOG('poll cleared', reason || 'unknown');
     }
 
     function ensureWatchTogetherOsdButton() {
         addWatchTogetherOsdButton();
         if (watchTogetherOsdButtonExists()) {
-            disconnectOsdButtonObserver();
+            clearOsdButtonPoll('already-present');
             return;
         }
-        if (osdButtonObserver) return;
+        if (osdButtonPollTimer != null) return;
 
-        const root = document.getElementById('reactRoot') || document.body;
-        if (!root) return;
-
-        osdButtonObserver = new MutationObserver(() => {
-            if (!document.querySelector('.skinHeader.osdHeader')) return;
+        const startedAt = Date.now();
+        let tick = 0;
+        OSD_LOG('poll start', { intervalMs: OSD_POLL_INTERVAL_MS, maxMs: OSD_POLL_MAX_MS });
+        osdButtonPollTimer = setInterval(() => {
+            tick += 1;
+            const elapsed = Date.now() - startedAt;
             addWatchTogetherOsdButton();
             if (watchTogetherOsdButtonExists()) {
-                disconnectOsdButtonObserver();
+                clearOsdButtonPoll('success');
+                OSD_LOG('poll success', { tick, elapsedMs: elapsed });
+                return;
             }
-        });
-        osdButtonObserver.observe(root, { childList: true, subtree: true });
-        osdButtonObserverTimeout = setTimeout(() => {
-            disconnectOsdButtonObserver();
-        }, 30000);
+            if (elapsed >= OSD_POLL_MAX_MS) {
+                clearOsdButtonPoll('timeout');
+                OSD_LOG('poll timeout', { tick, elapsedMs: elapsed });
+            }
+        }, OSD_POLL_INTERVAL_MS);
     }
 
     function createWatchTogetherOsdButton(anchor = null) {
@@ -1389,26 +1392,20 @@
 
         isAddingOsdButton = true;
 
-        // Drop any legacy bottom-OSD button from older builds
-        const existingButtons = document.querySelectorAll('#videoOsdPage button.btnWatchTogether');
-        if (existingButtons && existingButtons.length > 0) {
-            isAddingOsdButton = false;
-            return;
-        }
-
-        if (watchTogetherOsdButtonExists()) {
-            updateWatchTogetherOsdButtonActiveState();
-            isAddingOsdButton = false;
-            return;
-        }
-
-        const osdHeader = document.querySelector('.skinBody .skinHeader.osdHeader, #reactRoot > div:not([style*="display: none"]) > .skinHeader.osdHeader');
-        if (!osdHeader) {
-            isAddingOsdButton = false;
-            return;
-        }
-
         try {
+            // Drop any legacy bottom-OSD button from older builds
+            document.querySelectorAll('#videoOsdPage button.btnWatchTogether').forEach((btn) => btn.remove());
+
+            if (watchTogetherOsdButtonExists()) {
+                updateWatchTogetherOsdButtonActiveState();
+                return;
+            }
+
+            const osdHeader = document.querySelector('.skinBody .skinHeader.osdHeader, #reactRoot > div:not([style*="display: none"]) > .skinHeader.osdHeader');
+            if (!osdHeader) {
+                return;
+            }
+
             // v10/v11: header*Button classes; v12 MUI: aria-controls menu ids
             const anchor = osdHeader.querySelector('.headerSyncButton, [aria-controls="app-sync-play-menu"]')
                 || osdHeader.querySelector('.headerCastButton, [aria-controls="app-remote-play-menu"]')
