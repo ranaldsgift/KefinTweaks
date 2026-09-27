@@ -2274,87 +2274,6 @@ html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"
 	z-index: 1;
 }
 
-.emby-scroller-container:has(.itemsContainer[data-layout="grid"]) .emby-scrollbuttons {
-	display: none !important;
-}
-
-.emby-scroller-container:has(.emby-scrollbuttons-button:not(.hide)) .section-controls-more {
-	display: inline-block;
-}
-
-.layout-mobile .emby-scroller-container:has(.overflowPortraitCard:nth-child(4)) button.show-all-button,
-.layout-mobile .emby-scroller-container:has(.overflowPortraitCard:nth-child(4)) .section-controls-more,
-.layout-mobile .emby-scroller-container:has(.overflowBackdropCard:nth-child(3)) button.show-all-button,
-.layout-mobile .emby-scroller-container:has(.overflowBackdropCard:nth-child(3)) .section-controls-more {
-	display: inline-block;
-}
-
-.spotlight-section .spotlight-item:has(.spotlight-background-layer-center) .spotlight-background-layer {
-	width: 37.5%;
-}
-
-.emby-scroller-container .emby-scrollbuttons:has([data-direction="right"]:disabled):has([data-direction="left"]:disabled) {
-	display: none;
-}
-
-.spotlight-truncated-list:has(.spotlight-truncated-list-tooltip) {
-	overflow: visible;
-}
-
-.emby-scroller-container:has(.itemsContainer[data-layout="grid"]) .emby-scrollbuttons {
-	display: none !important;
-}
-
-:has(.spotlight-section[data-layout="Borderless"]) .homeSectionsContainer > *:not(.spotlight-section) {
-	z-index: 1;
-}
-
-.spotlight-section[data-size="full"] .spotlight-truncated-list.itemDetailsGroup:has(> .detailsGroupItem),
-.spotlight-section[data-size="full"] .spotlight-truncated-list.sectionTabs:has(> .emby-tab-button) {
-	font-size: large;
-	display: flex;
-	align-items: center;
-	align-self: start;
-}
-
-.spotlight-section .itemDetailsGroup:has(.detailsGroupItem:not(.hide)),
-.spotlight-section .sectionTabs:not(.spotlight-section-title):has(.emby-tab-button:not(.hide)) {
-	margin: 0px !important;
-	padding: 0px !important;
-	width: initial !important;
-	min-width: initial !important;
-}
-
-.spotlight-section:not(.hide) span.emby-tab-button.emby-tab-button-active:not(:has(a)) {
-	cursor: default;
-}
-
-.layout-mobile .spotlight-section .spotlight-section-title.sectionTabs:has(.emby-tab-button:not(.hide)) {
-	justify-self: center;
-	display: flex !important;
-	justify-content: center;
-}
-
-.layout-mobile .spotlight-section .spotlight-section-title.sectionTabs:has(.emby-tab-button:not(.hide)) > * {
-	display: block !important;
-	padding: 0.25em 0.5em !important;
-}
-
-.layout-mobile .spotlight-section[data-hide-section-name="true"] .spotlight-section-title,
-.layout-mobile .spotlight-section[data-hide-section-name="true"] .spotlight-section-title.sectionTabs,
-.spotlight-section[data-hide-section-name="true"] .spotlight-section-title.sectionTabs {
-	display: none !important;
-}
-
-.emby-scroller-container:has(.emby-scrollbuttons-button:not(.hide)) button.show-all-button {
-	display: flex;
-}
-
-.layout-mobile .emby-scroller-container:has(.overflowPortraitCard:nth-child(4)) button.show-all-button,
-.layout-mobile .emby-scroller-container:has(.overflowBackdropCard:nth-child(3)) button.show-all-button {
-	display: flex;
-}
-
 /* Section-level card title presentation */
 .verticalSection .cardText,
 .emby-scroller-container .cardText {
@@ -4017,10 +3936,6 @@ html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"
 	white-space: normal;
 }
 
-[data-border-style="profile"] .card .cardTextStack:has(.cardText:nth-child(2):last-child) .cardText-first {
-	margin-top: auto;
-}
-
 [data-border="profile"] .card .cardText-first a,
 [data-border-style="profile"] .card .cardText-first a {
 	color: inherit !important;
@@ -4119,10 +4034,6 @@ html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"
 	min-width: unset;
 }
 
-.custom-scroller-container .emby-scrollbuttons:has(:first-child[disabled]):has(:last-child[disabled]) {
-	display: none;
-}
-
 .missingIndicator,
 .unairedIndicator {
 	background: #c33;
@@ -4139,4 +4050,75 @@ html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"
 	padding-bottom: 0 !important;
 	margin-top: 0 !important;
 	margin-bottom: 0 !important;
+}
+
+.emby-scroller-container[data-layout="grid"] .emby-scrollbuttons {
+	display: none !important;
+}
+
+.spotlight-section .spotlight-item:has(.spotlight-background-layer-center) .spotlight-background-layer {
+	width: 37.5%;
+}
+
+.emby-scroller-container .emby-scrollbuttons:has([data-direction="right"]:disabled):has([data-direction="left"]:disabled) {
+	display: none;
+}
+
+.spotlight-truncated-list:has(.spotlight-truncated-list-tooltip) {
+	overflow: visible;
+}
+
+.emby-scroller-container[data-layout="grid"] .emby-scrollbuttons {
+	display: none !important;
+}
+
+.spotlight-section[data-size="full"] .spotlight-truncated-list.itemDetailsGroup:has(> .detailsGroupItem),
+.spotlight-section[data-size="full"] .spotlight-truncated-list.sectionTabs:has(> .emby-tab-button) {
+	font-size: large;
+	display: flex;
+	align-items: center;
+	align-self: start;
+}
+
+.spotlight-section .itemDetailsGroup:has(.detailsGroupItem:not(.hide)),
+.spotlight-section .sectionTabs:not(.spotlight-section-title):has(.emby-tab-button:not(.hide)) {
+	margin: 0px !important;
+	padding: 0px !important;
+	width: initial !important;
+	min-width: initial !important;
+}
+
+.spotlight-section:not(.hide) span.emby-tab-button.emby-tab-button-active:not(:has(a)) {
+	cursor: default;
+}
+
+.layout-mobile .spotlight-section .spotlight-section-title.sectionTabs:has(.emby-tab-button:not(.hide)) {
+	justify-self: center;
+	display: flex !important;
+	justify-content: center;
+}
+
+.layout-mobile .spotlight-section .spotlight-section-title.sectionTabs:has(.emby-tab-button:not(.hide)) > * {
+	display: block !important;
+	padding: 0.25em 0.5em !important;
+}
+
+.emby-scroller-container[data-border-style="profile"] .card .cardTextStack:has(.cardText:nth-child(2):last-child) .cardText-first {
+	margin-top: auto;
+}
+
+.layout-mobile .spotlight-section[data-hide-section-name="true"] .spotlight-section-title,
+.layout-mobile .spotlight-section[data-hide-section-name="true"] .spotlight-section-title.sectionTabs,
+.spotlight-section[data-hide-section-name="true"] .spotlight-section-title.sectionTabs {
+	display: none !important;
+}
+
+.spotlight-section {
+	pointer-events: none;
+}
+
+.spotlight-section .spotlight-section-title-container,
+.spotlight-section .spotlight-nav-container,
+.spotlight-section .spotlight-overlay * {
+	pointer-events: all;
 }

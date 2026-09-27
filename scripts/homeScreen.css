@@ -270,27 +270,6 @@ div#discovery-loading-indicator:not(.show)::after {
 	display: none;
 }
 
-body[data-seasonal-background="true"]:has(.homePage:not(.hide))
-	#reactRoot:has(.homePage:not(.hide) #homeTab.is-active)
-	> .backdropContainer
-	.backdropImage {
-	background: none !important;
-}
-
-body[data-seasonal-background="true"]:has(.homePage:not(.hide))
-	#reactRoot:has(.homePage:not(.hide) #homeTab.is-active)
-	> .backgroundContainer::after {
-	content: "";
-	position: absolute;
-	top: 0;
-	left: 0;
-	right: 0;
-	bottom: 0%;
-	background: linear-gradient(rgba(0, 0, 0, 0.65), rgba(0, 0, 0, 0.85)), var(--seasonal-background-image);
-	background-position: center;
-	background-size: cover;
-}
-
 .homePage[data-discovery-ready] div#discovery-loading-indicator:not(.show) {
 	min-height: 50px;
 }
@@ -305,16 +284,6 @@ body[data-seasonal-background="true"]:has(.homePage:not(.hide))
 		opacity: 1;
 		visibility: visible;
 	}
-}
-
-.homeSectionsContainer:not(:has([data-page]), :has([data-section-id])):not([data-sections-rendered])::after {
-	content: "Customize your Home Screen from your User Settings > Home in the top right corner.";
-	text-align: center;
-	margin: 3em auto;
-	display: block;
-	animation: fadeInDelayed 0.1s linear 3s forwards;
-	opacity: 0;
-	visibility: hidden;
 }
 
 [data-section-id="browse-by-studio"] .card {
@@ -550,9 +519,6 @@ html:not([data-active-page="home"]) #kefin-home-create-section-btn {
 	}
 }
 
-body:not(:has(#slides-container)):has(.MuiBox-root) .homeSectionsContainer:has([data-section-id]) {
-	margin-top: 3rem;
-}
 #kefin-home-category-rail .kefin-home-category-rail {
 	height: auto !important;
 }
@@ -572,4 +538,43 @@ html:not([data-active-page="home"]) .snowverlay {
 	.snowverlay {
 		display: none !important;
 	}
+}
+
+main.MuiBox-root .homeSectionsContainer[data-sections-rendered] {
+	margin-top: 3rem;
+}
+
+html[data-active-page="home"] body[data-seasonal-background="true"] .backdropContainer .backdropImage {
+	background: none !important;
+}
+
+html[data-active-page="home"]
+	body[data-seasonal-background="true"]:has(.homePage:not(.hide))
+	#reactRoot:has(.homePage:not(.hide) #homeTab.is-active)
+	> .backgroundContainer::after {
+	content: "";
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0%;
+	background: linear-gradient(rgba(0, 0, 0, 0.65), rgba(0, 0, 0, 0.85)), var(--seasonal-background-image);
+	background-position: center;
+	background-size: cover;
+}
+
+.homeSectionsContainer:has(> .verticalSection.section0:empty):has(> .verticalSection.section1:empty):has(
+		> .verticalSection.section2:empty
+	):has(> .verticalSection.section3:empty):has(> .verticalSection.section4:empty):has(> .verticalSection.section5:empty):has(
+		> .verticalSection.section6:empty
+	):has(> .verticalSection.section7:empty):has(> .verticalSection.section8:empty):has(> .verticalSection.section9:empty):not(
+		:has(> .section9 ~ :not(.discovery-loading-indicator))
+	)::after {
+	content: "Customize your Home Screen from your User Settings > Home in the top right corner.";
+	text-align: center;
+	margin: 3em auto;
+	display: block;
+	animation: fadeInDelayed 0.1s linear 1s forwards;
+	opacity: 0;
+	visibility: hidden;
 }
