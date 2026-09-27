@@ -2734,12 +2734,13 @@
         if (!canvas || !pixels || !canvas.isConnected) return false;
         const w = canvas.width || 20;
         const h = canvas.height || 20;
-        const ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
         if (!ctx) return false;
 
         const imageData = ctx.createImageData(w, h);
         imageData.data.set(pixels);
         ctx.putImageData(imageData, 0, 0);
+        canvas.setAttribute('data-blurhash-painted', 'true');
         canvas.removeAttribute('data-blurhash-pending');
 
         const cardImageContainer = canvas.nextElementSibling;
@@ -5976,6 +5977,10 @@
         return Math.abs(translateX);
     }
 
+    function setMaxScrollPosition(scroller, maxScroll) {
+        scroller.style.setProperty('--max-scroll', String(maxScroll));
+    }
+
     /**
      * Max transform/scroll offset so the trailing content edge matches the leading
      * gutter when the skin only pads the left (e.g. Fin --sidePadding), plus the
@@ -5993,9 +5998,9 @@
         const cards = scroller.querySelectorAll('.itemsContainer > .card:not(.card-layout-dummy):not(.skeleton-card)');
         const fullyVisible = getFullyVisibleCardCount(scroller, cards);
         if (fullyVisible === cards.length) {
+            setMaxScrollPosition(scroller, 0);
             return 0;
         }
-
 
         const { left, right } = pad || { left: 0, right: 0 };
         const cp = cardPad || { left: 0, right: 0 };
@@ -6003,7 +6008,7 @@
         const base = Math.max(0, (scroller.scrollWidth - scroller.clientWidth) + endInset);
         // Last-card right scroll: include card L+R padding in the end stop
         const maxScroll = base + (cp.left || 0) + (cp.right || 0);
-        scroller.style.setProperty('--max-scroll', String(maxScroll));
+        setMaxScrollPosition(scroller, maxScroll);
         return maxScroll;
     }
 
@@ -6952,17 +6957,9 @@
             // Unload restore: always prefer blurhash when available (ignore reduced-motion / saveData)
             if (!canvas.hasAttribute('data-blurhash-pending') && canvas.classList.contains('lazy-hidden')) {
                 // Re-show existing painted blurhash, or re-queue decode
-                const hasPixels = (() => {
-                    try {
-                        const ctx = canvas.getContext('2d');
-                        if (!ctx) return false;
-                        const sample = ctx.getImageData(0, 0, 1, 1).data;
-                        return sample[3] > 0;
-                    } catch (e) {
-                        return false;
-                    }
-                })();
+                const hasPixels = canvas.hasAttribute('data-blurhash-painted');
                 if (!hasPixels) {
+                    canvas.removeAttribute('data-blurhash-painted');
                     canvas.setAttribute('data-blurhash-pending', blurhash);
                     observeBlurhashCanvas(canvas);
                 }
@@ -8139,6 +8136,12 @@
 
             const refreshPromise = section.result?.refreshPromise;
             const hasPendingRefresh = !!refreshPromise;
+            const sectionConfig = section.config;
+            const isSpotlight = !!(sectionConfig?.spotlight || sectionConfig?.renderMode === 'Spotlight');
+            // Non-spotlight Random: keep skeleton until fresh refresh — avoid stale paint → fadeReplace
+            const skipStalePaint = hasPendingRefresh
+                && sectionHasRandomQuerySort(sectionConfig)
+                && !isSpotlight;
 
             // Keep refreshing indicator while a background revalidate is in flight
             sectionElement.dataset.refreshing = hasPendingRefresh ? 'true' : 'false';
@@ -8146,24 +8149,31 @@
             let items = result?.Items ?? result ?? [];
             if (!Array.isArray(items)) items = [];
 
-            // Empty sections: dismiss immediately even if scrolled away
-            if (items.length === 0) {
+            const applyOrDefer = (payload) => {
+                const margin = sectionEnhanceObserverRootMargin || '30% 0px 30% 0px';
+                if (!deferUntilVisible || isSectionWithinEnhanceMargin(sectionElement, margin)) {
+                    applyProgressiveEnhancement(sectionElement, section, payload, enhanceOptions);
+                } else {
+                    // Data ready but section left the enhance margin — wait until it re-enters
+                    delete sectionElement.dataset.enhanceScheduled;
+                    sectionEnhancePending.set(sectionElement, {
+                        section,
+                        options: enhanceOptions,
+                        pendingResult: payload
+                    });
+                    observeSectionForEnhance(sectionElement);
+                }
+            };
+
+            if (skipStalePaint) {
+                // Do not paint stale Random cache or stash it in pending — wait for refreshPromise
+                sectionElement.dataset.refreshing = 'true';
+            } else if (items.length === 0) {
+                // Empty sections: dismiss immediately even if scrolled away
                 applyProgressiveEnhancement(sectionElement, section, result, enhanceOptions);
                 return;
-            }
-
-            const margin = sectionEnhanceObserverRootMargin || '30% 0px 30% 0px';
-            if (!deferUntilVisible || isSectionWithinEnhanceMargin(sectionElement, margin)) {
-                applyProgressiveEnhancement(sectionElement, section, result, enhanceOptions);
             } else {
-                // Data ready but section left the enhance margin — wait until it re-enters
-                delete sectionElement.dataset.enhanceScheduled;
-                sectionEnhancePending.set(sectionElement, {
-                    section,
-                    options: enhanceOptions,
-                    pendingResult: result
-                });
-                observeSectionForEnhance(sectionElement);
+                applyOrDefer(result);
             }
 
             if (!hasPendingRefresh) return;
@@ -8177,11 +8187,19 @@
                     pending.pendingResult = fresh;
                     return;
                 }
+                if (skipStalePaint) {
+                    applyOrDefer(fresh);
+                    return;
+                }
                 applyProgressiveEnhancement(sectionElement, section, fresh, enhanceOptions);
             }).catch((err) => {
                 console.warn('[KefinTweaks CardBuilder] Background refresh failed:', section?.config?.id, err);
                 if (!sectionElement.isConnected) return;
                 sectionElement.dataset.refreshing = 'false';
+                // Random non-spotlight skipped stale paint — fall back so we are not stuck on skeletons
+                if (skipStalePaint) {
+                    applyOrDefer(result);
+                }
             });
         }).catch((err) => {
             console.error('[KefinTweaks CardBuilder] Progressive enhance failed:', section?.config?.id, err);
