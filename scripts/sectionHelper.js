@@ -273,7 +273,12 @@
                         let queryResult;
 
                         if (query.dataSource) {
-                            queryResult = await ApiHelper.fetchFromDataSource(query.dataSource, query.queryOptions || {});
+                            queryResult = await ApiHelper.fetchFromDataSource(
+                                query.dataSource,
+                                query.queryOptions || {},
+                                true,
+                                query.dataSourceOptions
+                            );
                         } else {
                             const queryUrl = ApiHelper.buildQueryFromSection(query, userId, serverUrl, sectionConfig.renderMode === 'Spotlight', { sectionType: sectionConfig.type });
 
@@ -575,7 +580,8 @@
                     : 'getTopActors';
             return {
                 dataSource: `PeopleCache.${method}`,
-                queryOptions: { ItemType: itemType, Limit: 100 }
+                dataSourceOptions: { ItemType: itemType },
+                queryOptions: { Limit: 100 }
             };
         }
         if (discoveryType === 'Similar' || discoveryType === 'Watchlist') {
@@ -676,7 +682,12 @@
         const built = ApiHelper.buildQueryFromSection(sourceQuery, userId, serverUrl, false);
 
         if (typeof built === 'object' && built.dataSource) {
-            const result = await ApiHelper.fetchFromDataSource(built.dataSource, built.options || {}, false);
+            const result = await ApiHelper.fetchFromDataSource(
+                built.dataSource,
+                built.options || {},
+                false,
+                built.dataSourceOptions
+            );
             return unwrapQueryItems(result);
         }
 

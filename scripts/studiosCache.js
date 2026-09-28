@@ -83,22 +83,32 @@
 
     /**
      * Gets popular TV networks (studios) filtered by minimum series count
-     * @param {number} minimumSeries - Minimum number of series required (default: 0, returns all)
+     * @param {number|{ MinCount?: number, minCount?: number, minimumSeries?: number }} minOrOptions
+     *        Minimum series count, or queryOptions bag from fetchFromDataSource
      * @returns {Promise<Array>} - Array of studios meeting the minimum threshold
      */
-    async function getPopularTVNetworks(minimumSeries) {
-        if (!minimumSeries) {
-            minimumSeries = window.KefinTweaksConfig?.HOME_SETTINGS?.minimumSeriesForPopularTVNetworks ?? window.KefinHomeConfig2?.HOME_SETTINGS?.minimumSeriesForPopularTVNetworks;
+    async function getPopularTVNetworks(minOrOptions) {
+        let minimumSeries;
+        if (minOrOptions && typeof minOrOptions === 'object') {
+            minimumSeries = minOrOptions.MinCount ?? minOrOptions.minCount ?? minOrOptions.minimumSeries;
+        } else {
+            minimumSeries = minOrOptions;
+        }
+
+        if (minimumSeries == null || minimumSeries === '') {
+            minimumSeries = window.KefinTweaksConfig?.HOME_SETTINGS?.minimumSeriesForPopularTVNetworks
+                ?? window.KefinHomeConfig2?.HOME_SETTINGS?.minimumSeriesForPopularTVNetworks;
         }
 
         const studios = await getSeriesStudios();
-        
-        if (minimumSeries > 0) {
-            return studios.filter(studio => 
-                (studio.SeriesCount || studio.ChildCount || 0) >= minimumSeries
+        const threshold = Number(minimumSeries);
+
+        if (Number.isFinite(threshold) && threshold > 0) {
+            return studios.filter(studio =>
+                (studio.SeriesCount || studio.ChildCount || 0) >= threshold
             );
         }
-        
+
         return studios;
     }
 

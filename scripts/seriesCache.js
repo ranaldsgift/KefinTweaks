@@ -7,12 +7,12 @@
     const WARN = (...args) => console.warn('[KefinTweaks Series Cache]', ...args);
     const ERR = (...args) => console.error('[KefinTweaks Series Cache]', ...args);
 
-    const CACHE_NAME = 'series_library';
-    const PARTIAL_CACHE_NAME = 'series_library_partial';
+    const CACHE_NAME = 'series_library_v2';
+    const PARTIAL_CACHE_NAME = 'series_library_partial_v2';
     const LAST_FETCH_KEY_PREFIX = 'kefinTweaks_lastDateFetchedSeriesCache_';
     const SERIES_FIELDS = [
         'ProviderIds', 'People', 'Studios', 'Taglines', 'Genres', 'Overview',
-        'PrimaryImageAspectRatio', 'ChildCount', 'RecursiveItemCount'
+        'PrimaryImageAspectRatio', 'ImageBlurHashes', 'ChildCount', 'RecursiveItemCount'
     ].join(',');
 
     let series = null;

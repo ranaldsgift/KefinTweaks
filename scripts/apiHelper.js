@@ -1069,7 +1069,11 @@
             }
             
             if (query.dataSource) {
-                return { dataSource: query.dataSource, options: queryOptions };
+                return {
+                    dataSource: query.dataSource,
+                    options: queryOptions,
+                    dataSourceOptions: query.dataSourceOptions || {}
+                };
             }
             
             return this.buildStandardQuery(queryOptions, userId, serverUrl, buildContext);
@@ -1142,14 +1146,37 @@
         },
         
         /**
+         * Resolve args for a cache dataSource method.
+         * Prefers explicit dataSourceOptions; falls back to legacy ItemType/MinCount in queryOptions.
+         */
+        resolveDataSourceMethodArgs: function(dataSourceOptions, queryOptions) {
+            if (dataSourceOptions && typeof dataSourceOptions === 'object') {
+                const keys = Object.keys(dataSourceOptions);
+                if (keys.length) return { ...dataSourceOptions };
+            }
+            const qo = queryOptions || {};
+            const out = {};
+            if (qo.ItemType != null && qo.ItemType !== '') out.ItemType = qo.ItemType;
+            else if (qo.itemType != null && qo.itemType !== '') out.ItemType = qo.itemType;
+            if (qo.MinCount != null && qo.MinCount !== '') out.MinCount = qo.MinCount;
+            else if (qo.minCount != null && qo.minCount !== '') out.MinCount = qo.minCount;
+            else if (qo.minimumSeries != null && qo.minimumSeries !== '') out.minimumSeries = qo.minimumSeries;
+            return out;
+        },
+
+        /**
          * Fetch from data source (cache-based)
          * @param {string} dataSource - Data source in format "CacheName.methodName"
-         * @param {Object} options - Query options (sorting, limits, etc.)
+         * @param {Object} queryOptions - Post-processing options (SortBy, SortOrder, Limit, etc.)
+         * @param {boolean} [useCache=true]
+         * @param {Object} [dataSourceOptions] - Args passed to the cache method (e.g. ItemType, MinCount)
          * @returns {Object} - Object with data, dataPromise, and isStalePromise
          */
-        fetchFromDataSource: async function(dataSource, options, useCache = true) {
+        fetchFromDataSource: async function(dataSource, queryOptions, useCache = true, dataSourceOptions) {
             const [cacheName, methodName] = dataSource.split('.');
             const cache = window[cacheName];
+            const options = queryOptions || {};
+            const methodArgs = this.resolveDataSourceMethodArgs(dataSourceOptions, options);
             
             if (!cache || !cache[methodName]) {
                 WARN(`Data source not available: ${dataSource}`);
@@ -1161,7 +1188,7 @@
             }
             
             try {
-                let dataPromise = Promise.resolve(cache[methodName](options));
+                let dataPromise = Promise.resolve(cache[methodName](methodArgs));
                 dataPromise = dataPromise.then(data => {
                     if (!Array.isArray(data)) {
                         data = [];

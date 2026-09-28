@@ -7,13 +7,13 @@
     const WARN = (...args) => console.warn('[KefinTweaks Movies Cache]', ...args);
     const ERR = (...args) => console.error('[KefinTweaks Movies Cache]', ...args);
 
-    const CACHE_NAME = 'movies_library';
-    const PARTIAL_CACHE_NAME = 'movies_library_partial';
+    const CACHE_NAME = 'movies_library_v2';
+    const PARTIAL_CACHE_NAME = 'movies_library_partial_v2';
     const LAST_FETCH_KEY_PREFIX = 'kefinTweaks_lastDateFetchedMovieCache_';
     const IMDB_TOP_250_CACHE_TTL = 24 * 60 * 60 * 1000;
     const MOVIE_FIELDS = [
         'ProviderIds', 'People', 'Studios', 'Taglines', 'Genres', 'Overview', 'PrimaryImageAspectRatio',
-        'DateCreated', 'DateLastMediaAdded'
+        'ImageBlurHashes', 'DateCreated', 'DateLastMediaAdded'
     ].join(',');
 
     let movies = null;
@@ -116,7 +116,7 @@
     }
 
     /**
-     * Full crawl with partial resume. Commits to movies_library only when complete.
+     * Full crawl with partial resume. Commits to movies_library_v2 only when complete.
      */
     async function fetchAndCacheMovies() {
         const cache = window.IndexedDBCache;

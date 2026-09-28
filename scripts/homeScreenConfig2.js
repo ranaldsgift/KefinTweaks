@@ -1365,7 +1365,8 @@
                     discoveryItemType: 'Movie',
                     discoverySourceQuery: {
                         dataSource: 'PeopleCache.getTopDirectors',
-                        queryOptions: { ItemType: 'Movie', Limit: 100 }
+                        dataSourceOptions: { ItemType: 'Movie' },
+                        queryOptions: { Limit: 100 }
                     },
                     name: 'Directed by {Person}',
                     enabled: true,
@@ -1392,7 +1393,8 @@
                     discoveryItemType: 'Movie',
                     discoverySourceQuery: {
                         dataSource: 'PeopleCache.getTopWriters',
-                        queryOptions: { ItemType: 'Movie', Limit: 100 }
+                        dataSourceOptions: { ItemType: 'Movie' },
+                        queryOptions: { Limit: 100 }
                     },
                     name: 'Written by {Person}',
                     enabled: true,
@@ -1419,7 +1421,8 @@
                     discoveryItemType: 'Movie',
                     discoverySourceQuery: {
                         dataSource: 'PeopleCache.getTopActors',
-                        queryOptions: { ItemType: 'Movie', Limit: 100 }
+                        dataSourceOptions: { ItemType: 'Movie' },
+                        queryOptions: { Limit: 100 }
                     },
                     name: 'Starring {Person}',
                     enabled: true,
@@ -1970,7 +1973,8 @@
                     discoveryItemType: 'Series',
                     discoverySourceQuery: {
                         dataSource: 'PeopleCache.getTopDirectors',
-                        queryOptions: { ItemType: 'Series', Limit: 100 }
+                        dataSourceOptions: { ItemType: 'Series' },
+                        queryOptions: { Limit: 100 }
                     },
                     name: 'Directed by {Person}',
                     enabled: false,
@@ -1998,7 +2002,8 @@
                     discoveryItemType: 'Series',
                     discoverySourceQuery: {
                         dataSource: 'PeopleCache.getTopWriters',
-                        queryOptions: { ItemType: 'Series', Limit: 100 }
+                        dataSourceOptions: { ItemType: 'Series' },
+                        queryOptions: { Limit: 100 }
                     },
                     name: 'Written by {Person}',
                     enabled: false,
@@ -2026,7 +2031,8 @@
                     discoveryItemType: 'Series',
                     discoverySourceQuery: {
                         dataSource: 'PeopleCache.getTopActors',
-                        queryOptions: { ItemType: 'Series', Limit: 100 }
+                        dataSourceOptions: { ItemType: 'Series' },
+                        queryOptions: { Limit: 100 }
                     },
                     name: 'Starring {Person}',
                     enabled: true,

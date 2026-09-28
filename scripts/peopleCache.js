@@ -7,7 +7,7 @@
     const WARN = (...args) => console.warn('[KefinTweaks PeopleCache]', ...args);
     const ERR = (...args) => console.error('[KefinTweaks PeopleCache]', ...args);
 
-    const CACHE_NAME = 'library_top_people_v3';
+    const CACHE_NAME = 'library_top_people_v4';
     const DEFAULT_MIN = 10;
     const DEFAULT_PER_TYPE_MAX = 100;
     const EPISODE_CHUNK_SIZE = 500;
@@ -337,7 +337,7 @@
         const params = new URLSearchParams({
             IncludeItemTypes: 'Episode',
             Recursive: 'true',
-            Fields: 'People',
+            Fields: 'People,ImageBlurHashes',
             ExcludeLocationTypes: 'Virtual',
             EnableTotalRecordCount: 'false',
             SortBy: 'DateCreated',
@@ -906,7 +906,12 @@
         if (personType === 'Director') list = filterRoleList('Director', itemType);
         else if (personType === 'Writer') list = filterRoleList('Writer', itemType);
         else list = filterRoleList('Actor', itemType);
-        return list.slice(0, limit).map((p) => ({ Id: p.Id, Name: p.Name, Type: 'Person' }));
+        return list.slice(0, limit).map((p) => {
+            const out = { Id: p.Id, Name: p.Name, Type: 'Person' };
+            if (p.PrimaryImageTag) out.PrimaryImageTag = p.PrimaryImageTag;
+            if (p.ImageBlurHashes) out.ImageBlurHashes = p.ImageBlurHashes;
+            return out;
+        });
     }
 
     async function waitForLoginReady(maxWaitMs = 60000) {

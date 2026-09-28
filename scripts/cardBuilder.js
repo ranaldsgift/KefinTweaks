@@ -1138,7 +1138,12 @@
             let queryResult;
 
             if (query.dataSource) {
-                queryResult = await ApiHelper.fetchFromDataSource(query.dataSource, query.queryOptions || {});
+                queryResult = await ApiHelper.fetchFromDataSource(
+                    query.dataSource,
+                    query.queryOptions || {},
+                    true,
+                    query.dataSourceOptions
+                );
             } else {
                 const queryUrl = ApiHelper.buildQueryFromSection(
                     query,
@@ -1234,7 +1239,12 @@
             
             if (query.dataSource) {
                 // Handle cache-based data sources
-                queryResult = await ApiHelper.fetchFromDataSource(query.dataSource, query.queryOptions || {}, false);
+                queryResult = await ApiHelper.fetchFromDataSource(
+                    query.dataSource,
+                    query.queryOptions || {},
+                    false,
+                    query.dataSourceOptions
+                );
             } else {
                 // Build and execute query
                 const queryUrl = ApiHelper.buildQueryFromSection(query, userId, serverUrl, sectionConfig.renderMode === 'Spotlight', { sectionType: sectionConfig.type });

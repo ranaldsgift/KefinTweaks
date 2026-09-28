@@ -5,12 +5,17 @@
 
     function stripPerson(person) {
         if (!person) return null;
-        return {
+        const out = {
             Name: person.Name,
             Id: person.Id,
             Role: person.Role,
             Type: person.Type
         };
+        if (person.PrimaryImageTag) out.PrimaryImageTag = person.PrimaryImageTag;
+        if (person.ImageBlurHashes?.Primary) {
+            out.ImageBlurHashes = { Primary: person.ImageBlurHashes.Primary };
+        }
+        return out;
     }
 
     function stripChapter(chapter) {
