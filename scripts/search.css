@@ -19,27 +19,16 @@ div#smart-search-wrapper:not([style*="display: none"]) ~ #jellyseerr-search-icon
 	right: unset;
 }
 
-.inputContainer.flex-grow:has(.smart-search-wrapper) {
-	display: grid;
-	grid-template-columns: 1fr 30px;
-	gap: 1em;
-}
-
 .smart-search-mode .searchFieldsInner {
 	position: relative;
 }
 
-div#searchPage {
-	padding-top: 3rem !important;
-}
-
-@media (min-width: 600px) {
-	div#searchPage {
-		padding-top: 5rem !important;
-	}
+main.MuiBox-root div#searchPage {
+	padding-top: 2rem !important;
 }
 
 div#searchPage {
+	padding-top: 5rem !important;
 	display: flex;
 	flex-direction: column;
 }
