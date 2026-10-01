@@ -18,6 +18,7 @@
     const ORIGINAL_ATTR = 'data-kefin-original-label';
     const SELECTED_INDEX_ATTR = 'data-selected-index';
     const CHANGE_BOUND_ATTR = 'data-kefin-vp-change-bound';
+    const APPLIED_ATTR = 'data-kefin-vp-applied';
 
     function isNoneSentinel(term) {
         return typeof term === 'string' && term.trim().toLowerCase() === NONE_SENTINEL.toLowerCase();
@@ -174,8 +175,76 @@
         });
     }
 
+    /** True after Kefin has completed one full apply for this select / its track form. */
+    function selectAlreadyKefinModified(select) {
+        if (!select) return false;
+        if (select.hasAttribute(APPLIED_ATTR)) return true;
+        const form = select.closest?.(FORM_SELECTOR);
+        return !!form?.hasAttribute?.(APPLIED_ATTR);
+    }
+
+    function markApplied(select) {
+        if (!select) return;
+        select.setAttribute(APPLIED_ATTR, 'true');
+        const form = select.closest?.(FORM_SELECTOR);
+        if (form) form.setAttribute(APPLIED_ATTR, 'true');
+    }
+
+    /**
+     * After the first full apply: only refresh option labels when Jellyfin resets them.
+     * Never reorder options, never change selection, never dispatch change.
+     */
+    function syncLabelsOnly(select) {
+        if (!select?.options?.length) return false;
+
+        const prefs = getPreferences();
+        let updated = 0;
+
+        isApplying = true;
+        try {
+            Array.from(select.options).forEach((option) => {
+                // Fresh/replaced options have no stamp — capture Jellyfin's native label first.
+                // Existing stamps keep the original native text even after we clean textContent.
+                if (!option.hasAttribute(ORIGINAL_ATTR)) {
+                    option.setAttribute(ORIGINAL_ATTR, option.textContent || '');
+                }
+                const originalLabel = option.getAttribute(ORIGINAL_ATTR) || '';
+                const editionMatch = findBestTerm(originalLabel, prefs.editions);
+                const versionMatch = findBestTerm(originalLabel, prefs.versions);
+                const hasMatch = !!(editionMatch || versionMatch);
+                const desc = {
+                    originalLabel,
+                    hasMatch,
+                    editionTerm: editionMatch?.term || null,
+                    versionTerm: versionMatch?.term || null
+                };
+                const label = desiredLabel(desc);
+                if (option.textContent !== label) {
+                    option.textContent = label;
+                    updated += 1;
+                }
+            });
+
+            if (updated > 0) {
+                LOG('Synced version preference labels (selection unchanged)', {
+                    updated,
+                    selectedIndex: select.selectedIndex,
+                    selected: select.value
+                });
+            }
+            return updated > 0;
+        } finally {
+            isApplying = false;
+        }
+    }
+
     function applyToSelect(select) {
         if (!select || !select.options?.length) return false;
+
+        // Subsequent passes: labels only — Jellyfin may reset native text after track changes.
+        if (selectAlreadyKefinModified(select)) {
+            return syncLabelsOnly(select);
+        }
 
         bindSelectedIndexTracker(select);
 
@@ -185,6 +254,7 @@
         const ranked = rankOptions(select.options, prefs);
 
         if (isSelectInExpectedState(select, ranked)) {
+            markApplied(select);
             return false;
         }
 
@@ -220,6 +290,8 @@
             }
 
             select.setAttribute(SELECTED_INDEX_ATTR, String(select.selectedIndex));
+            // Stamp before any Jellyfin rebuild so later passes stay label-only.
+            markApplied(select);
 
             LOG('Applied version preferences to detailTrackSelect', {
                 count: ranked.length,
@@ -287,6 +359,12 @@
 
     function isRelevantMutation(mutations) {
         for (const mutation of mutations) {
+            if (mutation.type === 'characterData') {
+                const parent = mutation.target?.parentElement;
+                if (parent?.tagName === 'OPTION') return true;
+                if (parent?.closest?.('select.detailTrackSelect')) return true;
+                continue;
+            }
             if (mutation.type !== 'childList') continue;
 
             const target = mutation.target;
@@ -346,7 +424,7 @@
             scheduleTryApply();
         });
 
-        observer.observe(root, { childList: true, subtree: true });
+        observer.observe(root, { childList: true, subtree: true, characterData: true });
     }
 
     function attachDetailsObserver() {
