@@ -1019,7 +1019,11 @@
         modal.dialog.style.maxHeight = 'none';
         modal.dialog.style.minWidth = '8rem';
         modal.dialog.style.width = 'auto';
-        modal.dialog.style.animation = '160ms ease-out 0s 1 normal both running scaleup';
+        if (typeof window.ModalSystem?.applyOpenAnimation === 'function') {
+            window.ModalSystem.applyOpenAnimation(modal.dialog);
+        } else {
+            modal.dialog.style.animation = '160ms ease-out 0s 1 normal both running scaleup';
+        }
         if (modal.dialogContent) {
             modal.dialogContent.style.padding = '0.25em 0';
             modal.dialogContent.style.overflow = 'hidden';
@@ -1035,10 +1039,18 @@
         requestAnimationFrame(() => positionFormatMenu(modal.dialog, anchorBtn));
     }
 
+    function setMenuOpenState(btn, open) {
+        if (!btn) return;
+        btn.classList.toggle('is-menu-open', !!open);
+        btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+
     function closeActiveFormatMenu() {
+        const anchor = activePopover?.formatMenuAnchor || null;
         if (window.ModalSystem?.isOpen?.(OPTION_MENU_MODAL_ID)) {
             window.ModalSystem.close(OPTION_MENU_MODAL_ID);
         }
+        setMenuOpenState(anchor, false);
         if (activePopover) {
             activePopover.formatMenu = null;
             activePopover.formatMenuAnchor = null;
@@ -1047,9 +1059,11 @@
     }
 
     function closeCardTitleMenuOnly() {
+        const anchor = activePopover?.cardTitleMenuAnchor || null;
         if (window.ModalSystem?.isOpen?.(CARD_TITLE_MENU_MODAL_ID)) {
             window.ModalSystem.close(CARD_TITLE_MENU_MODAL_ID);
         }
+        setMenuOpenState(anchor, false);
         if (activePopover) {
             activePopover.cardTitleMenu = null;
             activePopover.cardTitleMenuAnchor = null;
@@ -1067,9 +1081,11 @@
         activePopover.formatMenu = modal?.dialog || null;
         activePopover.formatMenuAnchor = anchorBtn;
         activePopover.formatMenuModalId = modalId;
+        setMenuOpenState(anchorBtn, true);
         if (modal) {
             modal.onClose = () => {
                 if (activePopover?.formatMenuModalId === modalId) {
+                    setMenuOpenState(activePopover.formatMenuAnchor, false);
                     activePopover.formatMenu = null;
                     activePopover.formatMenuAnchor = null;
                     activePopover.formatMenuModalId = null;
@@ -1083,10 +1099,12 @@
         activePopover.cardTitleMenu = modal?.dialog || null;
         activePopover.cardTitleMenuAnchor = anchorBtn;
         activePopover.cardTitleMenuModalId = CARD_TITLE_MENU_MODAL_ID;
+        setMenuOpenState(anchorBtn, true);
         if (modal) {
             modal.onClose = () => {
                 closeActiveFormatMenu();
                 if (activePopover?.cardTitleMenuModalId === CARD_TITLE_MENU_MODAL_ID) {
+                    setMenuOpenState(activePopover.cardTitleMenuAnchor, false);
                     activePopover.cardTitleMenu = null;
                     activePopover.cardTitleMenuAnchor = null;
                     activePopover.cardTitleMenuModalId = null;
@@ -2899,6 +2917,11 @@
         }
         .kefin-section-more-toggle[aria-expanded="true"] {
             opacity: 1;
+        }
+        .kefin-section-configure-popover .paper-icon-button-light.is-menu-open,
+        .kefin-section-card-title-menu-icons .paper-icon-button-light.is-menu-open {
+            opacity: 1;
+            background: rgba(0, 164, 220, 0.15);
         }
         .kefin-section-configure-field {
             display: flex;

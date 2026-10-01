@@ -8,6 +8,8 @@
 
     // Configuration
     const PRE_FETCH_DISCOVERY_DATA = false; // If true, fetches first discovery group immediately. If false, waits for scroll/click.
+    /** Max sections resolved/rendered per discovery group (infinite/chevron pages). */
+    const DISCOVERY_SECTIONS_PER_GROUP = 12;
 
     // Dependencies
     const ApiHelper = window.apiHelper;
@@ -58,6 +60,8 @@
         discoveryEnabled: true,
         discoveryBufferPromise: null,
         discoveryBuffer: [],
+        /** Unresolved section configs left after capping a discovery group render. */
+        discoveryGroupRemainder: [],
         discoverySectionOrder: 100000000,
         discoverySectionsRemain: true,
         ensuringDiscoveryBuffer: false,
@@ -100,7 +104,7 @@
         pendingJellyfinSectionObservers: []
     };
 
-    // Create loading indicator element (always last child of the sections container)
+    // Create loading indicator as next sibling of the sections container (outside flex column)
     function createDiscoveryLoadingIndicator(container) {
         // Prefer the provided container, but fall back to the standard sections container
         if (!container) {
@@ -112,15 +116,18 @@
             || document.querySelector('.libraryPage:not(.hide) #discovery-loading-indicator');
 
         if (loadingDiv) {
-            if (container && loadingDiv.parentElement !== container) {
-                container.appendChild(loadingDiv);
-            } else if (container && container.lastElementChild !== loadingDiv) {
-                container.appendChild(loadingDiv);
+            if (container && loadingDiv.previousElementSibling !== container) {
+                // Place as next sibling of the sections container
+                if (container.nextSibling) {
+                    container.parentNode.insertBefore(loadingDiv, container.nextSibling);
+                } else if (container.parentNode) {
+                    container.parentNode.appendChild(loadingDiv);
+                }
             }
             return loadingDiv;
         }
 
-        if (!container) {
+        if (!container || !container.parentNode) {
             WARN('Discovery loading indicator: sections container not found');
             return null;
         }
@@ -128,13 +135,16 @@
         loadingDiv = document.createElement('div');
         loadingDiv.className = 'discovery-loading-indicator';
         loadingDiv.id = 'discovery-loading-indicator';
-        loadingDiv.style.order = '1000000000';
         loadingDiv.innerHTML = `
             <div class="spinner"></div>
         `;
 
-        container.appendChild(loadingDiv);
-        LOG('Created discovery loading indicator inside sections container');
+        if (container.nextSibling) {
+            container.parentNode.insertBefore(loadingDiv, container.nextSibling);
+        } else {
+            container.parentNode.appendChild(loadingDiv);
+        }
+        LOG('Created discovery loading indicator as sibling of sections container');
         
         return loadingDiv;
     }
@@ -221,6 +231,7 @@
     function markDiscoveryExhausted() {
         state.discoverySectionsRemain = false;
         state.discoveryBuffer = null;
+        state.discoveryGroupRemainder = [];
         removeDiscoveryScrollListeners();
         setDiscoveryPageAttrs({ ready: true, infinite: false, exhausted: true });
         const loadingIndicator = createDiscoveryLoadingIndicator(
@@ -462,11 +473,12 @@
             }
         } */
 
-        // If we've already initialized and Jellyfin has completed its render, avoid re-running
-        const kefinTweaksHomeSections = document.querySelectorAll('.homePage:not(.hide) #homeTab .homeSectionsContainer [data-section-id]');
-        if (kefinTweaksHomeSections.length > 0) {
+        // If Home-category sections already exist, avoid re-running full init.
+        // Discovery-only remounts (e.g. back to Discover) must not skip home render.
+        if (hasHomeCategorySections(container)) {
             LOG('Home screen already initialized and Jellyfin has rendered');
             try {
+                const kefinTweaksHomeSections = container.querySelectorAll('[data-section-id]');
                 updatePinnedCategoryAvailability(
                     Array.from(kefinTweaksHomeSections).map((el) => ({
                         id: el.dataset.sectionId,
@@ -1124,10 +1136,8 @@
 
         state.isRenderingHome = true;
         try {
-            // Check if children with [data-section-id] are present
-            const children = container.children;
-            const hasSections = Array.from(children).some(child => child.dataset && child.dataset.sectionId);
-            if (hasSections) {
+            // Only skip when Home-category (none) sections already exist — discovery-only DOM must still render home
+            if (hasHomeCategorySections(container)) {
                 LOG('Sections already rendered, skipping');
                 return;
             }
@@ -1190,15 +1200,13 @@
 
             const targetContainer = container;
 
-            const kefinSections = Array.from(children).some(child => child.dataset && child.dataset.sectionId);
-            if (kefinSections) {
+            if (hasHomeCategorySections(container)) {
                 LOG('Sections already rendered, skipping');
                 return;
             }
 
             await window.cardBuilder.renderProgressiveSections(targetContainer, sectionsToRender, {
                 waitForContainerClass: 'homeSectionsContainer',
-                enhanceOnVisible: true,
                 showStaleDataBeforeRefresh
             });
 
@@ -1255,6 +1263,7 @@
         }
 
         state.discoveryMode = null;
+        state.discoveryGroupRemainder = [];
     }
 
     /**
@@ -1287,11 +1296,18 @@
 
             LOG('Fetching next discovery group data...');
 
-            const groupSections = await generateDiscoveryGroup();
+            let groupSections;
+            if (Array.isArray(state.discoveryGroupRemainder) && state.discoveryGroupRemainder.length > 0) {
+                groupSections = state.discoveryGroupRemainder.splice(0, DISCOVERY_SECTIONS_PER_GROUP);
+                LOG(`Draining discovery remainder (${groupSections.length} sections, ${state.discoveryGroupRemainder.length} left)...`);
+            } else {
+                groupSections = await generateDiscoveryGroup();
+            }
 
             if (!groupSections || groupSections.length === 0) {
                 LOG('No more discovery sections available for buffer.');
                 state.discoveryBuffer = [];
+                state.discoveryGroupRemainder = [];
                 state.discoverySectionsRemain = false;
                 return state.discoveryBuffer;
             }
@@ -1312,7 +1328,10 @@
             state.discoveryBuffer = state.discoveryBuffer.filter(result => result !== null);
 
             if (!state.discoveryBuffer.length) {
-                state.discoverySectionsRemain = false;
+                // Only exhaust when this chunk failed AND nothing remains to try next
+                if (!state.discoveryGroupRemainder?.length) {
+                    state.discoverySectionsRemain = false;
+                }
             }
 
             return state.discoveryBuffer;
@@ -1349,6 +1368,7 @@
         window.sectionHelper?.getDiscoveryState?.()?.renderedDiscoveryIds?.customDiscoverySections?.clear?.();
         state.discoverySectionsRemain = true;
         state.discoveryNeedsMoreScroll = false;
+        state.discoveryGroupRemainder = [];
 
         if (PRE_FETCH_DISCOVERY_DATA) {
             ensureDiscoveryBuffer();
@@ -1422,8 +1442,8 @@
             const config = await window.KefinHomeScreen.getConfig();
             const revealSectionsSequentially = config.DISCOVERY_SETTINGS?.fadeInSections === true;
 
-            // Park the indicator so newly appended sections are not inserted after it in the DOM
-            removeDiscoveryLoadingIndicator();
+            // Sibling spinner stays outside the flex column — no insertBefore parking
+            createDiscoveryLoadingIndicator(container);
 
             await window.cardBuilder.renderProgressiveSections(container, bufferedSections, {
                 revealSectionsSequentially,
@@ -1435,8 +1455,11 @@
 
             container.dataset.loadingDiscovery = 'false';
             container.classList.remove('loading-discovery');
-            
-            state.discoveryGroupIndex++;
+
+            // Advance page/group only after the current logical group is fully drained
+            if (!state.discoveryGroupRemainder?.length) {
+                state.discoveryGroupIndex++;
+            }
 
             state.discoveryBuffer = null;
             if (PRE_FETCH_DISCOVERY_DATA) {
@@ -1570,6 +1593,8 @@
             WARN('Failed to apply user overrides to discovery sections:', e);
         }
 
+        // Order + tag the full logical group, then cap what we resolve this pass.
+        // Leftovers are drained on subsequent ensureDiscoveryBuffer calls.
         selectedConfigs.forEach((section) => {
             section.order = state.discoverySectionOrder++;
             // Mark discovery render set so section roots get data-discovery-section
@@ -1577,9 +1602,12 @@
             section.discoverySection = true;
         });
 
-        //localCache.set('discoveryBuffer', selectedConfigs);
+        const capped = selectedConfigs.slice(0, DISCOVERY_SECTIONS_PER_GROUP);
+        state.discoveryGroupRemainder = selectedConfigs.slice(DISCOVERY_SECTIONS_PER_GROUP);
 
-        return selectedConfigs;
+        //localCache.set('discoveryBuffer', capped);
+
+        return capped;
     }
 
     function setupInfiniteScroll(container) {
@@ -2029,11 +2057,70 @@
         styleEl.textContent = buildCategoryFilterStyles(getConfiguredCategories());
     }
 
+    /**
+     * True when at least one Kefin Home-category section (data-category="none") is in the DOM.
+     * Discovery-only remounts must not count as "home already rendered".
+     * @param {ParentNode|null|undefined} root
+     * @returns {boolean}
+     */
+    function hasHomeCategorySections(root) {
+        const scope = root || document.querySelector('.homePage:not(.hide) #homeTab .homeSectionsContainer');
+        if (!scope) return false;
+        return !!scope.querySelector('[data-section-id][data-category="none"]');
+    }
+
+    /**
+     * Before category CSS hides other sections: pick the target-category section to scroll to.
+     * Last match that has reached the viewport (top <= viewport bottom); if all are still below, use the first.
+     * @param {HTMLElement} container
+     * @param {string} categoryId
+     * @returns {HTMLElement|null}
+     */
+    function pickHomeCategoryScrollTarget(container, categoryId) {
+        if (!container || !categoryId) return null;
+        const safe = typeof CSS !== 'undefined' && CSS.escape
+            ? CSS.escape(categoryId)
+            : String(categoryId).replace(/"/g, '\\"');
+        const matches = Array.from(
+            container.querySelectorAll(`[data-section-id][data-category="${safe}"]`)
+        );
+        if (!matches.length) return null;
+
+        const viewportBottom = window.innerHeight || document.documentElement.clientHeight || 0;
+        let lastSeen = null;
+        for (let i = 0; i < matches.length; i++) {
+            const rect = matches[i].getBoundingClientRect();
+            if (rect.top <= viewportBottom) lastSeen = matches[i];
+            else break;
+        }
+        return lastSeen || matches[0];
+    }
+
+    function scrollHomeSectionToStart(el) {
+        if (!el) return;
+        try {
+            el.scrollIntoView({ block: 'start', behavior: 'instant' });
+        } catch (_) {
+            try {
+                el.scrollIntoView({ block: 'start', behavior: 'auto' });
+            } catch (__) {
+                el.scrollIntoView(true);
+            }
+        }
+    }
+
     function applyActiveHomeCategory(categoryId) {
         const categories = getRailCategories();
         const next = categories.some((c) => c.id === categoryId) ? categoryId : 'none';
-        homeChromeActiveCategory = next;
+        const prev = homeChromeActiveCategory || 'none';
+        const categoryChanged = prev !== next;
         const separate = getHomeSettings().renderCategoriesSeparately === true;
+
+        const visibleContainer = document.querySelector(
+            '.libraryPage:not(.hide) .homeSectionsContainer, .homePage:not(.hide) .homeSectionsContainer'
+        );
+
+        homeChromeActiveCategory = next;
 
         document.querySelectorAll('.homeSectionsContainer').forEach((container) => {
             container.dataset.category = next;
@@ -2053,8 +2140,16 @@
             });
         }
 
+        // Always scroll to the top of the screen, regardless of categoryChanged or visibleContainer
+        if (categoryChanged && visibleContainer) {
+            requestAnimationFrame(() => {
+                window.scrollTo({ top: 0, behavior: 'instant' });
+            });
+        }
+
+
         if (next === 'discovery' && isDiscoveryAllowedForActiveCategory()) {
-            const container = document.querySelector('.libraryPage:not(.hide) .homeSectionsContainer, .homePage:not(.hide) .homeSectionsContainer');
+            const container = visibleContainer;
             if (container) {
                 const hasDiscovery = !!(
                     container.querySelector('[data-discovery-section="true"], [data-category="discovery"]')
@@ -2208,29 +2303,60 @@
     connectHomeSectionsReadyObserver();
     //initHomeScreenChrome();
 
+    // Serialize home-view work: latest-wins pending + one drain at a time
+    let homeViewPending = undefined; // undefined = empty; else { type, hash? }
+    let homeViewDrain = Promise.resolve();
+
+    function enqueueHomeViewJob(job) {
+        if (!job || !job.type) return homeViewDrain;
+        // Chrome must not overwrite a pending home job (enhance already syncs chrome)
+        if (job.type === 'chrome' && homeViewPending?.type === 'home') {
+            return homeViewDrain;
+        }
+        homeViewPending = job;
+        homeViewDrain = homeViewDrain
+            .then(async () => {
+                if (homeViewPending === undefined) return;
+                const next = homeViewPending;
+                homeViewPending = undefined;
+
+                if (next.type === 'chrome') {
+                    syncHomeScreenChromeVisibility();
+                    return;
+                }
+
+                if (next.type === 'home') {
+                    const hash = typeof next.hash === 'string' ? next.hash : '';
+                    const hashParams = hash.includes('?') ? hash.split('?')[1] : '';
+                    const urlParams = new URLSearchParams(hashParams);
+                    const currentTab = urlParams.get('tab');
+                    const currentTabIndex = currentTab ? parseInt(currentTab, 10) : 0;
+
+                    if (currentTabIndex !== 0) {
+                        syncHomeScreenChromeVisibility();
+                        return;
+                    }
+
+                    void manageBodyClasses().catch((err) => {
+                        ERR('manageBodyClasses failed:', err);
+                    });
+                    await enhanceHomeScreen();
+                    syncHomeScreenChromeVisibility();
+                }
+            })
+            .catch((err) => {
+                ERR('Home view queue failed:', err);
+            });
+        return homeViewDrain;
+    }
+
     if (window.KefinTweaksUtils && typeof window.KefinTweaksUtils.onViewPage === 'function') {
         window.KefinTweaksUtils.onViewPage(() => {
-            syncHomeScreenChromeVisibility();
+            enqueueHomeViewJob({ type: 'chrome' });
         }, { pages: [] });
 
         window.KefinTweaksUtils.onViewPage((view, element, hash) => {
-            // Get selected tab from hash
-            const hashParams = hash.includes('?') ? hash.split('?')[1] :     '';
-            const urlParams = new URLSearchParams(hashParams);
-            const currentTab = urlParams.get('tab');
-            const currentTabIndex = currentTab ? parseInt(currentTab, 10) : 0;
-
-            // If the tab isn't 0, don't render the home screen (still sync chrome)
-            if (currentTabIndex !== 0) {
-                syncHomeScreenChromeVisibility();
-                return;
-            }
-
-            try { 
-                manageBodyClasses();
-                enhanceHomeScreen();
-                syncHomeScreenChromeVisibility();
-            } catch (err) { ERR('Home screen page change handler failed:', err); }
+            enqueueHomeViewJob({ type: 'home', hash: hash || '' });
         }, { pages: ['home', 'home.html'] });
     }
 

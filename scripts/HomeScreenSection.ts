@@ -92,10 +92,16 @@ interface Query {
 	_sourceType?: "jellyfin" | "cache" | "static";
 	path?: string; // Custom endpoint path (e.g., '/Shows/NextUp', '/Shows/Upcoming')
 	dataSource?: string; // Cache/custom data source (e.g., 'MoviesCache.getImdbTop250Movies')
+	/** Args passed to the cache method (e.g. ItemType, MinCount) — not post-processing */
+	dataSourceOptions?: {
+		ItemType?: string;
+		MinCount?: number;
+		[key: string]: any;
+	};
 	minAge?: number; // Minimum age in days
 	maxAge?: number; // Maximum age in days
 	queryOptions?: {
-		// Query parameters for /Items or custom endpoints
+		// Query parameters for /Items or custom endpoints / Client Cache post-processing
 		Ids?: string[];
 		IncludeItemTypes?: string[];
 		SearchTerm?: string;

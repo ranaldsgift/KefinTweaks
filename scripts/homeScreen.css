@@ -52,7 +52,11 @@ div#discovery-loading-indicator:not(.show)::after {
 	content: "";
 }
 
-[data-loading-discovery="true"] div#discovery-loading-indicator {
+[data-loading-discovery="true"] div#discovery-loading-indicator,
+.homeSectionsContainer[data-loading-discovery="true"] ~ #discovery-loading-indicator,
+.homeSectionsContainer[data-loading-discovery="true"] + #discovery-loading-indicator,
+.sections[data-loading-discovery="true"] ~ #discovery-loading-indicator,
+.sections[data-loading-discovery="true"] + #discovery-loading-indicator {
 	display: flex;
 }
 
@@ -69,6 +73,11 @@ div#discovery-loading-indicator:not(.show)::after {
 .libraryPage
 	.homeSectionsContainer[data-category]:not([data-category="none"]):not([data-category="discovery"])
 	#discovery-loading-indicator,
+#indexPage .homeSectionsContainer[data-category]:not([data-category="none"]):not([data-category="discovery"]) ~ #discovery-loading-indicator,
+.homePage .homeSectionsContainer[data-category]:not([data-category="none"]):not([data-category="discovery"]) ~ #discovery-loading-indicator,
+.libraryPage
+	.homeSectionsContainer[data-category]:not([data-category="none"]):not([data-category="discovery"])
+	~ #discovery-loading-indicator,
 #indexPage .homeSectionsContainer[data-category]:not([data-category="none"]):not([data-category="discovery"]) .discovery-loading-indicator,
 .homePage .homeSectionsContainer[data-category]:not([data-category="none"]):not([data-category="discovery"]) .discovery-loading-indicator,
 .libraryPage
@@ -174,7 +183,11 @@ div#discovery-loading-indicator:not(.show)::after {
 	display: none !important;
 }
 
-.sections[data-loading-discovery="true"] .discovery-loading-indicator {
+.sections[data-loading-discovery="true"] .discovery-loading-indicator,
+.sections[data-loading-discovery="true"] ~ #discovery-loading-indicator,
+.sections[data-loading-discovery="true"] + #discovery-loading-indicator,
+.homeSectionsContainer[data-loading-discovery="true"] ~ #discovery-loading-indicator,
+.homeSectionsContainer[data-loading-discovery="true"] + #discovery-loading-indicator {
 	display: flex !important;
 	opacity: 1 !important;
 }
@@ -356,7 +369,7 @@ html:not([data-active-page="home"]) #kefin-home-create-section-btn {
 }
 
 /* Inner visual bar — keep our layout over skinHeader / MuiAppBar positioning */
-.kefin-home-category-rail {
+:where(.kefin-home-category-rail) {
 	--AppBar-background: var(--jf-palette-AppBar-defaultBg);
 	--AppBar-color: var(--jf-palette-text-primary);
 	background-color: var(--jf-palette-AppBar-darkBg, var(--AppBar-background));
@@ -433,16 +446,13 @@ html:not([data-active-page="home"]) #kefin-home-create-section-btn {
 		opacity: 1;
 		pointer-events: auto;
 		margin: 0 !important;
-		-webkit-backdrop-filter: blur(10px);
-		backdrop-filter: blur(10px);
 		border: none !important;
 		transition:
 			transform 0.25s ease,
 			opacity 0.25s ease;
-		background: var(--jf-palette-AppBar-darkBg, var(--AppBar-background));
 	}
-	#kefin-home-category-rail .kefin-home-category-rail:hover,
-	#kefin-home-category-rail .kefin-home-category-rail:focus-within {
+	:where(#kefin-home-category-rail) .kefin-home-category-rail:hover,
+	:where(#kefin-home-category-rail) .kefin-home-category-rail:focus-within {
 		opacity: 1;
 		background: var(--jf-palette-AppBar-darkBg, var(--AppBar-background)) !important;
 		border-radius: 0;
@@ -524,9 +534,13 @@ html:not([data-active-page="home"]) #kefin-home-create-section-btn {
 }
 
 .sections.homeSectionsContainer[data-category="discovery"]::before {
-	content: "Discover Something To Watch";
+	content: "\E87A\00a0 Discover Something To Watch";
+	font-family: "Material Icons", inherit;
 	padding-left: max(env(safe-area-inset-left), 3.3%);
 	font-size: 1.5rem;
+	margin: 0;
+	padding-bottom: .2em;
+	padding-top: 1em;
 }
 
 html:not([data-active-page="home"]) .snowverlay {

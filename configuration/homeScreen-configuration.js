@@ -2165,10 +2165,10 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
      */
     function buildSectionNavigationHTML(activeType = 'home') {
         const types = [
-            { id: 'home', label: 'Home Sections' },
-            { id: 'seasonal', label: 'Seasonal Sections' },
-            { id: 'discovery', label: 'Discovery Sections' },
-            { id: 'custom', label: 'Custom Sections' }
+            { id: 'home', label: 'Home' },
+            { id: 'seasonal', label: 'Seasonal' },
+            { id: 'discovery', label: 'Discovery' },
+            { id: 'custom', label: 'Custom' }
         ];
 
         return `
@@ -2190,11 +2190,11 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
      */
     function buildGlobalSettingsNavigationHTML(activeSubTab = 'general') {
         const tabs = [
-            { id: 'general', label: 'General Settings' },
-            { id: 'spotlight', label: 'Spotlight Settings' },
-            { id: 'discovery', label: 'Discovery Settings' },
-            { id: 'categories', label: 'Category Settings' },
-            { id: 'cache', label: 'Cache Settings' }
+            { id: 'general', label: 'General' },
+            { id: 'spotlight', label: 'Spotlight' },
+            { id: 'discovery', label: 'Discovery' },
+            { id: 'categories', label: 'Category' },
+            { id: 'cache', label: 'Cache' }
         ];
         return `
             <div style="display: flex; flex-direction: column; gap: 0.5em;">
@@ -2297,7 +2297,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                 return `
                     <div>
                         <div class="listItemBodyText" style="font-weight: 500; margin-bottom: 1em;">Discovery Sections</div>
-                        <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-bottom: 0.75em;">Discovery sections will appear dynamically on the home screen as the user scrolls down. They are pre-fetched and cached in the background to ensure a smooth experience. You can customize their settings here.</div>
+                        <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-bottom: 0.75em;">Discovery sections will appear dynamically on the home screen as the user scrolls down.</div>
                         <div id="discovery-sections-list">
                             ${discoveryGroups.map(g => buildGroupHTML(g, 'discovery')).join('')}
                         </div>
@@ -2310,8 +2310,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                 return `
                     <div>
                         <div class="listItemBodyText" style="font-weight: 500; margin-bottom: 1em;">Custom Sections</div>
-                        <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-bottom: 0.75em;">Customize your Custom Home Sections here. You can add, edit, and delete your own sections. You can also import community collections or a file you exported from the Import / Export tab.</div>
-                        <div id="custom-sections-list">
+                        <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-bottom: 0.75em;">Customize your Custom Home Sections here. You can add, edit, and delete your own sections.</div>                        <div id="custom-sections-list">
                             ${customGroups.map(g => buildGroupHTML(g, 'custom')).join('')}
                         </div>
                         <button type="button" class="emby-button button-submit raised add-custom-section-btn" style="padding: 0.75em 1.5em; margin-top: 0.75em;">
@@ -2345,7 +2344,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                         <span>New Section</span>
                     </button>
                     <button type="button" class="emby-button raised hsc-toolbar-update-btn" title="Save and apply these settings to all users.">
-                        <span class="material-icons" style="margin-right: 0.35em; font-size: 1.1em; vertical-align: middle;">sync</span>
+                        <span class="material-icons" style="margin-right: 0.35em; font-size: 1.1em; vertical-align: middle;">publish</span>
                         <span>Update</span>
                     </button>
                     <button type="button" class="emby-button raised hsc-toolbar-restore-defaults-btn" title="Restore default Home Screen sections">
