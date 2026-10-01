@@ -116,12 +116,11 @@
             LOG('Collections Child Count has changed, invalidating cache');
         }
         
-        if (!invalidate && await cache.isCacheValid(CACHE_NAME)) {
+        const currentCacheData = await cache.get(CACHE_NAME);
+        if (!invalidate && currentCacheData != null) {
             LOG('Collections cache is still valid');
             return;
         }
-
-        const currentCacheData = await cache.get(CACHE_NAME);
         const hasExistingCache = Array.isArray(currentCacheData) && currentCacheData.length > 0;
 
         if (state.populateInFlight) {

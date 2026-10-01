@@ -53,41 +53,8 @@
             return `${this.prefix}${cacheName}_${user}`;
         }
 
-        // Check if cache is valid (not expired)
-        async isCacheValid(cacheName, userId = null) {
-            const key = this.getCacheKey(cacheName, userId);
-            
-            try {
-                const db = await this.openDB();
-                const transaction = db.transaction([STORE_NAME], 'readonly');
-                const store = transaction.objectStore(STORE_NAME);
-                const request = store.get(key);
-                
-                return new Promise((resolve) => {
-                    request.onsuccess = () => {
-                        const data = request.result;
-                        if (!data) {
-                            resolve(false);
-                            return;
-                        }
-                        
-                        const now = Date.now();
-                        const ttl = data.ttl || this.ttl;
-                        resolve((now - data.timestamp) < ttl);
-                    };
-                    
-                    request.onerror = () => {
-                        WARN('Error checking cache validity:', request.error);
-                        resolve(false);
-                    };
-                });
-            } catch (error) {
-                ERR('Error in isCacheValid:', error);
-                return false;
-            }
-        }
-
-        // Get cached data entry (payload + metadata) if valid
+        // Get cached data entry (payload + metadata). Does NOT filter by TTL —
+        // callers (e.g. apiHelper.getQuery) may intentionally use stale rows.
         async getCacheEntry(cacheName, userId = null) {
             const key = this.getCacheKey(cacheName, userId);
             
@@ -124,12 +91,8 @@
             }
         }
 
-        // Get cached data if valid
+        // Get cached payload if present and not expired (single store.get)
         async get(cacheName, userId = null) {
-            if (!(await this.isCacheValid(cacheName, userId))) {
-                return null;
-            }
-            
             const key = this.getCacheKey(cacheName, userId);
             
             try {
@@ -141,7 +104,16 @@
                 return new Promise((resolve) => {
                     request.onsuccess = () => {
                         const data = request.result;
-                        resolve(data ? data.payload : null);
+                        if (!data) {
+                            resolve(null);
+                            return;
+                        }
+                        const ttl = data.ttl || this.ttl;
+                        if ((Date.now() - data.timestamp) >= ttl) {
+                            resolve(null);
+                            return;
+                        }
+                        resolve(data.payload);
                     };
                     
                     request.onerror = () => {
