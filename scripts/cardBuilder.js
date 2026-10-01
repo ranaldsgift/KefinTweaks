@@ -703,7 +703,7 @@
 
         const pos = getScrollerPosition(scroller);
         const maxPosition = getMaxPositionFromPadding(scroller, readScrollerPadding(scroller), readSampleCardPadding(scroller));
-        leftButton.disabled = pos === 0;
+        leftButton.disabled = pos <= 20;
         rightButton.disabled = pos >= maxPosition;
     }
 
@@ -1562,6 +1562,7 @@
             ...sectionConfig,
             cardFormat: finalCardFormat,
         });
+        unobserveSkeletonShimmer(sectionElement);
         sectionElement.dataset.refreshing = 'false';
         ensureSectionRevealObservation(sectionElement);
         return sectionElement;
@@ -1919,6 +1920,7 @@
                     ...sectionConfig,
                     cardFormat: finalCardFormat,
                 });
+                unobserveSkeletonShimmer(sectionElement);
                 sectionElement.dataset.refreshing = 'false';
                 ensureSectionRevealObservation(sectionElement);
                 const newButton = sectionElement.querySelector('.section-refresh-button');
@@ -2122,6 +2124,7 @@
         ensureCardBorders: ensureCardBorders,
         applyItemsLayoutState: applyItemsLayoutState,
         resolveItemsLayout: resolveItemsLayout,
+        resolveSpotlightPresentation: resolveSpotlightPresentation,
         resolveUseGaplessCards: resolveUseGaplessCards,
         invalidateLastRowPadding: invalidateLastRowPadding,
         invalidateCardRadiusCache: invalidateCardRadiusCache,
@@ -3931,7 +3934,8 @@
 
             buttonContainer.appendChild(moreButton);
 
-            if (item.Type !== 'CollectionFolder' && item.Type !== 'Folder' && item.Type !== 'UserView' && item.LocationType !== 'Virtual') {
+			const NON_PLAYABLE_TYPES = ['CollectionFolder', 'Folder', 'UserView', 'Virtual', 'Studio'];
+            if (!NON_PLAYABLE_TYPES.includes(item.Type) && item.LocationType !== 'Virtual') {
                 cardOverlayContainer.appendChild(playButton);
             }
             cardOverlayContainer.appendChild(buttonContainer);
@@ -4189,6 +4193,37 @@
      * @param {boolean} options.pauseOnHover - Pause auto-cycle when cursor is over spotlight (default: true, false when fullScreen)
      * @returns {HTMLElement} - The constructed spotlight container
      */
+    /**
+     * Resolve spotlight layout/size/tileCount from options (incl. legacy fullScreen).
+     * Shared by live create, skeleton create, and configure/defaults callers.
+     * @param {Object} [options]
+     * @param {boolean} [options.capForViewport=true] - Cap tileCount by viewport width
+     * @returns {{ layout: string, size: string, tileCount: number }}
+     */
+    function resolveSpotlightPresentation(options = {}) {
+        const fullScreen = options.fullScreen === true;
+        const layout = options.spotlightLayout ?? (fullScreen ? 'Borderless' : 'Border');
+        const size = options.spotlightSize ?? (fullScreen ? 'full' : 'normal');
+        let tileCount = options.tileCount;
+        if (tileCount == null || tileCount < 1 || tileCount > 3) {
+            tileCount = size === 'full' ? 1 : size === 'large' ? 2 : 3;
+        }
+        tileCount = Math.max(1, Math.min(3, Math.floor(tileCount)));
+        if (options.capForViewport !== false) {
+            const vw = window.innerWidth || 0;
+            if (vw < 900) tileCount = Math.min(tileCount, 1);
+            else if (vw < 1600) tileCount = Math.min(tileCount, 2);
+        }
+        return { layout, size, tileCount };
+    }
+
+    /**
+     * Creates a Netflix-style slim banner carousel (spotlight)
+     * @param {Array} itemsInput - Array of Jellyfin item objects
+     * @param {string} title - Title for the spotlight section
+     * @param {Object} options - Options for the spotlight carousel
+     * @returns {HTMLElement} - The constructed spotlight container
+     */
     function createSpotlightSection(itemsInput, title, options = {}) {
         let items = Array.isArray(itemsInput) ? itemsInput.slice() : [];
         if (!items.length) {
@@ -4203,8 +4238,6 @@
             showNavButtons = true,
             showClearArt = false,
             panAnimation = true,
-            spotlightLayout,
-            spotlightSize,
             tileCount: tileCountOpt,
             cycleBackdrops = false,
             cycleBackdropsTime,
@@ -4220,19 +4253,10 @@
             /** Build DOM only — no timers/observers (for harvesting slides during in-place refresh). */
             inert = false,
         } = options;
-        // Backward compat: derive layout/size from fullScreen if new keys missing
-        const fullScreen = options.fullScreen === true;
-        const layout = spotlightLayout ?? (fullScreen ? 'Borderless' : 'Border');
-        const size = spotlightSize ?? (fullScreen ? 'full' : 'normal');
-        let tileCount = tileCountOpt;
-        if (tileCount == null || tileCount < 1 || tileCount > 3) {
-            tileCount = size === 'full' ? 1 : size === 'large' ? 2 : 3;
-        }
-        tileCount = Math.max(1, Math.min(3, Math.floor(tileCount)));
-        // Cap multi-tile layouts on narrower viewports
-        const vw = window.innerWidth || 0;
-        if (vw < 900) tileCount = Math.min(tileCount, 1);
-        else if (vw < 1600) tileCount = Math.min(tileCount, 2);
+        const { layout, size, tileCount } = resolveSpotlightPresentation({
+            ...options,
+            tileCount: tileCountOpt,
+        });
         let backdropsCount = backdropsCountOpt;
         if (backdropsCount == null && cycleBackdropsTime > 0 && interval > 0) {
             backdropsCount = Math.max(1, Math.round(interval / cycleBackdropsTime));
@@ -7180,9 +7204,8 @@
      * @returns {HTMLElement} - Skeleton spotlight container
      */
     function createSkeletonSpotlightSection(title, options = {}) {
-        const { viewMoreUrl = null, spotlightLayout, spotlightSize, fullScreen, discoveryPending = false, caption = null } = options;
-        const layout = spotlightLayout ?? (fullScreen === true ? 'Borderless' : 'Border');
-        const size = spotlightSize ?? (fullScreen === true ? 'full' : 'normal');
+        const { viewMoreUrl = null, discoveryPending = false, caption = null } = options;
+        const { layout, size } = resolveSpotlightPresentation(options);
         const captionText = caption && String(caption).trim();
         const useSkeletonTitle = discoveryPending === true;
 
@@ -7790,7 +7813,7 @@
         } else {
             maxScroll = getMaxPositionFromPadding(scroller, readScrollerPadding(scroller), readSampleCardPadding(scroller));
         }
-        leftButton.disabled = scrollX <= 0;
+        leftButton.disabled = scrollX <= 20;
         rightButton.disabled = scrollX >= maxScroll - 1;
     }
 
@@ -8245,11 +8268,26 @@
         if (scroller.classList.contains('scrollX')) {
             scroller.scrollTo({ left: clamped, behavior: animate ? 'smooth' : 'auto' });
             setStoredScrollPosition(scroller, clamped);
-            return;
+        } else {
+            scroller.style.transition = animate ? 'transform 400ms ease-out' : 'none';
+            scroller.style.transform = `translateX(-${clamped}px)`;
+            setStoredScrollPosition(scroller, clamped);
         }
-        scroller.style.transition = animate ? 'transform 400ms ease-out' : 'none';
-        scroller.style.transform = `translateX(-${clamped}px)`;
-        setStoredScrollPosition(scroller, clamped);
+
+        const section = scroller.closest('.emby-scroller-container');
+        if (section) {
+            if (animate) {
+                const onTransitionEnd = () => {
+                    scroller.removeEventListener('transitionend', onTransitionEnd);
+                    applyScrollButtonState(section);
+                };
+                scroller.addEventListener('transitionend', onTransitionEnd);
+                // Native scrollX has no transitionend — refresh after a frame too
+                requestAnimationFrame(() => applyScrollButtonState(section));
+            } else {
+                applyScrollButtonState(section);
+            }
+        }
     }
 
     /**

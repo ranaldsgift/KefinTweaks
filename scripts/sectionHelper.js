@@ -22,6 +22,8 @@
             watchlist: new Set(),
             customDiscoverySections: new Set()
         },
+        /** Session-scoped: discovery template ids whose source pool resolved empty (not incomplete cache). */
+        emptyDiscoverySourceTemplates: new Set(),
         currentDiscoveryGenre: null,
         currentDiscoveryStudio: null,
         // Map of pairKey -> Promise resolving to dynamicResult for spotlight pairing
@@ -51,9 +53,33 @@
         Object.keys(ids).forEach((key) => {
             if (ids[key] instanceof Set) ids[key].clear();
         });
+        discoveryState.emptyDiscoverySourceTemplates.clear();
         discoveryState.currentDiscoveryGenre = null;
         discoveryState.currentDiscoveryStudio = null;
         discoveryState.pairResolvePromises.clear();
+    }
+
+    function getDiscoveryTemplateExclusionKey(configOrId) {
+        if (configOrId == null) return '';
+        if (typeof configOrId === 'string') {
+            const id = configOrId;
+            const stamped = id.replace(/-\d{10,}-[a-z0-9]+$/i, '');
+            return stamped || id.split('-')[0] || id;
+        }
+        if (configOrId.discoveryTemplateId) return String(configOrId.discoveryTemplateId);
+        return getDiscoveryTemplateExclusionKey(String(configOrId.id || ''));
+    }
+
+    function markEmptyDiscoverySourceTemplate(configOrId) {
+        const key = getDiscoveryTemplateExclusionKey(configOrId);
+        if (!key) return;
+        discoveryState.emptyDiscoverySourceTemplates.add(key);
+        LOG(`Excluding empty discovery source template for session: ${key}`);
+    }
+
+    function isEmptyDiscoverySourceTemplate(configOrId) {
+        const key = getDiscoveryTemplateExclusionKey(configOrId);
+        return !!key && discoveryState.emptyDiscoverySourceTemplates.has(key);
     }
 
     /**
@@ -672,7 +698,8 @@
             queries: []
         })) === true) {
             LOG(`Discovery section ${config.id}: skipping pool fetch — incomplete library cache`);
-            return [];
+            // null = incomplete cache (do not permanently exclude template)
+            return null;
         }
 
         const cfg = Config();
@@ -803,7 +830,12 @@
         }
 
         const pool = await fetchDiscoveryPool(config);
-        if (!pool.length) return null;
+        // Incomplete library cache — skip this attempt without excluding the template
+        if (pool == null) return null;
+        if (!pool.length) {
+            markEmptyDiscoverySourceTemplate(config);
+            return null;
+        }
 
         if (discoveryType === 'Genre') {
             const settings = getDiscoverySettings();
@@ -915,6 +947,7 @@
         const instanceConfig = {
             ...template,
             id: options.stubId || `${template.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            discoveryTemplateId: template.id,
             type: 'discovery',
         };
         if (options.stubOrder != null) {
@@ -1134,6 +1167,7 @@
         const config = {
             ...template,
             id: uniqueId,
+            discoveryTemplateId: template.id,
             type: 'discovery',
             discoveryPending: true,
             order: order != null ? order : template.order,
@@ -1207,7 +1241,10 @@
         resolveViewMoreUrl,
         getDiscoverySettings,
         getDiscoveryState: () => discoveryState,
-        resetDiscoveryDedupe
+        resetDiscoveryDedupe,
+        getDiscoveryTemplateExclusionKey,
+        markEmptyDiscoverySourceTemplate,
+        isEmptyDiscoverySourceTemplate
     };
 
     LOG('sectionHelper ready');

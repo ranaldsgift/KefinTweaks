@@ -378,19 +378,47 @@
     }
 
     function sectionHasUserOverrides(entry, serverDefaults) {
-        const api = getConfigApi();
         const cfg = entry?.effectiveConfig;
         const defaults = serverDefaults || entry?.serverDefaults || {};
-        if (!api?.serializeSectionPref || !cfg) return false;
-        const prefStr = api.serializeSectionPref(
-            resolveStoredSectionPrefId(entry.sectionId, cfg),
-            cfg.enabled !== false,
-            buildPrefOverrides(cfg),
-            defaults
-        );
-        const parts = String(prefStr || '').split(';');
-        if (parts[1] === 'false') return true;
-        return parts.slice(2).some((part) => part !== '');
+        if (!cfg) return false;
+        if (cfg.enabled === false) return true;
+
+        const overrides = buildPrefOverrides(cfg);
+        const norm = (v) => (v == null || v === '' ? '' : String(v));
+        const boolEq = (a, b) => (a === true) === (b === true);
+
+        const layout = overrides.itemsLayout === 'grid' || overrides.itemsLayout === 'row'
+            ? overrides.itemsLayout
+            : (overrides.gridExpanded === true ? 'grid' : 'row');
+        const serverLayout = defaults.itemsLayout === 'grid' || defaults.itemsLayout === 'row'
+            ? defaults.itemsLayout
+            : (defaults.gridExpanded === true ? 'grid' : 'row');
+
+        if (norm(overrides.renderMode) !== norm(defaults.renderMode || 'Normal')
+            && norm(overrides.renderMode) !== '') return true;
+        if (norm(overrides.order) !== norm(defaults.order)) return true;
+        if (norm(overrides.ttl) !== norm(defaults.ttl)) return true;
+        if (norm(overrides.cardFormat) !== norm(defaults.cardFormat)) return true;
+        {
+            const anim = overrides.animationEnabled !== false;
+            const serverAnim = (defaults.animationEnabled ?? defaults.panAnimation) !== false;
+            if (anim !== serverAnim) return true;
+        }
+        if (!boolEq(overrides.hideName === true, defaults.hideName === true)) return true;
+        if (!boolEq(overrides.hideCardTitles === true, defaults.hideCardTitles === true)) return true;
+        if (norm(overrides.cardTitlePosition) !== norm(defaults.cardTitlePosition)) return true;
+        if (norm(overrides.borderStyle) !== norm(defaults.borderStyle)) return true;
+        if (norm(overrides.borderColor) !== norm(defaults.borderColor)) return true;
+        if (norm(overrides.spotlightLayout) !== norm(defaults.spotlightLayout)) return true;
+        if (norm(overrides.spotlightSize) !== norm(defaults.spotlightSize)) return true;
+        if (norm(overrides.spotlightTileCount) !== norm(defaults.spotlightTileCount)) return true;
+        if (layout !== serverLayout) return true;
+        if (!boolEq(overrides.useGaplessCards === true, defaults.useGaplessCards === true)) return true;
+        if (norm(overrides.cardTitleCapitalization || 'normal') !== norm(defaults.cardTitleCapitalization || 'normal')) return true;
+        if (norm(overrides.cardTitleFontFamily || 'default') !== norm(defaults.cardTitleFontFamily || 'default')) return true;
+        if (norm(overrides.cardTitleFontSize || 'normal') !== norm(defaults.cardTitleFontSize || 'normal')) return true;
+        if (norm(overrides.cardTitleColor) !== norm(defaults.cardTitleColor)) return true;
+        return false;
     }
 
     function applyServerDefaultsToConfig(cfg, defaults) {
@@ -776,17 +804,41 @@
         return isSpotlightSection(entry?.effectiveConfig);
     }
 
+    function resolveSpotlightPresentationLocal(options = {}) {
+        if (window.cardBuilder?.resolveSpotlightPresentation) {
+            return window.cardBuilder.resolveSpotlightPresentation({
+                ...options,
+                capForViewport: false
+            });
+        }
+        const fullScreen = options.fullScreen === true;
+        const layout = options.spotlightLayout ?? (fullScreen ? 'Borderless' : 'Border');
+        const size = options.spotlightSize ?? (fullScreen ? 'full' : 'normal');
+        let tileCount = options.tileCount;
+        if (tileCount == null || tileCount < 1 || tileCount > 3) {
+            tileCount = size === 'full' ? 1 : size === 'large' ? 2 : 3;
+        }
+        tileCount = Math.max(1, Math.min(3, Math.floor(tileCount)));
+        return { layout, size, tileCount };
+    }
+
     // A section that was never spotlight has no spotlightConfig, so the popover controls and
     // the renderer would otherwise fall back to different defaults.
     function buildSpotlightConfigSeed(existingConfig, serverDefaults = {}) {
         const existing = existingConfig || {};
         const admin = window.KefinHomeScreen?.getConfig?.()?.SPOTLIGHT_SETTINGS || {};
+        const merged = { ...admin, ...existing };
+        const resolved = resolveSpotlightPresentationLocal({
+            ...merged,
+            spotlightLayout: existing.spotlightLayout ?? admin.spotlightLayout ?? serverDefaults.spotlightLayout,
+            spotlightSize: existing.spotlightSize ?? admin.spotlightSize ?? serverDefaults.spotlightSize,
+            tileCount: existing.tileCount ?? admin.tileCount ?? serverDefaults.spotlightTileCount
+        });
         return {
-            ...admin,
-            ...existing,
-            spotlightLayout: existing.spotlightLayout ?? admin.spotlightLayout ?? serverDefaults.spotlightLayout ?? 'Border',
-            spotlightSize: existing.spotlightSize ?? admin.spotlightSize ?? serverDefaults.spotlightSize ?? 'normal',
-            tileCount: existing.tileCount ?? admin.tileCount ?? serverDefaults.spotlightTileCount ?? 1
+            ...merged,
+            spotlightLayout: resolved.layout,
+            spotlightSize: resolved.size,
+            tileCount: resolved.tileCount
         };
     }
 
@@ -864,15 +916,10 @@
 
         if (shouldRenderAsSpotlight(entry)) {
             const spotlight = cfg.spotlightConfig || {};
-            if (spotlight.spotlightLayout) {
-                el.dataset.layout = spotlight.spotlightLayout;
-            }
-            if (spotlight.spotlightSize) {
-                el.dataset.size = spotlight.spotlightSize;
-            }
-            if (spotlight.tileCount != null) {
-                el.dataset.tileCount = String(spotlight.tileCount);
-            }
+            const resolved = resolveSpotlightPresentationLocal(spotlight);
+            el.dataset.layout = resolved.layout;
+            el.dataset.size = resolved.size;
+            el.dataset.tileCount = String(resolved.tileCount);
             el.querySelectorAll('.spotlight-overlay').forEach(overlay => {
                 const hasVisibleTitle = cfg.hideName !== true
                     && !!el.querySelector('.spotlight-section-title');
@@ -2313,8 +2360,9 @@
                 : ''}
         `;
 
-        const spotlightLayout = spotlight.spotlightLayout || 'Border';
-        const spotlightTileCount = normalizeSpotlightTileCount(spotlight.tileCount);
+        const resolvedSpotlight = resolveSpotlightPresentationLocal(spotlight);
+        const spotlightLayout = resolvedSpotlight.layout;
+        const spotlightTileCount = normalizeSpotlightTileCount(resolvedSpotlight.tileCount);
         const spotlightNextTileCount = nextSpotlightTileCount(spotlightTileCount);
         const spotlightTilesIcon = spotlightNextTileCount === 1
             ? 'looks_one'
@@ -2575,13 +2623,11 @@
 
         const spotlightLayoutBtn = popover.querySelector('.kefin-section-spotlight-layout-btn');
         if (spotlightLayoutBtn) {
-            syncSpotlightLayoutButton(
-                spotlightLayoutBtn,
-                entry.effectiveConfig.spotlightConfig?.spotlightLayout || 'Border'
-            );
+            const seedLayout = resolveSpotlightPresentationLocal(entry.effectiveConfig.spotlightConfig || {}).layout;
+            syncSpotlightLayoutButton(spotlightLayoutBtn, seedLayout);
             spotlightLayoutBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                const current = entry.effectiveConfig.spotlightConfig?.spotlightLayout || 'Border';
+                const current = resolveSpotlightPresentationLocal(entry.effectiveConfig.spotlightConfig || {}).layout;
                 const next = current === 'Borderless' ? 'Border' : 'Borderless';
                 entry.effectiveConfig.spotlightConfig = {
                     ...(entry.effectiveConfig.spotlightConfig || {}),
@@ -2595,8 +2641,9 @@
         const spotlightSizeBtn = popover.querySelector('.kefin-section-spotlight-size-btn');
         spotlightSizeBtn?.addEventListener('click', (e) => {
             e.stopPropagation();
+            const seedSize = resolveSpotlightPresentationLocal(entry.effectiveConfig.spotlightConfig || {}).size;
             openOptionMenu(spotlightSizeBtn, getSpotlightSizeOptions(), {
-                activeValue: entry.effectiveConfig.spotlightConfig?.spotlightSize || 'normal',
+                activeValue: seedSize,
                 onSelect: (value) => {
                     entry.effectiveConfig.spotlightConfig = {
                         ...(entry.effectiveConfig.spotlightConfig || {}),
@@ -2609,14 +2656,12 @@
 
         const spotlightTilesBtn = popover.querySelector('.kefin-section-spotlight-tiles-btn');
         if (spotlightTilesBtn) {
-            syncSpotlightTilesButton(
-                spotlightTilesBtn,
-                entry.effectiveConfig.spotlightConfig?.tileCount || 1
-            );
+            const seedTileCount = resolveSpotlightPresentationLocal(entry.effectiveConfig.spotlightConfig || {}).tileCount;
+            syncSpotlightTilesButton(spotlightTilesBtn, seedTileCount);
             spotlightTilesBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const current = normalizeSpotlightTileCount(
-                    entry.effectiveConfig.spotlightConfig?.tileCount
+                    resolveSpotlightPresentationLocal(entry.effectiveConfig.spotlightConfig || {}).tileCount
                 );
                 const next = nextSpotlightTileCount(current);
                 entry.effectiveConfig.spotlightConfig = {

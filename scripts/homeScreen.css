@@ -533,14 +533,31 @@ html:not([data-active-page="home"]) #kefin-home-create-section-btn {
 	height: auto !important;
 }
 
+.sections.homeSectionsContainer[data-category="discovery"] {
+	position: relative;
+}
+
 .sections.homeSectionsContainer[data-category="discovery"]::before {
-	content: "\E87A\00a0 Discover Something To Watch";
-	font-family: "Material Icons", inherit;
+	content: "\E87A";
+	font-family: "Material Icons";
 	padding-left: max(env(safe-area-inset-left), 3.3%);
 	font-size: 1.5rem;
 	margin: 0;
 	padding-bottom: .2em;
 	padding-top: 1em;
+	display: block;
+	line-height: 1.2;
+}
+
+.sections.homeSectionsContainer[data-category="discovery"]::after {
+	content: "Discover Something To Watch";
+	font-family: inherit;
+	font-size: 1.5rem;
+	position: absolute;
+	left: calc(max(env(safe-area-inset-left), 3.3%) + 1.7em);
+	top: 1em;
+	line-height: 1.2;
+	pointer-events: none;
 }
 
 html:not([data-active-page="home"]) .snowverlay {

@@ -875,14 +875,7 @@
             return section;
         });
 
-        const isInSeasonalPeriod = (startDate, endDate) => {
-            const currentDate = new Date();
-            const start = new Date(startDate);
-            const end = new Date(endDate);
-            start.setFullYear(currentDate.getFullYear());
-            end.setFullYear(currentDate.getFullYear());
-            return currentDate >= start && currentDate <= end;
-        };
+        const isInSeasonalPeriodLocal = (startDate, endDate) => isInSeasonalPeriod(startDate, endDate);
 
         const customGroups = homeScreenConfig?.CUSTOM_SECTION_GROUPS
             || window.KefinTweaksConfig?.homeScreenConfig?.CUSTOM_SECTION_GROUPS
@@ -891,7 +884,7 @@
         const customDiscoverySections = typeof collect === 'function'
             ? collect(customGroups, {
                 isSectionActive: (s) => s.enabled === true,
-                isInSeasonalPeriod
+                isInSeasonalPeriod: isInSeasonalPeriodLocal
             })
             : [];
 
@@ -1521,6 +1514,7 @@
         // Collect enabled templates unresolved — progressive resolve happens in ensureDiscoveryBuffer
         for (const template of discoveryTemplates) {
             if (template.enabled === false) continue;
+            if (window.sectionHelper?.isEmptyDiscoverySourceTemplate?.(template)) continue;
             selectedConfigs.push(template);
         }
 
@@ -1746,14 +1740,43 @@
     }
 
     function isInSeasonalPeriod(start, end) {
+        if (typeof window.KefinHomeScreen?.isInSeasonalPeriod === 'function'
+            && window.KefinHomeScreen.isInSeasonalPeriod !== isInSeasonalPeriod) {
+            return window.KefinHomeScreen.isInSeasonalPeriod(start, end);
+        }
+        if (start == null || end == null || start === '' || end === '') return false;
+        const parseMonthDay = (value) => {
+            const parts = String(value).trim().split(/[-/.]/).map((p) => parseInt(p, 10));
+            if (parts.length < 2 || parts.some((n) => !Number.isFinite(n))) return null;
+            let month;
+            let day;
+            if (parts.length >= 3 && parts[0] > 31) {
+                month = parts[1];
+                day = parts[2];
+            } else {
+                month = parts[0];
+                day = parts[1];
+            }
+            if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+            return { month, day };
+        };
+        const startMd = parseMonthDay(start);
+        const endMd = parseMonthDay(end);
+        if (!startMd || !endMd) return false;
+
         const now = new Date();
-        const currentYear = now.getFullYear();
-        const startDate = new Date(`${start}-${currentYear}`);
+        const year = now.getFullYear();
+        const startDate = new Date(year, startMd.month - 1, startMd.day, 0, 0, 0, 0);
+        let endDate = new Date(year, endMd.month - 1, endMd.day, 23, 59, 59, 999);
+        if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return false;
 
-        let endDate = new Date(`${end}-${currentYear}`);
-        if (endDate < startDate) endDate.setFullYear(currentYear + 1);
-        else if (endDate > startDate) endDate.setFullYear(currentYear);
-
+        if (endDate < startDate) {
+            if (now >= startDate) {
+                endDate.setFullYear(year + 1);
+            } else {
+                startDate.setFullYear(year - 1);
+            }
+        }
         return now >= startDate && now <= endDate;
     }
 

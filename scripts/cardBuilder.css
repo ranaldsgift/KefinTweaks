@@ -134,6 +134,22 @@
 	mask-position: 0 0;
 }
 
+.spotlight-section[data-size="large"] .spotlight-background-single,
+.spotlight-section[data-size="large"] .spotlight-background-dual {
+	height: 140%;
+	transform: translateY(-10%);
+	-webkit-mask-image: linear-gradient( to bottom, transparent 0%, black calc(var(--spotlight-fullscreen-vertical) * 4), black calc(100% - calc(var(--spotlight-fullscreen-vertical) * 4)), transparent 100% );
+	mask-image: linear-gradient( to bottom, transparent 0%, black calc(var(--spotlight-fullscreen-vertical) * 4), black calc(100% - calc(var(--spotlight-fullscreen-vertical) * 4)), transparent 100% );
+}
+
+.spotlight-section[data-size="full"] .spotlight-background-single,
+.spotlight-section[data-size="full"] .spotlight-background-dual {
+	height: 125%;
+	transform: translateY(-5%);
+	-webkit-mask-image: linear-gradient( to bottom, transparent 0%, black calc(var(--spotlight-fullscreen-vertical) * 2), black calc(100% - calc(var(--spotlight-fullscreen-vertical) * 4)), transparent 100% );
+	mask-image: linear-gradient( to bottom, transparent 0%, black calc(var(--spotlight-fullscreen-vertical) * 2), black calc(100% - calc(var(--spotlight-fullscreen-vertical) * 4)), transparent 100% );
+}
+
 .spotlight-background-single img {
 	display: block;
 	width: 100%;
@@ -844,17 +860,21 @@
 	max-width: 400px;
 	min-width: 300px;
 	opacity: 0;
+	visibility: hidden;
 	pointer-events: none;
-	transition: opacity 0.2s ease;
+	transition: opacity 0.2s ease, visibility 0s linear 0.2s;
 	transition-delay: 0s;
 	z-index: 1000;
 	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
 	word-wrap: break-word;
 }
 
-.spotlight-info-button:hover .spotlight-overview-tooltip {
+/* Show only while hovering the info icon glyph — not the button/tooltip footprint */
+.spotlight-info-button:has(.material-icons:hover) .spotlight-overview-tooltip {
 	opacity: 1;
-	transition-delay: 0.5s;
+	visibility: visible;
+	pointer-events: none;
+	transition-delay: 0.5s, 0.5s;
 }
 
 /* Hover overview only on Normal desktop spotlights */
@@ -864,7 +884,7 @@
 	display: none !important;
 }
 
-.spotlight-section:not(.hide)[data-section-id] .spotlight-nav-container {
+.spotlight-section:not(.hide)[data-section-id] > .spotlight-banner-container > .spotlight-nav-container {
 	position: absolute !important;
 	display: flex;
 	gap: 8px;
@@ -1677,17 +1697,17 @@
 }
 
 /* Tagline at bottom center above navigation dots (all spotlights) - always 1 line max */
-.spotlight-tagline {
+.spotlight-section:not(.hide) > .spotlight-banner-container .spotlight-tagline {
 	position: absolute !important;
-	left: 50%;
-	transform: translateX(-50%);
-	width: fit-content;
+	left: 50% !important;
+	transform: translateX(-50%) !important;
+	width: fit-content !important;
 	max-width: min(85%, 700px);
-	text-align: center;
+	text-align: center !important;
 	font-style: italic;
 	font-size: 1.05em;
-	margin: 0;
-	padding: 8px 16px;
+	margin: 0 !important;
+	padding: 0 !important;
 	-webkit-line-clamp: 1;
 	-webkit-box-orient: vertical;
 	overflow: hidden;
@@ -1695,7 +1715,7 @@
 	border-radius: 6px;
 	z-index: 4;
 	pointer-events: none;
-	line-height: 1.4;
+	height: unset !important;
 }
 .spotlight-section:not(.hide) .spotlight-tagline p {
 	font-weight: initial !important;
@@ -1911,6 +1931,10 @@
 	font-size: revert !important;
 	height: 40px !important;
 	align-items: center;
+}
+
+.spotlight-metadata-row .emby-tab-button {
+	color: #ececec;
 }
 
 :where(.spotlight-section-title.headerTabs.sectionTabs),

@@ -201,19 +201,21 @@
     }
 
     function appendBoolPrefField(fields, value, serverValue) {
+        // Persist defined bools even when equal to server default so user choice survives reload.
         if (value === undefined) {
             fields.push('');
             return;
         }
-        const normalized = value === true;
-        const serverNormalized = serverValue === true;
-        fields.push(normalized === serverNormalized ? '' : (normalized ? 'true' : 'false'));
+        fields.push(value === true ? 'true' : 'false');
     }
 
     function appendPrefField(fields, value, serverValue) {
-        const normalized = value == null ? '' : String(value);
-        const serverNormalized = serverValue == null ? '' : String(serverValue);
-        fields.push(normalized !== '' && normalized !== serverNormalized ? normalized : '');
+        // Persist defined overrides even when equal to server default so user choice survives reload.
+        if (value == null || value === '') {
+            fields.push('');
+            return;
+        }
+        fields.push(String(value));
     }
 
     function isCustomSectionForPref(section) {
@@ -946,9 +948,28 @@
         };
     }
 
+    function resolveSpotlightPresentationLocal(options = {}) {
+        if (typeof window !== 'undefined' && window.cardBuilder?.resolveSpotlightPresentation) {
+            return window.cardBuilder.resolveSpotlightPresentation({
+                ...options,
+                capForViewport: false
+            });
+        }
+        const fullScreen = options.fullScreen === true;
+        const layout = options.spotlightLayout ?? (fullScreen ? 'Borderless' : 'Border');
+        const size = options.spotlightSize ?? (fullScreen ? 'full' : 'normal');
+        let tileCount = options.tileCount;
+        if (tileCount == null || tileCount < 1 || tileCount > 3) {
+            tileCount = size === 'full' ? 1 : size === 'large' ? 2 : 3;
+        }
+        tileCount = Math.max(1, Math.min(3, Math.floor(tileCount)));
+        return { layout, size, tileCount };
+    }
+
     function getServerSectionDefaults(section) {
         if (!section) return {};
         const spotlight = section.spotlightConfig || {};
+        const resolved = resolveSpotlightPresentationLocal(spotlight);
         const id = String(section.id || '');
         const isPinned = id.startsWith(PINNED_LIST_ID_PREFIX) || id.startsWith(PINNED_PARENT_ID_PREFIX);
         return {
@@ -963,9 +984,9 @@
             cardTitlePosition: section.cardTitlePosition || '',
             borderStyle: section.borderStyle || '',
             borderColor: section.borderColor || '',
-            spotlightLayout: spotlight.spotlightLayout ?? 'Border',
-            spotlightSize: spotlight.spotlightSize ?? 'normal',
-            spotlightTileCount: parseInt(spotlight.tileCount, 10) || 1,
+            spotlightLayout: resolved.layout,
+            spotlightSize: resolved.size,
+            spotlightTileCount: resolved.tileCount,
             itemsLayout: 'row',
             useGaplessCards: false,
             cardTitleCapitalization: section.cardTitleCapitalization || 'normal',

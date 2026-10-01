@@ -239,6 +239,53 @@
     }
 
     /**
+     * Whether today falls in an MM-DD (or M-D) seasonal window.
+     * Supports year-wrap when end < start (e.g. 12-20 … 01-05).
+     * @param {string} startDate
+     * @param {string} endDate
+     * @returns {boolean}
+     */
+    function isInSeasonalPeriod(startDate, endDate) {
+        if (startDate == null || endDate == null || startDate === '' || endDate === '') {
+            return false;
+        }
+        const parseMonthDay = (value) => {
+            const parts = String(value).trim().split(/[-/.]/).map((p) => parseInt(p, 10));
+            if (parts.length < 2 || parts.some((n) => !Number.isFinite(n))) return null;
+            let month;
+            let day;
+            // YYYY-MM-DD → take month/day
+            if (parts.length >= 3 && parts[0] > 31) {
+                month = parts[1];
+                day = parts[2];
+            } else {
+                month = parts[0];
+                day = parts[1];
+            }
+            if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+            return { month, day };
+        };
+        const startMd = parseMonthDay(startDate);
+        const endMd = parseMonthDay(endDate);
+        if (!startMd || !endMd) return false;
+
+        const now = new Date();
+        const year = now.getFullYear();
+        const start = new Date(year, startMd.month - 1, startMd.day, 0, 0, 0, 0);
+        let end = new Date(year, endMd.month - 1, endMd.day, 23, 59, 59, 999);
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return false;
+
+        if (end < start) {
+            if (now >= start) {
+                end.setFullYear(year + 1);
+            } else {
+                start.setFullYear(year - 1);
+            }
+        }
+        return now >= start && now <= end;
+    }
+
+    /**
      * Collect discovery-enabled sections from custom groups, stamping pageNumber
      * per group (1..N among discovery sections only, in group order).
      * @param {Array} groups - CUSTOM_SECTION_GROUPS
@@ -1435,18 +1482,6 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             // ENABLED_DISCOVERY_SECTIONS is all enabled sections from DISCOVERY_SECTION_GROUPS and CUSTOM_SECTION_GROUPS that are discovery sections
             // If they have a start/end date the current date must fall within that date range
 
-            const isInSeasonalPeriod = (startDate, endDate) => {
-                const currentDate = new Date();
-                const start = new Date(startDate);
-                const end = new Date(endDate);
-
-                // Ensure the years are the same as the current date year
-                start.setFullYear(currentDate.getFullYear());
-                end.setFullYear(currentDate.getFullYear());
-
-                return currentDate >= start && currentDate <= end;
-            };
-
             const enabledHomeSections = flattenSectionGroups(mergedConfig.HOME_SECTION_GROUPS).filter(s => s.enabled === true && s.discoveryEnabled !== true && (s.startDate && s.endDate ? isInSeasonalPeriod(s.startDate, s.endDate) : true));
             const enabledSeasonalSections = flattenSectionGroups(mergedConfig.SEASONAL_SECTION_GROUPS).filter(s => s.enabled === true && s.discoveryEnabled !== true && isInSeasonalPeriod(s.startDate, s.endDate));
             const enabledCustomSections = flattenSectionGroups(mergedConfig.CUSTOM_SECTION_GROUPS).filter(s => s.enabled === true && s.discoveryEnabled !== true && (s.startDate && s.endDate ? isInSeasonalPeriod(s.startDate, s.endDate) : true));
@@ -1489,18 +1524,6 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
     function getSections() {
 
         const config = getConfig();
-
-        const isInSeasonalPeriod = (startDate, endDate) => {
-            const currentDate = new Date();
-            const start = new Date(startDate);
-            const end = new Date(endDate);
-
-            // Ensure the years are the same as the current date year
-            start.setFullYear(currentDate.getFullYear());
-            end.setFullYear(currentDate.getFullYear());
-
-            return currentDate >= start && currentDate <= end;
-        };
 
         const enabledHomeSections = flattenSectionGroups(config.HOME_SECTION_GROUPS).filter(s => (s.enabled || s.userConfigurable || s.userConfigurable === undefined) && s.discoveryEnabled !== true && (s.startDate && s.endDate ? isInSeasonalPeriod(s.startDate, s.endDate) : true));
         const enabledSeasonalSections = flattenSectionGroups(config.SEASONAL_SECTION_GROUPS).filter(s => (s.enabled || s.userConfigurable || s.userConfigurable === undefined) && s.discoveryEnabled !== true && isInSeasonalPeriod(s.startDate, s.endDate));
@@ -5751,6 +5774,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
 
     // Export getConfig for use by other scripts
     window.KefinHomeScreen = window.KefinHomeScreen || {};
+    window.KefinHomeScreen.isInSeasonalPeriod = isInSeasonalPeriod;
     window.KefinHomeScreen.getConfig = getConfig;
     window.KefinHomeScreen.getSections = getSections;
     window.KefinHomeScreen.fetchSectionPreviewItems = fetchSectionPreviewItems;
