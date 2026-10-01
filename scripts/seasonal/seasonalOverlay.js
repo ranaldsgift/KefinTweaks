@@ -36,6 +36,14 @@ function addSeasonalOverlay() {
     const FLY_WOBBLE_SPEED = { min: 0.08, max: 0.16 };
     const FLY_ROT_WOBBLE = { min: 8, max: 22 };
 
+    const TARGET_FPS = 30;
+    const FRAME_INTERVAL = 1000 / TARGET_FPS;
+    const BASE_FRAME_MS = 1000 / 60;
+    const MAX_DT_MS = 50;
+    const RESIZE_DEBOUNCE_MS = 150;
+    const SPRITE_BASE_SIZE = 32;
+    const MAX_DPR = 2;
+
     const style = document.createElement('style');
     style.textContent = `
       body {
@@ -57,30 +65,64 @@ function addSeasonalOverlay() {
     const canvas = document.createElement('canvas');
     canvas.className = 'snowverlay';
     document.body.appendChild(canvas);
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { alpha: true });
+
+    /** CSS-pixel size used for physics / clearRect (not buffer pixels). */
+    let cssWidth = window.innerWidth || 1;
+    let cssHeight = CANVAS_HEIGHT_PX;
+
+    const buildGlyphSprite = () => {
+        const sprite = document.createElement('canvas');
+        sprite.width = SPRITE_BASE_SIZE;
+        sprite.height = SPRITE_BASE_SIZE;
+        const sCtx = sprite.getContext('2d');
+        sCtx.clearRect(0, 0, SPRITE_BASE_SIZE, SPRITE_BASE_SIZE);
+        sCtx.font = `${SPRITE_BASE_SIZE * 0.85}px sans-serif`;
+        sCtx.textAlign = 'center';
+        sCtx.textBaseline = 'middle';
+        sCtx.fillText(glyph, SPRITE_BASE_SIZE / 2, SPRITE_BASE_SIZE / 2);
+        return sprite;
+    };
+    const glyphSprite = buildGlyphSprite();
 
     const resizeCanvas = () => {
-        canvas.width = window.innerWidth;
-        canvas.height = CANVAS_HEIGHT_PX;
+        cssWidth = Math.max(1, window.innerWidth || 1);
+        cssHeight = CANVAS_HEIGHT_PX;
+        const dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR);
+        canvas.width = Math.round(cssWidth * dpr);
+        canvas.height = Math.round(cssHeight * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
 
-    window.addEventListener('resize', resizeCanvas);
+    let resizeTimer = null;
+    const onResize = () => {
+        if (resizeTimer != null) clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+            resizeTimer = null;
+            resizeCanvas();
+            if (reducedMotionMq.matches && shouldPaintStatic()) {
+                renderStatic();
+            }
+        }, RESIZE_DEBOUNCE_MS);
+    };
+
+    window.addEventListener('resize', onResize);
     resizeCanvas();
 
     const particleOpacity = (particle) => {
         if (particle.opacity != null) return particle.opacity;
         if (!isFly) {
-            return Math.max(0, 1 - particle.y / canvas.height);
+            return Math.max(0, 1 - particle.y / cssHeight);
         }
         if (particle.y <= FADE_START_Y) {
             return 1;
         }
-        const fadeRange = Math.max(1, canvas.height - FADE_START_Y);
+        const fadeRange = Math.max(1, cssHeight - FADE_START_Y);
         return Math.max(0, 1 - (particle.y - FADE_START_Y) / fadeRange);
     };
 
-    const flyWindowCenterX = () => canvas.width * 0.5;
-    const flyWindowHalfWidth = () => Math.max(40, canvas.width * FLY_WINDOW_WIDTH_FRAC * 0.5);
+    const flyWindowCenterX = () => cssWidth * 0.5;
+    const flyWindowHalfWidth = () => Math.max(40, cssWidth * FLY_WINDOW_WIDTH_FRAC * 0.5);
 
     /** Spawn from top-center window; side picks outward curve direction. */
     const initFlyMotion = (particle, index = 0) => {
@@ -138,10 +180,10 @@ function addSeasonalOverlay() {
         }
 
         return {
-            x: Math.random() * canvas.width,
+            x: Math.random() * cssWidth,
             y: isAnimated
-                ? -20 - (index * canvas.height) / PARTICLE_AMOUNT
-                : Math.random() * Math.min(FADE_START_Y, canvas.height),
+                ? -20 - (index * cssHeight) / PARTICLE_AMOUNT
+                : Math.random() * Math.min(FADE_START_Y, cssHeight),
             size: Math.random() * (PARTICLE_SIZE.max - PARTICLE_SIZE.min) + PARTICLE_SIZE.min,
             speed: Math.random() * (PARTICLE_SPEED.max - PARTICLE_SPEED.min) + PARTICLE_SPEED.min,
             opacity: isAnimated ? null : Math.random() * 0.5 + 0.2,
@@ -157,7 +199,7 @@ function addSeasonalOverlay() {
             return;
         }
         particle.y = -10 - Math.random() * 30;
-        particle.x = Math.random() * canvas.width;
+        particle.x = Math.random() * cssWidth;
         particle.speed = Math.random() * (PARTICLE_SPEED.max - PARTICLE_SPEED.min) + PARTICLE_SPEED.min;
         particle.drift = Math.random() * 0.4 - 0.2;
         particle.rotation = Math.random() * 360;
@@ -167,110 +209,174 @@ function addSeasonalOverlay() {
         const opacity = particleOpacity(particle);
         if (opacity <= 0.01) return;
 
+        const size = particle.size;
         ctx.save();
         ctx.translate(particle.x, particle.y);
         ctx.rotate((particle.rotation * Math.PI) / 180);
-        ctx.font = `${particle.size}px sans-serif`;
-        ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(glyph, 0, 0);
+        ctx.globalAlpha = opacity;
+        ctx.drawImage(glyphSprite, -size / 2, -size / 2, size, size);
         ctx.restore();
     };
 
-    let animationFrame;
+    const particles = Array.from(
+        { length: PARTICLE_AMOUNT },
+        (_, i) => createParticle(true, i)
+    );
+
+    let animationFrame = null;
+    let lastTime = 0;
+    let animating = false;
+
     const stopAnimation = () => {
-        if (animationFrame) cancelAnimationFrame(animationFrame);
+        if (animationFrame != null) {
+            cancelAnimationFrame(animationFrame);
+            animationFrame = null;
+        }
+        animating = false;
     };
 
-    const renderStatic = () => {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        Array.from({ length: PARTICLE_AMOUNT }, () => createParticle(false))
-            .forEach(drawParticle);
-    };
+    const updateParticle = (particle, frameScale) => {
+        if (isFly) {
+            particle.vx += (particle.outwardAccel || 0) * frameScale;
+            const maxOut = FLY_OUTWARD_MAX;
+            if (Math.abs(particle.vx) > maxOut) {
+                particle.vx = Math.sign(particle.vx) * maxOut;
+            }
+            particle.vy = Math.min(
+                FLY_DOWN_MAX,
+                particle.vy + (particle.downAccel || 0) * frameScale
+            );
 
-    const startAnimation = () => {
-        const particles = Array.from(
-            { length: PARTICLE_AMOUNT },
-            (_, i) => createParticle(true, i)
-        );
+            particle.wobblePhase += particle.wobbleSpeed * frameScale;
+            particle.wobblePhase2 += particle.wobbleSpeed2 * frameScale;
+            const wobbleX =
+                Math.sin(particle.wobblePhase) * particle.wobbleAmp +
+                Math.sin(particle.wobblePhase2) * particle.wobbleAmp2;
+            const wobbleY =
+                Math.cos(particle.wobblePhase * 0.85) * (particle.wobbleAmp * 0.35) +
+                Math.sin(particle.wobblePhase2 * 1.3) * (particle.wobbleAmp2 * 0.5);
 
-        const animate = () => {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            particle.x += (particle.vx + wobbleX * 0.15) * frameScale;
+            particle.y += (particle.vy + wobbleY * 0.12) * frameScale;
 
-            particles.forEach((particle) => {
-                if (isFly) {
-                    // Accelerate outward + downward (leaving the window)
-                    particle.vx += particle.outwardAccel || 0;
-                    const maxOut = FLY_OUTWARD_MAX;
-                    if (Math.abs(particle.vx) > maxOut) {
-                        particle.vx = Math.sign(particle.vx) * maxOut;
-                    }
-                    particle.vy = Math.min(FLY_DOWN_MAX, particle.vy + (particle.downAccel || 0));
-
-                    particle.wobblePhase += particle.wobbleSpeed;
-                    particle.wobblePhase2 += particle.wobbleSpeed2;
-                    const wobbleX =
-                        Math.sin(particle.wobblePhase) * particle.wobbleAmp +
-                        Math.sin(particle.wobblePhase2) * particle.wobbleAmp2;
-                    const wobbleY =
-                        Math.cos(particle.wobblePhase * 0.85) * (particle.wobbleAmp * 0.35) +
-                        Math.sin(particle.wobblePhase2 * 1.3) * (particle.wobbleAmp2 * 0.5);
-
-                    particle.x += particle.vx + wobbleX * 0.15;
-                    particle.y += particle.vy + wobbleY * 0.12;
-
-                    // Face along velocity with organic rotational flutter
-                    const aimDeg = (Math.atan2(particle.vy, particle.vx) * 180) / Math.PI + 90;
-                    const rotFlutter = Math.sin(particle.wobblePhase) * particle.rotWobbleAmp
-                        + Math.sin(particle.wobblePhase2) * (particle.rotWobbleAmp * 0.4);
-                    particle.rotation = aimDeg + rotFlutter + particle.rotationSpeed;
-                } else {
-                    particle.y += particle.speed;
-                    particle.x += particle.drift;
-                    particle.rotation += particle.rotationSpeed;
-                }
-
-                const offBottom = particle.y > canvas.height + 20;
-                const fadedOut = isFly && particle.y > FADE_START_Y && particleOpacity(particle) <= 0.02;
-                const offSides = particle.x < -50 || particle.x > canvas.width + 50;
-
-                if (offBottom || fadedOut || offSides) {
-                    resetParticle(particle);
-                }
-
-                drawParticle(particle);
-            });
-
-            animationFrame = requestAnimationFrame(animate);
-        };
-
-        animate();
-        return stopAnimation;
-    };
-
-    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-    let currentAnimation = null;
-
-    const handleMotionChange = (e) => {
-        stopAnimation();
-        if (currentAnimation) currentAnimation();
-
-        if (e.matches) {
-            renderStatic();
-            currentAnimation = null;
+            const aimDeg = (Math.atan2(particle.vy, particle.vx) * 180) / Math.PI + 90;
+            const rotFlutter = Math.sin(particle.wobblePhase) * particle.rotWobbleAmp
+                + Math.sin(particle.wobblePhase2) * (particle.rotWobbleAmp * 0.4);
+            particle.rotation = aimDeg + rotFlutter + particle.rotationSpeed * frameScale;
         } else {
-            currentAnimation = startAnimation();
+            particle.y += particle.speed * frameScale;
+            particle.x += particle.drift * frameScale;
+            particle.rotation += particle.rotationSpeed * frameScale;
+        }
+
+        const offBottom = particle.y > cssHeight + 20;
+        const fadedOut = isFly && particle.y > FADE_START_Y && particleOpacity(particle) <= 0.02;
+        const offSides = particle.x < -50 || particle.x > cssWidth + 50;
+
+        if (offBottom || fadedOut || offSides) {
+            resetParticle(particle);
         }
     };
 
-    mediaQuery.addEventListener('change', handleMotionChange);
-    handleMotionChange(mediaQuery);
+    const animate = (currentTime) => {
+        animationFrame = requestAnimationFrame(animate);
 
-    window.addEventListener('beforeunload', () => {
-        mediaQuery.removeEventListener('change', handleMotionChange);
+        if (!lastTime) {
+            lastTime = currentTime;
+            return;
+        }
+
+        const rawDelta = currentTime - lastTime;
+        if (rawDelta < FRAME_INTERVAL) return;
+
+        lastTime = currentTime - (rawDelta % FRAME_INTERVAL);
+        const dt = Math.min(rawDelta, MAX_DT_MS);
+        const frameScale = dt / BASE_FRAME_MS;
+
+        ctx.clearRect(0, 0, cssWidth, cssHeight);
+        for (let i = 0; i < particles.length; i++) {
+            const particle = particles[i];
+            updateParticle(particle, frameScale);
+            drawParticle(particle);
+        }
+    };
+
+    const renderStatic = () => {
+        ctx.clearRect(0, 0, cssWidth, cssHeight);
+        for (let i = 0; i < PARTICLE_AMOUNT; i++) {
+            drawParticle(createParticle(false));
+        }
+    };
+
+    const reducedMotionMq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const mobileMq = window.matchMedia('(max-width: 899px)');
+
+    const isHomePageActive = () =>
+        document.documentElement.getAttribute('data-active-page') === 'home';
+
+    const shouldRunAnimation = () =>
+        !document.hidden
+        && isHomePageActive()
+        && !mobileMq.matches
+        && !reducedMotionMq.matches;
+
+    const shouldPaintStatic = () =>
+        !document.hidden
+        && isHomePageActive()
+        && !mobileMq.matches
+        && reducedMotionMq.matches;
+
+    const startAnimation = () => {
+        if (animating) return;
+        animating = true;
+        lastTime = 0;
+        animationFrame = requestAnimationFrame(animate);
+    };
+
+    const syncAnimationRunning = () => {
+        if (shouldRunAnimation()) {
+            if (!animating) startAnimation();
+            return;
+        }
+
         stopAnimation();
-    });
+        if (shouldPaintStatic()) {
+            renderStatic();
+        } else {
+            ctx.clearRect(0, 0, cssWidth, cssHeight);
+        }
+    };
+
+    const onVisibilityChange = () => syncAnimationRunning();
+    const onReducedMotionChange = () => syncAnimationRunning();
+    const onMobileChange = () => syncAnimationRunning();
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    reducedMotionMq.addEventListener('change', onReducedMotionChange);
+    mobileMq.addEventListener('change', onMobileChange);
+
+    let pageAttrObserver = null;
+    if (typeof MutationObserver !== 'undefined') {
+        pageAttrObserver = new MutationObserver(() => syncAnimationRunning());
+        pageAttrObserver.observe(document.documentElement, {
+            attributes: true,
+            attributeFilter: ['data-active-page']
+        });
+    }
+
+    syncAnimationRunning();
+
+    const cleanup = () => {
+        stopAnimation();
+        if (resizeTimer != null) clearTimeout(resizeTimer);
+        window.removeEventListener('resize', onResize);
+        document.removeEventListener('visibilitychange', onVisibilityChange);
+        reducedMotionMq.removeEventListener('change', onReducedMotionChange);
+        mobileMq.removeEventListener('change', onMobileChange);
+        if (pageAttrObserver) pageAttrObserver.disconnect();
+    };
+
+    window.addEventListener('beforeunload', cleanup);
 }
 
 addSeasonalOverlay();

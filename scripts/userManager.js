@@ -480,12 +480,9 @@
             footer,
             closeOnBackdrop: true,
             closeOnEscape: true,
-            showCloseButton: true
+            showCloseButton: true,
+            dialogStyle: { maxWidth: '720px', width: '90vw' }
         });
-        if (modal?.dialog) {
-            modal.dialog.style.maxWidth = '720px';
-            modal.dialog.style.width = '90vw';
-        }
         syncApplyEnabled();
     }
 

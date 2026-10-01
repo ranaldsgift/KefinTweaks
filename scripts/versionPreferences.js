@@ -11,8 +11,10 @@
     const DEFAULT_VERSIONS = ['4k', '2160p', '1080p', '720p', '576p', '480p', '360p', NONE_SENTINEL];
     const DEFAULT_EDITIONS = ['Theatrical', "Director's Cut", 'Extended Edition', 'Fan Edit', NONE_SENTINEL];
 
-    const SELECTOR = '.itemDetailPage:not(.hide) .selectSourceContainer select.detailTrackSelect';
-    const CONTAINER_SELECTOR = '.itemDetailPage:not(.hide) .selectSourceContainer';
+    const PAGE_SELECTOR = '#itemDetailPage:not(.hide)';
+    const FORM_SELECTOR = 'form.trackSelections';
+    const SELECTOR = `${PAGE_SELECTOR} ${FORM_SELECTOR} select.detailTrackSelect`;
+    const SELECT_FALLBACK = `${PAGE_SELECTOR} select.detailTrackSelect`;
     const ORIGINAL_ATTR = 'data-kefin-original-label';
     const SELECTED_INDEX_ATTR = 'data-selected-index';
     const CHANGE_BOUND_ATTR = 'data-kefin-vp-change-bound';
@@ -232,10 +234,23 @@
     }
 
     function findSourceSelect() {
-        return document.querySelector(SELECTOR);
+        return document.querySelector(SELECTOR) || document.querySelector(SELECT_FALLBACK);
+    }
+
+    function findDetailsPage() {
+        return document.querySelector(PAGE_SELECTOR);
+    }
+
+    function findTrackSelectionsForm(page) {
+        const root = page || findDetailsPage();
+        return root?.querySelector?.(FORM_SELECTOR) || null;
     }
 
     let observer = null;
+    /** @type {Element|null} */
+    let observedRoot = null;
+    /** True while observing the details page until form.trackSelections mounts. */
+    let waitingForTrackForm = false;
     let applyScheduled = false;
     let isApplying = false;
 
@@ -244,6 +259,8 @@
             observer.disconnect();
             observer = null;
         }
+        observedRoot = null;
+        waitingForTrackForm = false;
         applyScheduled = false;
     }
 
@@ -280,32 +297,82 @@
                 if (node.nodeType !== 1) continue;
                 if (node.matches?.('select.detailTrackSelect')) return true;
                 if (node.matches?.('option') && !node.hasAttribute(ORIGINAL_ATTR)) return true;
-                if (node.querySelector?.('select.detailTrackSelect, option')) return true;
+                if (node.matches?.(FORM_SELECTOR)) return true;
+                if (node.querySelector?.('select.detailTrackSelect, option, form.trackSelections')) return true;
             }
         }
         return false;
     }
 
-    /** Long-lived document observer; gates on unbound visible details select. */
-    function ensureDocumentObserver() {
-        if (observer) return;
+    function mutationIntroducesTrackForm(mutations) {
+        for (const mutation of mutations) {
+            if (mutation.type !== 'childList') continue;
+            for (const node of mutation.addedNodes) {
+                if (node.nodeType !== 1) continue;
+                if (node.matches?.(FORM_SELECTOR)) return true;
+                if (node.querySelector?.(FORM_SELECTOR)) return true;
+            }
+        }
+        return false;
+    }
 
-        tryApply();
-
-        const root = document.body || document.documentElement;
+    /**
+     * Observe a narrow root (prefer form.trackSelections; fall back to visible details page).
+     * If observing the page and the form appears, promote to the form.
+     */
+    function observeRoot(root, pendingForm) {
         if (!root) return;
+
+        disconnectObserver();
+
+        waitingForTrackForm = !!pendingForm;
+        observedRoot = root;
 
         observer = new MutationObserver((mutations) => {
             if (isApplying) return;
+
+            if (waitingForTrackForm) {
+                const form =
+                    (mutationIntroducesTrackForm(mutations) && findTrackSelectionsForm(observedRoot)) ||
+                    findTrackSelectionsForm(observedRoot);
+                if (form) {
+                    observeRoot(form, false);
+                    tryApply();
+                    return;
+                }
+            }
+
             if (!isRelevantMutation(mutations)) return;
             scheduleTryApply();
         });
+
         observer.observe(root, { childList: true, subtree: true });
     }
 
-    function onDetailsPage() {
-        ensureDocumentObserver();
+    function attachDetailsObserver() {
+        disconnectObserver();
+
+        const page = findDetailsPage();
+        if (!page) return;
+
+        const form = findTrackSelectionsForm(page);
+        if (form) {
+            observeRoot(form, false);
+        } else {
+            observeRoot(page, true);
+        }
         tryApply();
+    }
+
+    function onDetailsPage() {
+        attachDetailsObserver();
+    }
+
+    function onAnyPage(view, _doc, hash) {
+        if (isDetailsHash(hash) || (typeof view === 'string' && /details/i.test(view))) {
+            return;
+        }
+        disconnectObserver();
     }
 
     function init() {
@@ -314,8 +381,6 @@
             return;
         }
 
-        ensureDocumentObserver();
-
         window.KefinTweaksUtils.onViewPage(() => {
             try {
                 onDetailsPage();
@@ -323,6 +388,18 @@
                 WARN('Failed to apply version preferences', err);
             }
         }, { pages: ['details'] });
+
+        window.KefinTweaksUtils.onViewPage((view, doc, hash) => {
+            try {
+                onAnyPage(view, doc, hash);
+            } catch (err) {
+                WARN('Failed to clean up version preferences observer', err);
+            }
+        });
+
+        if (isDetailsHash()) {
+            attachDetailsObserver();
+        }
 
         LOG('Initialized');
     }
