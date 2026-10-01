@@ -85,11 +85,6 @@
 	margin-right: auto !important;
 }
 
-[data-modal-id="kefin-homescreen-section-create-flow"] .hsse-flow-body:has(.hsse-wizard) {
-	display: flex;
-	align-items: center;
-}
-
 [data-modal-id="kefin-homescreen-section-create-flow"] .hsse-subtitle {
 	margin: 0 0 1.25em;
 	font-size: 0.9375rem;

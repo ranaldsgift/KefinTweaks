@@ -448,6 +448,7 @@
         });
     }
 
+    /** Defer crawl until idle/hidden/fallback after home has a chance to paint. */
     let bootstrapStarted = false;
     let bootstrapScheduled = false;
 
@@ -462,30 +463,19 @@
         }
     }
 
-    /** Defer crawl until home has painted (or 3s after login) so home getQuery is not starved. */
     function scheduleBootstrap() {
         if (bootstrapScheduled) return;
         bootstrapScheduled = true;
-
-        const start = () => { bootstrap(); };
-
-        const onPainted = () => {
-            document.removeEventListener('kefinTweaksHomePainted', onPainted);
-            start();
-        };
-        document.addEventListener('kefinTweaksHomePainted', onPainted);
-
-        waitForLoginReady().then((ok) => {
-            if (!ok) {
-                document.removeEventListener('kefinTweaksHomePainted', onPainted);
-                start();
-                return;
-            }
-            setTimeout(() => {
-                document.removeEventListener('kefinTweaksHomePainted', onPainted);
-                start();
-            }, 3000);
-        });
+        const utils = window.LibraryCacheUtils;
+        if (utils?.scheduleIdleBootstrap) {
+            utils.scheduleIdleBootstrap({
+                waitForLogin: waitForLoginReady,
+                onReady: () => { bootstrap(); }
+            });
+            return;
+        }
+        // Fallback if LibraryCacheUtils not loaded yet
+        waitForLoginReady().then(() => bootstrap());
     }
 
     window.MoviesCache = {

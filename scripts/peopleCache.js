@@ -7,7 +7,7 @@
     const WARN = (...args) => console.warn('[KefinTweaks PeopleCache]', ...args);
     const ERR = (...args) => console.error('[KefinTweaks PeopleCache]', ...args);
 
-    const CACHE_NAME = 'library_top_people_v4';
+    const CACHE_NAME = 'library_top_people_v3';
     const DEFAULT_MIN = 10;
     const DEFAULT_PER_TYPE_MAX = 100;
     const EPISODE_CHUNK_SIZE = 500;
@@ -337,7 +337,7 @@
         const params = new URLSearchParams({
             IncludeItemTypes: 'Episode',
             Recursive: 'true',
-            Fields: 'People,ImageBlurHashes',
+            Fields: 'People',
             ExcludeLocationTypes: 'Virtual',
             EnableTotalRecordCount: 'false',
             SortBy: 'DateCreated',
@@ -460,7 +460,7 @@
                 setEpisodeCrawl(startIndex, newestAt, oldestApplied);
                 await persistPeople({ prune: false });
             }
-        } else {
+                } else {
             LOG('Episode people sync: full crawl…');
             startIndex = 0;
             newestAt = null;
@@ -747,7 +747,7 @@
             try {
                 const cache = window.IndexedDBCache;
                 const userId = window.ApiClient.getCurrentUserId();
-                if (cache && await cache.isCacheValid(CACHE_NAME, userId)) {
+                if (cache) {
                     const cached = await cache.get(CACHE_NAME, userId);
                     if (cached?.isComplete && Array.isArray(cached.peopleData)) {
                         const currentMode = shouldLoadPeopleEpisodeData();
@@ -791,7 +791,7 @@
                                 // Resume partial, incremental watermark, or start full — never wipe on missing watermark alone
                                 scheduleEpisodePeopleSync();
                             }
-                            return;
+                    return;
                         }
                     }
                 }
@@ -906,12 +906,7 @@
         if (personType === 'Director') list = filterRoleList('Director', itemType);
         else if (personType === 'Writer') list = filterRoleList('Writer', itemType);
         else list = filterRoleList('Actor', itemType);
-        return list.slice(0, limit).map((p) => {
-            const out = { Id: p.Id, Name: p.Name, Type: 'Person' };
-            if (p.PrimaryImageTag) out.PrimaryImageTag = p.PrimaryImageTag;
-            if (p.ImageBlurHashes) out.ImageBlurHashes = p.ImageBlurHashes;
-            return out;
-        });
+        return list.slice(0, limit).map((p) => ({ Id: p.Id, Name: p.Name, Type: 'Person' }));
     }
 
     async function waitForLoginReady(maxWaitMs = 60000) {
@@ -926,6 +921,7 @@
         return window.userHelper.waitForLogin(maxWaitMs);
     }
 
+    /** Defer crawl until idle/hidden/fallback after home has a chance to paint. */
     let bootstrapStarted = false;
     let bootstrapScheduled = false;
 
@@ -945,26 +941,15 @@
     function scheduleBootstrap() {
         if (bootstrapScheduled) return;
         bootstrapScheduled = true;
-
-        const start = () => { bootstrap(); };
-
-        const onPainted = () => {
-            document.removeEventListener('kefinTweaksHomePainted', onPainted);
-            start();
-        };
-        document.addEventListener('kefinTweaksHomePainted', onPainted);
-
-        waitForLoginReady().then((ok) => {
-            if (!ok) {
-                document.removeEventListener('kefinTweaksHomePainted', onPainted);
-                start();
-                return;
-            }
-            setTimeout(() => {
-                document.removeEventListener('kefinTweaksHomePainted', onPainted);
-                start();
-            }, 3000);
-        });
+        const utils = window.LibraryCacheUtils;
+        if (utils?.scheduleIdleBootstrap) {
+            utils.scheduleIdleBootstrap({
+                waitForLogin: waitForLoginReady,
+                onReady: () => { bootstrap(); }
+            });
+            return;
+        }
+        waitForLoginReady().then(() => bootstrap());
     }
 
     window.PeopleCache = {

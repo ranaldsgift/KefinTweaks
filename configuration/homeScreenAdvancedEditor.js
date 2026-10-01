@@ -20,12 +20,33 @@
         { value: 'Custom', label: 'Custom', path: null }
     ];
 
+    const PEOPLE_CACHE_ITEM_TYPE_VALUES = [
+        { value: '', label: 'All' },
+        { value: 'Movie', label: 'Movie' },
+        { value: 'Series', label: 'Series' },
+        { value: 'Episode', label: 'Episode' }
+    ];
+
+    const PEOPLE_CACHE_ARGS = [
+        {
+            key: 'ItemType',
+            type: 'select',
+            label: 'Item Type',
+            possibleValues: PEOPLE_CACHE_ITEM_TYPE_VALUES
+        },
+        { key: 'MinCount', type: 'number', label: 'Min Count' }
+    ];
+
     const CACHE_SOURCE_OPTIONS = [
         { value: 'MoviesCache.getImdbTop250Movies', label: 'IMDb Top 250 Movies' },
-        { value: 'StudiosCache.getPopularTVNetworks', label: 'Popular TV Networks' },
-        { value: 'PeopleCache.getTopActors', label: 'Top Actors' },
-        { value: 'PeopleCache.getTopDirectors', label: 'Top Directors' },
-        { value: 'PeopleCache.getTopWriters', label: 'Top Writers' }
+        {
+            value: 'StudiosCache.getPopularTVNetworks',
+            label: 'Popular TV Networks',
+            args: [{ key: 'MinCount', type: 'number', label: 'Min Count' }]
+        },
+        { value: 'PeopleCache.getTopActors', label: 'Top Actors', args: PEOPLE_CACHE_ARGS },
+        { value: 'PeopleCache.getTopDirectors', label: 'Top Directors', args: PEOPLE_CACHE_ARGS },
+        { value: 'PeopleCache.getTopWriters', label: 'Top Writers', args: PEOPLE_CACHE_ARGS }
     ];
 
     const DEFAULT_SECTION_QUERY_LIMIT = window.KefinHomeScreenEditorConstants?.DEFAULT_SECTION_QUERY_LIMIT ?? 16;
@@ -1388,9 +1409,60 @@
         if (list) list.innerHTML = buildStaticItemsListHTML(items);
     }
 
+    function getCacheSourceOption(dataSource) {
+        const value = dataSource || CACHE_SOURCE_OPTIONS[0]?.value;
+        return CACHE_SOURCE_OPTIONS.find(o => o.value === value) || CACHE_SOURCE_OPTIONS[0] || null;
+    }
+
+    function buildCacheArgsHTML(queryIndex, dataSource, dataSourceOptions) {
+        const { buildSelect, buildTextInput } = getApi();
+        const source = getCacheSourceOption(dataSource);
+        const args = Array.isArray(source?.args) ? source.args : [];
+        if (!args.length) return '';
+
+        const fields = args.map((arg) => {
+            const id = `query-${queryIndex}-dsArg-${arg.key}`;
+            const raw = dataSourceOptions?.[arg.key];
+            const selected = raw != null ? String(raw) : (arg.default != null ? String(arg.default) : '');
+            if (arg.type === 'select') {
+                const options = Array.isArray(arg.possibleValues) ? arg.possibleValues : [];
+                return buildSelect(id, options, selected, arg.label || arg.key);
+            }
+            if (arg.type === 'number') {
+                return buildTextInput(id, selected, arg.label || arg.key, 'number', '', { step: 1 });
+            }
+            return buildTextInput(id, selected, arg.label || arg.key);
+        }).join('');
+
+        return `<div class="hsae-cache-args hsae-field-grid hsae-field-grid-2" data-query-index="${queryIndex}">${fields}</div>`;
+    }
+
+    function collectCacheArgsIntoDataSourceOptions(editor, queryIndex, dataSource, dataSourceOptions) {
+        const source = getCacheSourceOption(dataSource);
+        const args = Array.isArray(source?.args) ? source.args : [];
+        args.forEach((arg) => {
+            const el = editor.querySelector(`#query-${queryIndex}-dsArg-${arg.key}`);
+            if (!el) return;
+            const raw = el.value;
+            if (raw === '' || raw == null) return;
+            if (arg.type === 'number') {
+                const n = parseFloat(raw);
+                if (Number.isFinite(n)) dataSourceOptions[arg.key] = n;
+                return;
+            }
+            dataSourceOptions[arg.key] = raw;
+        });
+    }
+
     function buildQueryCard(query, index, canDelete, isExpanded = true) {
         const { buildSelect, buildTextInput, SORT_ORDERS, SORT_ORDER_DIRECTIONS } = getApi();
         const queryOptions = query.queryOptions || {};
+        // Prefer dataSourceOptions; fall back to legacy ItemType/MinCount stored in queryOptions
+        const dataSourceOptions = {
+            ...(query.queryOptions?.ItemType != null ? { ItemType: query.queryOptions.ItemType } : {}),
+            ...(query.queryOptions?.MinCount != null ? { MinCount: query.queryOptions.MinCount } : {}),
+            ...(query.dataSourceOptions || {})
+        };
         const sourceType = inferQuerySourceType(query);
         const endpointValue = sourceType === 'static' ? 'Items' : inferEndpointValue(query);
         const customPathDisplay = endpointValue === 'Custom' && sourceType === 'jellyfin' ? 'block' : 'none';
@@ -1398,8 +1470,10 @@
         const endpointDisplay = sourceType === 'jellyfin' || sourceType === 'static' ? 'block' : 'none';
         const jellyfinDisplay = sourceType === 'jellyfin' ? 'block' : 'none';
         const staticDisplay = sourceType === 'static' ? 'block' : 'none';
-        const sortExtrasDisplay = sourceType === 'jellyfin' || sourceType === 'static' ? 'block' : 'none';
+        const limitDisplay = sourceType === 'jellyfin' || sourceType === 'static' || sourceType === 'cache' ? 'block' : 'none';
+        const searchDisplay = sourceType === 'jellyfin' || sourceType === 'static' ? 'block' : 'none';
         const staticItems = getQueryStaticItems(query);
+        const selectedDataSource = query.dataSource || CACHE_SOURCE_OPTIONS[0]?.value;
 
         const parentSelection = getQueryParentSelection(query);
         const includeTypes = Array.isArray(queryOptions.IncludeItemTypes)
@@ -1434,11 +1508,14 @@
                             ${buildEndpointSelectHTML(index, endpointValue, sourceType === 'static')}
                         </div>
                         <div class="hsae-cache-wrap" data-query-index="${index}" style="display:${cacheDisplay};">
-                            ${buildSelect(`query-${index}-dataSource`, CACHE_SOURCE_OPTIONS, query.dataSource || CACHE_SOURCE_OPTIONS[0].value, 'Cache Source')}
+                            ${buildSelect(`query-${index}-dataSource`, CACHE_SOURCE_OPTIONS, selectedDataSource, 'Cache Source')}
                         </div>
                         <div id="query-${index}-path-container" class="hsae-custom-path hsae-query-jellyfin-only" style="display:${customPathDisplay};">
                             ${buildTextInput(`query-${index}-path`, query.path || '', 'Custom Endpoint Path', 'text', '/Shows/Upcoming, etc.')}
                         </div>
+                    </div>
+                    <div class="hsae-cache-args-wrap" data-query-index="${index}" style="display:${cacheDisplay};" data-hsae-profiles="full">
+                        ${sourceType === 'cache' ? buildCacheArgsHTML(index, selectedDataSource, dataSourceOptions) : ''}
                     </div>
 
                     <div class="hsae-field-grid hsae-query-row-sort">
@@ -1448,10 +1525,10 @@
                         <div class="hsae-query-sort-order" data-hsae-profiles="full normal dateCutoffs">
                             ${buildSelect(`query-${index}-SortOrder`, SORT_ORDER_DIRECTIONS, queryOptions.SortOrder || '', 'Sort Order')}
                         </div>
-                        <div class="hsae-query-limit hsae-query-sort-extras" data-hsae-profiles="full minimal postProcessing normal dateCutoffs" style="display:${sortExtrasDisplay};">
+                        <div class="hsae-query-limit" data-hsae-profiles="full minimal postProcessing normal dateCutoffs" style="display:${limitDisplay};">
                             ${buildTextInput(`query-${index}-Limit`, queryOptions.Limit ?? '', 'Limit', 'number', '', { min: 0, step: 1 })}
                         </div>
-                        <div class="hsae-query-search hsae-query-sort-extras" data-hsae-profiles="full" style="display:${sortExtrasDisplay};">
+                        <div class="hsae-query-search" data-hsae-profiles="full" style="display:${searchDisplay};">
                             ${buildTextInput(`query-${index}-SearchTerm`, queryOptions.SearchTerm || '', 'Search Term')}
                         </div>
                     </div>
@@ -2369,17 +2446,36 @@
         }
 
         if (sourceType === 'cache') {
-            const dataSource = editor.querySelector(`#query-${queryIndex}-dataSource`)?.value;
+            const dataSource = editor.querySelector(`#query-${queryIndex}-dataSource`)?.value
+                || CACHE_SOURCE_OPTIONS[0]?.value;
             if (dataSource) query.dataSource = dataSource;
-        } else {
-            const endpoint = editor.querySelector(`#query-${queryIndex}-endpoint`)?.value || 'Items';
-            const endpointMeta = ENDPOINT_OPTIONS.find(o => o.value === endpoint);
-            if (endpoint === 'Custom') {
-                const path = editor.querySelector(`#query-${queryIndex}-path`)?.value?.trim();
-                if (path) query.path = path;
-            } else if (endpointMeta?.path) {
-                query.path = endpointMeta.path;
+            query.queryOptions = {};
+            ['SortBy', 'SortOrder'].forEach(key => {
+                const value = editor.querySelector(`#query-${queryIndex}-${key}`)?.value;
+                if (value) query.queryOptions[key] = value;
+            });
+            const limit = editor.querySelector(`#query-${queryIndex}-Limit`)?.value;
+            if (limit !== '' && limit != null) {
+                const limitN = parseInt(limit, 10);
+                if (Number.isFinite(limitN) && limitN >= 0) {
+                    query.queryOptions.Limit = limitN;
+                }
             }
+            const dataSourceOptions = {};
+            collectCacheArgsIntoDataSourceOptions(editor, queryIndex, dataSource, dataSourceOptions);
+            if (Object.keys(dataSourceOptions).length) {
+                query.dataSourceOptions = dataSourceOptions;
+            }
+            return query;
+        }
+
+        const endpoint = editor.querySelector(`#query-${queryIndex}-endpoint`)?.value || 'Items';
+        const endpointMeta = ENDPOINT_OPTIONS.find(o => o.value === endpoint);
+        if (endpoint === 'Custom') {
+            const path = editor.querySelector(`#query-${queryIndex}-path`)?.value?.trim();
+            if (path) query.path = path;
+        } else if (endpointMeta?.path) {
+            query.path = endpointMeta.path;
         }
 
         query.queryOptions = {};
@@ -2709,12 +2805,15 @@
 
         const sourceSelect = editor.querySelector(`#query-${queryIndex}-sourceType`);
         const endpointSelect = editor.querySelector(`#query-${queryIndex}-endpoint`);
+        const dataSourceSelect = editor.querySelector(`#query-${queryIndex}-dataSource`);
         const pathContainer = editor.querySelector(`#query-${queryIndex}-path-container`);
         const endpointWrap = editor.querySelector('.hsae-jellyfin-endpoint-wrap');
         const cacheWrap = editor.querySelector('.hsae-cache-wrap');
+        const cacheArgsWrap = editor.querySelector('.hsae-cache-args-wrap');
         const jellyfinOnlyBlocks = editor.querySelectorAll('.hsae-query-jellyfin-only');
         const staticOnlyBlocks = editor.querySelectorAll('.hsae-query-static-only');
-        const sortExtrasBlocks = editor.querySelectorAll('.hsae-query-sort-extras');
+        const limitBlock = editor.querySelector('.hsae-query-limit');
+        const searchBlock = editor.querySelector('.hsae-query-search');
 
         const updateSourceVisibility = () => {
             const sourceType = sourceSelect?.value || 'jellyfin';
@@ -2724,15 +2823,21 @@
                 if (sourceType === 'static') endpointSelect.value = 'Items';
             }
             if (cacheWrap) cacheWrap.style.display = sourceType === 'cache' ? 'block' : 'none';
+            if (cacheArgsWrap) cacheArgsWrap.style.display = sourceType === 'cache' ? 'block' : 'none';
             jellyfinOnlyBlocks.forEach(block => {
                 block.style.display = sourceType === 'jellyfin' ? '' : 'none';
             });
             staticOnlyBlocks.forEach(block => {
                 block.style.display = sourceType === 'static' ? '' : 'none';
             });
-            sortExtrasBlocks.forEach(block => {
-                block.style.display = sourceType === 'jellyfin' || sourceType === 'static' ? '' : 'none';
-            });
+            if (limitBlock) {
+                limitBlock.style.display = sourceType === 'jellyfin' || sourceType === 'static' || sourceType === 'cache'
+                    ? ''
+                    : 'none';
+            }
+            if (searchBlock) {
+                searchBlock.style.display = sourceType === 'jellyfin' || sourceType === 'static' ? '' : 'none';
+            }
         };
 
         const updateEndpointVisibility = () => {
@@ -2741,6 +2846,9 @@
         };
 
         sourceSelect?.addEventListener('change', () => {
+            refreshEditorBody(modalInstance);
+        });
+        dataSourceSelect?.addEventListener('change', () => {
             refreshEditorBody(modalInstance);
         });
         endpointSelect?.addEventListener('change', updateEndpointVisibility);
