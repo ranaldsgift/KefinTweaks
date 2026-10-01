@@ -244,7 +244,8 @@
     function updateSearchUrl(searchTerm, searchType = 'videos') {
         try {
             // Jellyfin uses hash-based routing, so we need to update the hash
-            const urlSuffix = ApiClient._appVersion.split('.')[1] > 10 ? '' : '.html';
+            const [major, minor] = ApiClient._appVersion.split('.').map(Number);
+            const urlSuffix = major > 10 || (major === 10 && minor >= 11) ? '' : '.html';
             const baseHash = `#/search${urlSuffix}`;
             const params = new URLSearchParams();
             const trimmed = searchTerm.trim();
