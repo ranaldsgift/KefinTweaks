@@ -2525,17 +2525,10 @@
             footer: footer,
             closeOnBackdrop: true,
             closeOnEscape: true,
+            dialogStyle: window.innerWidth >= 900
+                ? { maxWidth: '90vw', width: '1400px', maxHeight: '90vh' }
+                : undefined,
             onOpen: (modalInstance) => {
-                // Check if window is less than 900px
-                const layoutMobile = window.innerWidth < 900;
-
-                // Update modal dialog styling for large size
-                if (modalInstance && modalInstance.dialog && !layoutMobile) {
-                    modalInstance.dialog.style.maxWidth = '90vw';
-                    modalInstance.dialog.style.width = '1400px';
-                    modalInstance.dialog.style.maxHeight = '90vh';
-                }
-
                 // Add event handlers
                 setupConfigModalHandlers(modalInstance, config);
                 }

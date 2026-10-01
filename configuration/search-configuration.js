@@ -107,7 +107,7 @@
             `;
 
             // Create modal
-            const modalInstance = window.ModalSystem.create({
+            window.ModalSystem.create({
                 id: MODAL_ID,
                 title: 'Search Configuration',
                 content: content,
@@ -115,6 +115,9 @@
                 closeOnBackdrop: true,
                 closeOnEscape: true,
                 showCloseButton: true,
+                dialogStyle: window.innerWidth >= 900
+                    ? { maxWidth: '90vw', width: '1400px', height: '90vh' }
+                    : undefined,
                 onOpen: (modal) => {
                     // Save button
                     const saveBtn = modal.dialogFooter.querySelector('#save-search-config-btn');
@@ -134,12 +137,6 @@
                     }
                 }
             });
-
-            if (window.innerWidth >= 900) {
-                modalInstance.dialog.style.maxWidth = '90vw';
-                modalInstance.dialog.style.width = '1400px';
-                modalInstance.dialog.style.height = '90vh';
-            }
 
             LOG('Search configuration modal opened');
         } catch (error) {

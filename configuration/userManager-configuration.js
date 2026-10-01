@@ -469,6 +469,7 @@
                 closeOnBackdrop: true,
                 closeOnEscape: true,
                 showCloseButton: true,
+                dialogStyle: { maxWidth: '420px', width: '90vw' },
                 onOpen: (m) => {
                     const input = m.dialogContent.querySelector('#um-tag-input');
                     const finish = (val) => {
@@ -489,10 +490,6 @@
                 },
                 onClose: () => resolve(null)
             });
-            if (modal?.dialog) {
-                modal.dialog.style.maxWidth = '420px';
-                modal.dialog.style.width = '90vw';
-            }
         });
     }
 
@@ -535,6 +532,7 @@
                 closeOnBackdrop: true,
                 closeOnEscape: true,
                 showCloseButton: true,
+                dialogStyle: { maxWidth: '420px', width: '90vw' },
                 onOpen: (m) => {
                     m.dialogFooter.querySelector('#um-sched-cancel')?.addEventListener('click', () => finish(null));
                     m.dialogFooter.querySelector('#um-sched-ok')?.addEventListener('click', () => {
@@ -550,10 +548,6 @@
                 },
                 onClose: () => finish(null)
             });
-            if (modal?.dialog) {
-                modal.dialog.style.maxWidth = '420px';
-                modal.dialog.style.width = '90vw';
-            }
         });
     }
 
@@ -723,13 +717,10 @@
             closeOnBackdrop: true,
             closeOnEscape: true,
             showCloseButton: true,
+            dialogStyle: window.innerWidth >= 900
+                ? { maxWidth: '90vw', width: '1400px', height: '90vh' }
+                : undefined,
             onOpen: (modal) => {
-                if (window.innerWidth >= 900) {
-                    modal.dialog.style.maxWidth = '90vw';
-                    modal.dialog.style.width = '1400px';
-                    modal.dialog.style.height = '90vh';
-                }
-
                 modal.dialogFooter.querySelector('#um-editor-cancel')?.addEventListener('click', () => {
                     window.ModalSystem.close(EDITOR_MODAL_ID);
                 });
@@ -839,20 +830,18 @@
             footer.style.cssText = 'display:flex;gap:0.75em;justify-content:flex-end;';
             footer.innerHTML = `<button class="emby-button raised" onclick="window.ModalSystem.close('${CONFIG_MODAL_ID}')">Close</button>`;
 
-            const modal = window.ModalSystem.create({
+            window.ModalSystem.create({
                 id: CONFIG_MODAL_ID,
                 title: 'User Manager',
                 content,
                 footer,
                 closeOnBackdrop: true,
                 closeOnEscape: true,
-                showCloseButton: true
+                showCloseButton: true,
+                dialogStyle: window.innerWidth >= 900
+                    ? { maxWidth: '90vw', width: '1400px', height: '90vh' }
+                    : undefined
             });
-            if (modal?.dialog && window.innerWidth >= 900) {
-                modal.dialog.style.maxWidth = '90vw';
-                modal.dialog.style.width = '1400px';
-                modal.dialog.style.height = '90vh';
-            }
             LOG('User Manager config opened');
         } catch (e) {
             ERR('Error opening User Manager config', e);

@@ -9,6 +9,49 @@ window.ModalSystem = (function() {
     // Store active modals
     const activeModals = new Map();
 
+    // Body scroll lock while any kefin modal is open (replaces non-passive wheel trap)
+    let bodyScrollLockCount = 0;
+    let savedBodyOverflow = null;
+    let savedHtmlOverflow = null;
+
+    function lockBodyScroll() {
+        if (bodyScrollLockCount === 0) {
+            savedBodyOverflow = document.body.style.overflow;
+            savedHtmlOverflow = document.documentElement.style.overflow;
+            document.body.style.overflow = 'hidden';
+            document.documentElement.style.overflow = 'hidden';
+        }
+        bodyScrollLockCount++;
+    }
+
+    function unlockBodyScroll() {
+        if (bodyScrollLockCount <= 0) return;
+        bodyScrollLockCount--;
+        if (bodyScrollLockCount === 0) {
+            document.body.style.overflow = savedBodyOverflow || '';
+            document.documentElement.style.overflow = savedHtmlOverflow || '';
+            savedBodyOverflow = null;
+            savedHtmlOverflow = null;
+        }
+    }
+
+    /**
+     * Apply Jellyfin's scaleup open animation and clear it when finished.
+     * Clearing avoids a stuck compositor layer that leaves large dialogs soft/blurry.
+     * @param {HTMLElement} dialog
+     */
+    function applyOpenAnimation(dialog) {
+        if (!dialog) return;
+        dialog.style.animation = '160ms ease-out 0s 1 normal both running scaleup';
+        const onEnd = (e) => {
+            if (e.target !== dialog) return;
+            if (e.animationName && e.animationName !== 'scaleup') return;
+            dialog.style.animation = '';
+            dialog.removeEventListener('animationend', onEnd);
+        };
+        dialog.addEventListener('animationend', onEnd);
+    }
+
     /**
      * Create a Jellyfin-style modal dialog
      * @param {Object} options - Modal configuration
@@ -22,6 +65,7 @@ window.ModalSystem = (function() {
      * @param {boolean} options.closeOnEscape - Whether to close on Escape key (default: true)
      * @param {boolean} options.showCloseButton - Whether to show close button in header (default: true if title exists)
      * @param {boolean} [options.fixedSize] - Use dialog-fixedSize. If undefined, enable when window width < 900.
+     * @param {Object} [options.dialogStyle] - CSS styles applied to the dialog before open (e.g. width/height).
      * @returns {Object} Modal instance
      */
     function createModal(options = {}) {
@@ -35,7 +79,8 @@ window.ModalSystem = (function() {
             closeOnBackdrop = true,
             closeOnEscape = true,
             showCloseButton = true,
-            fixedSize
+            fixedSize,
+            dialogStyle
         } = options;
 
         if (!id) {
@@ -68,12 +113,16 @@ window.ModalSystem = (function() {
         dialog.setAttribute('data-autofocus', 'true');
         dialog.setAttribute('data-removeonclose', 'true');
         dialog.setAttribute('data-name', 'kefin-modal');
-        dialog.style.animation = '160ms ease-out 0s 1 normal both running scaleup';
         dialog.style.display = 'flex';
         dialog.style.flexDirection = 'column';
         if (!useFixedSize) {
             dialog.style.maxHeight = '90vh';
         }
+        // Final box size before scaleup so the compositor layer is not soft-scaled after open
+        if (dialogStyle && typeof dialogStyle === 'object') {
+            Object.assign(dialog.style, dialogStyle);
+        }
+        applyOpenAnimation(dialog);
 
         // Create header if title is provided
         let dialogHeader = null;
@@ -121,89 +170,10 @@ window.ModalSystem = (function() {
         dialogContent.style.overflowY = 'auto';
         dialogContent.style.flex = '1';
         dialogContent.style.minHeight = '0';
-        
-        // Helper function to check if an element is scrollable
-        const isScrollable = (element) => {
-            if (!element || element === document.body || element === document.documentElement) {
-                return false;
-            }
-            const style = window.getComputedStyle(element);
-            const overflowY = style.overflowY;
-            const overflow = style.overflow;
-            const hasScrollableContent = element.scrollHeight > element.clientHeight;
-            return (overflowY === 'auto' || overflowY === 'scroll' || overflow === 'auto' || overflow === 'scroll') && hasScrollableContent;
-        };
-
-        // Helper function to find the closest scrollable parent
-        const findClosestScrollable = (element, stopAt = null) => {
-            let current = element;
-            while (current && current !== stopAt && current !== document.body && current !== document.documentElement) {
-                if (isScrollable(current)) {
-                    return current;
-                }
-                current = current.parentElement;
-            }
-            return null;
-        };
-
-        // Helper function to check if element can scroll in direction
-        const canScrollInDirection = (element, delta) => {
-            if (!element) return false;
-            const scrollTop = element.scrollTop;
-            const scrollHeight = element.scrollHeight;
-            const clientHeight = element.clientHeight;
-            
-            // Scrolling down (positive delta)
-            if (delta > 0) {
-                return scrollTop + clientHeight < scrollHeight - 1; // -1 for rounding
-            }
-            // Scrolling up (negative delta)
-            else {
-                return scrollTop > 0;
-            }
-        };
-
-        // Add scroll trap to prevent body scroll when scrolling within modal
-        const wheelHandler = (e) => {
-            const element = dialogContent;
-            const delta = e.deltaY;
-
-            // Find if the event originated from a child scrollable element
-            const childScrollable = findClosestScrollable(e.target, element);
-            
-            // If event is from a child scrollable element
-            if (childScrollable && childScrollable !== element) {
-                // Check if the child can scroll in the direction of the wheel
-                if (canScrollInDirection(childScrollable, delta)) {
-                    // Let the child handle the scroll, but stop propagation to prevent body scroll
-                    e.stopPropagation();
-                    return; // Don't prevent default, let child scroll
-                }
-                // Child is at boundary, prevent default to stop body scroll
-                e.preventDefault();
-                e.stopPropagation();
-                return;
-            }
-
-            // Event is on the modal content itself
-            const scrollTop = element.scrollTop;
-            const scrollHeight = element.scrollHeight;
-            const clientHeight = element.clientHeight;
-
-            // At top and scrolling up
-            if (delta < 0 && scrollTop === 0) {
-                e.preventDefault();
-            }
-            // At bottom and scrolling down
-            else if (delta > 0 && scrollTop + clientHeight >= scrollHeight) {
-                e.preventDefault();
-            }
-            
-            // Stop propagation to prevent body scroll
-            e.stopPropagation();
-        };
-        
-        dialogContent.addEventListener('wheel', wheelHandler, { passive: false });
+        // Contain overscroll so nested wheel/touch scroll does not chain to the page
+        // (avoids a non-passive wheel listener that delays input while the main thread is busy)
+        dialogContent.style.overscrollBehavior = 'contain';
+        dialog.style.overscrollBehavior = 'contain';
 
         // Add content
         if (content) {
@@ -261,12 +231,12 @@ window.ModalSystem = (function() {
             updateContent: (newContent) => updateModalContent(id, newContent),
             addEventListener: (event, handler) => {
                 dialog.addEventListener(event, handler);
-            },
-            _wheelHandler: wheelHandler
+            }
         };
 
         // Store modal instance
         activeModals.set(id, modalInstance);
+        //lockBodyScroll();
 
         // Add event listeners
         if (closeOnBackdrop) {
@@ -308,11 +278,6 @@ window.ModalSystem = (function() {
         if (modal._escapeHandler) {
             document.removeEventListener('keydown', modal._escapeHandler);
         }
-        
-        // Remove wheel handler if it exists
-        if (modal._wheelHandler && modal.dialogContent) {
-            modal.dialogContent.removeEventListener('wheel', modal._wheelHandler);
-        }
 
         // Remove from DOM
         if (modal.backdrop && modal.backdrop.parentNode) {
@@ -324,6 +289,7 @@ window.ModalSystem = (function() {
 
         // Remove from active modals
         activeModals.delete(id);
+        //unlockBodyScroll();
 
         // Call onClose callback if modal instance has it
         if (modal.onClose && typeof modal.onClose === 'function') {
@@ -392,6 +358,7 @@ window.ModalSystem = (function() {
         updateContent: updateModalContent,
         isOpen: isModalOpen,
         getActiveIds: getActiveModalIds,
-        closeAll: closeAllModals
+        closeAll: closeAllModals,
+        applyOpenAnimation
     };
 })();

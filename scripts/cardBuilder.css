@@ -9,7 +9,6 @@
 
 .spotlight-banner-container {
 	position: relative;
-	overflow: hidden;
 	border-radius: 8px;
 }
 
@@ -56,7 +55,6 @@
 	background-size: cover;
 	background-position: center;
 	transition: opacity 0.8s ease-in-out;
-	contain: paint;
 	isolation: isolate;
 }
 
@@ -90,14 +88,6 @@
 	border-radius: 8px;
 }
 
-/* Dual-backdrop background with masked crossfade */
-.spotlight-background-dual {
-	position: absolute;
-	inset: 0;
-	z-index: 1;
-	overflow: hidden;
-}
-
 .spotlight-section[data-layout="Border"] .spotlight-background-dual {
 	border-radius: 8px;
 }
@@ -128,12 +118,20 @@
 }
 
 /* Single backdrop (when tileCount is 1 or only one image) */
-.spotlight-background-single {
+.spotlight-background-single,
+.spotlight-background-dual {
 	position: absolute;
 	z-index: 1;
 	overflow: hidden;
 	width: 100%;
-	height: 100%;
+	height: 160%;
+	transform: translateY(-15%);
+	-webkit-mask-image: linear-gradient( to bottom, transparent 0%, black calc(var(--spotlight-fullscreen-vertical) * 8), black calc(100% - calc(var(--spotlight-fullscreen-vertical) * 8)), transparent 100% );
+	mask-image: linear-gradient( to bottom, transparent 0%, black calc(var(--spotlight-fullscreen-vertical) * 8), black calc(100% - calc(var(--spotlight-fullscreen-vertical) * 8)), transparent 100% );
+	-webkit-mask-size: 100% 100%;
+	mask-size: 100% 100%;
+	-webkit-mask-position: 0 0;
+	mask-position: 0 0;
 }
 
 .spotlight-background-single img {
@@ -158,7 +156,7 @@
 
 @keyframes kenBurnsZoomIn {
 	from {
-		transform: scale3d(1, 1, 1);
+		transform: scale3d(1, 1, 0);
 	}
 	to {
 		transform: scale3d(1.12, 1.12, 1);
@@ -167,7 +165,7 @@
 
 @keyframes kenBurnsZoomOut {
 	from {
-		transform: scale3d(1.15, 1.15, 1);
+		transform: scale3d(1.15, 1.15, 0);
 	}
 	to {
 		transform: scale3d(1.02, 1.02, 1);
@@ -177,7 +175,7 @@
 /* Full-screen: start images pre-scaled so they extend past edges from the start (no hard edge before zoom) */
 @keyframes kenBurnsZoomInFullscreen {
 	from {
-		transform: scale3d(1.08, 1.08, 1);
+		transform: scale3d(1.08, 1.08, 0);
 	}
 	to {
 		transform: scale3d(1.12, 1.12, 1);
@@ -186,7 +184,7 @@
 
 @keyframes kenBurnsZoomOutFullscreen {
 	from {
-		transform: scale3d(1.15, 1.15, 1);
+		transform: scale3d(1.15, 1.15, 0);
 	}
 	to {
 		transform: scale3d(1.08, 1.08, 1);
@@ -205,7 +203,7 @@
 @keyframes fadeInUp {
 	from {
 		opacity: 0;
-		transform: scale3d(1, 1, 1) translateY(30px);
+		transform: scale3d(1, 1, 0) translateY(30px);
 	}
 	to {
 		opacity: 1;
@@ -216,7 +214,7 @@
 @keyframes fadeInDown {
 	from {
 		opacity: 0;
-		transform: scale3d(1, 1, 1) translateY(-30px);
+		transform: scale3d(1, 1, 0) translateY(-30px);
 	}
 	to {
 		opacity: 1;
@@ -226,7 +224,7 @@
 
 @keyframes kenBurnsPanRight {
 	from {
-		transform: scale3d(1.1, 1.1, 1) translateX(-5%);
+		transform: scale3d(1.1, 1.1, 0) translateX(-5%);
 	}
 	to {
 		transform: scale3d(1.1, 1.1, 1) translateX(5%);
@@ -235,46 +233,46 @@
 
 @keyframes kenBurnsPanLeft {
 	from {
-		transform: scale3d(1.1, 1.1, 1) translateX(5%);
+		transform: scale3d(1.1, 1.1, 0) translateX(5%);
 	}
 	to {
-		transform: scale3d(1.1, 1.1, 1) translateX(-5%);
+		transform: scale3d(1.1, 1.1, 0) translateX(-5%);
 	}
 }
 
 @keyframes kenBurnsPanUp {
 	from {
-		transform: scale3d(1.1, 1.1, 1) translateY(5%);
+		transform: scale3d(1.1, 1.1, 0) translateY(5%);
 	}
 	to {
-		transform: scale3d(1.1, 1.1, 1) translateY(-5%);
+		transform: scale3d(1.1, 1.1, 0) translateY(-5%);
 	}
 }
 
 @keyframes kenBurnsDiagonal {
 	from {
-		transform: scale3d(1.08, 1.08, 1) translate(-5%, 5%);
+		transform: scale3d(1.08, 1.08, 0) translate(-5%, 5%);
 	}
 	to {
-		transform: scale3d(1.13, 1.13, 1) translate(5%, -5%);
+		transform: scale3d(1.13, 1.13, 0) translate(5%, -5%);
 	}
 }
 
 @keyframes fadeInScale {
 	from {
 		opacity: 0;
-		transform: scale3d(0.95, 0.95, 1);
+		transform: scale3d(0.95, 0.95, 0);
 	}
 	to {
 		opacity: 1;
-		transform: scale3d(1, 1, 1);
+		transform: scale3d(1, 1, 0);
 	}
 }
 
 @keyframes parallaxFloat {
 	0%,
 	100% {
-		transform: scale3d(1, 1, 1) translateY(0);
+		transform: scale3d(1, 1, 0) translateY(0);
 	}
 	50% {
 		transform: scale3d(1, 1, 1) translateY(-12px);
@@ -284,7 +282,7 @@
 @keyframes depthPulse {
 	0%,
 	100% {
-		transform: scale3d(1, 1, 1);
+		transform: scale3d(1, 1, 0);
 	}
 	50% {
 		transform: scale3d(1.03, 1.03, 1);
@@ -293,7 +291,7 @@
 
 @keyframes slowRotate {
 	from {
-		transform: scale3d(1.15, 1.15, 1) rotate(0deg);
+		transform: scale3d(1.15, 1.15, 0) rotate(0deg);
 	}
 	to {
 		transform: scale3d(1.15, 1.15, 1) rotate(3deg);
@@ -303,7 +301,7 @@
 @keyframes breathe {
 	0%,
 	100% {
-		transform: scale3d(1, 1, 1);
+		transform: scale3d(1, 1, 0);
 		opacity: 0.9;
 	}
 	50% {
@@ -330,7 +328,7 @@
 		filter: saturate(1) brightness(1);
 	}
 	50% {
-		filter: saturate(1.2) brightness(1.05);
+		filter: saturate(1.5) brightness(1.25);
 	}
 	100% {
 		filter: saturate(1) brightness(1);
@@ -451,7 +449,6 @@
 	bottom: 0;
 	left: 0;
 	width: 45%;
-	background: linear-gradient(to right, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0.7) 40%, transparent 100%);
 	padding: 40px;
 	color: white;
 	display: grid;
@@ -602,6 +599,10 @@
 	overflow: visible;
 	min-width: 0;
 }
+
+.spotlight-metadata-row .sectionTabs {
+	font-size: inherit;
+  }
 
 .spotlight-metadata-row .itemDetailsGroup,
 .spotlight-metadata-row .sectionTabs {
@@ -844,7 +845,8 @@
 	min-width: 300px;
 	opacity: 0;
 	pointer-events: none;
-	transition: opacity 0.2s;
+	transition: opacity 0.2s ease;
+	transition-delay: 0s;
 	z-index: 1000;
 	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
 	word-wrap: break-word;
@@ -852,6 +854,14 @@
 
 .spotlight-info-button:hover .spotlight-overview-tooltip {
 	opacity: 1;
+	transition-delay: 0.5s;
+}
+
+/* Hover overview only on Normal desktop spotlights */
+.spotlight-section[data-size="large"] .spotlight-overview-tooltip,
+.spotlight-section[data-size="full"] .spotlight-overview-tooltip,
+.layout-mobile .spotlight-overview-tooltip {
+	display: none !important;
 }
 
 .spotlight-section:not(.hide)[data-section-id] .spotlight-nav-container {
@@ -958,7 +968,6 @@
 		width: calc(100% - 2rem);
 		padding: 5rem 1rem 3rem !important;
 		align-items: center;
-		background: rgba(0, 0, 0, 0.7);
 	}
 
 	.spotlight-tagline {
@@ -972,7 +981,6 @@
 	display: inline-block;
 	border-radius: 4px;
 	background: rgba(255, 255, 255, 0.12);
-	animation: skeleton-pulse 1.5s ease-in-out infinite;
 }
 .cardText-first .skeleton-text-line {
 	padding: 0 22.5% !important;
@@ -996,6 +1004,50 @@
 	width: 35%;
 	min-width: 6rem;
 	margin-top: 0.15em;
+}
+
+/* One shimmer overlay per skeleton section — gated by .skeleton-shimmer-active (IO) */
+.itemsContainer {
+	position: relative;
+}
+
+.skeleton-section .itemsContainer::after,
+.skeleton-section .spotlight-items-container::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	z-index: 2;
+	background: linear-gradient(
+		90deg,
+		transparent 0%,
+		rgba(255, 255, 255, 0.08) 45%,
+		rgba(255, 255, 255, 0.16) 50%,
+		rgba(255, 255, 255, 0.08) 55%,
+		transparent 100%
+	);
+	transform: translateX(-100%);
+	opacity: 0;
+}
+
+.skeleton-section.skeleton-shimmer-active .itemsContainer::after,
+.skeleton-section.skeleton-shimmer-active .spotlight-items-container::after {
+	opacity: 1;
+	animation: skeleton-shimmer-sweep 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.skeleton-section.skeleton-shimmer-active .itemsContainer::after,
+	.skeleton-section.skeleton-shimmer-active .spotlight-items-container::after {
+		animation: none !important;
+		opacity: 0 !important;
+	}
+}
+
+/* Localize style/layout invalidation to section shells during enhance/lazy paint */
+.emby-scroller-container.custom-scroller-container,
+.spotlight-section {
+	contain: layout style;
 }
 
 /* Tagline always 1 line - Movie-specific override kept for any edge cases */
@@ -1481,7 +1533,7 @@
 /* Borderless layout: full width, no border, negative margins for overlap.
    Banner has NO padding so the background image overflows edge-to-edge; only content is inset. */
 .spotlight-section[data-layout="Borderless"] {
-	--spotlight-fullscreen-vertical: 4%;
+	--spotlight-fullscreen-vertical: 20px;
 	--spotlight-fullscreen-horizontal: max(env(safe-area-inset-left), env(safe-area-inset-right), 4%);
 	padding: 0;
 	width: 100%;
@@ -1496,51 +1548,55 @@
 
 .spotlight-section[data-layout="Borderless"] .spotlight-banner-container {
 	border-radius: 0;
-	/* No padding: background fills full size so image extends edge-to-edge and into overlap zone */
 	position: relative;
-	/* Wider mask so backdrop fades gradually at top/bottom (no visible solid edge during animation) */
-	-webkit-mask-image: linear-gradient(
-		to bottom,
-		transparent 0%,
-		black calc(var(--spotlight-fullscreen-vertical) * 2),
-		black calc(100% - calc(var(--spotlight-fullscreen-vertical) * 2)),
-		transparent 100%
-	);
-	mask-image: linear-gradient(
-		to bottom,
-		transparent 0%,
-		black calc(var(--spotlight-fullscreen-vertical) * 2),
-		black calc(100% - calc(var(--spotlight-fullscreen-vertical) * 2)),
-		transparent 100%
-	);
-	-webkit-mask-size: 100% 100%;
-	mask-size: 100% 100%;
-	-webkit-mask-position: 0 0;
-	mask-position: 0 0;
+}
+
+.spotlight-section[data-layout="Border"] .spotlight-banner-container {
+	overflow: hidden;
 }
 
 /* Dark gradient overlays at top and bottom (like left-side overlay): graceful fade and better visibility when content overlaps */
-.spotlight-section[data-layout="Borderless"] .spotlight-banner-container::before,
-.spotlight-section[data-layout="Borderless"] .spotlight-banner-container::after {
+.spotlight-section .spotlight-item .spotlight-background-single::before,
+.spotlight-section .spotlight-item .spotlight-background-single::after,
+.spotlight-section .spotlight-item .spotlight-background-dual::before,
+.spotlight-section .spotlight-item .spotlight-background-dual::after {
 	content: "";
 	position: absolute;
+	top: 0;
 	left: 0;
 	right: 0;
-	width: 100%;
-	height: 15%;
+	height: 100%;
 	pointer-events: none;
 	z-index: 2;
 }
 
-.spotlight-section[data-layout="Borderless"] .spotlight-banner-container::before {
+.spotlight-background-single::before,
+.spotlight-background-dual::before {
+	width: 45%;
+	background: radial-gradient(farthest-corner at bottom left, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.7) 40%, rgba(0, 0, 0, 0) 70%);
+}
+
+.layout-mobile .spotlight-background-single::before,
+.layout-mobile .spotlight-background-dual::before {
+	width: 100%;
+	background: linear-gradient(to bottom, transparent 0%, transparent 40%, rgba(0, 0, 0, 0.45) 60%, rgba(0, 0, 0, 0.85) 100%) !important;
+}
+
+.spotlight-background-single::after,
+.spotlight-background-dual::after {
+	width: 100%;
+	background: linear-gradient( 180deg, black 0%, transparent 35%, transparent 65%, black 100% );	
+}
+
+/* .spotlight-section[data-layout="Borderless"] .spotlight-item .spotlight-background-single:::before {
 	top: 0;
 	background: linear-gradient(0deg, transparent, black);
 }
 
-.spotlight-section[data-layout="Borderless"] .spotlight-banner-container::after {
+.spotlight-section[data-layout="Borderless"] .spotlight-item .spotlight-background-single::after {
 	bottom: 0;
 	background: linear-gradient(180deg, transparent, black);
-}
+} */
 
 .spotlight-section[data-layout="Borderless"] .spotlight-items-container,
 .spotlight-section[data-layout="Borderless"] .spotlight-item {
@@ -1568,17 +1624,16 @@
 	z-index: 3;
 	grid-template-rows: 1fr auto auto auto;
 	gap: 1.5em;
-	background: linear-gradient(to right, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0.7) 70%, transparent 100%);
 }
 
 .spotlight-section[data-layout="Borderless"][data-size="large"] .spotlight-overlay {
-	padding: calc(var(--spotlight-fullscreen-vertical) * 1.75) var(--spotlight-fullscreen-horizontal)
-		calc(var(--spotlight-fullscreen-vertical) * 2) var(--spotlight-fullscreen-horizontal);
+	padding: calc(var(--spotlight-fullscreen-vertical) * 5) var(--spotlight-fullscreen-horizontal)
+		calc(var(--spotlight-fullscreen-vertical) * 5) var(--spotlight-fullscreen-horizontal);
 }
 
 .spotlight-section[data-layout="Borderless"][data-size="full"] .spotlight-overlay {
-	padding: calc(var(--spotlight-fullscreen-vertical) * 2.25) var(--spotlight-fullscreen-horizontal)
-		calc(var(--spotlight-fullscreen-vertical) * 2.5) var(--spotlight-fullscreen-horizontal);
+	padding: calc(var(--spotlight-fullscreen-vertical) * 5) var(--spotlight-fullscreen-horizontal)
+		calc(var(--spotlight-fullscreen-vertical) * 5) var(--spotlight-fullscreen-horizontal);
 	grid-template-rows: 1fr auto minmax(6rem, auto) minmax(48px, auto);
 	align-content: center;
 	gap: 1.5em;
@@ -1733,7 +1788,6 @@
 
 .layout-mobile .spotlight-overlay {
 	width: calc(100% - 2rem) !important;
-	background: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.4) 40%, rgba(0, 0, 0, 0.85) 100%) !important;
 	padding: 4rem 1rem 1rem 1rem !important;
 	align-items: start;
 	align-content: start;
@@ -1795,16 +1849,12 @@
 	display: none !important;
 }
 
-.layout-mobile .spotlight-section .spotlight-buttons-container.mainDetailButtons .btnPlay {
-	margin: 0.3em !important;
-}
-
-.spotlight-section .spotlight-buttons-container.mainDetailButtons .btnPlay {
+.spotlight-section .spotlight-buttons-container.mainDetailButtons > button {
 	right: 0px !important;
 	margin-top: 0 !important;
 	margin-left: 0 !important;
 	margin-bottom: 0 !important;
-	margin-right: 1em !important;
+	margin-right: 0 !important;
 	min-width: unset;
 	flex: unset !important;
 }
@@ -1814,6 +1864,18 @@
 .spotlight-section .spotlight-buttons-container.mainDetailButtons {
 	margin: 0px !important;
 	padding: 0px !important;
+}
+.spotlight-section .mainDetailButtons > .btnPlay:is(.emby-button) {
+	padding: 0.25em !important;
+}
+.spotlight-section .spotlight-buttons-container.mainDetailButtons {
+    gap: 2em;
+}
+.spotlight-section .spotlight-buttons-container.mainDetailButtons > * {
+    padding: 0 !important;
+}
+.spotlight-section .spotlight-buttons-container.mainDetailButtons > * span {
+    font-size: 2em;
 }
 
 .spotlight-section:not(.hide) .headerTabs,
@@ -1831,11 +1893,11 @@
 }
 
 .spotlight-section:not(.hide) .emby-tab-button {
-	height: initial !important;
-	padding: 0.5rem 0.5rem !important;
+	padding: 0.5em 1em !important;
 	margin: 0px !important;
 	top: initial !important;
 	transform: initial !important;
+	align-items: center;
 }
 
 .spotlight-section-title.headerTabs.sectionTabs,
@@ -1846,6 +1908,16 @@
 	align-items: start;
 	justify-content: start;
 	width: auto;
+	font-size: revert !important;
+	height: 40px !important;
+	align-items: center;
+}
+
+:where(.spotlight-section-title.headerTabs.sectionTabs),
+:where(.spotlight-section .headerTabs.sectionTabs),
+:where(.spotlight-nav-container.headerTabs.sectionTabs) {
+  background-color: rgba(20, 20, 20, 0.85);
+  border-radius: 0.2em;
 }
 
 .spotlight-section[data-hide-section-name="true"] .spotlight-section-title,
@@ -1858,28 +1930,25 @@
 	top: 0;
 }
 
-.spotlight-nav-buttons-container {
+.spotlight-section:not(.hide) .spotlight-nav-buttons-container {
 	display: flex !important;
-	gap: 8px !important;
-	font-size: 1.1rem !important;
+	padding: 0 0.5em !important;
+}
+.spotlight-section:not(.hide) .spotlight-nav-buttons-container button {
+	padding: 0.5em;
 }
 .spotlight-nav-button span.material-icons {
-	font-size: 24px !important;
 	display: inline-block !important;
 	top: initial !important;
 }
 .spotlight-section-title > * {
-	font-size: 18px !important;
+	font-size: 1em !important;
 }
 
 .spotlight-metadata-row *:not(a) {
 	cursor: default;
 }
 
-.spotlight-section[data-layout="Borderless"][data-size="normal"] {
-	margin-top: calc(-1 * calc(var(--spotlight-fullscreen-vertical) * 1.5));
-	margin-bottom: calc(-1 * calc(var(--spotlight-fullscreen-vertical) * 2));
-}
 .spotlight-section[data-layout="Borderless"][data-size="normal"] .spotlight-banner-container {
 	height: 55vh;
 }
@@ -1895,17 +1964,12 @@
 }
 
 .spotlight-section[data-layout="Borderless"][data-size="normal"] .spotlight-overlay.has-title {
-	padding: calc(var(--spotlight-fullscreen-vertical) * 3) var(--spotlight-fullscreen-horizontal)
-		calc(var(--spotlight-fullscreen-vertical) * 2) var(--spotlight-fullscreen-horizontal);
+	padding: calc(var(--spotlight-fullscreen-vertical) * 5) var(--spotlight-fullscreen-horizontal)
+		calc(var(--spotlight-fullscreen-vertical) * 5) var(--spotlight-fullscreen-horizontal);
 }
 
 .spotlight-section[data-layout="Borderless"][data-size="normal"] {
-	--spotlight-fullscreen-vertical: 3em;
 	--spotlight-fullscreen-horizontal: max(env(safe-area-inset-left), env(safe-area-inset-right), 4%);
-}
-.spotlight-section[data-layout="Borderless"][data-size="normal"] .spotlight-section-title-container {
-	left: var(--spotlight-fullscreen-horizontal);
-	top: calc(var(--spotlight-fullscreen-vertical) * 2);
 }
 .spotlight-section[data-layout="Borderless"][data-size="normal"] .spotlight-tagline {
 	bottom: calc(var(--spotlight-fullscreen-vertical) * 1.5 + 40px);
@@ -1915,7 +1979,7 @@
 }
 .spotlight-section[data-layout="Borderless"][data-size="normal"] .spotlight-nav-container {
 	right: var(--spotlight-fullscreen-horizontal);
-	top: calc(var(--spotlight-fullscreen-vertical) * 2);
+	top: calc(var(--spotlight-fullscreen-vertical) * 2.5);
 }
 .spotlight-section[data-layout="Borderless"][data-size="normal"] .spotlight-overlay {
 	grid-template-rows: 1fr auto auto auto;
@@ -1924,7 +1988,7 @@
 	grid-template-rows: var(--spotlight-logo-height) auto 1fr auto;
 }
 .spotlight-section[data-layout="Border"][data-size="full"] .spotlight-overlay {
-	grid-template-rows: 3fr auto minmax(6rem, auto) 1fr;
+	grid-template-rows: 3fr auto minmax(6rem, auto) auto;
 }
 .spotlight-section[data-layout="Border"][data-size="full"] .spotlight-logo-section {
 	align-self: end;
@@ -1986,9 +2050,6 @@
 	top: 2rem !important;
 	right: 2rem !important;
 }
-.spotlight-section[data-layout="Border"][data-size="normal"] .spotlight-section-title a {
-	font-size: 1rem !important;
-}
 .spotlight-section[data-layout="Border"] .spotlight-banner-container {
 	border: 1px solid rgb(255 255 255 / 10%);
 }
@@ -2002,11 +2063,6 @@
 
 .spotlight-section[data-layout="Border"][data-size="normal"] .spotlight-overview {
 	-webkit-line-clamp: 2;
-}
-
-.spotlight-section[data-size="normal"] .spotlight-background-single img,
-.spotlight-section[data-size="large"] .spotlight-background-single img {
-	object-position: center 20%;
 }
 
 .layout-mobile .sectionTitleContainer-cards .sectionTitle-link > * {
@@ -2032,10 +2088,6 @@
 	flex-direction: column;
 	justify-content: end;
 	align-items: center;
-}
-
-.layout-mobile .spotlight-section[data-layout="Borderless"][data-size="full"] .spotlight-overlay {
-	/* padding-bottom: 5rem !important; */
 }
 
 .layout-mobile .spotlight-overview-section,
@@ -2070,34 +2122,19 @@
 	min-width: 0;
 	text-align: center;
 }
-
-/* .layout-mobile .spotlight-section[data-layout="Borderless"][data-order="1"] .spotlight-section-title {
-    top: 135px;
-}
-.layout-mobile .spotlight-section[data-layout="Borderless"][data-order="1"] {
-    margin-top: calc(-1 * calc(var(--spotlight-fullscreen-vertical) * 10)) !important;
-} */
-
-.layout-mobile .spotlight-section-title .emby-tab-button {
-	padding: 0.25rem !important;
-}
 .layout-mobile .spotlight-section .emby-tab-button,
 .layout-mobile .spotlight-metadata-section span a,
 .layout-mobile .spotlight-metadata-section span {
-	font-size: 1rem !important;
+	font-size: 1em !important;
 }
 
 .layout-mobile .spotlight-section .spotlight-item-title {
-	font-size: 2rem !important;
+	font-size: 2em !important;
 	text-align: center;
 }
 
 .layout-mobile .spotlight-section:not(.hide) .spotlight-tagline {
 	display: none !important;
-}
-
-.layout-mobile .spotlight-buttons-container.mainDetailButtons span {
-	font-size: 1.2rem;
 }
 
 .layout-mobile .spotlight-section .spotlight-metadata-row {
@@ -2192,19 +2229,19 @@ html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"
 /* .emby-scroller-container[data-card-format="Logo"] .cardImageContainer,
 .emby-scroller-container[data-card-format="Clear Art"] .cardImageContainer,
 .emby-scroller-container[data-card-format="Disc"] .cardImageContainer {
-	transition: opacity 0.15s ease-in-out;
+    transition: opacity 0.15s ease-in-out;
 }
 
 .emby-scroller-container[data-card-format="Logo"] .cardImageContainer.lazy-hidden,
 .emby-scroller-container[data-card-format="Clear Art"] .cardImageContainer.lazy-hidden,
 .emby-scroller-container[data-card-format="Disc"] .cardImageContainer.lazy-hidden {
-	opacity: 0;
+    opacity: 0;
 }
 
 .emby-scroller-container[data-card-format="Logo"] .cardImageContainer.lazy-loaded,
 .emby-scroller-container[data-card-format="Clear Art"] .cardImageContainer.lazy-loaded,
 .emby-scroller-container[data-card-format="Disc"] .cardImageContainer.lazy-loaded {
-	opacity: 1;
+    opacity: 1;
 } */
 
 :not(.layout-mobile) .emby-scroller-container[data-card-format="Logo"]:not([data-border-style]) .itemsContainer,
@@ -4064,42 +4101,43 @@ html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"
 	display: none;
 }
 
-.spotlight-truncated-list:has(.spotlight-truncated-list-tooltip) {
-	overflow: visible;
-}
-
 .emby-scroller-container[data-layout="grid"] .emby-scrollbuttons {
 	display: none !important;
 }
 
-/* .spotlight-section[data-size="full"] .spotlight-truncated-list.itemDetailsGroup:has(> .detailsGroupItem),
+/* 
+.spotlight-truncated-list:has(.spotlight-truncated-list-tooltip) {
+	overflow: visible;
+}
+
+.spotlight-section[data-size="full"] .spotlight-truncated-list.itemDetailsGroup:has(> .detailsGroupItem),
 .spotlight-section[data-size="full"] .spotlight-truncated-list.sectionTabs:has(> .emby-tab-button) {
-	font-size: large;
-	display: flex;
-	align-items: center;
-	align-self: start;
+    font-size: large;
+    display: flex;
+    align-items: center;
+    align-self: start;
 }
 
 .spotlight-section .itemDetailsGroup:has(.detailsGroupItem:not(.hide)),
 .spotlight-section .sectionTabs:not(.spotlight-section-title):has(.emby-tab-button:not(.hide)) {
-	margin: 0px !important;
-	padding: 0px !important;
-	width: initial !important;
-	min-width: initial !important;
+    margin: 0px !important;
+    padding: 0px !important;
+    width: initial !important;
+    min-width: initial !important;
 }
 
 .spotlight-section:not(.hide) span.emby-tab-button.emby-tab-button-active:not(:has(a)) {
-	cursor: default;
+    cursor: default;
 }
 
 .layout-mobile .spotlight-section .spotlight-section-title.sectionTabs:has(.emby-tab-button:not(.hide)) {
-	justify-self: center;
-	display: flex !important;
-	justify-content: center;
+    justify-self: center;
+    display: flex !important;
+    justify-content: center;
 }
 
 .layout-mobile .spotlight-section .spotlight-section-title.sectionTabs:has(.emby-tab-button:not(.hide)) > * {
-	display: block !important;
+    display: block !important;
 	padding: 0.25em 0.5em !important;
 }
 
@@ -4121,4 +4159,22 @@ html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"
 .spotlight-section .spotlight-nav-container,
 .spotlight-section .spotlight-overlay * {
 	pointer-events: all;
+}
+
+.sectionTitleContainer {
+	display: flex !important;
+}
+.cardOverlayContainer > .button-link {
+	width: 100%;
+	height: 100%;
+}
+
+.card[data-type="Program"] .cardTextStack .cardText-secondary:nth-child(3) {
+    display: none;
+}
+[data-section-id="liveTv-on-now"] .card[data-type="Program"] .cardTextStack .cardText-secondary:nth-child(2) {
+    display: none;
+}
+[data-section-id="liveTv-on-now"] .card[data-type="Program"] .cardTextStack .cardText-secondary:nth-child(3) {
+    display: block;
 }

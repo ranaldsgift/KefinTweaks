@@ -443,7 +443,7 @@
                 <button class="emby-button raised block button-submit" id="save-versionpreferences-config-btn">Save</button>
             `;
 
-            const modalInstance = window.ModalSystem.create({
+            window.ModalSystem.create({
                 id: MODAL_ID,
                 title: 'Item Version Preferences',
                 content,
@@ -451,6 +451,9 @@
                 closeOnBackdrop: true,
                 closeOnEscape: true,
                 showCloseButton: true,
+                dialogStyle: window.innerWidth >= 900
+                    ? { maxWidth: '90vw', width: '1400px', height: '90vh' }
+                    : undefined,
                 onOpen: (modal) => {
                     const saveBtn = modal.dialogFooter.querySelector('#save-versionpreferences-config-btn');
                     saveBtn?.addEventListener('click', async () => {
@@ -467,12 +470,6 @@
                     });
                 }
             });
-
-            if (window.innerWidth >= 900) {
-                modalInstance.dialog.style.maxWidth = '90vw';
-                modalInstance.dialog.style.width = '1400px';
-                modalInstance.dialog.style.height = '90vh';
-            }
 
             LOG('Version Preferences configuration modal opened');
         } catch (error) {

@@ -5283,6 +5283,9 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                 closeOnBackdrop: true,
                 closeOnEscape: true,
                 showCloseButton: true,
+                dialogStyle: window.innerWidth >= 900
+                    ? { maxWidth: '90vw', width: '1400px', height: '90vh' }
+                    : undefined,
                 onOpen: (modalInstance) => {
                     // Attach tab switching
                     attachTabListeners(modalInstance);
@@ -5332,12 +5335,6 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                 }
             });
 
-            if (window.innerWidth >= 900) {
-                mainModalInstance.dialog.style.maxWidth = '90vw';
-                mainModalInstance.dialog.style.width = '1400px';
-                mainModalInstance.dialog.style.height = '90vh';
-            }
-
             LOG('Main configuration modal opened');
         } catch (error) {
             ERR('Error opening config modal:', error);
@@ -5353,7 +5350,6 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         if (Array.isArray(section.items) && section.items.length > 0) return false;
         if (Array.isArray(section.externalListUrls) && section.externalListUrls.length > 0) return false;
         if (section.discoveryType) return true;
-        if (section.discoveryEnabled === true) return true;
         const type = String(section.type || '').toLowerCase();
         return ['genre', 'studio', 'person', 'collection', 'similar', 'watchlist', 'tag'].includes(type);
     }
@@ -5736,9 +5732,9 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                 size: 'large',
                 closeOnBackdrop: true,
                 closeOnEscape: true,
+                dialogStyle: { width: '1400px' },
                 onOpen: async (modalInstance) => {
                     const container = modalInstance.dialogContent.querySelector('#preview-container');
-                    modalInstance.dialog.style.width = '1400px';
                     await renderSectionPreviewInto(previewSection, items, container);
                 }
             });

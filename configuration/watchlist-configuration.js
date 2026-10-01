@@ -163,7 +163,7 @@
                 <button class="emby-button raised block button-submit" id="save-watchlist-config-btn">Save</button>
             `;
 
-            const modalInstance = window.ModalSystem.create({
+            window.ModalSystem.create({
                 id: MODAL_ID,
                 title: 'Watchlist',
                 content,
@@ -171,6 +171,7 @@
                 closeOnBackdrop: true,
                 closeOnEscape: true,
                 showCloseButton: true,
+                dialogStyle: { maxWidth: '90vw', width: '560px' },
                 onOpen: (modal) => {
                     attachToggleHandlers(modal.dialogContent || content);
                     const saveBtn = modal.dialogFooter.querySelector('#save-watchlist-config-btn');
@@ -188,11 +189,6 @@
                     }
                 }
             });
-
-            if (modalInstance?.dialog) {
-                modalInstance.dialog.style.maxWidth = '90vw';
-                modalInstance.dialog.style.width = '560px';
-            }
             LOG('Watchlist configuration modal opened');
         } catch (error) {
             ERR('Error opening Watchlist config modal:', error);

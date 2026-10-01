@@ -154,7 +154,7 @@
                 <button class="emby-button raised block button-submit" id="save-custommenulinks-config-btn">Save</button>
             `;
 
-            const modalInstance = window.ModalSystem.create({
+            window.ModalSystem.create({
                 id: MODAL_ID,
                 title: 'Custom Menu Links Configuration',
                 content: content,
@@ -162,6 +162,9 @@
                 closeOnBackdrop: true,
                 closeOnEscape: true,
                 showCloseButton: true,
+                dialogStyle: window.innerWidth >= 900
+                    ? { maxWidth: '90vw', width: '1400px', height: '90vh' }
+                    : undefined,
                 onOpen: (modal) => {
                     const saveBtn = modal.dialogFooter.querySelector('#save-custommenulinks-config-btn');
                     if (saveBtn) {
@@ -181,12 +184,6 @@
                     }
                 }
             });
-
-            if (window.innerWidth >= 900) {
-                modalInstance.dialog.style.maxWidth = '90vw';
-                modalInstance.dialog.style.width = '1400px';
-                modalInstance.dialog.style.height = '90vh';
-            }
 
             LOG('Custom Menu Links configuration modal opened');
         } catch (error) {
