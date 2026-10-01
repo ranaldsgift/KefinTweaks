@@ -65,7 +65,7 @@
         window.addEventListener('hashchange', fire);
         LOG('Installed History API view bridge (pushState/replaceState/popstate/hashchange)');
     }
-
+    
     // Initialize the utils by hooking into Emby.Page.onViewShow
     async function initialize() {
         installHistoryViewBridge();
@@ -74,7 +74,7 @@
         if (window.Emby && window.Emby.Page && window.Emby.Page.onViewShow && !state.embyViewHookInstalled) {
             originalOnViewShow = window.Emby.Page.onViewShow;
             LOG('Stored original Emby.Page.onViewShow');
-
+        
             window.Emby.Page.onViewShow = function (...args) {
                 if (originalOnViewShow) {
                     try {
@@ -94,7 +94,7 @@
             state.hookAttempts++;
             if (state.hookAttempts < state.maxHookAttempts) {
                 setTimeout(initialize, 1000);
-            } else {
+        } else {
                 WARN('Failed to hook into Emby.Page.onViewShow after ' + state.maxHookAttempts + ' attempts');
             }
         }
@@ -1338,8 +1338,8 @@
         const backdrop = menu.querySelector('.MuiBackdrop-root, .MuiModal-backdrop');
         if (backdrop) {
             backdrop.click();
-            return;
-        }
+                                return;
+                            }
         document.dispatchEvent(new KeyboardEvent('keydown', {
             key: 'Escape',
             code: 'Escape',
@@ -1513,24 +1513,39 @@
         return injectIntoUserMenuLegacy(entry);
     }
 
+    function injectSideMenuOnly(entry) {
+        if (!entry || entry.sideMenu === false) return false;
+        const drawerOk = injectIntoV12Drawer(entry);
+        const legacyContainer = document.querySelector(entry.containerSelector || DEFAULT_CUSTOM_MENU_SELECTOR);
+        const legacyOk = legacyContainer ? addLinkToContainer(legacyContainer, entry) : false;
+        return drawerOk || legacyOk;
+    }
+
+    function injectUserMenuOnly(entry) {
+        if (!entry?.userMenu) return false;
+        return injectIntoUserMenu(entry);
+    }
+
+    function injectTopNavOnly(entry) {
+        if (!entry) return false;
+        if (entry.topNavigation === 'main') return injectIntoTopNavMain(entry);
+        if (entry.topNavigation === 'right') return injectIntoTopNavRight(entry);
+        return false;
+    }
+
     function injectOneCustomMenuLink(entry) {
         let anyOk = false;
 
         if (entry.sideMenu !== false) {
-            const drawerOk = injectIntoV12Drawer(entry);
-            const legacyContainer = document.querySelector(entry.containerSelector || DEFAULT_CUSTOM_MENU_SELECTOR);
-            const legacyOk = legacyContainer ? addLinkToContainer(legacyContainer, entry) : false;
-            anyOk = drawerOk || legacyOk || anyOk;
+            anyOk = injectSideMenuOnly(entry) || anyOk;
         }
 
-        if (entry.topNavigation === 'main') {
-            anyOk = injectIntoTopNavMain(entry) || anyOk;
-        } else if (entry.topNavigation === 'right') {
-            anyOk = injectIntoTopNavRight(entry) || anyOk;
+        if (entry.topNavigation === 'main' || entry.topNavigation === 'right') {
+            anyOk = injectTopNavOnly(entry) || anyOk;
         }
 
         if (entry.userMenu) {
-            anyOk = injectIntoUserMenu(entry) || anyOk;
+            anyOk = injectUserMenuOnly(entry) || anyOk;
         }
 
         if (entry.topNavigation === 'main') {
@@ -1640,13 +1655,27 @@
         syncCustomTopNavActiveState();
     }
 
-    function isCustomMenuCardTreeTarget(target) {
-        if (!target || target.nodeType !== 1 || typeof target.closest !== 'function') return false;
-        if (target.closest('.skinHeader, .mainDrawer, .navDrawer, #app-user-menu, .customMenuOptions, .adminMenuOptions, .userMenuOptions, .headerTabs, .headerRight')) {
-            return false;
-        }
-        return !!(target.closest('.itemsContainer') || target.closest('.card'));
-    }
+    const ANY_CUSTOM_MENU_HOST_SEL = [
+        // top nav
+        '.skinHeader',
+        '.headerTabs',
+        '.headerRight',
+        '.MuiToolbar-root',
+        '.MuiStack-root',
+        // side
+        '.MuiDrawer-paper',
+        '.mainDrawer',
+        '.navDrawer',
+        '.customMenuOptions',
+        '.adminMenuOptions',
+        '.userMenuOptions',
+        // user menus (modern + legacy)
+        '#app-user-menu',
+        '.userPreferencesPage',
+        '.userPreferencesPage .userSection',
+        '.userPreferencesPage .adminSection',
+        '.userPreferencesPage .verticalSection'
+    ].join(', ');
 
     function isKefinCustomMenuOwnedNode(node) {
         if (!node) return false;
@@ -1656,34 +1685,45 @@
         return !!el.closest(KEFIN_CUSTOM_MENU_OWNED_SEL);
     }
 
-    function mutationShouldTriggerCustomMenuReapply(mutation) {
-        if (isCustomMenuCardTreeTarget(mutation.target)) return false;
-        if (isKefinCustomMenuOwnedNode(mutation.target)) return false;
-
-        const addedEls = Array.from(mutation.addedNodes).filter((n) => n.nodeType === 1);
-        if (addedEls.length > 0 && addedEls.every((n) => isKefinCustomMenuOwnedNode(n))) {
-            return false;
-        }
-
-        return true;
+    function addedNodeMatchesHost(node, hostSel) {
+        if (!node || node.nodeType !== 1) return false;
+        return !!(node.matches?.(hostSel) || node.querySelector?.(hostSel));
     }
 
+    function mutationShouldTriggerCustomMenuReapply(mutation) {
+        const addedEls = Array.from(mutation.addedNodes).filter((n) => n.nodeType === 1);
+        if (!addedEls.length) return false;
+        if (addedEls.every((n) => isKefinCustomMenuOwnedNode(n))) return false;
+        return addedEls.some((n) => addedNodeMatchesHost(n, ANY_CUSTOM_MENU_HOST_SEL));
+    }
+
+    function disconnectCustomMenuLinkObserver() {
+        if (!customMenuLinkObserver) return;
+        customMenuLinkObserver.disconnect();
+        customMenuLinkObserver = null;
+    }
+
+    /**
+     * Persistent MO: any custom-menu host remount → idempotent reapplyAll.
+     * No host is assumed stable (drawer, prefs, #app-user-menu, top-nav).
+     */
     function ensureCustomMenuLinkObserver() {
+        if (!customMenuLinkRegistry.length) {
+            disconnectCustomMenuLinkObserver();
+            return;
+        }
         if (customMenuLinkObserver || typeof MutationObserver === 'undefined' || !document.body) {
             return;
         }
 
         let scheduled = false;
         customMenuLinkObserver = new MutationObserver((mutations) => {
-            if (customMenuLinkReapplyDepth > 0) {
+            if (customMenuLinkReapplyDepth > 0) return;
+            if (!customMenuLinkRegistry.length) {
+                disconnectCustomMenuLinkObserver();
                 return;
             }
-
-            const needsReapply = mutations.some(mutationShouldTriggerCustomMenuReapply);
-            if (!needsReapply) {
-                return;
-            }
-
+            if (!mutations.some(mutationShouldTriggerCustomMenuReapply)) return;
             if (scheduled) return;
             scheduled = true;
             requestAnimationFrame(() => {
@@ -2016,10 +2056,11 @@ button[data-kefin-custom-menu-more] .MuiSvgIcon-root {
         }
 
         upsertCustomMenuLinkRegistry(entry);
+
+        const ok = withCustomMenuReapplySuppressed(() => !!injectOneCustomMenuLink(entry));
         ensureCustomMenuLinkObserver();
 
-        // Always settle: deferred inject still happens via registry + observer.
-        return withCustomMenuReapplySuppressed(() => !!injectOneCustomMenuLink(entry));
+        return ok;
     }
 
     /**
@@ -2308,13 +2349,13 @@ button[data-kefin-custom-menu-more] .MuiSvgIcon-root {
             if (!configToSave) {
                 throw new Error('No config provided and window.KefinTweaksConfig is not available');
             }
-
+            
             const pluginId = await resolvePluginId(JS_INJECTOR_ALIASES);
             if (!pluginId) {
                 WARN('JavaScript Injector plugin not found, cannot save config');
                 return false;
             }
-
+            
             const injectorConfig = await getPluginConfiguration(pluginId);
             const server = ApiClient._serverAddress;
             const configUrl = `${server}/Plugins/${pluginId}/Configuration`;
@@ -2330,7 +2371,7 @@ button[data-kefin-custom-menu-more] .MuiSvgIcon-root {
 // Do not edit manually unless you know what you're doing
 
 window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
-
+            
             // Build / refresh KefinTweaks-injector preload entry (same POST)
             let injectorScriptContent = null;
             try {
@@ -2384,10 +2425,10 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
                     const list = injectorConfig.CustomJavaScripts || [];
                     const idx = list.findIndex((s) => s.Name === 'KefinTweaks-Config');
                     const entry = {
-                        Name: 'KefinTweaks-Config',
-                        Script: scriptContent,
-                        Enabled: true,
-                        RequiresAuthentication: false
+                    Name: 'KefinTweaks-Config',
+                    Script: scriptContent,
+                    Enabled: true,
+                    RequiresAuthentication: false
                     };
                     if (idx !== -1) list[idx] = { ...list[idx], ...entry };
                     else list.push(entry);
@@ -2456,7 +2497,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
 		}
 		window.KefinTweaksUtils._watchlistUrl = watchlistUrl;
 		return watchlistUrl;
-	}
+    }
 
 	/**
 	 * Get watchlist tab index, fetching if not yet set
@@ -2468,8 +2509,8 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
 		}
 
         _watchlistTabIndex = await fetchWatchlistTabIndex();
-		return _watchlistTabIndex;
-	}
+            return _watchlistTabIndex;
+        }
 
     // ----- Custom pages (hash routes → .customPage in skinBody) -----
     const DISALLOWED_CUSTOM_PAGE_SEGMENTS = new Set([
@@ -2535,15 +2576,11 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
 	display: none;
 }
 
-#reactRoot:not(.kefin-custom-page-active) .pageTitle {
-	display: none !important;
-}
-
-#reactRoot:not(.kefin-custom-page-active):not([data-kefin-fallback-ready]) .skinBody #fallbackPage > * {
+#reactRoot:not(.kefin-custom-page-active) #fallbackPage:not([data-kefin-fallback-ready]) > * {
 	display: none;
 }
 
-#reactRoot:not(.kefin-custom-page-active):not([data-kefin-fallback-ready]) #fallbackPage::after {
+#reactRoot:not(.kefin-custom-page-active) #fallbackPage:not([data-kefin-fallback-ready])::after {
 	content: '';
 	display: inline-block;
 	width: 20px;
@@ -2558,7 +2595,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
 	top: 1em;
 }
 
-#reactRoot[data-kefin-fallback-ready] #fallbackPage::after {
+#fallbackPage[data-kefin-fallback-ready]::after {
 	display: none !important;
 	content: none !important;
 }
@@ -2617,12 +2654,12 @@ main.MuiBox-root .customPage.libraryPage:not(.noSecondaryNavPage)[data-kefin-cus
     }
 
     function setFallbackReadyAttr(ready) {
-        const root = document.getElementById('reactRoot') || document.documentElement;
-        if (!root) return;
+        const fallbackPage = document.getElementById('fallbackPage');
+        if (!fallbackPage) return;
         if (ready) {
-            root.setAttribute('data-kefin-fallback-ready', 'true');
+            fallbackPage.setAttribute('data-kefin-fallback-ready', 'true');
         } else {
-            root.removeAttribute('data-kefin-fallback-ready');
+            fallbackPage.removeAttribute('data-kefin-fallback-ready');
         }
     }
 
@@ -2675,7 +2712,9 @@ main.MuiBox-root .customPage.libraryPage:not(.noSecondaryNavPage)[data-kefin-cus
             page = 'games';
         }
 
-        document.documentElement.dataset.activePage = page;
+        if (document.documentElement.dataset.activePage !== page) {
+            document.documentElement.dataset.activePage = page;
+        }
     }
 
     function emitCustomPageShow(entry, page) {
@@ -2996,7 +3035,7 @@ main.MuiBox-root .customPage.libraryPage:not(.noSecondaryNavPage)[data-kefin-cus
                 syncAllCustomPages();
             }
         };
-    }
+	}
 
     // Expose utilities to global scope
     window.KefinTweaksUtils = {
