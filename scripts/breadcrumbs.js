@@ -75,8 +75,9 @@
             item: item
         };
 
-        // Don't append .html for server versions 10.11 and above
-        const urlSuffix = ApiClient._appVersion.split('.')[1] > 10 ? '' : '.html'
+        // Jellyfin Web 10.11 and newer use routes without .html.
+        const [major, minor] = ApiClient._appVersion.split('.').map(Number);
+        const urlSuffix = major > 10 || (major === 10 && minor >= 11) ? '' : '.html';
 
         let queryParams = '';
         if (item.ParentId) {
