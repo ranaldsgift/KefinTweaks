@@ -3,12 +3,6 @@
 	display: none;
 }
 
-.MuiToolbar-root:has(.kefinTweaks-breadcrumbs-wrapper) {
-	display: grid;
-	grid-template-columns: auto 1fr auto;
-	grid-template-rows: 1fr auto;
-}
-
 @media (min-width: 768px) {
 	.kefinTweaks-breadcrumbs-wrapper {
 		display: block;
@@ -145,4 +139,9 @@
 	width: initial !important;
 	max-width: initial !important;
 	white-space: nowrap;
+}
+.MuiToolbar-root:has(.kefinTweaks-breadcrumbs-wrapper) {
+	display: grid;
+	grid-template-columns: auto 1fr auto;
+	grid-template-rows: 1fr auto;
 }
