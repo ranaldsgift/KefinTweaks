@@ -28,10 +28,10 @@ div#kefinTweaks-breadcrumbs-wrapper {
 	margin: 0;
 }
 
-.custom-scroller-container .emby-scrollbuttons:not(:has(:first-child:disabled):has(:last-child:disabled)) > * {
+/* .custom-scroller-container .emby-scrollbuttons:not(:has(:first-child:disabled):has(:last-child:disabled)) > * {
 	opacity: 1 !important;
 	margin-right: 0px !important;
-}
+} */
 
 [data-card-format="Logo"] .cardBox,
 [data-card-format="Clear Art"] .cardBox {

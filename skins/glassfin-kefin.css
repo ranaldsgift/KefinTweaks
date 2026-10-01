@@ -12,3 +12,18 @@
 	> .emby-tab-button.kefin-custom-menu-top-link[data-kefin-custom-menu-top-link^="Watchlist||"]::before {
 	content: "bookmark";
 }
+
+.spotlight-section-title.headerTabs.sectionTabs,
+.spotlight-section .headerTabs.sectionTabs,
+.spotlight-nav-container.headerTabs.sectionTabs {
+  background-color: transparent;
+  border-radius: unset;
+  backdrop-filter: none;
+}
+
+.layout-desktop .detailSection > #listChildrenCollapsible {
+	padding-left: 0 !important;
+}
+#itemDetailPage[data-series-episodes-item-id] .detailSection {
+	overflow: visible !important;
+}

@@ -6,3 +6,7 @@
 	border-bottom-right-radius: 0;
 	border-bottom-left-radius: 0;
 }
+
+.layout-desktop .libraryPage:not(.noSecondaryNavPage) {
+	padding-top: 0 !important;
+}
