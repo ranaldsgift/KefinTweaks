@@ -13,10 +13,10 @@
 }
 
 div#smart-search-wrapper:not([style*="display: none"]) ~ #jellyseerr-search-icon {
-	transform: unset;
-	position: relative;
-	top: 0.4em;
-	right: unset;
+	transform: translateX(calc(100% + 1.5em));
+	position: absolute;
+	top: 0;
+	right: 0;
 }
 
 .smart-search-mode .searchFieldsInner {
