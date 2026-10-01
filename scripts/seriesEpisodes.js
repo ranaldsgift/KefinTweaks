@@ -338,6 +338,54 @@
     }
 
     /**
+     * Infer Next Up episode from the native .nextUpSection card title (S#:E#).
+     * @param {HTMLElement} activePage
+     * @returns {Object|null}
+     */
+    function inferNextUpFromDom(activePage) {
+        if (!activePage) return null;
+
+        const card = activePage.querySelector('.nextUpSection .itemsContainer .card');
+        if (!card) return null;
+
+        const titleLink = card.querySelector('.cardText-first a[title]');
+        if (!titleLink) return null;
+
+        const title = titleLink.getAttribute('title') || '';
+        const match = title.match(/S(\d+)\s*:\s*E(\d+)/i);
+        if (!match) return null;
+
+        const season = parseInt(match[1], 10);
+        const episode = parseInt(match[2], 10);
+        if (!Number.isFinite(season) || !Number.isFinite(episode)) return null;
+
+        let id = null;
+        const href = titleLink.getAttribute('href') || '';
+        const idMatch = href.match(/[?&]id=([^&]+)/i);
+        if (idMatch) {
+            try {
+                id = decodeURIComponent(idMatch[1]);
+            } catch (_) {
+                id = idMatch[1];
+            }
+        }
+        if (!id) {
+            id = card.getAttribute('data-id') || card.dataset?.id || null;
+        }
+
+        const nameRemainder = title.replace(/S\d+\s*:\s*E\d+\s*-?\s*/i, '').trim();
+
+        LOG(`Inferred Next Up from DOM: S${season}:E${episode}${id ? ` (${id})` : ''}`);
+        return {
+            ParentIndexNumber: season,
+            IndexNumber: episode,
+            Id: id,
+            SeasonId: null,
+            Name: nameRemainder || title
+        };
+    }
+
+    /**
      * Fetches the Next Up episode for a given series
      * @param {string} seriesId - The series ID
      * @returns {Promise<Object|null>} - Episode number object with season and episode, or null
@@ -507,14 +555,24 @@
     }
 
     function performEpisodeScroll(scrollerContainer, targetCard, targetEpisodeNumber) {
-        const scrollerPadding = parseInt(window.getComputedStyle(scrollerContainer).paddingLeft, 10) || 0;
-        const translateX = targetCard.offsetLeft - scrollerPadding;
-        window.cardBuilder.setScrollerPosition(scrollerContainer, translateX, false);
+        const itemsContainer = scrollerContainer.querySelector('.itemsContainer') || scrollerContainer;
+        const cards = Array.from(itemsContainer.querySelectorAll(
+            ':scope > .card:not(.card-layout-dummy):not(.skeleton-card)'
+        ));
+        const index = cards.indexOf(targetCard);
+        if (index < 0) {
+            WARN(`Target episode card not in scroller card list S${targetEpisodeNumber.season}:E${targetEpisodeNumber.episode}`);
+            return;
+        }
+
+        if (window.cardBuilder?.scrollToCardIndex) {
+            window.cardBuilder.scrollToCardIndex(scrollerContainer, index, { animate: false });
+        }
 
         const scrollButtons = scrollerContainer.closest('.emby-scroller-container')?.querySelector('.emby-scrollbuttons');
         if (scrollButtons) {
             const leftButton = scrollButtons.querySelector('button[data-direction="left"]');
-            if (leftButton) {
+            if (leftButton && index > 0) {
                 leftButton.removeAttribute('disabled');
             }
         }
@@ -748,8 +806,12 @@
             return;
         }
 
-        // Get NextUp episode
-        let targetEpisode = await fetchNextUpEpisode(seriesId);
+        // Prefer Next Up from native DOM (already painted); API only if missing
+        const pageForUi = document.querySelector('.libraryPage:not(.hide)') || activePage;
+        let targetEpisode = inferNextUpFromDom(pageForUi);
+        if (!targetEpisode) {
+            targetEpisode = await fetchNextUpEpisode(seriesId);
+        }
         let targetEpisodeNumber = null;
         
         // Determine target season
@@ -788,7 +850,6 @@
 
         // Extract NextUp header text
         let nextUpHeaderText = 'Next Up';
-        const pageForUi = document.querySelector('.libraryPage:not(.hide)') || activePage;
         const nextUpSection = pageForUi.querySelector('.nextUpSection');
         if (nextUpSection) {
             const nextUpHeader = nextUpSection.querySelector('.sectionTitle, h2, h3');
@@ -800,6 +861,8 @@
 
         // Render episodes section
         await renderEpisodesSection(seriesId, seasons, targetEpisode, nextUpHeaderText);
+
+        const childrenCollapsible = activePage.querySelector('.detailSection #listChildrenCollapsible');
 
         // Hide season container if option is enabled and there's only one season
         if (hideSingleSeasonContainer && isSingleSeason && childrenCollapsible) {
@@ -894,10 +957,7 @@
 
                 LOG(`Found series: ${item.Id} (${item.Name})`);
 
-                // Small delay to ensure page is ready (Emby may still be swapping pages)
-                setTimeout(async () => {
-                    await processSeriesPage(item);
-                }, 100);
+                await processSeriesPage(item);
             },
             {
                 pages: ['details']

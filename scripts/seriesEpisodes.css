@@ -7,9 +7,10 @@
 	padding-left: 0;
 }
 
-.detailSection:has(.series-episodes-section) {
+#itemDetailPage[data-series-episodes-item-id] .detailSection {
 	overflow: hidden;
 }
+
 .series-episodes-section {
 	padding-left: 0 !important;
 	margin: 0 !important;
