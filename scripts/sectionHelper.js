@@ -425,7 +425,7 @@
     }
 
     async function getWatchlistUrl() {
-        return window.KefinTweaksUtils._watchlistUrl || '#/watchlist';
+        return window.KefinTweaksUtils.getWatchlistUrl();
     }
 
     /**

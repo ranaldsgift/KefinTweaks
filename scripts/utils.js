@@ -1192,7 +1192,19 @@
     }
 
     function isModernUI() {
-        return !!document.querySelector('main.MuiBox-root') || (localStorage.getItem('layout')?.length === 0 && isJellyfinWebAtLeast12());
+        if (document.querySelector('main.MuiBox-root')) return true;
+        if (!isJellyfinWebAtLeast12()) return false;
+
+        // Match Jellyfin 12's layout choice before the Modern app has rendered.
+        const savedLayout = localStorage.getItem('layout');
+        const legacyLayouts = ['desktop-legacy', 'mobile-legacy', 'tv'];
+        if (legacyLayouts.includes(savedLayout)) return false;
+        if (['modern', 'desktop', 'mobile'].includes(savedLayout)) return true;
+
+        // Auto also covers a missing or unrecognized saved setting.
+        if (document.documentElement.classList.contains('layout-tv')) return false;
+        const defaultLayout = window.NativeShell?.AppHost?.getDefaultLayout?.() || 'modern';
+        return !legacyLayouts.includes(defaultLayout);
     }
 
     function injectIntoTopNavMain(entry) {
@@ -2484,15 +2496,18 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
     }
 
     async function getWatchlistUrl() {
+		if (window.KefinTweaksUtils.isModernUI()) {
+			window.KefinTweaksUtils._watchlistUrl = '#/watchlist';
+			return '#/watchlist';
+		}
 		if (window.KefinTweaksUtils._watchlistUrl) {
 			return window.KefinTweaksUtils._watchlistUrl;
 		}
-		const isModernUI = window.KefinTweaksUtils.isModernUI();
 		const watchlistTabIndex = await getWatchlistTabIndex() || null;
 
         let watchlistUrl = '#/watchlist';
 
-		if (watchlistTabIndex !== null && watchlistTabIndex !== undefined && !isModernUI) {
+		if (watchlistTabIndex !== null && watchlistTabIndex !== undefined && !window.KefinTweaksUtils.isModernUI()) {
 			watchlistUrl = `#/home?tab=${watchlistTabIndex}`;
 		}
 		window.KefinTweaksUtils._watchlistUrl = watchlistUrl;
