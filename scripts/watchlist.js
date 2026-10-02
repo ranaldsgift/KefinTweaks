@@ -6911,16 +6911,11 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				if (mutation.type === 'childList') {
 					mutation.addedNodes.forEach((node) => {
 						if (node.nodeType === Node.ELEMENT_NODE) {
-							// Check if this is a library page that became visible
-							if (node.classList && node.classList.contains('homePage') && !node.classList.contains('hide')) {
+							// Custom Tabs can insert its content after the home page is visible.
+							const selector = '.homePage:not(.hide), .sections.watchlist';
+							if (node.matches(selector) || node.querySelector(selector)) {
 								checkForEmptyWatchlist();
 							}
-							
-							// Also check any library pages within the added node
-							const libraryPages = node.querySelectorAll ? node.querySelectorAll('.homePage:not(.hide)') : [];
-							libraryPages.forEach(libraryPage => {
-								checkForEmptyWatchlist();
-							});
 						}
 					});
 				}
