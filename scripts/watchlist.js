@@ -927,27 +927,86 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		});
 	}
 
-	// Show all shows modal
-	function showAllShowsModal() {
-		// Get all progress data and sort it the same way as top 5
-		const progressData = progressCache.data;
-		const allShows = progressData
-			.map(progress => ({
-				name: progress.series.Name,
-				episodesWatched: progress.watchedCount,
-				totalEpisodes: progress.totalEpisodes,
-				percentage: progress.percentage,
-				seriesId: progress.series.Id
+	/** Sum played-episode RunTimeTicks for a progress row (watchedRuntime is seconds when set). */
+	function getSeriesWatchedRuntimeTicks(progress) {
+		if (!progress) return 0;
+		const source = Array.isArray(progress.episodes) && progress.episodes.length
+			? progress.episodes
+			: (progress.playEvents || []);
+		if (source.length) {
+			let totalTicks = 0;
+			source.forEach((ep) => {
+				const key = ep?.UserData?.LastPlayedDate || ep?.LastPlayedDate;
+				const played = ep?.UserData ? ep.UserData.Played === true : !!key;
+				if (!played) return;
+				totalTicks += Number(ep.RunTimeTicks) || 0;
+			});
+			return totalTicks;
+		}
+		if (typeof progress.watchedRuntime === 'number' && progress.watchedRuntime > 0) {
+			return Math.round(progress.watchedRuntime * 10000000);
+		}
+		return 0;
+	}
+
+	function formatWatchedRuntimeLabel(ticks) {
+		const seconds = (Number(ticks) || 0) / 10000000;
+		const hours = seconds / 3600;
+		if (hours >= 1) return `${hours.toFixed(1)} hours`;
+		const mins = Math.round(seconds / 60);
+		return `${mins} min`;
+	}
+
+	function escapeHtmlWatchlist(str) {
+		return String(str || '')
+			.replace(/&/g, '&amp;')
+			.replace(/</g, '&lt;')
+			.replace(/>/g, '&gt;')
+			.replace(/"/g, '&quot;');
+	}
+
+	/** Map progress rows to top-show entries sorted by total watch time. */
+	function mapProgressToTopShows(progressData, limit = null) {
+		const mapped = (progressData || [])
+			.map((progress) => ({
+				name: progress.series?.Name || 'Unknown',
+				episodesWatched: progress.watchedCount || 0,
+				totalEpisodes: progress.totalEpisodes || 0,
+				percentage: progress.percentage || 0,
+				seriesId: progress.series?.Id,
+				watchedRuntimeTicks: getSeriesWatchedRuntimeTicks(progress)
 			}))
 			.sort((a, b) => {
-				// Primary sort: completion percentage (highest first)
-				const percentageDiff = b.percentage - a.percentage;
-				if (percentageDiff !== 0) {
-					return percentageDiff;
-				}
-				// Tiebreaker: episode count (most episodes first)
-				return b.totalEpisodes - a.totalEpisodes;
+				const tickDiff = b.watchedRuntimeTicks - a.watchedRuntimeTicks;
+				if (tickDiff !== 0) return tickDiff;
+				return (b.episodesWatched || 0) - (a.episodesWatched || 0);
 			});
+		return limit != null ? mapped.slice(0, limit) : mapped;
+	}
+
+	function bindShowAllShowsButton(root) {
+		const scope = root && root.querySelector ? root : document;
+		const showAllBtn = scope.querySelector?.('#show-all-shows-btn')
+			|| getElementByIdSafe('show-all-shows-btn');
+		if (!showAllBtn || showAllBtn.dataset.showAllBound === 'true') return;
+		showAllBtn.dataset.showAllBound = 'true';
+		showAllBtn.addEventListener('click', (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			showAllShowsModal();
+		});
+	}
+
+	// Show all shows modal
+	function showAllShowsModal() {
+		if (!window.ModalSystem) {
+			WARN('ModalSystem not available');
+			return;
+		}
+
+		// Get all progress data and sort by total watch time (same as Top Shows)
+		const progressData = progressCache.data || [];
+		const allShows = mapProgressToTopShows(progressData);
 		
 		let showsHtml = '';
 		if (allShows.length === 0) {
@@ -961,8 +1020,8 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 					<div class="all-show-item">
 						<div class="show-rank">${rank}</div>
 						<div class="show-info">
-							<div class="show-name">${show.name}</div>
-							<div class="show-episodes">${show.episodesWatched} of ${show.totalEpisodes} ${episodesText} (${show.percentage}%)</div>
+							<div class="show-name">${escapeHtmlWatchlist(show.name)}</div>
+							<div class="show-episodes">${formatWatchedRuntimeLabel(show.watchedRuntimeTicks)} · ${show.episodesWatched} of ${show.totalEpisodes} ${episodesText} (${show.percentage}%)</div>
 						</div>
 					</div>
 				`;
@@ -1085,12 +1144,6 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		}
 
 		return visibleWatchlistSections[0];
-	}
-	
-	// Safe element getter that targets the visible library page
-	function getElementByIdSafe(elementId) {
-		const libraryPage = getVisibleLibraryPage();
-		return libraryPage ? libraryPage.querySelector(`#${elementId}`) : getElementByIdSafe(elementId);
 	}
 	
 	// Add custom CSS for watchlist icon
@@ -2790,25 +2843,8 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		const moviesWatched = movieCache.data.length;
 		const hoursWatched = sumWatchedRuntimeHours(progressData, movieCache.data);
 
-		// Calculate top 5 shows by completion percentage, then by episode count
-		const topShows = progressData
-			.map(progress => ({
-				name: progress.series.Name,
-				episodesWatched: progress.watchedCount,
-				totalEpisodes: progress.totalEpisodes,
-				percentage: progress.percentage,
-				seriesId: progress.series.Id
-			}))
-			.sort((a, b) => {
-				// Primary sort: completion percentage (highest first)
-				const percentageDiff = b.percentage - a.percentage;
-				if (percentageDiff !== 0) {
-					return percentageDiff;
-				}
-				// Tiebreaker: episode count (most episodes first)
-				return b.totalEpisodes - a.totalEpisodes;
-			})
-			.slice(0, 5);
+		// Top 5 shows by total watch time (RunTimeTicks), then episode count
+		const topShows = mapProgressToTopShows(progressData, 5);
 
 		return {
 			seriesStarted,
@@ -2855,12 +2891,13 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			const rank = index + 1;
 			const rankClass = rank <= 3 ? ` rank-${rank}` : '';
 			const episodesText = show.episodesWatched === 1 ? 'episode' : 'episodes';
+			const timeLabel = formatWatchedRuntimeLabel(show.watchedRuntimeTicks);
 			
 			return `
 				<div class="top-show-item${rankClass}">
 					<div class="show-rank">${rank}</div>
-					<div class="top-show-name" title="${show.name}">${show.name}</div>
-					<div class="top-show-episodes">${show.episodesWatched} of ${show.totalEpisodes} ${episodesText} (${show.percentage}%)</div>
+					<div class="top-show-name" title="${escapeHtmlWatchlist(show.name)}">${escapeHtmlWatchlist(show.name)}</div>
+					<div class="top-show-episodes">${timeLabel} · ${show.episodesWatched} of ${show.totalEpisodes} ${episodesText} (${show.percentage}%)</div>
 				</div>
 			`;
 		}).join('');
@@ -3539,6 +3576,9 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		watchlistSection.dataset.htmlRendered = 'true';
 		// Reset listeners setup flag since we have new DOM elements
 		watchlistSection.dataset.listenersSetup = 'false';
+
+		// Bind Show All immediately on the fresh button (does not wait for tab listener pass)
+		bindShowAllShowsButton(watchlistSection);
 
 		// Add refresh buttons after HTML is rendered
 		addRefreshButtons();
@@ -5723,6 +5763,8 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 					await updateProgressStatistics(progressCache.data);
 				}
 
+				bindShowAllShowsButton(statisticsTab);
+
 				LOG('Statistics content rendered successfully');
 			} catch (err) {
 				ERR('Error rendering statistics content:', err);
@@ -6814,14 +6856,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		setupMovieSearch();
 		
 		// Setup "Show All" button for top shows
-		const showAllBtn = getElementByIdSafe('show-all-shows-btn');
-		if (showAllBtn) {
-			showAllBtn.addEventListener('click', (e) => {
-				e.preventDefault();
-				e.stopPropagation();
-				showAllShowsModal();
-			});
-		}
+		bindShowAllShowsButton(watchlistSection);
 		
 		// Mark as setup to prevent duplicates
 		watchlistSection.dataset.listenersSetup = 'true';
@@ -7511,6 +7546,52 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 
 	/************ Watchlist Button Observer ************/
 
+	function bindWatchlistButton(button, itemId, itemType) {
+		if (!button || !itemId) return;
+		if (!button.getAttribute('data-id')) {
+			button.setAttribute('data-id', itemId);
+		}
+		if (button.dataset.watchlistBound === 'true') return;
+		button.dataset.watchlistBound = 'true';
+		button.addEventListener('click', async (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+
+			const newRating = button.dataset.active === 'false' ? 'true' : 'false';
+			await ApiClient.updateUserItemRating(ApiClient.getCurrentUserId(), itemId, newRating);
+			const isActive = newRating === 'true';
+			applyWatchlistButtonActiveState(button, isActive);
+			await updateWatchlistCacheOnToggle(itemId, itemType, isActive);
+		});
+	}
+
+	function bindSpotlightWatchlistButtons(root) {
+		const scope = root && root.nodeType === Node.ELEMENT_NODE ? root : document;
+		const buttons = new Set();
+		if (
+			scope.classList?.contains('watchlist-button') &&
+			scope.getAttribute('data-id') &&
+			(scope.classList.contains('spotlight-watchlist-button') || scope.closest?.('.spotlight-section'))
+		) {
+			buttons.add(scope);
+		}
+		scope.querySelectorAll?.(
+			'.spotlight-section .watchlist-button[data-id], .watchlist-button.spotlight-watchlist-button[data-id]'
+		)?.forEach((button) => buttons.add(button));
+
+		buttons.forEach((button) => {
+			const itemId = button.getAttribute('data-id');
+			if (!itemId) return;
+			const host = button.closest('[data-item-type], [data-type]');
+			const itemType =
+				button.getAttribute('data-type') ||
+				host?.getAttribute('data-item-type') ||
+				host?.getAttribute('data-type') ||
+				'';
+			bindWatchlistButton(button, itemId, itemType);
+		});
+	}
+
 	// Function to add watchlist button to a card overlay container
 	function addWatchlistButton(overlayContainer) {
 		if (!overlayContainer) return;
@@ -7579,19 +7660,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			applyWatchlistButtonActiveState(watchlistButton, isItemInLikedIdCache(itemId));
 		}
 
-		if (watchlistButton.dataset.watchlistBound !== 'true') {
-			watchlistButton.dataset.watchlistBound = 'true';
-			watchlistButton.addEventListener('click', async (e) => {
-				e.preventDefault();
-				e.stopPropagation();
-
-				const newRating = watchlistButton.dataset.active === 'false' ? 'true' : 'false';
-				await ApiClient.updateUserItemRating(ApiClient.getCurrentUserId(), itemId, newRating);
-				const isActive = newRating === 'true';
-				applyWatchlistButtonActiveState(watchlistButton, isActive);
-				await updateWatchlistCacheOnToggle(itemId, itemType, isActive);
-			});
-		}
+		bindWatchlistButton(watchlistButton, itemId, itemType);
 	}
 
 	// Function to process all existing overlay containers
@@ -7604,10 +7673,12 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				addWatchlistButton(overlayContainer);
 			}
 		});
+		bindSpotlightWatchlistButtons(document);
 	}
 
 	function processWatchlistOverlaysInRoot(root) {
 		if (!root || root.nodeType !== Node.ELEMENT_NODE) return;
+		bindSpotlightWatchlistButtons(root);
 		if (root.classList?.contains('cardOverlayContainer')) {
 			const buttonContainer = root.querySelector('.cardOverlayButton-br');
 			if (buttonContainer) addWatchlistButton(root);
@@ -7656,6 +7727,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			for (const mutation of mutations) {
 				for (const node of mutation.addedNodes) {
 					if (node.nodeType !== Node.ELEMENT_NODE) continue;
+					bindSpotlightWatchlistButtons(node);
 					// Skip deep card-internal inserts (handled by shallow itemsContainer observers)
 					if (node.closest?.('.card') && !node.classList?.contains('itemsContainer')) {
 						continue;
@@ -7685,6 +7757,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		has: isItemInLikedIdCache,
 		set: setLikedIdInCache,
 		syncOverlayButtons: syncOverlayWatchlistButtons,
+		bindWatchlistButton,
 		isSupportedType: isWatchlistSupportedType
 	};
 
