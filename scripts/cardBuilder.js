@@ -16,6 +16,7 @@
     const state = {
         defaultCardBackgroundNumber: 1,
         useBlurhash: true,
+		watchlist: false,
     };
 
     /** In-memory scroller metrics (avoid CSS var style writes for JS-only caches). */
@@ -2043,6 +2044,7 @@
     }
 
     function updateCardWatchlistButtons(itemId, userData) {
+        if (!state.watchlist) return;
         if (!itemId || !userData || !('Likes' in userData)) return;
 
         const isLiked = userData.Likes === true;
@@ -3867,7 +3869,7 @@
 
             // Watchlist button (active state from UserData.Likes; click bound by watchlist.js)
             const watchlistSupportedTypes = ['Movie', 'Series', 'Season', 'Episode', 'BoxSet', 'Playlist', 'Video'];
-            if (watchlistSupportedTypes.includes(itemType)) {
+            if (state.watchlist && watchlistSupportedTypes.includes(itemType)) {
                 const isLiked = item.UserData?.Likes === true;
                 const watchlistButton = document.createElement('button');
                 watchlistButton.type = 'button';
@@ -3934,7 +3936,7 @@
 
             buttonContainer.appendChild(moreButton);
 
-			const NON_PLAYABLE_TYPES = ['CollectionFolder', 'Folder', 'UserView', 'Virtual', 'Studio'];
+			const NON_PLAYABLE_TYPES = ['CollectionFolder', 'Folder', 'UserView', 'Virtual', 'Studio', 'Genre', 'Person'];
             if (!NON_PLAYABLE_TYPES.includes(item.Type) && item.LocationType !== 'Virtual') {
                 cardOverlayContainer.appendChild(playButton);
             }
@@ -4110,7 +4112,7 @@
 
             if (itemType === 'Series' && item.Status === 'Continuing') {
                 secondaryTextContent = item.ProductionYear + ' - Present';
-            } else if (itemType === 'Series' && item.EndDate) {
+            } else if (itemType === 'Series' && item.EndDate && item.ProductionYear && item.EndDate.substring(0, 4) !== String(item.ProductionYear)) {
                 secondaryTextContent = item.ProductionYear + ' - ' + item.EndDate.substring(0, 4);
             } else if (item.Type === 'Program') {
                 secondaryTextContent = new Date(item.StartDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
@@ -4894,67 +4896,32 @@
                 }
             });
 
-            // Watchlist button (material icon span button with bookmark icon)
-            const watchlistButton = document.createElement('button');
-            watchlistButton.className = 'emby-button button-flat btnWatchlist';
+            // Watchlist button (same Likes / watchlist-button pattern as cards; clicks via watchlist.js)
+            const spotlightWatchlistSupportedTypes = ['Movie', 'Series', 'Season', 'Episode', 'BoxSet', 'Playlist', 'Video'];
+            let watchlistButton = null;
+            if (state.watchlist && spotlightWatchlistSupportedTypes.includes(itemType)) {
+                const isLiked = item.UserData?.Likes === true;
+                watchlistButton = document.createElement('button');
+                watchlistButton.type = 'button';
+                watchlistButton.className = 'watchlist-button spotlight-watchlist-button emby-button button-flat paper-icon-button-light';
+                watchlistButton.setAttribute('data-action', 'none');
+                watchlistButton.setAttribute('data-id', item.Id);
+                watchlistButton.setAttribute('data-active', isLiked ? 'true' : 'false');
+                watchlistButton.title = isLiked ? 'Remove from Watchlist' : 'Add to Watchlist';
 
-            // Check watchlist status - try to get from cache or API
-            let isInWatchlist = false;
-            const sectionName =
-                itemType === 'Movie'
-                    ? 'movies'
-                    : itemType === 'Series'
-                        ? 'series'
-                        : itemType === 'Season'
-                            ? 'seasons'
-                            : itemType === 'Episode'
-                                ? 'episodes'
-                                : null;
+                const watchlistIcon = document.createElement('span');
+                watchlistIcon.className = 'material-icons watchlist';
+                watchlistIcon.setAttribute('aria-hidden', 'true');
+                watchlistButton.appendChild(watchlistIcon);
 
-            // Check watchlist cache if available
-            if (sectionName && typeof window.watchlistCache !== 'undefined' && window.watchlistCache[sectionName]?.data) {
-                isInWatchlist = window.watchlistCache[sectionName].data.some((watchlistItem) => watchlistItem.Id === item.Id);
-            }
-
-            const watchlistIcon = document.createElement('span');
-            watchlistIcon.className = 'material-icons';
-            watchlistIcon.textContent = 'bookmark';
-            watchlistIcon.title = isInWatchlist ? 'Remove from Watchlist' : 'Add to Watchlist';
-            watchlistButton.appendChild(watchlistIcon);
-            if (isInWatchlist) {
-                watchlistButton.classList.add('watchlisted');
-            }
-            watchlistButton.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                const userId = ApiClient.getCurrentUserId();
-                const newStatus = !isInWatchlist;
-
-                try {
-                    // Update watchlist status using proper API
-                    await ApiClient.updateUserItemRating(userId, item.Id, newStatus ? 'true' : 'false');
-
-                    // Update local state
-                    isInWatchlist = newStatus;
-
-                    // Update button class
-                    if (isInWatchlist) {
-                        watchlistButton.classList.add('watchlisted');
-                    } else {
-                        watchlistButton.classList.remove('watchlisted');
-                    }
-
-                    // Update watchlist cache if available
-                    if (sectionName && typeof window.updateWatchlistCacheOnToggle === 'function') {
-                        await window.updateWatchlistCacheOnToggle(item.Id, itemType, isInWatchlist);
-                    }
-                } catch (err) {
-                    console.error('Failed to update watchlist status:', err);
+                if (typeof window.KefinWatchlistLikedIds?.bindWatchlistButton === 'function') {
+                    window.KefinWatchlistLikedIds.bindWatchlistButton(watchlistButton, item.Id, itemType);
                 }
-            });
+            }
 
             // Info button (shows overview on hover)
             const infoButton = document.createElement('button');
-            infoButton.className = 'emby-button button-flat spotlight-info-button';
+            infoButton.className = 'emby-button button-flat spotlight-info-button paper-icon-button-light';
             const infoIcon = document.createElement('span');
             infoIcon.className = 'material-icons';
             infoIcon.textContent = 'info';
@@ -4970,7 +4937,9 @@
             }
 
             buttonsContainer.appendChild(playButton);
-            buttonsContainer.appendChild(watchlistButton);
+            if (watchlistButton) {
+                buttonsContainer.appendChild(watchlistButton);
+            }
             buttonsContainer.appendChild(infoButton);
 
             // Rating with star icon
@@ -9173,6 +9142,10 @@
     }
 
     async function initialize() {
+        // Match loader default: watchlist enabled unless scripts.watchlist === false
+        const scripts = window.KefinTweaksConfig?.scripts || {};
+        state.watchlist = scripts.watchlist !== false;
+
         if (window.userHelper?.waitForLogin) {
             await window.userHelper.waitForLogin();
         }
