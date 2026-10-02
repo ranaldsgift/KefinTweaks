@@ -979,6 +979,16 @@
         entry.element = newContent;
         registerRuntime(entry);
         applyPresentationToElement(entry);
+        // Fresh cards from format/mode rerender need explicit lazy observe (push path, no MO).
+        if (window.cardBuilder?.registerLazyImagesInSection) {
+            window.cardBuilder.registerLazyImagesInSection(newContent);
+        } else if (window.cardBuilder?.registerLazyImagesIn) {
+            window.cardBuilder.registerLazyImagesIn(newContent);
+        }
+        // Spotlight (and any section without .itemsContainer) still needs a root pass.
+        if (isSpotlight && window.cardBuilder?.registerLazyImagesIn) {
+            window.cardBuilder.registerLazyImagesIn(newContent);
+        }
 
         if (!isSpotlight && window.cardBuilder?.applyItemsLayoutState) {
             window.cardBuilder.invalidateLastRowPadding?.(newContent.querySelector('.itemsContainer'));
