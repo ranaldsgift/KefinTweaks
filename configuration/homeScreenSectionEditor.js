@@ -1780,7 +1780,7 @@
         return `
             <div class="hsse-flow">
                 <p class="listItemBodyText secondary hsse-subtitle">Choose how you&apos;d like to get started</p>
-                <div class="hsse-flow-body">
+                <div class="hsse-flow-body" style="align-content: center;">
                     <div class="hsse-mode-grid">
                         <button type="button" class="hsse-mode-card hsse-wizard" data-hsse-action="select-wizard">
                             <div class="hsse-mode-card-header">

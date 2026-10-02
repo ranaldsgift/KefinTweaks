@@ -571,10 +571,6 @@ html:not([data-active-page="home"]) .snowverlay {
 	}
 }
 
-html[data-active-page="home"] body[data-seasonal-background="true"] .backdropContainer .backdropImage {
-	background: none !important;
-}
-
 html[data-active-page="home"] body[data-seasonal-background="true"] #reactRoot > .backgroundContainer::after {
 	content: "";
 	position: absolute;

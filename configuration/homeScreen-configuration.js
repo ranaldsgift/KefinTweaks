@@ -1865,12 +1865,15 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
     const LIBRARY_SYNC_GROUP_IDS = new Set(['home-recently-added', 'home-popular-genres']);
 
     /**
-     * Merge group objects, matching sections by id
+     * Merge group objects, matching sections by id.
      * @param {Object} savedGroup - Group from saved config
      * @param {Object} currentGroup - Group from current config
+     * @param {{ authoritativeSections?: boolean }} [options] - When authoritativeSections is true
+     *   (or group is in LIBRARY_SYNC_GROUP_IDS), current section list wins — saved-only sections
+     *   are not re-appended (discovery prune / library verify).
      * @returns {Object} Merged group object
      */
-    function mergeGroup(savedGroup, currentGroup) {
+    function mergeGroup(savedGroup, currentGroup, options = {}) {
         if (!savedGroup && !currentGroup) return null;
         if (!savedGroup) return JSON.parse(JSON.stringify(currentGroup));
         if (!currentGroup) return JSON.parse(JSON.stringify(savedGroup));
@@ -1915,9 +1918,12 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             }
         });
 
-        // Library template groups: current list is authoritative (verify may have pruned sections)
+        // Library sync groups + callers with authoritativeSections (e.g. discovery): current list wins
         const groupId = currentGroup.id || savedGroup.id;
-        if (!LIBRARY_SYNC_GROUP_IDS.has(groupId)) {
+        const authoritative =
+            options.authoritativeSections === true ||
+            LIBRARY_SYNC_GROUP_IDS.has(groupId);
+        if (!authoritative) {
             savedSectionMap.forEach(savedSection => {
                 if (!savedSection.deleted) {
                     mergedSections.push(JSON.parse(JSON.stringify(savedSection)));
@@ -1933,9 +1939,10 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
      * Merge home screen group configs, matching groups by id
      * @param {Array} currentGroups - Groups from current config
      * @param {Array} savedGroups - Groups from saved config
+     * @param {{ authoritativeSections?: boolean }} [options] - Forwarded to mergeGroup
      * @returns {Array} Merged groups array
      */
-    function mergeHomeScreenGroupConfig(currentGroups, savedGroups) {
+    function mergeHomeScreenGroupConfig(currentGroups, savedGroups, options = {}) {
         if (!currentGroups || currentGroups.length === 0) {
             // Filter out deleted groups from saved config
             return (savedGroups || []).filter(g => !g.deleted).map(g => JSON.parse(JSON.stringify(g)));
@@ -1969,7 +1976,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             
             if (savedGroup) {
                 // Group exists in both - merge them
-                merged.push(mergeGroup(savedGroup, currentGroup));
+                merged.push(mergeGroup(savedGroup, currentGroup, options));
                 savedGroupMap.delete(key);
             } else {
                 // New group - add it
@@ -2015,7 +2022,8 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                 ),
                 DISCOVERY_SECTION_GROUPS: mergeHomeScreenGroupConfig(
                     config.DISCOVERY_SECTION_GROUPS || [],
-                    savedHomeScreenConfig.DISCOVERY_SECTION_GROUPS || []
+                    savedHomeScreenConfig.DISCOVERY_SECTION_GROUPS || [],
+                    { authoritativeSections: true }
                 ),
                 // Custom groups are replaced entirely (UI is source of truth)
                 CUSTOM_SECTION_GROUPS: config.CUSTOM_SECTION_GROUPS || [],
