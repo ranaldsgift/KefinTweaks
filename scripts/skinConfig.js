@@ -145,6 +145,16 @@
                 name: 'Hide Missing And Unaired Indicators On Home Screen',
                 url: `${getKefinTweaksRoot()}skins/optional/global/hideMissingAndUnairedIndicatorsOnHomeScreen.css`,
                 enabled: false
+            },
+            {
+                name: 'Hide Seasonal Background Images',
+                url: `${getKefinTweaksRoot()}skins/optional/global/seasonalBackgroundHide.css`,
+                enabled: false
+            },
+            {
+                name: 'Disable Seasonal Animations',
+                url: `${getKefinTweaksRoot()}skins/optional/global/seasonalAnimationDisable.css`,
+                enabled: false
             }
         ],
         

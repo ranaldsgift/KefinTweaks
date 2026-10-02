@@ -1,0 +1,10 @@
+// Hide seasonal background images
+/* Hide seasonal background images */
+html[data-active-page="home"] body[data-seasonal-background="true"] .backdropContainer .backdropImage {
+	background: initial !important;
+}
+html[data-active-page="home"] body[data-seasonal-background="true"] #reactRoot > .backgroundContainer::after {
+	display: none !important;
+	content: none !important;
+	background: none !important;
+}
