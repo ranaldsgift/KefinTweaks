@@ -123,7 +123,12 @@
 }
 
 .kefin-toggle-switch::after {
-	content: "";
+	content: "close";
+	font-family: "Material Icons";
+	font-size: 14px;
+	line-height: 22px;
+	text-align: center;
+	color: rgba(0, 0, 0, 0.55);
 	position: absolute;
 	width: 22px;
 	height: 22px;
@@ -136,6 +141,7 @@
 }
 
 .kefin-toggle-switch[data-enabled="true"]::after {
+	content: "check";
 	left: calc(100% - 25px);
 }
 
