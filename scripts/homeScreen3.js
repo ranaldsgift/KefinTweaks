@@ -9,7 +9,9 @@
     // Configuration
     const PRE_FETCH_DISCOVERY_DATA = false; // If true, fetches first discovery group immediately. If false, waits for scroll/click.
     /** Max sections resolved/rendered per discovery group (infinite/chevron pages). */
-    const DISCOVERY_SECTIONS_PER_GROUP = 12;
+    const DISCOVERY_SECTIONS_PER_GROUP = 100;
+    /** IntersectionObserver rootMargin for discovery section progressive enhance (batches + any discovery enhance). */
+    const DISCOVERY_ENHANCE_ROOT_MARGIN = '30% 0px 30% 0px';
 
     // Dependencies
     const ApiHelper = window.apiHelper;
@@ -287,7 +289,7 @@
         const existing = document.querySelector(HOME_SECTIONS_SELECTOR);
         if (existing) {
             LOG('Home sections container already present; enhancing');
-            enhanceHomeScreen();
+            enqueueHomeViewJob({ type: 'home', hash: window.location.hash || '' });
             return;
         }
 
@@ -299,7 +301,7 @@
         homeSectionsReadyObserver = new MutationObserver(() => {
             if (!document.querySelector(HOME_SECTIONS_SELECTOR)) return;
             LOG('Home sections container appeared; enhancing');
-            enhanceHomeScreen();
+            enqueueHomeViewJob({ type: 'home', hash: window.location.hash || '' });
         });
         homeSectionsReadyObserver.observe(document.documentElement, {
             childList: true,
@@ -1371,7 +1373,7 @@
 
         createDiscoveryLoadingIndicator(container);
 
-        const useInfiniteScroll = userConfig ? (userConfig.infiniteScroll !== false) : true;
+        const useInfiniteScroll = userConfig?.infiniteScroll === true;
         
         if (useInfiniteScroll) {
             state.discoveryMode = 'infinite';
@@ -1441,6 +1443,7 @@
             await window.cardBuilder.renderProgressiveSections(container, bufferedSections, {
                 revealSectionsSequentially,
                 enhanceOnVisible: true,
+                enhanceRootMargin: DISCOVERY_ENHANCE_ROOT_MARGIN,
                 showStaleDataBeforeRefresh: config.HOME_SETTINGS?.showStaleDataBeforeRefresh === true
             });
 
@@ -1832,7 +1835,7 @@
         sectionCache.fragmentCache = null;
         sectionCache.isInitialRender = true;
 
-        await enhanceHomeScreen();
+        return enqueueHomeViewJob({ type: 'home', hash: window.location.hash || '' });
     }
 
     const HOME_CHROME_CREATE_ID = 'kefin-home-create-section-btn';
@@ -2313,7 +2316,7 @@
     }
 
     window.homeScreen3 = {
-        init: enhanceHomeScreen,
+        init: () => enqueueHomeViewJob({ type: 'home', hash: window.location.hash || '' }),
         refreshHomeSections,
         resolveDiscoverySection: buildDiscoverySectionInstance,
         sectionHelper: () => window.sectionHelper,
