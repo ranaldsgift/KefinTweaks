@@ -82,7 +82,7 @@
 	background-color: rgba(0, 0, 0, 0.5);
 	z-index: -1;
 }
-.MuiDrawer-root[${DRAWER_ATTR}] .MuiDrawer-paper {
+:where(.MuiDrawer-root[${DRAWER_ATTR}]) .MuiDrawer-paper {
 	transform: translateX(-100%);
 	transition: transform 225ms cubic-bezier(0, 0, 0.2, 1);
 	outline: 0px;
