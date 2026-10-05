@@ -2065,7 +2065,7 @@
             if (!id || id === 'none') return;
             const safe = CSS.escape(id);
             rules.push(`
-.homeSectionsContainer[data-category="${safe}"] > [data-section-id]:not([data-category="${safe}"]) {
+.homeSectionsContainer[data-category="${safe}"] > :not([data-category="${safe}"]):not(#discovery-loading-indicator):not(.discovery-loading-indicator) {
     display: none !important;
 }
 `);
@@ -2155,6 +2155,7 @@
 
         const rail = document.getElementById(HOME_CHROME_CATEGORY_RAIL_ID);
         if (rail) {
+            rail.dataset.category = next;
             rail.querySelectorAll('.kefin-home-category-item').forEach((item) => {
                 const active = item.dataset.categoryId === next;
                 item.classList.toggle('is-active', active);
@@ -2268,7 +2269,12 @@
             btn.blur();
         });
 
-        document.body.appendChild(outer);
+        const slides = document.getElementById('slides-container');
+        if (slides && slides.parentNode === document.body) {
+            document.body.insertBefore(outer, slides);
+        } else {
+            document.body.appendChild(outer);
+        }
         homeChromeCategoryMounted = true;
         applyActiveHomeCategory(desiredCategory);
         syncHomeCategoryRailScrollListener();
