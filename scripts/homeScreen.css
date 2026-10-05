@@ -604,3 +604,11 @@ html[data-active-page="home"] body[data-seasonal-background="true"] #reactRoot >
 .kefin-home-category-btn span:is(.emby-button-foreground) {
 	top: 0px !important;
 }
+
+#kefin-home-category-rail[data-category]:not([data-category="none"]) ~ #slides-container {
+	display: none !important;
+}
+
+.sections.homeSectionsContainer:not([data-category="none"]) {
+	margin-top: 0 !important;
+}
