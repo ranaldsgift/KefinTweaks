@@ -3076,16 +3076,25 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                     if (targetGroupName && targetGroupName !== found.group.name) {
                         found.group.sections.splice(found.sectionIndex, 1);
                         addSectionToGroup(currentConfig[found.groupType], targetGroupName, sectionData);
+                        await saveConfig(currentConfig);
+                        showToast('Section saved');
+                        refreshMainModal();
                     } else {
                         updateSectionInGroups(currentConfig[found.groupType], sectionData.id, sectionData);
+                        await saveConfig(currentConfig);
+                        showToast('Section saved');
+                        const sectionTypeForRow = GROUP_TYPE_TO_SECTION_TYPE[found.groupType] || sectionData.type || 'home';
+                        if (!updateSectionRowInPlace(sectionData, sectionTypeForRow, found.group?.name)) {
+                            refreshMainModal();
+                        }
                     }
                 } else {
                     addSectionToGroup(currentConfig.CUSTOM_SECTION_GROUPS, targetGroupName || 'Custom Sections', sectionData);
+                    await saveConfig(currentConfig);
+                    showToast('Saved new Home Screen Section');
+                    refreshMainModal();
                 }
 
-                await saveConfig(currentConfig);
-                showToast(found ? 'Section saved' : 'Saved new Home Screen Section');
-                refreshMainModal();
                 if (options.refreshHomeOnSave && !mainModalInstance) {
                     try {
                         await window.homeScreen3?.refreshHomeSections?.();
@@ -3168,6 +3177,27 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
     }
 
 
+    /**
+     * Replace a single .section-row in the main modal without full refresh (preserves scroll).
+     * @returns {boolean} true if row was updated
+     */
+    function updateSectionRowInPlace(sectionData, sectionType = 'home', groupName = null) {
+        if (!mainModalInstance?.dialogContent || !sectionData?.id) return false;
+        const escapedId = typeof CSS !== 'undefined' && CSS.escape
+            ? CSS.escape(sectionData.id)
+            : String(sectionData.id).replace(/["\\]/g, '\\$&');
+        const row = mainModalInstance.dialogContent.querySelector(`.section-row[data-section-id="${escapedId}"]`);
+        if (!row) return false;
+
+        const type = sectionType || row.dataset.sectionType || 'home';
+        const wrap = document.createElement('div');
+        wrap.innerHTML = buildSectionRowHTML(sectionData, type, groupName).trim();
+        const newRow = wrap.firstElementChild;
+        if (!newRow) return false;
+        row.replaceWith(newRow);
+        return true;
+    }
+
     function refreshMainModal() {
         if (!mainModalInstance) return;
         
@@ -3182,6 +3212,9 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
 
         // Store current active tab before refresh
         const savedActiveTab = normalizeActiveTab(currentActiveTab);
+
+        const scrollEl = mainModalInstance.dialogContent;
+        const scrollTop = scrollEl?.scrollTop ?? 0;
 
         const content = document.createElement('div');
         content.innerHTML = buildMainConfigHTML();
@@ -3218,6 +3251,13 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                 }
             });
         }
+
+        const restoreScroll = () => {
+            const el = mainModalInstance?.dialogContent;
+            if (el) el.scrollTop = scrollTop;
+        };
+        restoreScroll();
+        requestAnimationFrame(restoreScroll);
     }
 
 
