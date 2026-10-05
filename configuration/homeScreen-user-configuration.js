@@ -52,6 +52,12 @@
     /** Flex order slot for newly created pinned sections (admins can tune later). */
     const PINNED_DEFAULT_ORDER = 5;
 
+    /** Live editor sections for native Save outbound merge (User > Home). */
+    let activeUserHomeEditorSections = null;
+
+    /** One-shot ApiClient.updateDisplayPreferences arm state. */
+    let nativeHomeSaveMergeState = null;
+
     function createEmptyHomeScreen() {
         return {
             sections: [],
@@ -1664,6 +1670,145 @@
         }).homeScreen;
     }
 
+    /**
+     * Sync patch for outbound DisplayPreferences CustomPrefs from live editor sections.
+     * Uses the outbound prefs shell when provided; otherwise userHelper/localStorage cache.
+     * @returns {{ kefinTweaks: string, kefinHomeScreen: string }|null}
+     */
+    function buildKefinCustomPrefsPatch(sections, customPrefsShell) {
+        if (!Array.isArray(sections) || sections.length === 0) return null;
+
+        let customPrefs = customPrefsShell && typeof customPrefsShell === 'object'
+            ? customPrefsShell
+            : null;
+        if (!customPrefs) {
+            try {
+                if (window.LocalStorageCache) {
+                    const cache = new window.LocalStorageCache();
+                    const cached = cache.get('userDisplayPreferences');
+                    if (cached?.CustomPrefs) customPrefs = { ...cached.CustomPrefs };
+                }
+            } catch (_) { /* ignore */ }
+        }
+        if (!customPrefs) customPrefs = {};
+
+        const existingHomeScreen = parseKefinTweaksHomeScreen(customPrefs);
+        const serverMap = new Map();
+        sections.forEach((s) => {
+            if (s?.id) serverMap.set(s.id, s);
+        });
+        const homeScreen = mergeEditorSectionsIntoHomeScreen(existingHomeScreen, sections, serverMap);
+        const kefin = typeof window.userHelper?.parseKefinTweaks === 'function'
+            ? window.userHelper.parseKefinTweaks(customPrefs)
+            : {};
+        kefin.homeScreen = homeScreen;
+        return {
+            kefinTweaks: JSON.stringify(kefin),
+            kefinHomeScreen: JSON.stringify(homeScreenToLegacyArray(homeScreen))
+        };
+    }
+
+    function findDisplayPrefsArg(args) {
+        if (!args || !args.length) return null;
+        for (let i = 0; i < args.length; i++) {
+            const a = args[i];
+            if (a && typeof a === 'object' && !Array.isArray(a) && ('CustomPrefs' in a || 'Id' in a || 'Client' in a)) {
+                return a;
+            }
+        }
+        // jellyfin-apiclient: (id, prefs, userId, client) — prefs often at [1]
+        if (args[1] && typeof args[1] === 'object' && !Array.isArray(args[1])) return args[1];
+        return null;
+    }
+
+    function applyKefinPatchToDisplayPrefs(prefs, sections) {
+        if (!prefs || !Array.isArray(sections) || !sections.length) return false;
+        if (!prefs.CustomPrefs || typeof prefs.CustomPrefs !== 'object') {
+            prefs.CustomPrefs = {};
+        }
+        const patch = buildKefinCustomPrefsPatch(sections, prefs.CustomPrefs);
+        if (!patch) return false;
+        prefs.CustomPrefs.kefinTweaks = patch.kefinTweaks;
+        prefs.CustomPrefs.kefinHomeScreen = patch.kefinHomeScreen;
+        return true;
+    }
+
+    function disarmNativeHomeSaveKefinMerge() {
+        const state = nativeHomeSaveMergeState;
+        nativeHomeSaveMergeState = null;
+        if (!state) return;
+        if (state.timeoutId != null) {
+            clearTimeout(state.timeoutId);
+            state.timeoutId = null;
+        }
+        const apiClient = state.apiClient;
+        if (apiClient && state.original
+            && apiClient.updateDisplayPreferences !== state.original
+            && typeof state.original === 'function') {
+            apiClient.updateDisplayPreferences = state.original;
+        }
+    }
+
+    /**
+     * One-shot: next ApiClient.updateDisplayPreferences merges live Kefin CustomPrefs, then disarms.
+     */
+    function armNativeHomeSaveKefinMerge({ getSections, timeoutMs = 2000 } = {}) {
+        const apiClient = window.ApiClient;
+        if (!apiClient || typeof apiClient.updateDisplayPreferences !== 'function') {
+            WARN('armNativeHomeSaveKefinMerge: ApiClient.updateDisplayPreferences unavailable');
+            return false;
+        }
+
+        // Already armed: refresh callback / reset timeout; do not stack wrappers
+        if (nativeHomeSaveMergeState) {
+            nativeHomeSaveMergeState.getSections = getSections;
+            if (nativeHomeSaveMergeState.timeoutId != null) {
+                clearTimeout(nativeHomeSaveMergeState.timeoutId);
+            }
+            nativeHomeSaveMergeState.timeoutId = setTimeout(() => {
+                if (nativeHomeSaveMergeState) {
+                    LOG('Native Save Kefin merge: timeout disarm (no DisplayPreferences flush)');
+                    disarmNativeHomeSaveKefinMerge();
+                }
+            }, timeoutMs);
+            return true;
+        }
+
+        const original = apiClient.updateDisplayPreferences.bind(apiClient);
+        const state = {
+            apiClient,
+            original,
+            getSections,
+            timeoutId: null
+        };
+        nativeHomeSaveMergeState = state;
+
+        apiClient.updateDisplayPreferences = function (...args) {
+            try {
+                const sections = typeof state.getSections === 'function' ? state.getSections() : null;
+                const prefs = findDisplayPrefsArg(args);
+                if (prefs && Array.isArray(sections) && sections.length) {
+                    const ok = applyKefinPatchToDisplayPrefs(prefs, sections);
+                    if (ok) LOG('Merged live kefinTweaks into outbound DisplayPreferences');
+                }
+            } catch (e) {
+                ERR('Failed to merge kefinTweaks into outbound DisplayPreferences:', e);
+            }
+            disarmNativeHomeSaveKefinMerge();
+            return original(...args);
+        };
+
+        state.timeoutId = setTimeout(() => {
+            if (nativeHomeSaveMergeState === state) {
+                LOG('Native Save Kefin merge: timeout disarm (no DisplayPreferences flush)');
+                disarmNativeHomeSaveKefinMerge();
+            }
+        }, timeoutMs);
+
+        LOG('Armed one-shot DisplayPreferences Kefin merge');
+        return true;
+    }
+
     async function buildServerSectionsById() {
         const map = new Map();
         if (!window.KefinHomeScreen?.getConfig) return map;
@@ -1878,6 +2023,8 @@
             return;
         }
 
+        activeUserHomeEditorSections = null;
+
         try {
             container.innerHTML = '<div class="listItemBodyText secondary">Loading home sections…</div>';
 
@@ -2074,6 +2221,7 @@
             if (editorContainer && window.KefinTweaksUI.setupOrderEditorListeners) {
                 // Track current section state
                 let currentSections = [...allSections];
+                activeUserHomeEditorSections = currentSections;
                 let isSaving = false;
 
                 // Extract save logic into reusable function
@@ -2162,6 +2310,15 @@
             if (!form || !form.firstChild) {
                 WARN('Home settings form not ready');
                 return;
+            }
+
+            if (form.dataset.kefinNativeSaveHook !== 'true') {
+                form.dataset.kefinNativeSaveHook = 'true';
+                form.addEventListener('submit', () => {
+                    armNativeHomeSaveKefinMerge({
+                        getSections: () => activeUserHomeEditorSections
+                    });
+                });
             }
 
             if (form.querySelector('#kefin-user-home-sections-editor')) {
