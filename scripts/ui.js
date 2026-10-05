@@ -758,61 +758,87 @@
         }
     }
 
-    /**
-     * Get section type toggle states from localStorage
-     * @returns {Object} Object mapping section types (lowercase) to their enabled state (boolean)
-     */
+    /** Session-only section-type pill states (cleared on full page reload). */
+    let sectionTypeToggleStatesSession = null;
+
     function getSectionTypeToggleStates() {
-        try {
-            const stored = localStorage.getItem('kefinTweaks-sectionTypeToggles');
-            if (stored) {
-                return JSON.parse(stored);
-            }
-        } catch (e) {
-            // Ignore parse errors, return defaults
-        }
-        return {};
+        return sectionTypeToggleStatesSession && typeof sectionTypeToggleStatesSession === 'object'
+            ? { ...sectionTypeToggleStatesSession }
+            : {};
     }
 
-    /**
-     * Save section type toggle states to localStorage
-     * @param {Object} states - Object mapping section types (lowercase) to their enabled state (boolean)
-     */
     function saveSectionTypeToggleStates(states) {
-        try {
-            localStorage.setItem('kefinTweaks-sectionTypeToggles', JSON.stringify(states));
-        } catch (e) {
-            // Ignore storage errors (e.g., quota exceeded)
-        }
+        sectionTypeToggleStatesSession = states && typeof states === 'object' ? { ...states } : {};
+    }
+
+    /** Display label for type pills (home → Normal). */
+    function getSectionTypePillLabel(type) {
+        const t = String(type || '').toLowerCase();
+        if (t === 'home') return 'Normal';
+        if (!t) return '';
+        return t.charAt(0).toUpperCase() + t.slice(1);
     }
 
     /**
-     * Render section type toggle buttons
-     * @param {Array<string>} sectionTypes - Array of unique section types
-     * @param {Array<string>} enabledTypes - Array of types that should be initially enabled (defaults to all)
+     * Resolve which type pills are active.
+     * Defaults: Normal + Seasonal on, Discovery off. Discovery is exclusive.
+     */
+    function resolveSectionTypePillStates(sectionTypes, savedStates) {
+        const types = (sectionTypes || []).map((t) => String(t).toLowerCase());
+        const saved = savedStates && typeof savedStates === 'object' ? savedStates : null;
+        const hasSaved = saved && Object.keys(saved).length > 0;
+        const states = {};
+
+        if (!hasSaved) {
+            types.forEach((type) => {
+                states[type] = type !== 'discovery';
+            });
+            return states;
+        }
+
+        const discoveryOn = types.includes('discovery') && saved.discovery === true;
+        types.forEach((type) => {
+            if (discoveryOn) {
+                states[type] = type === 'discovery';
+            } else if (Object.prototype.hasOwnProperty.call(saved, type)) {
+                states[type] = saved[type] === true;
+            } else {
+                // Newly available while Discovery off: Normal/Seasonal default on
+                states[type] = type !== 'discovery';
+            }
+        });
+
+        // Ensure at least one active
+        if (!types.some((t) => states[t])) {
+            if (types.includes('home')) states.home = true;
+            else if (types.length) states[types[0]] = true;
+        }
+        return states;
+    }
+
+    /**
+     * Render section type filter pills (multi-select chips; Discovery exclusive).
+     * @param {Array<string>} sectionTypes
+     * @param {Array<string>} enabledTypes - types that should be initially active
      * @returns {string} HTML string
      */
     function renderSectionTypeToggles(sectionTypes, enabledTypes = null) {
         if (!sectionTypes || sectionTypes.length === 0) return '';
-        
-        // If enabledTypes not provided, all types are enabled by default
-        const enabledSet = enabledTypes ? new Set(enabledTypes.map(t => t.toLowerCase())) : new Set(sectionTypes.map(t => t.toLowerCase()));
-        
-        // Helper to capitalize first letter for display
-        const capitalize = (str) => str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
-        
+
+        const enabledSet = enabledTypes
+            ? new Set(enabledTypes.map((t) => t.toLowerCase()))
+            : new Set(sectionTypes.map((t) => t.toLowerCase()));
+
         return `
-            <div class="section-type-toggles" style="display: flex; gap: 0.5em; margin-bottom: 1em;">
-                ${sectionTypes.map(type => {
+            <div class="section-type-toggles" style="display: flex; flex-wrap: wrap; gap: 0.5em; margin-bottom: 1em;">
+                ${sectionTypes.map((type) => {
                     const typeLower = type.toLowerCase();
                     const isEnabled = enabledSet.has(typeLower);
-                    const buttonClasses = `emby-button section-type-toggle-btn raised block${isEnabled ? ' button-submit' : ''}`;
                     return `
-                    <button type="button" 
-                            class="${buttonClasses}" 
-                            data-section-type="${typeLower}"
-                            style="padding: 0.5em 1em; font-size: 0.9em;">
-                        ${capitalize(typeLower)}
+                    <button type="button"
+                            class="kefin-chip section-type-toggle-btn${isEnabled ? ' hsae-active' : ''}"
+                            data-section-type="${typeLower}">
+                        ${escapeHtml(getSectionTypePillLabel(typeLower))}
                     </button>
                 `;
                 }).join('')}
@@ -846,6 +872,18 @@
         const dataAttrsStr = dataAttrs.join(' ');
 
         const isPinnedSection = sectionId.startsWith('pinned-parent-') || sectionId.startsWith('pinned-list-');
+        const isSeasonal = sectionType === 'seasonal' || (section.startDate && section.endDate);
+        const isDiscovery = sectionType === 'discovery'
+            || section.discoveryEnabled === true
+            || !!section.discoveryType;
+        const seasonalBadge = isSeasonal
+            ? (section.startDate && section.endDate
+                ? `<span class="listItemBodyText secondary seasonal-tag" style="font-size: 0.8em; background: rgba(255,255,255,0.1); padding: 0.15em 0.45em; border-radius: 3px;">Seasonal · ${escapeHtml(String(section.startDate))} – ${escapeHtml(String(section.endDate))}</span>`
+                : `<span class="listItemBodyText secondary seasonal-tag" style="font-size: 0.8em; background: rgba(255,255,255,0.1); padding: 0.15em 0.45em; border-radius: 3px;">Seasonal</span>`)
+            : '';
+        const discoveryBadge = isDiscovery
+            ? `<span class="listItemBodyText secondary discovery-tag" style="font-size: 0.8em; background: rgba(255,255,255,0.1); padding: 0.15em 0.45em; border-radius: 3px;">Discovery</span>`
+            : '';
 
         return `
             <div class="listItem viewItem section-row" data-section-id="${sectionId}" data-section-type="${sectionType}" ${draggableAttr} ${dataAttrsStr}>
@@ -856,8 +894,10 @@
                     dataAttributes: { 'section-id': sectionId }
                 })}
                 <div class="listItemBody">
-                    <div style="display: flex; align-items: center; gap: 0.5em;">
+                    <div style="display: flex; align-items: center; gap: 0.5em; flex-wrap: wrap;">
                         <span>${sectionName.replace(/"/g, '&quot;')}</span>
+                        ${seasonalBadge}
+                        ${discoveryBadge}
                     </div>
                 </div>
                 <div class="section-row-actions">
@@ -1060,40 +1100,19 @@
         // Get unique section types (sorted for consistent display) all in lowercase
         const renderedSectionTypes = Array.from(sectionTypesSet).sort().map(type => type.toLowerCase());
 
-        // Preferred Section Types order in array: Jellyfin, Home, Seasonal, Discovery, Custom
-        let sectionTypes = ['jellyfin', 'home', 'seasonal', 'discovery', 'custom'];
-        sectionTypes = sectionTypes.filter(type => renderedSectionTypes.includes(type));
+        // Preferred order: Normal (home), Seasonal, Discovery
+        let sectionTypes = ['home', 'seasonal', 'discovery'];
+        sectionTypes = sectionTypes.filter((type) => renderedSectionTypes.includes(type));
 
-        // Load saved toggle states from localStorage
-        const savedToggleStates = getSectionTypeToggleStates();
-        
-        // Build data attributes for type filtering
-        // Use saved states if available, otherwise use defaults (seasonal = false, others = true)
-        const typeFilterAttrs = sectionTypes.map(type => {
+        const pillStates = resolveSectionTypePillStates(sectionTypes, getSectionTypeToggleStates());
+        saveSectionTypeToggleStates(pillStates);
+
+        const typeFilterAttrs = sectionTypes.map((type) => {
             const typeLower = type.toLowerCase();
-            // Check if we have a saved state for this type
-            const hasSavedState = savedToggleStates.hasOwnProperty(typeLower);
-            let isEnabled;
-            if (hasSavedState) {
-                // Use saved state
-                isEnabled = savedToggleStates[typeLower] ? 'true' : 'false';
-            } else {
-                // Use default: seasonal is hidden by default, all others are visible
-                isEnabled = typeLower === 'seasonal' ? 'false' : 'true';
-            }
-            return `data-section-type-${typeLower}="${isEnabled}"`;
+            return `data-section-type-${typeLower}="${pillStates[typeLower] ? 'true' : 'false'}"`;
         }).join(' ');
-        
-        // Determine which types should have their toggle buttons initially enabled
-        const enabledTypes = sectionTypes.filter(type => {
-            const typeLower = type.toLowerCase();
-            const hasSavedState = savedToggleStates.hasOwnProperty(typeLower);
-            if (hasSavedState) {
-                return savedToggleStates[typeLower];
-            }
-            // Default: seasonal is off, others are on
-            return typeLower !== 'seasonal';
-        });
+
+        const enabledTypes = sectionTypes.filter((type) => pillStates[type.toLowerCase()]);
 
         return `
             <div class="sections-container" ${typeFilterAttrs}>
@@ -1234,6 +1253,31 @@
                     .section-row .drag_handle {
                         display: none !important;
                     }
+                }
+                .section-type-toggles .kefin-chip {
+                    padding: 0.375rem 0.8125rem;
+                    border-radius: 999px;
+                    border: 1px solid rgba(255, 255, 255, 0.15);
+                    background: rgba(255, 255, 255, 0.04);
+                    font-size: 0.875rem;
+                    cursor: pointer;
+                    font-family: inherit;
+                    color: inherit;
+                }
+                .section-type-toggles .kefin-chip.hsae-active {
+                    border-color: rgba(0, 164, 220, 0.6);
+                    background: rgba(0, 164, 220, 0.15);
+                    color: var(--theme-primary-color, #00a4dc);
+                }
+                .toggle-slider-thumb {
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                }
+                .toggle-slider-thumb .material-icons {
+                    font-size: 14px;
+                    line-height: 1;
+                    color: rgba(0, 0, 0, 0.55);
                 }
             `;
             document.head.appendChild(style);
@@ -1426,12 +1470,7 @@
             
             if (!enabledList || !disabledList) {
                 // Fallback to old behavior if lists don't exist
-                toggle.dataset.enabled = newEnabled;
-                toggle.style.background = newEnabled ? 'rgba(0, 164, 220, 0.8)' : 'rgba(158, 158, 158, 0.5)';
-                const span = toggle.querySelector('span');
-                if (span) {
-                    span.style.left = newEnabled ? '32px' : '2px';
-                }
+                updateToggleSliderUI(toggle, newEnabled);
                 if (onToggleChange) {
                     onToggleChange(sectionId, newEnabled);
                 }
@@ -1439,12 +1478,7 @@
             }
             
             // Update toggle UI
-            toggle.dataset.enabled = newEnabled;
-            toggle.style.background = newEnabled ? 'rgba(0, 164, 220, 0.8)' : 'rgba(158, 158, 158, 0.5)';
-            const span = toggle.querySelector('span');
-            if (span) {
-                span.style.left = newEnabled ? '32px' : '2px';
-            }
+            updateToggleSliderUI(toggle, newEnabled);
             
             // Move section between lists
             if (newEnabled) {
@@ -1492,52 +1526,58 @@
             }
         });
         
-        // Section type toggle handlers
+        // Section type pill handlers (Normal/Seasonal multi-select; Discovery exclusive)
         container.addEventListener('click', (e) => {
             const toggleBtn = e.target.closest('.section-type-toggle-btn');
             if (!toggleBtn) return;
-            
+
             e.stopPropagation();
-            const sectionType = toggleBtn.dataset.sectionType;
-            const sectionTypeLower = sectionType.toLowerCase();
-            
-            // Find the sections container (might be the container itself or a parent)
+            const sectionTypeLower = String(toggleBtn.dataset.sectionType || '').toLowerCase();
+            if (!sectionTypeLower) return;
+
             const sectionsContainer = container.classList.contains('sections-container')
                 ? container
                 : (container.closest('.sections-container') || container.querySelector('.sections-container'));
             if (!sectionsContainer) return;
-            
-            // Get current state and toggle it
-            const attrName = `data-section-type-${sectionTypeLower}`;
-            const currentState = sectionsContainer.getAttribute(attrName);
-            const newState = currentState === 'false' ? 'true' : 'false';
-            const newStateBool = newState === 'true';
 
-            // Keep at least one section type visible — do not turn off the last active type
-            if (!newStateBool && currentState === 'true') {
-                let enabledTypeCount = 0;
-                for (const attr of sectionsContainer.attributes) {
-                    if (attr.name.startsWith('data-section-type-') && attr.value === 'true') {
-                        enabledTypeCount++;
-                    }
-                }
-                if (enabledTypeCount <= 1) {
+            const pillBtns = Array.from(sectionsContainer.querySelectorAll('.section-type-toggle-btn'));
+            const typeKeys = pillBtns.map((btn) => String(btn.dataset.sectionType || '').toLowerCase()).filter(Boolean);
+            const getActive = (type) => sectionsContainer.getAttribute(`data-section-type-${type}`) === 'true';
+            const setActive = (type, on) => {
+                sectionsContainer.setAttribute(`data-section-type-${type}`, on ? 'true' : 'false');
+            };
+
+            const currentlyOn = getActive(sectionTypeLower);
+            const discoveryCurrentlyOn = typeKeys.includes('discovery') && getActive('discovery');
+
+            if (sectionTypeLower === 'discovery') {
+                if (currentlyOn) {
+                    // Sole-active Discovery: must leave via Normal/Seasonal
                     return;
                 }
-            }
-
-            sectionsContainer.setAttribute(attrName, newState);
-
-            if (newStateBool) {
-                toggleBtn.classList.add('button-submit');
+                typeKeys.forEach((type) => setActive(type, type === 'discovery'));
+            } else if (discoveryCurrentlyOn) {
+                // Leave Discovery: only the clicked pill on
+                typeKeys.forEach((type) => setActive(type, type === sectionTypeLower));
+            } else if (currentlyOn) {
+                const enabledCount = typeKeys.filter((type) => getActive(type)).length;
+                if (enabledCount <= 1) return;
+                setActive(sectionTypeLower, false);
             } else {
-                toggleBtn.classList.remove('button-submit');
+                setActive(sectionTypeLower, true);
             }
 
-            // Save the new state to localStorage
-            const savedToggleStates = getSectionTypeToggleStates();
-            savedToggleStates[sectionTypeLower] = newStateBool;
-            saveSectionTypeToggleStates(savedToggleStates);
+            const nextStates = {};
+            pillBtns.forEach((btn) => {
+                const type = String(btn.dataset.sectionType || '').toLowerCase();
+                const on = getActive(type);
+                nextStates[type] = on;
+                btn.classList.toggle('hsae-active', on);
+            });
+            saveSectionTypeToggleStates(nextStates);
+            updateFirstLastAttributes(
+                sectionsContainer.querySelector('.enabled-sections-list')
+            );
         });
 
         // Drag and drop handlers - only work within enabled sections list
@@ -1906,7 +1946,10 @@
                     transition: left 0.3s ease;
                     box-shadow: 0 2px 4px rgba(0,0,0,0.3);
                     pointer-events: none;
-                "></span>`;
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                "><span class="material-icons" aria-hidden="true" style="font-size: 14px; line-height: 1; color: rgba(0,0,0,0.55);">${isEnabled ? 'check' : 'close'}</span></span>`;
 
         const toggleButton = `
             <button type="button" class="${escapeHtml(cssClass)}" ${dataAttrsString} ${id ? `data-checkbox-id="${escapeHtml(id)}"` : ''} data-enabled="${isEnabled}" aria-pressed="${isEnabled}"${inlineStyle}>
@@ -1947,6 +1990,8 @@
         const knob = toggleButton.querySelector('.toggle-slider-thumb');
         if (knob) {
             knob.style.left = enabled ? 'calc(100% - 25px)' : '3px';
+            const icon = knob.querySelector('.material-icons');
+            if (icon) icon.textContent = enabled ? 'check' : 'close';
         }
 
         const checkboxId = toggleButton.dataset.checkboxId;
