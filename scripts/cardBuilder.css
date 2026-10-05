@@ -2231,11 +2231,11 @@ html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"
 }
 
 .emby-scroller-container[data-card-format="Banner"] .card {
-	width: 25vw !important;
+	width: 33vw !important;
 }
 
 .layout-mobile .emby-scroller-container[data-card-format="Banner"] .card {
-	width: 50vw !important;
+	width: 95vw !important;
 }
 
 /* .emby-scroller-container[data-card-format="Logo"] .cardImageContainer,
