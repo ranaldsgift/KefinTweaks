@@ -431,7 +431,12 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
     const LATEST_RELEASE_NAME = 'Latest';
     const DEVELOPMENT_NAME = 'Development';
     const EXPERIMENTAL_NAME = 'Experimental';
+    const SPECIFIC_BUILD_NAME = 'Specific Build';
     const SELF_HOSTED_NAME = 'Self Hosted';
+
+    function isFullCommitSha(value) {
+        return typeof value === 'string' && /^[0-9a-f]{40}$/i.test(value.trim());
+    }
 
     // Parse source URL to determine source type and version
     function parseKefinTweaksSource(url) {
@@ -452,9 +457,8 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             return { sourceType: 'github', version: DEVELOPMENT_NAME };
         } else if (version === 'experimental') {
             return { sourceType: 'github', version: EXPERIMENTAL_NAME };
-        } else if (version && version.length === 40 && /^[0-9a-f]+$/.test(version)) {
-            // Commit hash URL (e.g. from a previous Experimental selection)
-            return { sourceType: 'github', version: EXPERIMENTAL_NAME };
+        } else if (isFullCommitSha(version)) {
+            return { sourceType: 'github', version: SPECIFIC_BUILD_NAME, commit: version.toLowerCase() };
         } else {
             return { sourceType: 'github', version: version.replace(/^v/, '') };
         }
@@ -477,16 +481,16 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                 .map(release => release.tag_name.replace(/^v/, ''))
                 .filter(tag => tag.match(/^\d+\.\d+\.\d+/)); // Only semantic versions
 
-            versionsCache = [LATEST_RELEASE_NAME, DEVELOPMENT_NAME, EXPERIMENTAL_NAME, ...versions];
+            versionsCache = [LATEST_RELEASE_NAME, DEVELOPMENT_NAME, EXPERIMENTAL_NAME, SPECIFIC_BUILD_NAME, ...versions];
             return versionsCache;
         } catch (error) {
             console.warn('[KefinTweaks Installer] Error fetching versions:', error);
-            return [LATEST_RELEASE_NAME, DEVELOPMENT_NAME, EXPERIMENTAL_NAME];
+            return [LATEST_RELEASE_NAME, DEVELOPMENT_NAME, EXPERIMENTAL_NAME, SPECIFIC_BUILD_NAME];
         }
     }
 
     // Build kefinTweaksRoot URL from selections
-    function buildKefinTweaksRootUrl(sourceType, source) {
+    function buildKefinTweaksRootUrl(sourceType, source, commitHash) {
         if (sourceType === 'custom') {
             // Ensure URL ends with /
             return source.endsWith('/') ? source : source + '/';
@@ -498,11 +502,24 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             versionTag = 'main';
         } else if (source === EXPERIMENTAL_NAME) {
             versionTag = 'experimental';
+        } else if (source === SPECIFIC_BUILD_NAME) {
+            const sha = String(commitHash || '').trim().toLowerCase();
+            if (!isFullCommitSha(sha)) {
+                throw new Error('Specific Build requires a full 40-character commit hash');
+            }
+            versionTag = sha;
         } else if (source !== LATEST_RELEASE_NAME) {
             versionTag = source.startsWith('v') ? source : 'v' + source;
         }
 
         return `${JSDELIVR_BASE}@${versionTag}/`;
+    }
+
+    function formatSpecificBuildDisplay(sourceInfo) {
+        const sha = sourceInfo?.commit || '';
+        return sha
+            ? `${SPECIFIC_BUILD_NAME} (#${sha.slice(0, 7)})`
+            : SPECIFIC_BUILD_NAME;
     }
 
     // Simple modal creation (doesn't depend on modal.js)
@@ -860,6 +877,29 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         customUrlInput.value = sourceInfo.sourceType === 'custom' ? currentRoot : '';
         customUrlInput.style.display = sourceInfo.sourceType === 'custom' ? 'block' : 'none';
 
+        // Specific Build commit hash input
+        const commitHashLabel = document.createElement('label');
+        commitHashLabel.textContent = 'Commit Hash:';
+        commitHashLabel.style.display = 'block';
+        commitHashLabel.style.marginBottom = '0.5em';
+        commitHashLabel.style.marginTop = '1em';
+
+        const commitHashInput = document.createElement('input');
+        commitHashInput.type = 'text';
+        commitHashInput.className = 'fld emby-input';
+        commitHashInput.id = 'kefinTweaksCommitHash';
+        commitHashInput.placeholder = '40-character git commit SHA';
+        commitHashInput.spellcheck = false;
+        commitHashInput.autocomplete = 'off';
+        commitHashInput.value = sourceInfo.commit || '';
+
+        const updateCommitHashVisibility = () => {
+            const showCommit = sourceTypeSelect.value === 'github'
+                && sourceSelect.value === SPECIFIC_BUILD_NAME;
+            commitHashLabel.style.display = showCommit ? 'block' : 'none';
+            commitHashInput.style.display = showCommit ? 'block' : 'none';
+        };
+
         // Set initial visibility based on source type
         if (sourceInfo.sourceType === 'custom') {
             sourceSelect.style.display = 'none';
@@ -870,6 +910,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             sourceLabel.style.display = 'block';
             customUrlInput.style.display = 'none';
         }
+        updateCommitHashVisibility();
 
         // Toggle visibility based on source type
         sourceTypeSelect.onchange = () => {
@@ -882,12 +923,19 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                 sourceLabel.style.display = 'block';
                 customUrlInput.style.display = 'none';
             }
+            updateCommitHashVisibility();
+        };
+
+        sourceSelect.onchange = () => {
+            updateCommitHashVisibility();
         };
 
         content.appendChild(sourceTypeLabel);
         content.appendChild(sourceTypeSelect);
         content.appendChild(sourceLabel);
         content.appendChild(sourceSelect);
+        content.appendChild(commitHashLabel);
+        content.appendChild(commitHashInput);
         content.appendChild(customUrlInput);
 
         // Footer with buttons
@@ -914,7 +962,19 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                     return;
                 }
 
-                const kefinTweaksRoot = buildKefinTweaksRootUrl(sourceType, source);
+                let commitHash = '';
+                if (sourceType === 'github' && source === SPECIFIC_BUILD_NAME) {
+                    commitHash = (commitHashInput.value || '').trim().toLowerCase();
+                    if (!isFullCommitSha(commitHash)) {
+                        showAlertModal(
+                            'Invalid Commit Hash',
+                            '<p>Please enter a full 40-character git commit SHA for Specific Build.</p>'
+                        );
+                        return;
+                    }
+                }
+
+                const kefinTweaksRoot = buildKefinTweaksRootUrl(sourceType, source, commitHash);
                 const kefinTweaksRootResolvedRaw = await resolveRootVersion(kefinTweaksRoot);
                 const kefinTweaksRootResolved = kefinTweaksRootResolvedRaw.endsWith('/')
                     ? kefinTweaksRootResolvedRaw
@@ -979,6 +1039,8 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                 let versionDisplay = '';
                 if (sourceInfo.sourceType === 'custom') {
                     versionDisplay = SELF_HOSTED_NAME;
+                } else if (sourceInfo.version === SPECIFIC_BUILD_NAME) {
+                    versionDisplay = formatSpecificBuildDisplay(sourceInfo);
                 } else if (sourceInfo.version === DEVELOPMENT_NAME) {
                     versionDisplay = DEVELOPMENT_NAME;
                 } else if (sourceInfo.version === LATEST_RELEASE_NAME) {
@@ -1171,6 +1233,8 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             if (root) {
                 if (sourceInfo.sourceType === 'custom') {
                     versionDisplay = SELF_HOSTED_NAME;
+                } else if (sourceInfo.version === SPECIFIC_BUILD_NAME) {
+                    versionDisplay = formatSpecificBuildDisplay(sourceInfo);
                 } else if (sourceInfo.version === DEVELOPMENT_NAME) {
                     versionDisplay = DEVELOPMENT_NAME;
                 } else if (sourceInfo.version === LATEST_RELEASE_NAME) {
@@ -1367,6 +1431,8 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             if (root) {
                 if (sourceInfo.sourceType === 'custom') {
                     versionDisplay = SELF_HOSTED_NAME;
+                } else if (sourceInfo.version === SPECIFIC_BUILD_NAME) {
+                    versionDisplay = formatSpecificBuildDisplay(sourceInfo);
                 } else if (sourceInfo.version === DEVELOPMENT_NAME) {
                     versionDisplay = DEVELOPMENT_NAME;
                 } else if (sourceInfo.version === LATEST_RELEASE_NAME) {
@@ -1693,15 +1759,11 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
 	display: none;
 }
 
-#reactRoot:not(.kefin-custom-page-active) .pageTitle {
-	display: none !important;
-}
-
-#reactRoot:not(.kefin-custom-page-active) .skinBody #fallbackPage > * {
+#reactRoot:not(.kefin-custom-page-active) #fallbackPage:not([data-kefin-fallback-ready]) > * {
 	display: none;
 }
 
-#reactRoot:not(.kefin-custom-page-active) #fallbackPage::after {
+#reactRoot:not(.kefin-custom-page-active) #fallbackPage:not([data-kefin-fallback-ready])::after {
 	content: '';
 	display: inline-block;
 	width: 20px;
@@ -1714,6 +1776,11 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
 	left: 50%;
 	transform: translateX(-50%);
 	top: 1em;
+}
+
+#fallbackPage[data-kefin-fallback-ready]::after {
+	display: none !important;
+	content: none !important;
 }
 
 #reactRoot.kefin-custom-page-active .backdropImage {
@@ -1739,10 +1806,11 @@ header.MuiPaper-root + main.MuiBox-root .customPage {
 main.MuiBox-root .customPage.libraryPage:not(.noSecondaryNavPage)[data-kefin-custom-page] {
   padding-top:  1rem !important;
 }
-.layout-mobile :not(main.MuiBox-root) .customPage.libraryPage:not(.noSecondaryNavPage)[data-kefin-custom-page] {
+.layout-mobile :not(main.MuiBox-root) > .skinBody > .customPage.libraryPage:not(.noSecondaryNavPage)[data-kefin-custom-page] {
   padding-top:  5rem !important;
 }
 `;
+        window.KefinTweaksCustomPageStyles = css;
         let style = document.getElementById('kefin-custom-page-styles');
         if (!style) {
             style = document.createElement('style');

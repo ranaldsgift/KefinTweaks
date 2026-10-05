@@ -2492,7 +2492,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
 
         let watchlistUrl = '#/watchlist';
 
-		if (watchlistTabIndex !== null && watchlistTabIndex !== undefined && !isModernUI) {
+		if (watchlistTabIndex !== null && watchlistTabIndex !== undefined) {
 			watchlistUrl = `#/home?tab=${watchlistTabIndex}`;
 		}
 		window.KefinTweaksUtils._watchlistUrl = watchlistUrl;
@@ -2509,8 +2509,8 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
 		}
 
         _watchlistTabIndex = await fetchWatchlistTabIndex();
-            return _watchlistTabIndex;
-        }
+        return _watchlistTabIndex;
+    }
 
     // ----- Custom pages (hash routes → .customPage in skinBody) -----
     const DISALLOWED_CUSTOM_PAGE_SEGMENTS = new Set([
@@ -2571,73 +2571,17 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
         return slug || 'page';
     }
 
-    const CUSTOM_PAGE_STYLES_CSS = `
-#reactRoot.kefin-custom-page-active .skinBody #fallbackPage {
-	display: none;
-}
-
-#reactRoot:not(.kefin-custom-page-active) #fallbackPage:not([data-kefin-fallback-ready]) > * {
-	display: none;
-}
-
-#reactRoot:not(.kefin-custom-page-active) #fallbackPage:not([data-kefin-fallback-ready])::after {
-	content: '';
-	display: inline-block;
-	width: 20px;
-	height: 20px;
-	border: 3px solid #f3f3f3;
-	border-top: 3px solid #4ecdc4;
-	border-radius: 50%;
-	animation: spin 1s linear infinite;
-	position: relative;
-	left: 50%;
-	transform: translateX(-50%);
-	top: 1em;
-}
-
-#fallbackPage[data-kefin-fallback-ready]::after {
-	display: none !important;
-	content: none !important;
-}
-
-#reactRoot.kefin-custom-page-active .backdropImage {
-	background: none !important;
-}
-
-
-header.MuiPaper-root + main.MuiBox-root .customPage {
-	margin-top: 3rem;
-}
-
-.layout-mobile .kefin-custom-page-active .MuiToolbar-root > .MuiStack-root > :nth-child(n+2),
-.layout-mobile .kefin-custom-page-active .MuiToolbar-root > .MuiStack-root > :first-child .MuiButton-icon img {
-  display: none;
-}
-.layout-mobile .kefin-custom-page-active .MuiToolbar-root > .MuiStack-root > :first-child .MuiButton-icon::after {
-  content: '\\e88a';
-  font-family: 'Material Icons';
-  font-size: 1.2rem;
-}
-.layout-mobile .kefin-custom-page-active .MuiToolbar-root > .MuiStack-root > :first-child {
-  font-size: 0px;
-}
-main.MuiBox-root .customPage.libraryPage:not(.noSecondaryNavPage)[data-kefin-custom-page] {
-  padding-top:  1rem !important;
-}
-.layout-mobile :not(main.MuiBox-root) > .skinBody > .customPage.libraryPage:not(.noSecondaryNavPage)[data-kefin-custom-page] {
-  padding-top:  5rem !important;
-}
-`;
-
-    /** Always refresh textContent so early-inject :has() rules get replaced on JMP. */
+    /** Re-apply plugin SoT custom-page CSS (window.KefinTweaksCustomPageStyles). No local CSS blob. */
     function ensureCustomPageStyles() {
+        const css = window.KefinTweaksCustomPageStyles;
+        if (typeof css !== 'string' || !css) return;
         let style = document.getElementById('kefin-custom-page-styles');
         if (!style) {
             style = document.createElement('style');
             style.id = 'kefin-custom-page-styles';
             (document.head || document.documentElement).appendChild(style);
         }
-        style.textContent = CUSTOM_PAGE_STYLES_CSS;
+        style.textContent = css;
     }
 
     function syncCustomPageActiveClass(active) {
