@@ -989,6 +989,7 @@
             endDate: section.endDate || '',
             order: section.order != null ? String(section.order) : '',
             caption: section.caption || '',
+            description: section.description || '',
             renderMode,
             cardFormat: section.cardFormat || 'Poster',
             useRandomQuery: section.useRandomQuery === true,
@@ -1044,6 +1045,8 @@
 
         if (nameEl) state.sectionName = nameEl.value;
         if (captionEl) state.caption = captionEl.value;
+        const descriptionEl = root.querySelector('#section-description');
+        if (descriptionEl) state.description = descriptionEl.value;
         if (groupEl) state.groupSelect = groupEl.value;
         if (groupNewEl) state.groupNew = groupNewEl.value;
         if (visibilityEl) state.sectionVisibility = visibilityEl.value;
@@ -2346,6 +2349,11 @@
                             { hintKey: 'hsae-use-parent-card' }
                         )}
                     </div>
+                    <div class="hsae-field-wrap hsae-section-description" style="margin-top: 1em;">
+                        <label class="listItemBodyText" for="section-description" style="display: block; margin-bottom: 0.25em;">Description</label>
+                        <div class="listItemBodyText secondary" style="margin-bottom: 0.5em; font-size: 0.85em;">Describe the section in more detail, useful when sharing Custom Sections.</div>
+                        <textarea id="section-description" class="fld emby-textarea" rows="3" style="width: 100%; resize: vertical;" placeholder="Optional section description">${escapeHtml(section.description || state.description || '')}</textarea>
+                    </div>
                 </div>
             </details>
         `;
@@ -2578,6 +2586,9 @@
         const captionVal = dialog.querySelector('#section-caption')?.value?.trim() || '';
         if (captionVal) section.caption = captionVal;
         else section.caption = '';
+        const descriptionVal = dialog.querySelector('#section-description')?.value?.trim() || '';
+        if (descriptionVal) section.description = descriptionVal;
+        else section.description = '';
         section.enabled = userEnabledChecked;
         section.userConfigurable = userConfigChecked;
 

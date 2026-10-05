@@ -4021,21 +4021,18 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         // Community Collections tab setup
         setupCommunityCollectionsTab(dialog);
 
-        // Export Sections button
-        const exportSectionsBtn = dialog.querySelector('.export-sections-btn');
-        if (exportSectionsBtn) {
-            exportSectionsBtn.addEventListener('click', () => {
+        // Import / Export — delegated so buttons survive refreshMainModal content swaps
+        dialog.addEventListener('click', (e) => {
+            if (e.target.closest('.export-sections-btn')) {
+                e.preventDefault();
                 showExportDialog();
-            });
-        }
-
-        // Import Sections button
-        const importSectionsBtn = dialog.querySelector('.import-sections-btn');
-        if (importSectionsBtn) {
-            importSectionsBtn.addEventListener('click', () => {
+                return;
+            }
+            if (e.target.closest('.import-sections-btn')) {
+                e.preventDefault();
                 showImportDialog();
-            });
-        }
+            }
+        });
     }
 
     /**
@@ -4618,8 +4615,12 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             return;
         }
 
+        const collectionDesc = collection.description
+            ? `<div class="listItemBodyText secondary" style="margin-bottom: 0.75em;">${escapeHtml(String(collection.description))}</div>`
+            : '';
         const content = document.createElement('div');
         content.innerHTML = `
+            ${collectionDesc}
             <div class="listItemBodyText secondary" style="margin-bottom: 1em;">Select sections to import from this collection.</div>
             <div id="communitySectionsContainer">
                 <div id="communitySectionsList"></div>
@@ -4724,12 +4725,21 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
 
         sectionsList.innerHTML = `
             <div style="background: rgba(0,0,0,0.2); border-radius: 4px; padding: 0.5em;">
-                ${collection.sections.map((s, i) => `
-                    <label class="checkboxContainer" style="display: flex; align-items: center; padding: 0.5em; margin-bottom: 0.25em;">
-                        <input type="checkbox" class="import-community-check" data-index="${i}" checked>
-                        <span class="listItemBodyText" style="margin-left: 0.5em;">${s.name || 'Unnamed'}</span>
+                ${collection.sections.map((s, i) => {
+                    const name = escapeHtml(s.name || 'Unnamed');
+                    const desc = s.description
+                        ? `<div class="listItemBodyText secondary" style="font-size: 0.85em; margin-top: 0.25em;">${escapeHtml(String(s.description))}</div>`
+                        : '';
+                    return `
+                    <label class="checkboxContainer" style="display: flex; align-items: flex-start; padding: 0.5em; margin-bottom: 0.25em;">
+                        <input type="checkbox" class="import-community-check" data-index="${i}" checked style="margin-top: 0.2em;">
+                        <div style="margin-left: 0.5em; flex: 1; min-width: 0;">
+                            <span class="listItemBodyText">${name}</span>
+                            ${desc}
+                        </div>
                     </label>
-                `).join('')}
+                `;
+                }).join('')}
             </div>
         `;
 
@@ -5290,25 +5300,6 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                 });
             }
         });
-
-        // Community Collections tab setup
-        setupCommunityCollectionsTab(dialog);
-
-        // Export Sections button
-        const exportSectionsBtn = dialog.querySelector('.export-sections-btn');
-        if (exportSectionsBtn) {
-            exportSectionsBtn.addEventListener('click', () => {
-                showExportDialog();
-            });
-        }
-
-        // Import Sections button
-        const importSectionsBtn = dialog.querySelector('.import-sections-btn');
-        if (importSectionsBtn) {
-            importSectionsBtn.addEventListener('click', () => {
-                showImportDialog();
-            });
-        }
     }
 
     /**
