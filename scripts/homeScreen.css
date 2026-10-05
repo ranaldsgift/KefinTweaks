@@ -600,3 +600,7 @@ html[data-active-page="home"] body[data-seasonal-background="true"] #reactRoot >
 	visibility: hidden;
 }
  */
+
+.kefin-home-category-btn span:is(.emby-button-foreground) {
+	top: 0px !important;
+}
