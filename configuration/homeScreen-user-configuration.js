@@ -879,6 +879,96 @@
     }
 
     /**
+     * Candidate Kefin sections for a native homesection type (inbound enable sync).
+     * resume → continueWatching only; livetv/latestmedia → all matches.
+     */
+    function resolveKefinCandidatesForNative(nativeType, catalogSections) {
+        const type = String(nativeType || '').toLowerCase();
+        if (!type || type === 'none') return [];
+        const catalog = catalogSections || [];
+
+        if (type === 'resume') {
+            return catalog.filter((s) => s?.id === 'continueWatching');
+        }
+        if (type === 'latestmedia') {
+            return catalog.filter((s) => {
+                const id = s?.id || '';
+                return id.startsWith('recently-added-') || resolveSectionJellyfinId(s) === 'latestmedia';
+            });
+        }
+        if (type === 'livetv') {
+            return catalog.filter((s) => resolveSectionJellyfinId(s) === 'livetv');
+        }
+        return catalog.filter((s) => resolveSectionJellyfinId(s) === type);
+    }
+
+    /**
+     * Enable Kefin sections from native Jellyfin homesectionN (enable-only, no order changes).
+     * If any candidate for a native type is already enabled, skip that type.
+     * @returns {{ changed: boolean, enabledIds: string[] }}
+     */
+    function syncKefinEnabledFromNativeHomeSections(homeScreen, customPrefs, catalogSections) {
+        const home = homeScreen || createEmptyHomeScreen();
+        const prefs = customPrefs || {};
+        const catalog = catalogSections || [];
+        const prefMap = getSectionPrefMap(home);
+
+        const nativeTypes = [];
+        for (let i = 0; i <= 9; i++) {
+            const raw = prefs[`homesection${i}`];
+            if (!raw || raw === '' || String(raw).toLowerCase() === 'none') continue;
+            nativeTypes.push(String(raw).toLowerCase());
+        }
+        const uniqueNative = [...new Set(nativeTypes)];
+        if (!uniqueNative.length) return { changed: false, enabledIds: [] };
+
+        function sectionIsEnabled(section) {
+            if (!section?.id) return false;
+            const storedId = getStoredSectionPrefId(section);
+            const pref = prefMap.get(getPrefDedupeKey({ id: section.id }))
+                || prefMap.get(getPrefDedupeKey({ id: storedId }));
+            if (pref && pref.enabled !== undefined) return pref.enabled === true;
+            return section.enabled === true;
+        }
+
+        const enabledIds = [];
+        let changed = false;
+
+        uniqueNative.forEach((nativeType) => {
+            const candidates = resolveKefinCandidatesForNative(nativeType, catalog);
+            if (!candidates.length) return;
+            if (candidates.some(sectionIsEnabled)) return;
+
+            candidates.forEach((section) => {
+                const storedId = getStoredSectionPrefId(section);
+                const existing = prefMap.get(getPrefDedupeKey({ id: section.id }))
+                    || prefMap.get(getPrefDedupeKey({ id: storedId }))
+                    || {};
+                upsertSectionPref(home, {
+                    ...existing,
+                    id: storedId || section.id,
+                    enabled: true
+                });
+                // Refresh map entry for subsequent checks in this pass
+                const updated = parseSectionPrefString(
+                    home.sections.find((s) => {
+                        const p = parseSectionPrefString(s);
+                        return p?.id && getPrefDedupeKey(p) === getPrefDedupeKey({ id: storedId || section.id });
+                    })
+                );
+                if (updated) prefMap.set(getPrefDedupeKey(updated), updated);
+                enabledIds.push(section.id);
+                changed = true;
+            });
+        });
+
+        if (changed) {
+            LOG('Enabled Kefin sections from native homesectionN:', enabledIds);
+        }
+        return { changed, enabledIds };
+    }
+
+    /**
      * Full home screen config for the current user (server sections + pins + overrides).
      * kefinTweaks.homeScreen is sole enable source; Jellyfin homesectionN is rewritten to match.
      * @returns {Promise<{ sections: Array, homeScreen: Object, serverSections: Array, pinnedSections: Array }>}
@@ -920,6 +1010,26 @@
 
         let sections = deduplicateHomeScreenSections([...serverSections, ...pinnedSections]);
         sections = applyUserSectionOverrides(sections, homeScreen, { serverSectionsById });
+
+        // Inbound: enable Kefin sections from native homesectionN (enable-only; skip if any match already on)
+        const inboundSync = syncKefinEnabledFromNativeHomeSections(homeScreen, customPrefs, sections);
+        if (inboundSync.changed) {
+            sections = applyUserSectionOverrides(
+                deduplicateHomeScreenSections([...serverSections, ...pinnedSections]),
+                homeScreen,
+                { serverSectionsById }
+            );
+            if (displayPrefs && !sanitizePersistInFlight) {
+                sanitizePersistInFlight = true;
+                try {
+                    await saveKefinTweaksHomeScreen(homeScreen, displayPrefs);
+                    LOG('Persisted Kefin enable flags from native homesectionN');
+                } finally {
+                    sanitizePersistInFlight = false;
+                }
+            }
+        }
+
         sections = sections.filter((section) => section.enabled || section.userConfigurable === true || section.userConfigurable === undefined);
         sections = deduplicateHomeScreenSections(sections);
 
@@ -2095,6 +2205,7 @@
         getConfig,
         enableJellyfinSectionsFromKefin,
         syncNativeHomeSectionsFromKefin,
+        syncKefinEnabledFromNativeHomeSections,
         resolvePairNativeHomeSections,
         getServerPairNativeHomeSectionsDefault,
         buildHomesectionSlotsFromKefin,
