@@ -313,6 +313,14 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         }
     }
 
+    function isKefinInjectorAttachedOnPage() {
+        return !!(
+            window.KefinTweaksInjectorAttached
+            || window.KefinTweaksScriptsPreloaded
+            || window.KefinTweaksInjectorStamp
+        );
+    }
+
     async function waitForLoginForInjectorWrite(maxWaitMs = 10000, checkInterval = 250) {
         if (isLoggedInForInjectorWrite()) return true;
         const start = Date.now();
@@ -335,6 +343,10 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
 
         if (!isLoggedInForInjectorWrite()) {
             return { ok: false, reason: 'not logged in' };
+        }
+
+        if (!(await isAdmin())) {
+            return { ok: false, reason: 'not admin' };
         }
 
         try {
@@ -1962,41 +1974,36 @@ main.MuiBox-root .customPage.libraryPage:not(.noSecondaryNavPage)[data-kefin-cus
         });
     }
 
-    // Check if config exists; auto-create KefinTweaks-injector when missing; always load live injector.js
+    // Check if config exists; auto-create KefinTweaks-injector when missing (admin only); always load live injector.js
     async function checkAndLoadInjector() {
         try {
-            const config = await getKefinTweaksConfig();
-            const root = config?.kefinTweaksRoot || '';
+            // Prefer in-page Config (already injected). Avoid /Plugins GET on normal page load for non-admins.
+            let config = window.KefinTweaksConfig || null;
+            if (!config) {
+                const admin = await isAdmin();
+                if (admin) {
+                    await waitForLoginForInjectorWrite();
+                    config = await getKefinTweaksConfig();
+                }
+            }
 
             // Before injector/utils: hide fallback page chrome for custom routes
             injectCustomPageStyles(config);
 
+            const root = config?.kefinTweaksRoot || '';
             if (!root || root === '') {
                 console.log('[KefinTweaks Installer] kefinTweaksRoot not configured. Please configure via the Plugins page.');
                 return;
             }
 
-            // Plugin config GET/POST needs a session; wait briefly so admin first-load can auto-create
-            await waitForLoginForInjectorWrite();
-
-            let injectorConfig = null;
-            try {
-                const pluginId = await findJavaScriptInjectorPlugin();
-                if (pluginId) {
-                    injectorConfig = await getJavaScriptInjectorConfig(pluginId);
-                }
-            } catch (e) {
-                console.warn('[KefinTweaks Installer] Could not read JS Injector config:', e);
-            }
-
-            const hasPreload = !!(injectorConfig && hasEnabledKefinInjectorEntry(injectorConfig.CustomJavaScripts));
-            if (hasPreload) {
-                console.log('[KefinTweaks Installer] KefinTweaks-injector present; still loading injector.js for live plan + sync');
-            } else {
-                // Entry missing: try to create + apply assets now (admin/logged-in)
+            if (isKefinInjectorAttachedOnPage()) {
+                console.log('[KefinTweaks Installer] KefinTweaks-injector present on page; still loading injector.js for live plan + sync');
+            } else if (await isAdmin()) {
+                await waitForLoginForInjectorWrite();
                 const ensured = await ensureKefinTweaksInjectorEntry(config);
                 if (ensured.ok && ensured.plan) {
                     window.KefinTweaksScriptsPreloaded = true;
+                    window.KefinTweaksInjectorAttached = true;
                     if (window.KefinTweaksLoader) {
                         window.KefinTweaksLoader.ensureKefinTweaksApi(window.KefinTweaksLoader.SCRIPT_DEFINITIONS);
                         window.KefinTweaksLoader.applyAssetsToDocument(ensured.plan.assets);
@@ -2014,6 +2021,8 @@ main.MuiBox-root .customPage.libraryPage:not(.noSecondaryNavPage)[data-kefin-cus
                 } else {
                     console.log('[KefinTweaks Installer] KefinTweaks-injector not available (' + (ensured.reason || 'unknown') + '); loading injector.js');
                 }
+            } else {
+                console.log('[KefinTweaks Installer] KefinTweaks-injector not on page (non-admin); loading injector.js');
             }
 
             await loadInjectorFromRoot(root);

@@ -978,6 +978,7 @@
             '// kefinTweaksInjectorStamp=' + stamp,
             '(function () {',
             '  if (window.KefinTweaksScriptsPreloaded) return;',
+            '  window.KefinTweaksInjectorAttached = true;',
             '  var cfg = window.KefinTweaksConfig || {};',
             '  if (cfg.enabled !== true) return;',
             '  var symbolicRoot = cfg.kefinTweaksRoot || \'\';',
