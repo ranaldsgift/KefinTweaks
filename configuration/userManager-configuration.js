@@ -79,7 +79,6 @@
             InvalidLoginAttemptCount: 0,
             LoginAttemptsBeforeLockout: -1,
             MaxActiveSessions: 0,
-            EnablePublicSharing: true,
             BlockedMediaFolders: [],
             BlockedChannels: [],
             RemoteClientBitrateLimit: 0,
@@ -322,7 +321,6 @@
                     <h2 class="checkboxListLabel">Other</h2>
                     ${buildCheckbox('', !!policy.EnableContentDownloading, 'Allow media downloads', { className: 'um-chk-download', wrapInSection: true })}
                     ${buildCheckbox('', !!policy.EnableUserPreferenceAccess, 'Allow user preference access', { className: 'um-chk-prefs', wrapInSection: true })}
-                    ${buildCheckbox('', !!policy.EnablePublicSharing, 'Allow public sharing', { className: 'um-chk-public-share', wrapInSection: true })}
                     ${buildCheckbox('', !!policy.IsDisabled, 'Disable this user', { className: 'um-chk-disabled', wrapInSection: true })}
                     ${buildCheckbox('', !!policy.IsHidden, 'Hide this user from login screens', { className: 'um-chk-hidden', wrapInSection: true })}
                     <div class="inputContainer" style="margin-top:0.75em;">
@@ -439,7 +437,6 @@
             EnableAllFolders: enableAllFolders,
             LoginAttemptsBeforeLockout: parseInt(root.querySelector('#um-lockout')?.value ?? '-1', 10),
             MaxActiveSessions: parseInt(root.querySelector('#um-max-sessions')?.value ?? '0', 10),
-            EnablePublicSharing: !!root.querySelector('.um-chk-public-share')?.checked,
             RemoteClientBitrateLimit: mbpsToBitrate(root.querySelector('#um-bitrate')?.value),
             AuthenticationProviderId: DEFAULT_AUTH,
             PasswordResetProviderId: DEFAULT_PASSWORD_RESET,
