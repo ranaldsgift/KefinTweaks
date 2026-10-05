@@ -1896,23 +1896,40 @@
 
             // Resolved Kefin sections only (no Jellyfin-native duplicate rows)
             const userConfig = await getConfig();
-            let allSections = (userConfig.sections || []).filter((s) => {
+            const discoveryFeatureEnabled = window.KefinHomeScreen?.getConfig?.()?.DISCOVERY_SETTINGS?.enabled !== false;
+            const serverSectionsById = await buildServerSectionsById();
+
+            const filterEditorSection = (s) => {
                 if (s.userConfigurable === false) return false;
-                if (s.type === 'discovery' || s.discoveryEnabled === true) return false;
                 // Keep hidden sections only when currently enabled
                 if (s.hidden === true && s.enabled === false) return false;
                 return true;
-            });
+            };
+
+            const normalizeEditorSectionType = (section) => {
+                if (isDiscoverySectionForPref(section)) return 'discovery';
+                const t = String(section.type || '').toLowerCase();
+                if (t === 'seasonal') return 'seasonal';
+                return 'home';
+            };
+
+            let homeSections = (userConfig.sections || []).filter(filterEditorSection);
+            let discoverySections = [];
+            if (discoveryFeatureEnabled && Array.isArray(userConfig.enabledDiscoverySections)) {
+                discoverySections = applyUserSectionOverrides(
+                    userConfig.enabledDiscoverySections.filter(filterEditorSection),
+                    userConfig.homeScreen,
+                    { serverSectionsById }
+                );
+            }
+
+            let allSections = [...homeSections, ...discoverySections].map((section) => ({
+                ...section,
+                type: normalizeEditorSectionType(section)
+            }));
 
             // Sort by order
             allSections.sort((a, b) => (a.order || 0) - (b.order || 0));
-
-            // Set any section types that aren't "seasonal" to "home"
-            allSections.forEach(section => {
-                if (section.type && section.type.toLowerCase() !== 'seasonal') {
-                    section.type = 'home';
-                }
-            });
 
             // Create editor HTML
             const editorHTML = window.KefinTweaksUI.renderHomeSectionsOrderEditor(allSections, {
