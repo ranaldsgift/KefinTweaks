@@ -2686,6 +2686,8 @@
 		infiniteScroll: false,
 		minGenreMovieCount: 50,
 		minGenreSeriesCount: 10,
+		minStudioMovieCount: 50,
+		minStudioSeriesCount: 10,
 		defaultItemLimit: 16,
 		defaultSortOrder: "Random",
 		defaultCardFormat: "Poster",

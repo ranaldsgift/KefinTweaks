@@ -704,7 +704,7 @@
         { name: 'New Line Cinema', file: 'New_Line_Cinema.svg' },
         { name: 'Paramount Pictures', file: 'Paramount_Pictures.svg' },
         { name: 'Pixar', file: 'Pixar.svg' },
-        { name: 'Showtime', file: 'Showtime.svg' },
+        { name: 'Paramount+ with Showtime', file: 'Paramount+_with_Showtime.svg' },
         { name: 'Universal Pictures', file: 'Universal_Pictures.svg' },
         { name: 'Walt Disney Pictures', file: 'Walt_Disney_Pictures.svg' },
         { name: 'Warner Bros.', file: 'Warner_Bros..svg' },
@@ -2573,6 +2573,8 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                     ${buildTextInput('discovery-spotlightDiscoveryChance', discovery.spotlightDiscoveryChance ?? 0.5, 'Spotlight Discovery Chance (0-1)', 'number')}
                     ${buildTextInput('discovery-minGenreMovieCount', discovery.minGenreMovieCount || 50, 'Genre Movie Count', 'number')}
                     ${buildTextInput('discovery-minGenreSeriesCount', discovery.minGenreSeriesCount || 10, 'Genre Series Count', 'number')}
+                    ${buildTextInput('discovery-minStudioMovieCount', discovery.minStudioMovieCount || 25, 'Studio Movie Count', 'number')}
+                    ${buildTextInput('discovery-minStudioSeriesCount', discovery.minStudioSeriesCount || 5, 'Studio Series Count', 'number')}
                 </div>
             </div>
         `;
@@ -2904,6 +2906,8 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                 infiniteScroll: root.querySelector('#discovery-infiniteScroll')?.checked !== false,
                 minGenreMovieCount: parseInt(root.querySelector('#discovery-minGenreMovieCount')?.value || '50', 10),
                 minGenreSeriesCount: parseInt(root.querySelector('#discovery-minGenreSeriesCount')?.value || '10', 10),
+                minStudioMovieCount: parseInt(root.querySelector('#discovery-minStudioMovieCount')?.value || '25', 10),
+                minStudioSeriesCount: parseInt(root.querySelector('#discovery-minStudioSeriesCount')?.value || '5', 10),
                 spotlightDiscoveryChance: parseFloat(root.querySelector('#discovery-spotlightDiscoveryChance')?.value || '0.5'),
                 renderSpotlightAboveMatching: root.querySelector('#discovery-renderSpotlightAboveMatching')?.checked === true,
                 randomizeOrder: root.querySelector('#discovery-randomizeOrder')?.checked === true,

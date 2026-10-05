@@ -856,8 +856,13 @@
         }
 
         if (discoveryType === 'Studio') {
+            const settings = getDiscoverySettings();
+            const minCount = itemType === 'Series'
+                ? (settings.minStudioSeriesCount ?? settings.minStudioMovieCount ?? 25)
+                : (settings.minStudioMovieCount ?? 25);
+            const countField = itemType === 'Series' ? 'SeriesCount' : 'MovieCount';
             const dedupe = getStudioDedupeSet(config);
-            const eligible = pool.filter((s) => s?.Id && !dedupe.has(s.Id));
+            const eligible = pool.filter((s) => s?.Id && !dedupe.has(s.Id) && (s[countField] || 0) > minCount);
             if (!eligible.length) return null;
             const selected = eligible[Math.floor(Math.random() * eligible.length)];
             dedupe.add(selected.Id);
