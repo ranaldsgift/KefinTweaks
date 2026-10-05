@@ -24,7 +24,6 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	const localStorageCache = new window.LocalStorageCache();
 	
 	const WATCHLIST_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-	const WATCHLIST_URL = window.KefinTweaksUtils._watchlistUrl || '#/watchlist';
 
 	// Playback monitoring for watchlist cleanup
 	let playbackMonitorInitialized = false;
@@ -1133,7 +1132,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	}
 
 	function getWatchlistSection() {
-		const visibleWatchlistSections = document.querySelectorAll('.libraryPage:not(.hide) .sections.watchlist');
+		const visibleWatchlistSections = document.querySelectorAll('.libraryPage:not(.hide) .sections.watchlist, div[id^="customTab_"] .sections.watchlist');
 
 		if (!visibleWatchlistSections || visibleWatchlistSections.length === 0) {
 			return null;
@@ -2231,11 +2230,12 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	function setupHashChangeListener() {
 		window.addEventListener('hashchange', async () => {
 			const path = String(window.location.hash || '').split('?')[0];
-			if (path !== '#/watchlist') {
+			const watchlistUrl = window.KefinTweaksUtils._watchlistUrl;
+			if (path !== watchlistUrl) {
 				return;
 			}
 
-			LOG('Hash changed on #/watchlist, syncing watchlist state');
+			LOG('Hash changed, syncing watchlist state');
 			await renderWatchlist();
 
 			const params = getUrlParams();
@@ -7486,11 +7486,12 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		};
 
 		const watchlistUrl = await window.KefinTweaksUtils.getWatchlistUrl();
+		const isCustomTabUrl = watchlistUrl.includes('/home?tab=');
 
 		const options = {
 			sideMenu: watchlistCfg.sideMenu !== false,
 			userMenu: watchlistCfg.userMenu === true,
-			topNavigation: watchlistCfg.topNavigation,
+			topNavigation: isCustomTabUrl ? 'none' : watchlistCfg.topNavigation,
 			order: watchlistCfg.order
 		};
 
@@ -8050,10 +8051,6 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 
 	// Initialize the slides container observer
 	monitorSlidesContainer();
-
-	window.debugWatchlistUrl = function() {
-		LOG('Watchlist URL:', WATCHLIST_URL);
-	};
 
     // Debug functions for troubleshooting (available in console)
     window.debugWatchlistButtons = function() {
