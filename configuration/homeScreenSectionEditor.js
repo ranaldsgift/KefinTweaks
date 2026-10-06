@@ -2298,7 +2298,7 @@
         MinCriticRating: { label: 'Min Critic Rating', type: 'number', hint: '0-10' },
         IsFavorite: { label: 'Is Favorite', type: 'boolean' },
         IsPlayed: { label: 'Is Played', type: 'boolean' },
-        IsUnplayed: { label: 'Is Unplayed', type: 'boolean' },
+        // IsUnplayed is owned by Hide watched — not offered in Additional Options
         IsMissing: { label: 'Is Missing', type: 'boolean' },
         IsUnaired: { label: 'Is Unaired', type: 'boolean' },
         HasThemeSong: { label: 'Has Theme Song', type: 'boolean' },
