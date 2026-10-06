@@ -155,6 +155,11 @@
                 name: 'Disable Seasonal Animations',
                 url: `${getKefinTweaksRoot()}skins/optional/global/seasonalAnimationDisable.css`,
                 enabled: false
+            },
+            {
+                name: 'Unhide Native User Home Controls on User > Home settings page',
+                url: `${getKefinTweaksRoot()}skins/optional/global/unhideNativeUserHomeControls.css`,
+                enabled: false
             }
         ],
         

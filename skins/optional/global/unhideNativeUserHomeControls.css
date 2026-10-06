@@ -1,0 +1,3 @@
+.homeScreenSettingsContainer:has(#kefin-user-home-sections-editor) .selectContainer {
+    display: block !important;
+}
