@@ -2041,24 +2041,55 @@
         return true;
     }
 
-    async function buildServerSectionsById() {
+    /**
+     * Map discovery section ids → parent group { groupId, groupName } for User > Home badges.
+     * Includes DISCOVERY_SECTION_GROUPS and discoveryEnabled sections in CUSTOM_SECTION_GROUPS.
+     * @param {Object} mergedConfig
+     * @returns {Map<string, { groupId: string, groupName: string }>}
+     */
+    function buildDiscoverySectionGroupMap(mergedConfig) {
         const map = new Map();
-        if (!window.KefinHomeScreen?.getConfig) return map;
+        if (!mergedConfig) return map;
+
+        const stampGroup = (group, discoveryOnly) => {
+            const groupId = String(group?.id || '');
+            const groupName = String(group?.name || groupId || 'Unnamed Group');
+            (group?.sections || []).forEach((section) => {
+                if (!section?.id) return;
+                if (discoveryOnly && section.discoveryEnabled !== true) return;
+                map.set(section.id, { groupId, groupName });
+            });
+        };
+
+        (mergedConfig.DISCOVERY_SECTION_GROUPS || []).forEach((group) => stampGroup(group, false));
+        (mergedConfig.CUSTOM_SECTION_GROUPS || []).forEach((group) => stampGroup(group, true));
+        return map;
+    }
+
+    function buildServerSectionsByIdFromConfig(mergedConfig) {
+        const map = new Map();
+        if (!mergedConfig) return map;
+        const allGroups = [
+            ...(mergedConfig.HOME_SECTION_GROUPS || []),
+            ...(mergedConfig.SEASONAL_SECTION_GROUPS || []),
+            ...(mergedConfig.DISCOVERY_SECTION_GROUPS || []),
+            ...(mergedConfig.CUSTOM_SECTION_GROUPS || [])
+        ];
+        flattenSectionGroups(allGroups).forEach(section => {
+            if (section?.id) map.set(section.id, section);
+        });
+        return map;
+    }
+
+    async function buildServerSectionsById() {
+        if (!window.KefinHomeScreen?.getConfig) return new Map();
         try {
             const mergedConfig = await window.KefinHomeScreen.getConfig();
-            const allGroups = [
-                ...(mergedConfig.HOME_SECTION_GROUPS || []),
-                ...(mergedConfig.SEASONAL_SECTION_GROUPS || []),
-                ...(mergedConfig.DISCOVERY_SECTION_GROUPS || []),
-                ...(mergedConfig.CUSTOM_SECTION_GROUPS || [])
-            ];
-            flattenSectionGroups(allGroups).forEach(section => {
-                if (section?.id) map.set(section.id, section);
-            });
+            return buildServerSectionsByIdFromConfig(mergedConfig);
         } catch (e) {
             WARN('Could not build server sections map:', e);
+            return new Map();
         }
-        return map;
     }
 
     /**
@@ -2275,8 +2306,15 @@
 
             // Resolved Kefin sections only (no Jellyfin-native duplicate rows)
             const userConfig = await getConfig();
-            const discoveryFeatureEnabled = window.KefinHomeScreen?.getConfig?.()?.DISCOVERY_SETTINGS?.enabled !== false;
-            const serverSectionsById = await buildServerSectionsById();
+            let mergedHomeConfig = null;
+            try {
+                mergedHomeConfig = await window.KefinHomeScreen?.getConfig?.();
+            } catch (e) {
+                WARN('Could not load merged home config for editor labels:', e);
+            }
+            const discoveryFeatureEnabled = mergedHomeConfig?.DISCOVERY_SETTINGS?.enabled !== false;
+            const serverSectionsById = buildServerSectionsByIdFromConfig(mergedHomeConfig);
+            const discoveryGroupMap = buildDiscoverySectionGroupMap(mergedHomeConfig);
 
             const filterEditorSection = (s) => {
                 if (s.userConfigurable === false) return false;
@@ -2299,13 +2337,32 @@
                     userConfig.enabledDiscoverySections.filter(filterEditorSection),
                     userConfig.homeScreen,
                     { serverSectionsById }
-                );
+                ).map((section) => {
+                    const groupMeta = discoveryGroupMap.get(section.id);
+                    if (!groupMeta) return section;
+                    return {
+                        ...section,
+                        discoveryGroupId: groupMeta.groupId,
+                        discoveryGroupName: groupMeta.groupName
+                    };
+                });
             }
 
-            let allSections = [...homeSections, ...discoverySections].map((section) => ({
-                ...section,
-                type: normalizeEditorSectionType(section)
-            }));
+            let allSections = [...homeSections, ...discoverySections].map((section) => {
+                const serverSection = serverSectionsById.get(section.id);
+                const caption = section.caption || serverSection?.caption;
+                const groupMeta = discoveryGroupMap.get(section.id);
+                const next = {
+                    ...section,
+                    type: normalizeEditorSectionType(section),
+                    ...(caption != null && caption !== '' ? { caption } : {})
+                };
+                if (groupMeta) {
+                    next.discoveryGroupId = groupMeta.groupId;
+                    next.discoveryGroupName = groupMeta.groupName;
+                }
+                return next;
+            });
 
             // Sort by order
             allSections.sort((a, b) => (a.order || 0) - (b.order || 0));

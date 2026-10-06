@@ -881,8 +881,18 @@
                 ? `<span class="listItemBodyText secondary seasonal-tag" style="font-size: 0.8em; background: rgba(255,255,255,0.1); padding: 0.15em 0.45em; border-radius: 3px;">Seasonal · ${escapeHtml(String(section.startDate))} – ${escapeHtml(String(section.endDate))}</span>`
                 : `<span class="listItemBodyText secondary seasonal-tag" style="font-size: 0.8em; background: rgba(255,255,255,0.1); padding: 0.15em 0.45em; border-radius: 3px;">Seasonal</span>`)
             : '';
+        const discoveryBadgeLabel = String(
+            section.discoveryGroupName || section.groupName || 'Discovery'
+        ).trim() || 'Discovery';
+        const discoveryBadgeTitle = section.discoveryGroupId
+            ? ` title="${escapeHtml(String(section.discoveryGroupId))}"`
+            : '';
         const discoveryBadge = isDiscovery
-            ? `<span class="listItemBodyText secondary discovery-tag" style="font-size: 0.8em; background: rgba(255,255,255,0.1); padding: 0.15em 0.45em; border-radius: 3px;">Discovery</span>`
+            ? `<span class="listItemBodyText secondary discovery-tag" style="font-size: 0.8em; background: rgba(255,255,255,0.1); padding: 0.15em 0.45em; border-radius: 3px;"${discoveryBadgeTitle}>${escapeHtml(discoveryBadgeLabel)}</span>`
+            : '';
+        const captionText = String(section.caption || '').trim();
+        const captionHtml = captionText
+            ? `<div class="listItemBodyText secondary section-row-caption" style="font-size: 0.85em; margin-top: 0.2em; opacity: 0.85;">${escapeHtml(captionText)}</div>`
             : '';
 
         return `
@@ -894,11 +904,12 @@
                     dataAttributes: { 'section-id': sectionId }
                 })}
                 <div class="listItemBody">
-                    <div style="display: flex; align-items: center; gap: 0.5em; flex-wrap: wrap;">
-                        <span>${sectionName.replace(/"/g, '&quot;')}</span>
+                    <div class="section-row-title-line" style="display: flex; align-items: center; gap: 0.5em; flex-wrap: wrap;">
+                        <span>${escapeHtml(sectionName)}</span>
                         ${seasonalBadge}
                         ${discoveryBadge}
                     </div>
+                    ${captionHtml}
                 </div>
                 <div class="section-row-actions">
                     ${isPinnedSection ? `
