@@ -252,18 +252,6 @@ div#discovery-loading-indicator:not(.show)::after {
 	font-size: 1.5rem !important;
 	line-height: 1.8rem !important;
 }
-.section0:not([data-page]),
-.section1:not([data-page]),
-.section2:not([data-page]),
-.section3:not([data-page]),
-.section4:not([data-page]),
-.section5:not([data-page]),
-.section6:not([data-page]),
-.section7:not([data-page]),
-.section8:not([data-page]),
-.section9:not([data-page]) {
-	display: none !important;
-}
 
 .homeSectionsContainer .card[data-type="TvChannel"] a.cardImageContainer:not([style])::after {
 	content: attr(aria-label);

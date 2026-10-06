@@ -25,6 +25,34 @@
     }
 
     /**
+     * Hide native Jellyfin .sectionN rows only once homeScreen3 has successfully
+     * started (so clients that cannot parse this file keep the native home).
+     * Persist for the session via a single injected stylesheet.
+     */
+    function ensureNativeHomeSectionsHidden() {
+        const styleId = 'kefin-hide-native-homesections';
+        if (document.getElementById(styleId)) return;
+        const style = document.createElement('style');
+        style.id = styleId;
+        style.textContent = [
+            '.section0:not([data-page]),',
+            '.section1:not([data-page]),',
+            '.section2:not([data-page]),',
+            '.section3:not([data-page]),',
+            '.section4:not([data-page]),',
+            '.section5:not([data-page]),',
+            '.section6:not([data-page]),',
+            '.section7:not([data-page]),',
+            '.section8:not([data-page]),',
+            '.section9:not([data-page]) {',
+            '  display: none !important;',
+            '}'
+        ].join('\n');
+        (document.head || document.documentElement).appendChild(style);
+    }
+    ensureNativeHomeSectionsHidden();
+
+    /**
      * Flatten section groups into a flat array of sections
      * @param {Array} groups - Array of HomeScreenSectionGroup objects
      * @returns {Array} Flat array of all sections
@@ -509,14 +537,12 @@
             filteredHomeSections = userConfig.sections || [];
             homeScreen = userConfig.homeScreen;
             userDisplayPreferences = await state.getDisplayPrefernces();
-            //addUserHomeScreenOrderCSS(userDisplayPreferences, homeScreen);
         } else {
             const mergedHomeSections = await mergeHomeSectionConfigs();
             userDisplayPreferences = await state.getDisplayPrefernces();
             const customPrefs = userDisplayPreferences?.CustomPrefs || {};
             homeScreen = userHomeConfig.parseKefinTweaksHomeScreen(customPrefs);
             const pinnedSections = userHomeConfig.buildPinnedSectionConfigs(homeScreen);
-            //addUserHomeScreenOrderCSS(userDisplayPreferences, homeScreen);
 
             const serverSectionsById = new Map();
             mergedHomeSections.forEach(section => {
@@ -1009,74 +1035,6 @@
             ERR('Error loading user home screen preferences:', error);
             return null;
         }
-    }
-
-    /**
-     * Add CSS for user-defined section ordering
-     */
-    function addUserHomeScreenOrderCSS(userDisplayPreferences, homeScreen = null) {
-        const customPrefs = userDisplayPreferences?.CustomPrefs || {};
-        const parsedHomeScreen = homeScreen || window.KefinUserHomeScreenConfig.parseKefinTweaksHomeScreen(customPrefs);
-        const kefinHomeScreen = window.KefinUserHomeScreenConfig.homeScreenToLegacyArray(parsedHomeScreen);
-
-        // Create a homesectionN : order value mapping for the custom CSS orders to be applied
-        const jellyfinOrders = {};
-        for (let i = 0; i <= 8; i++) {
-            const homeSection = customPrefs[`homesection${i}`];
-
-            if (!homeSection) {
-                continue;
-            }
-
-            // Match to homeSection in kefinHomeScreen with .toLowerCase() id
-            let kefinHomeScreenSection = kefinHomeScreen.find(s => s.id.toLowerCase() === homeSection.toLowerCase() && s.enabled === true);
-
-            if (!kefinHomeScreenSection) {
-                // Check if it's "latestmedia"
-                if (homeSection.toLowerCase() === 'latestmedia' && !state.kefinLatestMedia) {
-                    kefinHomeScreenSection = kefinHomeScreen.find(s => s.id.toLowerCase().startsWith('recently-added') && s.enabled === true);
-                }
-            }
-
-            if (kefinHomeScreenSection) {
-                jellyfinOrders[`homesection${i}`] = kefinHomeScreenSection.order;
-            } else {
-                jellyfinOrders[`homesection${i}`] = 999;
-            }
-        }        
-        
-        // Remove existing style tag if present
-        const existingStyle = document.getElementById('kefin-user-homescreen-order-css');
-
-        // Create new style tag
-        const style = document.createElement('style');
-        style.id = 'kefin-user-homescreen-order-css';
-        
-        let css = '';
-
-        // Add CSS for Jellyfin sections
-        Object.entries(jellyfinOrders).forEach(([homesectionKey, order]) => {
-            // Map homesectionN to class selector
-            const classSelector = `.${homesectionKey.replace('home','')}`;
-            css += `${classSelector} { order: ${order} !important; }\n`;
-        });
-
-        // Add display: none to all .homeectionN not in jellyfinOrders
-        for (let i = 0; i <= 8; i++) {
-            const homesectionKey = `homesection${i}`;
-            if (jellyfinOrders[homesectionKey] && isNaN(jellyfinOrders[homesectionKey])) {
-                const classSelector = `.${homesectionKey.replace('home','')}`;
-                css += `${classSelector} { display: none !important; }\n`;
-            }
-        }
-
-        style.textContent = css;
-        if (existingStyle) {
-            existingStyle.remove();
-        }
-        document.head.appendChild(style);
-        
-        LOG('User home screen order CSS applied');
     }
 
     /**
