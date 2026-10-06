@@ -296,3 +296,58 @@ div#homeScreen_recentlyReleased_container .listItem:has(#homeScreen_recentlyRele
 .emby-scroller-container[data-section-id].hideIndicators .cardIndicators {
 	display: none;
 }
+
+.manage-config-tabs .manage-tab-btn.active {
+	background-color: rgba(82, 181, 255, 0.25);
+	outline: 1px solid rgba(82, 181, 255, 0.5);
+}
+
+[data-modal-id="kefinTweaksManageModal"] [data-name="kefin-modal-content"] {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+}
+
+.manage-config-shell {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	min-height: 0;
+}
+
+.manage-tab-panels {
+	position: relative;
+	flex: 1 1 auto;
+	min-height: 28rem;
+	height: 100%;
+}
+
+.manage-tab-panel {
+	position: absolute;
+	inset: 0;
+	overflow: auto;
+	display: none;
+}
+
+.manage-tab-panel.is-active {
+	display: block;
+}
+
+.manage-io-panel {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	min-height: 0;
+	box-sizing: border-box;
+}
+
+.manage-io-textarea {
+	width: 100%;
+	flex: 1 1 auto;
+	min-height: 16rem;
+	font-family: monospace;
+	font-size: 0.9em;
+	line-height: 1.5;
+	resize: none;
+	box-sizing: border-box;
+}

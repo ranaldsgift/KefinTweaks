@@ -2457,6 +2457,318 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
         }
     }
 
+    const KEFIN_CONFIG_ENTRY_NAME = 'KefinTweaks-Config';
+    const KEFIN_CONFIG_SCRIPT_MARKER = 'window.KefinTweaksConfig = {';
+    const DEFAULT_BACKUP_KEEP_COUNT = 5;
+
+    function isKefinConfigScriptEntry(entry) {
+        return !!(entry?.Script && String(entry.Script).includes(KEFIN_CONFIG_SCRIPT_MARKER));
+    }
+
+    function parseConfigFromScript(script) {
+        if (!script || typeof script !== 'string') return null;
+        const prefix = 'window.KefinTweaksConfig = ';
+        const idx = script.indexOf(prefix);
+        if (idx < 0) return null;
+        let jsonText = script.slice(idx + prefix.length).trim();
+        if (jsonText.endsWith(';')) jsonText = jsonText.slice(0, -1).trim();
+        try {
+            return JSON.parse(jsonText);
+        } catch (e) {
+            WARN('Failed to parse KefinTweaksConfig from script:', e);
+            return null;
+        }
+    }
+
+    function parseBackupTimestamp(name, script) {
+        const createdMatch = String(script || '').match(/Created:\s*(\d{4}-\d{2}-\d{2}T[^\s\n]+)/i);
+        if (createdMatch) {
+            const d = new Date(createdMatch[1]);
+            if (!Number.isNaN(d.getTime())) return d;
+        }
+        const nameMatch = String(name || '').match(/(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})/);
+        if (nameMatch) {
+            const iso = nameMatch[1].replace(/T(\d{2})-(\d{2})-(\d{2})/, 'T$1:$2:$3') + 'Z';
+            const d = new Date(iso);
+            if (!Number.isNaN(d.getTime())) return d;
+        }
+        return null;
+    }
+
+    function buildConfigBackupScript(config, reason) {
+        const reasonLine = reason ? `// Reason: ${reason}\n` : '';
+        return `// KefinTweaks Configuration Backup
+${reasonLine}// Created: ${new Date().toISOString()}
+// Do not edit manually
+
+window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
+    }
+
+    function makeBackupName(kind = 'manual') {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+        if (kind === 'scheduled') {
+            return `KefinTweaks-Config-ScheduledBackup-${timestamp}`;
+        }
+        return `KefinTweaks-Config-Backup-${timestamp}`;
+    }
+
+    function getBackupKindFromName(name) {
+        const n = String(name || '');
+        if (n.includes('ScheduledBackup')) return 'scheduled';
+        if (n.includes('SkinConflictsRemoved')) return 'skin-conflict';
+        return 'manual';
+    }
+
+    function getBackupKindLabel(kind) {
+        if (kind === 'scheduled') return 'Scheduled';
+        if (kind === 'skin-conflict') return 'Skin conflict';
+        return 'Manual';
+    }
+
+    async function fetchInjectorConfigForBackups() {
+        const pluginId = await resolvePluginId(JS_INJECTOR_ALIASES);
+        if (!pluginId) throw new Error('JavaScript Injector plugin not found');
+        const injectorConfig = await getPluginConfiguration(pluginId);
+        if (!injectorConfig.CustomJavaScripts) injectorConfig.CustomJavaScripts = [];
+        return { pluginId, injectorConfig };
+    }
+
+    async function postInjectorConfig(pluginId, injectorConfig) {
+        const server = ApiClient._serverAddress;
+        const configUrl = `${server}/Plugins/${pluginId}/Configuration`;
+        const saveResponse = await fetch(configUrl, {
+            method: 'POST',
+            headers: {
+                Authorization: getAuthHeader(),
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(injectorConfig)
+        });
+        if (!saveResponse.ok) {
+            throw new Error(`Failed to save injector config: ${saveResponse.statusText}`);
+        }
+        return true;
+    }
+
+    async function listKefinConfigBackups() {
+        try {
+            const { injectorConfig } = await fetchInjectorConfigForBackups();
+            const backups = (injectorConfig.CustomJavaScripts || [])
+                .filter((entry) => isKefinConfigScriptEntry(entry) && entry.Name !== KEFIN_CONFIG_ENTRY_NAME)
+                .map((entry) => {
+                    const date = parseBackupTimestamp(entry.Name, entry.Script);
+                    const kind = getBackupKindFromName(entry.Name);
+                    return {
+                        name: entry.Name,
+                        date,
+                        dateLabel: date ? date.toLocaleString() : 'Unknown date',
+                        kind,
+                        kindLabel: getBackupKindLabel(kind),
+                        enabled: entry.Enabled === true,
+                        script: entry.Script
+                    };
+                });
+            backups.sort((a, b) => {
+                const at = a.date ? a.date.getTime() : 0;
+                const bt = b.date ? b.date.getTime() : 0;
+                return bt - at;
+            });
+            return backups;
+        } catch (err) {
+            ERR('Error listing config backups:', err);
+            return [];
+        }
+    }
+
+    async function createKefinConfigBackup(config = null, options = {}) {
+        const { reason = 'manual', kind } = options;
+        try {
+            const configToBackup = config || window.KefinTweaksConfig;
+            if (!configToBackup) throw new Error('No config available to backup');
+
+            const backupKind = kind
+                || (reason === 'scheduled-daily' ? 'scheduled' : 'manual');
+            const { pluginId, injectorConfig } = await fetchInjectorConfigForBackups();
+            const backupName = makeBackupName(backupKind);
+            injectorConfig.CustomJavaScripts.push({
+                Name: backupName,
+                Script: buildConfigBackupScript(configToBackup, reason),
+                Enabled: false,
+                RequiresAuthentication: false
+            });
+            await postInjectorConfig(pluginId, injectorConfig);
+            LOG(`Created config backup: ${backupName}`);
+            return { ok: true, name: backupName };
+        } catch (err) {
+            ERR('Error creating config backup:', err);
+            return { ok: false, error: err };
+        }
+    }
+
+    async function deleteKefinConfigBackup(name) {
+        return deleteKefinConfigBackups(name ? [name] : []);
+    }
+
+    async function deleteKefinConfigBackups(names) {
+        try {
+            const nameList = (Array.isArray(names) ? names : [])
+                .map((n) => String(n || '').trim())
+                .filter((n) => n && n !== KEFIN_CONFIG_ENTRY_NAME);
+            if (!nameList.length) {
+                throw new Error('No backups selected');
+            }
+            const removeSet = new Set(nameList);
+            const { pluginId, injectorConfig } = await fetchInjectorConfigForBackups();
+            const before = injectorConfig.CustomJavaScripts.length;
+            injectorConfig.CustomJavaScripts = injectorConfig.CustomJavaScripts.filter(
+                (entry) => !removeSet.has(entry.Name)
+            );
+            const removed = before - injectorConfig.CustomJavaScripts.length;
+            if (removed === 0) {
+                throw new Error('No matching backups found to delete');
+            }
+            await postInjectorConfig(pluginId, injectorConfig);
+            LOG(`Deleted ${removed} config backup(s)`);
+            return { ok: true, removed };
+        } catch (err) {
+            ERR('Error deleting config backup(s):', err);
+            return { ok: false, removed: 0, error: err };
+        }
+    }
+
+    async function pruneKefinConfigBackups(keepCount = DEFAULT_BACKUP_KEEP_COUNT) {
+        try {
+            const keep = Math.max(1, Math.floor(Number(keepCount) || DEFAULT_BACKUP_KEEP_COUNT));
+            const { pluginId, injectorConfig } = await fetchInjectorConfigForBackups();
+            const backups = (injectorConfig.CustomJavaScripts || [])
+                .filter((entry) => isKefinConfigScriptEntry(entry) && entry.Name !== KEFIN_CONFIG_ENTRY_NAME)
+                .map((entry) => ({
+                    entry,
+                    date: parseBackupTimestamp(entry.Name, entry.Script)
+                }));
+            backups.sort((a, b) => {
+                const at = a.date ? a.date.getTime() : 0;
+                const bt = b.date ? b.date.getTime() : 0;
+                return bt - at;
+            });
+            if (backups.length <= keep) return { pruned: 0 };
+
+            const toRemove = new Set(backups.slice(keep).map((b) => b.entry.Name));
+            injectorConfig.CustomJavaScripts = injectorConfig.CustomJavaScripts.filter(
+                (entry) => !toRemove.has(entry.Name)
+            );
+            await postInjectorConfig(pluginId, injectorConfig);
+            LOG(`Pruned ${toRemove.size} config backup(s); kept ${keep}`);
+            return { pruned: toRemove.size };
+        } catch (err) {
+            ERR('Error pruning config backups:', err);
+            return { pruned: 0, error: err };
+        }
+    }
+
+    async function restoreKefinConfigBackup(name, options = {}) {
+        const { backupCurrentFirst = false } = options;
+        try {
+            if (!name || name === KEFIN_CONFIG_ENTRY_NAME) {
+                throw new Error('Invalid backup name');
+            }
+            const { injectorConfig } = await fetchInjectorConfigForBackups();
+            const entry = (injectorConfig.CustomJavaScripts || []).find((e) => e.Name === name);
+            if (!entry || !isKefinConfigScriptEntry(entry)) {
+                throw new Error(`Backup not found: ${name}`);
+            }
+            const restoredConfig = parseConfigFromScript(entry.Script);
+            if (!restoredConfig || typeof restoredConfig !== 'object') {
+                throw new Error('Backup script does not contain a valid KefinTweaksConfig');
+            }
+
+            if (backupCurrentFirst) {
+                const current = window.KefinTweaksConfig || null;
+                if (current) {
+                    const backupResult = await createKefinConfigBackup(current, {
+                        reason: 'before-restore'
+                    });
+                    if (!backupResult.ok) {
+                        throw new Error('Failed to backup current config before restore');
+                    }
+                }
+            }
+
+            window.KefinTweaksConfig = restoredConfig;
+            const ok = await saveConfigToJavaScriptInjector(restoredConfig);
+            if (!ok) throw new Error('Failed to save restored config');
+            LOG(`Restored config from backup: ${name}`);
+            return true;
+        } catch (err) {
+            ERR('Error restoring config backup:', err);
+            return false;
+        }
+    }
+
+    function normalizeBackupsSettings(config) {
+        const raw = config?.backups && typeof config.backups === 'object' ? config.backups : {};
+        return {
+            scheduledEnabled: raw.scheduledEnabled === true,
+            keepCount: Math.max(1, Math.floor(Number(raw.keepCount) || DEFAULT_BACKUP_KEEP_COUNT)),
+            lastScheduledAt: raw.lastScheduledAt || null
+        };
+    }
+
+    function sameCalendarDay(isoA, dateB = new Date()) {
+        if (!isoA) return false;
+        const a = new Date(isoA);
+        if (Number.isNaN(a.getTime())) return false;
+        return (
+            a.getUTCFullYear() === dateB.getUTCFullYear() &&
+            a.getUTCMonth() === dateB.getUTCMonth() &&
+            a.getUTCDate() === dateB.getUTCDate()
+        );
+    }
+
+    async function maybeRunScheduledBackup(config = null) {
+        try {
+            const cfg = config || window.KefinTweaksConfig;
+            if (!cfg) return { ran: false, reason: 'no-config' };
+            const settings = normalizeBackupsSettings(cfg);
+            if (!settings.scheduledEnabled) return { ran: false, reason: 'disabled' };
+            if (sameCalendarDay(settings.lastScheduledAt)) {
+                return { ran: false, reason: 'already-today' };
+            }
+
+            const created = await createKefinConfigBackup(cfg, {
+                reason: 'scheduled-daily',
+                kind: 'scheduled'
+            });
+            if (!created.ok) return { ran: false, reason: 'create-failed' };
+
+            await pruneKefinConfigBackups(settings.keepCount);
+
+            cfg.backups = {
+                ...settings,
+                lastScheduledAt: new Date().toISOString()
+            };
+            window.KefinTweaksConfig = cfg;
+            await saveConfigToJavaScriptInjector(cfg);
+            LOG('Scheduled daily config backup completed');
+            return { ran: true, name: created.name };
+        } catch (err) {
+            ERR('Error running scheduled backup:', err);
+            return { ran: false, reason: 'error', error: err };
+        }
+    }
+
+    // Once per page load: run scheduled backup after login if enabled
+    (async () => {
+        try {
+            const loggedIn = await waitForLogin(20000);
+            if (!loggedIn || !window.KefinTweaksConfig) return;
+            await maybeRunScheduledBackup(window.KefinTweaksConfig);
+        } catch (e) {
+            /* ignore */
+        }
+    })();
+
+
     let _watchlistTabIndex = null;
 
     async function fetchWatchlistTabIndex() {
@@ -2996,6 +3308,16 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
         resolvePluginId,
         getPluginConfiguration,
         clearPluginIdCache,
+        listKefinConfigBackups,
+        createKefinConfigBackup,
+        deleteKefinConfigBackup,
+        deleteKefinConfigBackups,
+        restoreKefinConfigBackup,
+        pruneKefinConfigBackups,
+        maybeRunScheduledBackup,
+        normalizeBackupsSettings,
+        KEFIN_CONFIG_ENTRY_NAME,
+        KEFIN_CONFIG_SCRIPT_MARKER,
         getWatchlistTabIndex,
         waitForApiClient,
         waitForLogin,

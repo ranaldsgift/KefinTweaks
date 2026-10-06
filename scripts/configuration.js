@@ -885,11 +885,8 @@
                         <button class="emby-button raised" id="changeKefinTweaksSourceBtn" style="padding: 0.75em 2em; font-size: 1em;" title="Switch between the Latest, Development, Version specific branches or point to your own self hosted location!">
                             <span>Plugin Settings</span>
                         </button>
-                        <button class="emby-button raised" id="exportConfigBtn" style="padding: 0.75em 2em; font-size: 1em;">
-                            <span>Export</span>
-                        </button>
-                        <button class="emby-button raised" id="importConfigBtn" style="padding: 0.75em 2em; font-size: 1em;">
-                            <span>Import</span>
+                        <button class="emby-button raised" id="manageConfigBtn" style="padding: 0.75em 2em; font-size: 1em;" title="Manage backups, export, and import">
+                            <span>Manage</span>
                         </button>
                     </div>
                 </div>
@@ -4766,16 +4763,10 @@
             resetBtn.addEventListener('click', () => handleResetConfig(modalInstance));
         }
 
-        // Export button handler
-        const exportBtn = modalInstance.dialog?.querySelector('#exportConfigBtn');
-        if (exportBtn) {
-            exportBtn.addEventListener('click', () => handleExportConfig(config));
-        }
-
-        // Import button handler
-        const importBtn = modalInstance.dialog?.querySelector('#importConfigBtn');
-        if (importBtn) {
-            importBtn.addEventListener('click', () => handleImportConfig(modalInstance));
+        // Manage button handler (Backups / Export / Import)
+        const manageBtn = modalInstance.dialog?.querySelector('#manageConfigBtn');
+        if (manageBtn) {
+            manageBtn.addEventListener('click', () => openManageConfigModal(config, modalInstance));
         }
 
         // Remove duplicate defaults button handler
@@ -4826,6 +4817,568 @@
         }
     }
 
+    function toastMsg(message, timeout) {
+        if (window.KefinTweaksToaster?.toast) {
+            window.KefinTweaksToaster.toast(message, timeout);
+        } else {
+            alert(message);
+        }
+    }
+
+    function getExportClipboardFlags() {
+        const isHttps =
+            (typeof ApiClient !== 'undefined' &&
+                ApiClient._serverAddress &&
+                ApiClient._serverAddress.startsWith('https://')) ||
+            (typeof location !== 'undefined' && location.protocol === 'https:');
+        const supportsClipboard = !!(navigator.clipboard && navigator.clipboard.writeText);
+        return { canUseClipboard: isHttps && supportsClipboard };
+    }
+
+    function buildManageExportPanelHtml(canUseClipboard) {
+        return `
+            <div class="manage-io-panel">
+                <div class="listItemBodyText" style="margin-bottom: 1em; flex-shrink: 0;">
+                    Your current configuration is shown below as JSON. Select and copy this text to back up or share your configuration.
+                    ${canUseClipboard ? '' : ' Clipboard access requires an HTTPS connection, so manual copying is required.'}
+                </div>
+                <textarea id="manageExportConfigTextarea" class="fld emby-textarea manage-io-textarea" rows="16"
+                    readonly></textarea>
+                ${canUseClipboard ? `
+                <div style="margin-top: 1em; flex-shrink: 0;">
+                    <button type="button" class="emby-button raised button-submit" id="manageCopyExportConfigBtn"
+                        style="padding: 0.75em 2em; font-size: 1em; font-weight: 500;">
+                        <span>Copy to Clipboard</span>
+                    </button>
+                </div>` : ''}
+            </div>
+        `;
+    }
+
+    function buildManageImportPanelHtml() {
+        return `
+            <div class="manage-io-panel">
+                <div class="listItemBodyText" style="margin-bottom: 1em; flex-shrink: 0;">
+                    Paste your configuration JSON below. This will completely replace your current configuration.
+                </div>
+                <textarea id="manageImportConfigTextarea" class="fld emby-textarea manage-io-textarea" rows="16"
+                    placeholder="Paste your configuration JSON here..."></textarea>
+                <div style="margin-top: 1em; flex-shrink: 0;">
+                    <button type="button" class="emby-button raised button-submit" id="manageConfirmImportBtn"
+                        style="padding: 0.75em 2em; font-size: 1em; font-weight: 500;">
+                        <span>Import</span>
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    function backupsSettingsDescription(scheduledEnabled, keepCount) {
+        const x = Math.max(1, Math.floor(Number(keepCount) || 5));
+        if (scheduledEnabled) {
+            return `KefinTweaks will backup your configuration once per day and keep up to ${x} previous backups. Backups are only created from an admin account that is logged in.`;
+        }
+        return 'KefinTweaks will never automatically backup your configuration unless necessary during a migration task or other operations.';
+    }
+
+    function buildManageBackupsPanelHtml(settings) {
+        const scheduledEnabled = settings.scheduledEnabled === true;
+        const keepCount = Math.max(1, Math.floor(Number(settings.keepCount) || 5));
+        const toggleHtml = window.KefinTweaksUI?.buildToggleCard
+            ? window.KefinTweaksUI.buildToggleCard(
+                'manageScheduledBackups',
+                scheduledEnabled,
+                'Scheduled Backups',
+                backupsSettingsDescription(scheduledEnabled, keepCount)
+            )
+            : `
+                <label class="checkboxContainer" style="display:flex;align-items:center;gap:0.75em;">
+                    <input type="checkbox" id="manageScheduledBackups" ${scheduledEnabled ? 'checked' : ''}>
+                    <span>Scheduled Backups</span>
+                </label>
+                <div class="listItemBodyText secondary" id="manageScheduledBackupsDesc">${backupsSettingsDescription(scheduledEnabled, keepCount)}</div>
+            `;
+
+        return `
+            <div class="manage-backups-settings" style="display:flex;flex-direction:column;gap:1.25em;">
+                <div>${toggleHtml}</div>
+                <div>
+                    <label class="listItemBodyText" for="manageBackupKeepCount" style="display:block;margin-bottom:0.35em;">Number of Backups to Keep</label>
+                    <input type="number" id="manageBackupKeepCount" class="fld emby-input" min="1" step="1" value="${keepCount}" style="max-width:8em;">
+                    <div class="listItemBodyText secondary" style="margin-top:0.35em;">KefinTweaks will overwrite the oldest scheduled Backup once you get to this limit.</div>
+                </div>
+                <div>
+                    <h3 class="listItemBodyText" style="margin:0 0 0.75em;">Manage Backups</h3>
+                    <div id="manageBackupsTableHost">
+                        <div class="listItemBodyText secondary">Loading backups…</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderBackupsTableRows(backups) {
+        if (!backups.length) {
+            return `<div class="listItemBodyText secondary">No backups found.</div>`;
+        }
+        const rows = backups.map((b) => `
+            <tr data-backup-name="${escapeHtmlAttr(b.name)}" data-backup-kind="${escapeHtmlAttr(b.kind || 'manual')}">
+                <td style="padding:0.5em 0.4em;vertical-align:middle;width:2.5em;">
+                    <input type="checkbox" class="checkbox manage-backup-row-check" data-backup-name="${escapeHtmlAttr(b.name)}" aria-label="Select ${escapeHtmlAttr(b.name)}">
+                </td>
+                <td style="padding:0.5em 0.75em;vertical-align:middle;">
+                    <div class="listItemBodyText" style="word-break:break-all;">${escapeHtmlAttr(b.name)}</div>
+                    <div class="listItemBodyText secondary" style="font-size:0.9em;">
+                        ${escapeHtmlAttr(b.kindLabel || 'Manual')} · ${escapeHtmlAttr(b.dateLabel || 'Unknown date')}
+                    </div>
+                </td>
+                <td style="padding:0.5em 0.75em;white-space:nowrap;text-align:right;vertical-align:middle;">
+                    <button type="button" class="emby-button paper-icon-button-light manage-backup-restore-btn" title="Restore" aria-label="Restore">
+                        <span class="material-icons" aria-hidden="true">settings_backup_restore</span>
+                    </button>
+                    <button type="button" class="emby-button paper-icon-button-light manage-backup-delete-btn" title="Delete" aria-label="Delete">
+                        <span class="material-icons" aria-hidden="true">delete</span>
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+        return `
+            <div style="display:flex;flex-wrap:wrap;gap:0.5em;align-items:center;margin-bottom:0.75em;">
+                <button type="button" class="emby-button raised" id="manageBackupsSelectAllBtn" style="padding:0.4em 1em;">Select all</button>
+                <button type="button" class="emby-button raised" id="manageBackupsDeselectAllBtn" style="padding:0.4em 1em;">Deselect all</button>
+                <button type="button" class="emby-button raised" id="manageBackupsDeleteSelectedBtn" style="padding:0.4em 1em;" disabled>Delete selected</button>
+            </div>
+            <div style="overflow:auto;max-height:320px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;">
+                <table style="width:100%;border-collapse:collapse;">
+                    <thead>
+                        <tr style="border-bottom:1px solid rgba(255,255,255,0.1);text-align:left;">
+                            <th style="padding:0.5em 0.4em;width:2.5em;" class="listItemBodyText">
+                                <input type="checkbox" class="checkbox" id="manageBackupsSelectAllHeader" title="Select all" aria-label="Select all">
+                            </th>
+                            <th style="padding:0.5em 0.75em;" class="listItemBodyText">Backup</th>
+                            <th style="padding:0.5em 0.75em;text-align:right;" class="listItemBodyText">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    function escapeHtmlAttr(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    async function refreshManageBackupsTable(host) {
+        if (!host) return;
+        host.innerHTML = `<div class="listItemBodyText secondary">Loading backups…</div>`;
+        const listFn = window.KefinTweaksUtils?.listKefinConfigBackups;
+        if (!listFn) {
+            host.innerHTML = `<div class="listItemBodyText secondary">Backup helpers unavailable.</div>`;
+            return;
+        }
+        const backups = await listFn();
+        host.innerHTML = renderBackupsTableRows(backups);
+    }
+
+    function confirmDeleteBackup(name) {
+        return confirmDeleteBackups([name]);
+    }
+
+    function confirmDeleteBackups(names) {
+        const list = (Array.isArray(names) ? names : []).filter(Boolean);
+        return new Promise((resolve) => {
+            if (!list.length) {
+                resolve(false);
+                return;
+            }
+            const title = list.length === 1 ? 'Delete Backup' : `Delete ${list.length} Backups`;
+            const body = list.length === 1
+                ? `<div class="listItemBodyText">Remove backup <strong>${escapeHtmlAttr(list[0])}</strong>? This cannot be undone.</div>`
+                : `<div class="listItemBodyText" style="margin-bottom:0.75em;">Remove <strong>${list.length}</strong> selected backups? This cannot be undone.</div>
+                   <ul style="margin:0;padding-left:1.25em;max-height:180px;overflow:auto;">
+                     ${list.map((n) => `<li class="listItemBodyText secondary" style="word-break:break-all;">${escapeHtmlAttr(n)}</li>`).join('')}
+                   </ul>`;
+
+            if (!window.ModalSystem) {
+                resolve(window.confirm(list.length === 1
+                    ? `Delete backup "${list[0]}"?`
+                    : `Delete ${list.length} selected backups?`));
+                return;
+            }
+            window.ModalSystem.create({
+                id: 'manageDeleteBackupConfirm',
+                title,
+                content: body,
+                footer: `
+                    <button class="emby-button raised button-submit" id="manageDeleteBackupConfirmBtn" style="padding:0.75em 2em;margin-right:1em;">Delete</button>
+                    <button class="emby-button raised" id="manageDeleteBackupCancelBtn" style="padding:0.75em 2em;">Cancel</button>
+                `,
+                closeOnBackdrop: true,
+                closeOnEscape: true,
+                onOpen: (mi) => {
+                    mi.dialogFooter?.querySelector('#manageDeleteBackupConfirmBtn')?.addEventListener('click', () => {
+                        mi.close();
+                        resolve(true);
+                    });
+                    mi.dialogFooter?.querySelector('#manageDeleteBackupCancelBtn')?.addEventListener('click', () => {
+                        mi.close();
+                        resolve(false);
+                    });
+                }
+            });
+        });
+    }
+
+    function confirmRestoreBackup(name) {
+        return new Promise((resolve) => {
+            if (!window.ModalSystem) {
+                const backupFirst = window.confirm(`Backup current config before restoring "${name}"?`);
+                resolve(window.confirm(`Restore "${name}"?`) ? { restore: true, backupCurrentFirst: backupFirst } : { restore: false });
+                return;
+            }
+            window.ModalSystem.create({
+                id: 'manageRestoreBackupConfirm',
+                title: 'Restore Backup',
+                content: `
+                    <div class="listItemBodyText" style="margin-bottom:1em;">
+                        Restore configuration from <strong>${escapeHtmlAttr(name)}</strong>? This will overwrite your current active configuration.
+                    </div>
+                `,
+                footer: `
+                    <button class="emby-button raised button-submit" id="manageRestoreWithBackupBtn" style="padding:0.75em 1.5em;margin-right:0.5em;">Backup before Restore</button>
+                    <button class="emby-button raised button-submit" id="manageRestoreOnlyBtn" style="padding:0.75em 1.5em;margin-right:0.5em;">Restore</button>
+                    <button class="emby-button raised" id="manageRestoreCancelBtn" style="padding:0.75em 1.5em;">Cancel</button>
+                `,
+                closeOnBackdrop: true,
+                closeOnEscape: true,
+                onOpen: (mi) => {
+                    mi.dialogFooter?.querySelector('#manageRestoreWithBackupBtn')?.addEventListener('click', () => {
+                        mi.close();
+                        resolve({ restore: true, backupCurrentFirst: true });
+                    });
+                    mi.dialogFooter?.querySelector('#manageRestoreOnlyBtn')?.addEventListener('click', () => {
+                        mi.close();
+                        resolve({ restore: true, backupCurrentFirst: false });
+                    });
+                    mi.dialogFooter?.querySelector('#manageRestoreCancelBtn')?.addEventListener('click', () => {
+                        mi.close();
+                        resolve({ restore: false });
+                    });
+                }
+            });
+        });
+    }
+
+    async function persistBackupsSettings(config, settings) {
+        config.backups = {
+            scheduledEnabled: settings.scheduledEnabled === true,
+            keepCount: Math.max(1, Math.floor(Number(settings.keepCount) || 5)),
+            lastScheduledAt: settings.lastScheduledAt || config.backups?.lastScheduledAt || null
+        };
+        if (window.KefinTweaksConfig) {
+            window.KefinTweaksConfig.backups = { ...config.backups };
+        }
+        await KefinTweaksUtils.saveConfigToJavaScriptInjector(config);
+        if (config.backups.scheduledEnabled) {
+            await window.KefinTweaksUtils.maybeRunScheduledBackup?.(config);
+        }
+    }
+
+    function bindManageBackupsPanel(root, config) {
+        const settings = window.KefinTweaksUtils?.normalizeBackupsSettings
+            ? window.KefinTweaksUtils.normalizeBackupsSettings(config)
+            : { scheduledEnabled: false, keepCount: 5, lastScheduledAt: null };
+
+        const scheduledCb = root.querySelector('#manageScheduledBackups');
+        const keepInput = root.querySelector('#manageBackupKeepCount');
+        const descEl = root.querySelector('#manageScheduledBackupsDesc')
+            || root.querySelector('.kefin-toggle-card-desc');
+        const tableHost = root.querySelector('#manageBackupsTableHost');
+
+        if (window.KefinTweaksUI?.bindToggleCards) {
+            window.KefinTweaksUI.bindToggleCards(root);
+        }
+
+        const syncDesc = () => {
+            if (!descEl) return;
+            const enabled = scheduledCb?.checked === true;
+            const keep = Math.max(1, Math.floor(Number(keepInput?.value) || 5));
+            descEl.textContent = backupsSettingsDescription(enabled, keep);
+        };
+
+        scheduledCb?.addEventListener('change', async () => {
+            syncDesc();
+            try {
+                await persistBackupsSettings(config, {
+                    ...settings,
+                    scheduledEnabled: scheduledCb.checked === true,
+                    keepCount: Math.max(1, Math.floor(Number(keepInput?.value) || 5))
+                });
+                toastMsg(`Scheduled backups ${scheduledCb.checked ? 'enabled' : 'disabled'}`);
+                await refreshManageBackupsTable(tableHost);
+            } catch (e) {
+                console.error('[KefinTweaks Configuration] Error saving backup settings:', e);
+                toastMsg('Failed to save backup settings', '5');
+            }
+        });
+
+        keepInput?.addEventListener('change', async () => {
+            const keep = Math.max(1, Math.floor(Number(keepInput.value) || 5));
+            keepInput.value = String(keep);
+            syncDesc();
+            try {
+                await persistBackupsSettings(config, {
+                    ...settings,
+                    scheduledEnabled: scheduledCb?.checked === true,
+                    keepCount: keep
+                });
+                await window.KefinTweaksUtils.pruneKefinConfigBackups?.(keep);
+                await refreshManageBackupsTable(tableHost);
+                toastMsg(`Keeping up to ${keep} backups`);
+            } catch (e) {
+                console.error('[KefinTweaks Configuration] Error saving keep count:', e);
+                toastMsg('Failed to save backup keep count', '5');
+            }
+        });
+
+        tableHost?.addEventListener('click', async (e) => {
+            const selectAllBtn = e.target.closest?.('#manageBackupsSelectAllBtn');
+            const deselectAllBtn = e.target.closest?.('#manageBackupsDeselectAllBtn');
+            const deleteSelectedBtn = e.target.closest?.('#manageBackupsDeleteSelectedBtn');
+
+            const syncSelectionUi = () => {
+                const selected = tableHost.querySelectorAll('.manage-backup-row-check:checked');
+                const all = tableHost.querySelectorAll('.manage-backup-row-check');
+                const btn = tableHost.querySelector('#manageBackupsDeleteSelectedBtn');
+                if (btn) btn.disabled = selected.length === 0;
+                const header = tableHost.querySelector('#manageBackupsSelectAllHeader');
+                if (header && all.length) {
+                    header.checked = selected.length === all.length;
+                    header.indeterminate = selected.length > 0 && selected.length < all.length;
+                }
+            };
+
+            const setAllChecked = (checked) => {
+                tableHost.querySelectorAll('.manage-backup-row-check').forEach((cb) => {
+                    cb.checked = checked;
+                });
+                const header = tableHost.querySelector('#manageBackupsSelectAllHeader');
+                if (header) {
+                    header.checked = checked;
+                    header.indeterminate = false;
+                }
+                syncSelectionUi();
+            };
+
+            if (selectAllBtn) {
+                setAllChecked(true);
+                return;
+            }
+            if (deselectAllBtn) {
+                setAllChecked(false);
+                return;
+            }
+            if (deleteSelectedBtn) {
+                const names = Array.from(tableHost.querySelectorAll('.manage-backup-row-check:checked'))
+                    .map((cb) => cb.getAttribute('data-backup-name'))
+                    .filter(Boolean);
+                if (!names.length) return;
+                const confirmed = await confirmDeleteBackups(names);
+                if (!confirmed) return;
+                const result = await window.KefinTweaksUtils.deleteKefinConfigBackups?.(names);
+                if (result?.ok) {
+                    toastMsg(`Deleted ${result.removed} backup${result.removed === 1 ? '' : 's'}`);
+                    await refreshManageBackupsTable(tableHost);
+                } else {
+                    toastMsg('Failed to delete selected backups', '5');
+                }
+                return;
+            }
+
+            // Ignore row-checkbox clicks here (handled by change); don't treat as row actions
+            if (e.target?.classList?.contains('manage-backup-row-check')
+                || e.target?.id === 'manageBackupsSelectAllHeader') {
+                return;
+            }
+
+            const restoreBtn = e.target.closest?.('.manage-backup-restore-btn');
+            const deleteBtn = e.target.closest?.('.manage-backup-delete-btn');
+            const row = e.target.closest?.('tr[data-backup-name]');
+            const name = row?.getAttribute('data-backup-name');
+            if (!name) return;
+
+            if (restoreBtn) {
+                const choice = await confirmRestoreBackup(name);
+                if (!choice.restore) return;
+                const ok = await window.KefinTweaksUtils.restoreKefinConfigBackup?.(name, {
+                    backupCurrentFirst: choice.backupCurrentFirst === true
+                });
+                if (ok) {
+                    toastMsg('Configuration restored. Reloading…');
+                    setTimeout(() => window.location.reload(), 600);
+                } else {
+                    toastMsg('Failed to restore backup', '5');
+                }
+                return;
+            }
+
+            if (deleteBtn) {
+                const confirmed = await confirmDeleteBackup(name);
+                if (!confirmed) return;
+                const result = await window.KefinTweaksUtils.deleteKefinConfigBackups?.([name]);
+                if (result?.ok) {
+                    toastMsg('Backup deleted');
+                    await refreshManageBackupsTable(tableHost);
+                } else {
+                    toastMsg('Failed to delete backup', '5');
+                }
+            }
+        });
+
+        tableHost?.addEventListener('change', (e) => {
+            const target = e.target;
+            if (!target) return;
+
+            if (target.id === 'manageBackupsSelectAllHeader') {
+                const checked = target.checked === true;
+                tableHost.querySelectorAll('.manage-backup-row-check').forEach((cb) => {
+                    cb.checked = checked;
+                });
+                target.indeterminate = false;
+            } else if (!target.classList?.contains('manage-backup-row-check')) {
+                return;
+            }
+
+            const selected = tableHost.querySelectorAll('.manage-backup-row-check:checked');
+            const all = tableHost.querySelectorAll('.manage-backup-row-check');
+            const btn = tableHost.querySelector('#manageBackupsDeleteSelectedBtn');
+            if (btn) btn.disabled = selected.length === 0;
+            const header = tableHost.querySelector('#manageBackupsSelectAllHeader');
+            if (header && all.length && target.id !== 'manageBackupsSelectAllHeader') {
+                header.checked = selected.length === all.length;
+                header.indeterminate = selected.length > 0 && selected.length < all.length;
+            }
+        });
+
+        refreshManageBackupsTable(tableHost);
+    }
+
+    function openManageConfigModal(config, parentModalInstance) {
+        if (!window.ModalSystem) {
+            alert('Modal system not available');
+            return;
+        }
+
+        const { canUseClipboard } = getExportClipboardFlags();
+        const settings = window.KefinTweaksUtils?.normalizeBackupsSettings
+            ? window.KefinTweaksUtils.normalizeBackupsSettings(config)
+            : { scheduledEnabled: false, keepCount: 5, lastScheduledAt: null };
+        const configJson = JSON.stringify(config, null, 2);
+
+        window.ModalSystem.create({
+            id: 'kefinTweaksManageModal',
+            title: 'Manage',
+            dialogStyle: {
+                width: 'min(720px, 95vw)',
+                height: 'min(780px, 90vh)',
+                maxHeight: '90vh'
+            },
+            content: `
+                <div class="manage-config-shell">
+                    <div class="manage-config-tabs" style="display:flex;gap:0.5em;margin-bottom:1em;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:0.5em;flex-shrink:0;">
+                        <button type="button" class="emby-button raised manage-tab-btn active" data-manage-tab="backups" style="padding:0.5em 1.25em;">Backups</button>
+                        <button type="button" class="emby-button raised manage-tab-btn" data-manage-tab="export" style="padding:0.5em 1.25em;">Export</button>
+                        <button type="button" class="emby-button raised manage-tab-btn" data-manage-tab="import" style="padding:0.5em 1.25em;">Import</button>
+                    </div>
+                    <div class="manage-tab-panels">
+                        <div class="manage-tab-panel is-active" data-manage-panel="backups">
+                            ${buildManageBackupsPanelHtml(settings)}
+                        </div>
+                        <div class="manage-tab-panel" data-manage-panel="export">
+                            ${buildManageExportPanelHtml(canUseClipboard)}
+                        </div>
+                        <div class="manage-tab-panel" data-manage-panel="import">
+                            ${buildManageImportPanelHtml()}
+                        </div>
+                    </div>
+                </div>
+            `,
+            footer: `
+                <button class="emby-button raised" id="closeManageConfigBtn" style="padding:0.75em 2em;font-size:1em;">
+                    <span>Close</span>
+                </button>
+            `,
+            closeOnBackdrop: true,
+            closeOnEscape: true,
+            onOpen: (manageModal) => {
+                const content = manageModal.dialogContent;
+                manageModal.dialogFooter?.querySelector('#closeManageConfigBtn')?.addEventListener('click', () => manageModal.close());
+
+                const setTab = (tab) => {
+                    content.querySelectorAll('.manage-tab-btn').forEach((btn) => {
+                        btn.classList.toggle('active', btn.dataset.manageTab === tab);
+                    });
+                    content.querySelectorAll('.manage-tab-panel').forEach((panel) => {
+                        panel.classList.toggle('is-active', panel.dataset.managePanel === tab);
+                    });
+                };
+                content.querySelectorAll('.manage-tab-btn').forEach((btn) => {
+                    btn.addEventListener('click', () => setTab(btn.dataset.manageTab));
+                });
+
+                // Export panel
+                const exportTa = content.querySelector('#manageExportConfigTextarea');
+                if (exportTa) {
+                    exportTa.value = configJson;
+                    setTimeout(() => {
+                        exportTa.focus();
+                        exportTa.select();
+                    }, 100);
+                }
+                content.querySelector('#manageCopyExportConfigBtn')?.addEventListener('click', async () => {
+                    try {
+                        await navigator.clipboard.writeText(configJson);
+                        toastMsg('Configuration copied to clipboard!');
+                    } catch (copyError) {
+                        console.error('[KefinTweaks Configuration] Error copying config:', copyError);
+                        toastMsg('Error copying configuration to clipboard', '5');
+                    }
+                });
+
+                // Import panel
+                content.querySelector('#manageConfirmImportBtn')?.addEventListener('click', async () => {
+                    const jsonText = content.querySelector('#manageImportConfigTextarea')?.value.trim() || '';
+                    if (!jsonText) {
+                        toastMsg('Please paste configuration JSON', '3');
+                        return;
+                    }
+                    let importedConfig;
+                    try {
+                        importedConfig = JSON.parse(jsonText);
+                    } catch (parseError) {
+                        toastMsg('Invalid JSON format', '5');
+                        return;
+                    }
+                    if (!importedConfig || typeof importedConfig !== 'object' || Array.isArray(importedConfig)) {
+                        toastMsg('Configuration must be a JSON object', '5');
+                        return;
+                    }
+                    const confirmed = await showImportConfirmation();
+                    if (!confirmed) return;
+                    manageModal.close();
+                    await applyImportedConfig(importedConfig, parentModalInstance || manageModal);
+                });
+
+                bindManageBackupsPanel(content.querySelector('[data-manage-panel="backups"]') || content, config);
+            }
+        });
+    }
+
     // Export configuration via modal (with optional clipboard copy on HTTPS)
     async function handleExportConfig(config) {
         try {
@@ -4833,14 +5386,7 @@
 
             // Prefer modal-based export so it works even on unsecured servers
             if (window.ModalSystem) {
-                const isHttps =
-                    (typeof ApiClient !== 'undefined' &&
-                        ApiClient._serverAddress &&
-                        ApiClient._serverAddress.startsWith('https://')) ||
-                    (typeof location !== 'undefined' && location.protocol === 'https:');
-
-                const supportsClipboard = !!(navigator.clipboard && navigator.clipboard.writeText);
-                const canUseClipboard = isHttps && supportsClipboard;
+                const { canUseClipboard } = getExportClipboardFlags();
 
                 window.ModalSystem.create({
                     id: 'exportConfigModal',
