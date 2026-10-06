@@ -592,8 +592,9 @@
 	color: #f2b01e;
 	font-size: 1.4em;
 	height: auto !important;
-	margin-right: 0.125em;
 	width: auto !important;
+	margin-left: 0em !important;
+	margin-right: 0em !important;
 }
 
 .spotlight-rating-value {
@@ -795,7 +796,7 @@
 	font-size: 28px;
 }
 
-.spotlight-watchlist-button {
+.spotlight-buttons-container button:not(.btnPlay) {
 	width: 48px;
 	height: 48px;
 	border-radius: 50%;
@@ -1457,7 +1458,8 @@
 .sectionTitle-wrapper {
 	display: grid;
 	align-items: center;
-	grid-template-columns: auto 1fr;
+	/* title | picker (optional; collapses when absent) | controls */
+	grid-template-columns: auto auto 1fr;
 	flex: 1;
 	min-width: 0;
 	width: 100%;
@@ -1470,8 +1472,14 @@
 	min-width: 0;
 }
 
-.sectionTitle-wrapper > .section-controls {
+.sectionTitle-wrapper > .multi-query-picker-button {
 	grid-column: 2;
+	grid-row: 1;
+	align-self: center;
+}
+
+.sectionTitle-wrapper > .section-controls {
+	grid-column: 3;
 	grid-row: 1;
 	align-self: center;
 }
@@ -1871,10 +1879,16 @@
 	padding: 0px !important;
 }
 .spotlight-section .mainDetailButtons > :is(button.emby-button) {
-	padding: 0.5em !important;
+	padding: 0em !important;
 }
 .spotlight-section .mainDetailButtons > .btnPlay:is(.emby-button) {
-	padding: 0.25em !important;
+	padding: 0.25em 1em !important;
+	display: flex;
+	flex-direction: row;
+}
+.spotlight-section .mainDetailButtons > .btnPlay:is(.emby-button)::after {
+	content: attr(title);
+	padding-right: 0.5em;
 }
 .spotlight-section .spotlight-buttons-container.mainDetailButtons {
     gap: 2em;
@@ -2292,10 +2306,6 @@ html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"
 
 .spotlight-section .emby-tab-button {
 	text-shadow: none !important;
-}
-
-.spotlight-buttons-container .starRatingContainer {
-	margin-right: 1em !important;
 }
 
 .custom-scroller-container {

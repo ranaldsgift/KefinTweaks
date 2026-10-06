@@ -1653,8 +1653,9 @@
         const controlsMount = titleContainer.querySelector('.section-controls');
         const titleLink = titleContainer.querySelector('a.sectionTitle-link');
         const sectionTitle = titleContainer.querySelector('.sectionTitle');
-        if (controlsMount) {
-            titleContainer.insertBefore(selectButton, controlsMount);
+        // controls may live under .sectionTitle-wrapper when a caption is present
+        if (controlsMount?.parentNode) {
+            controlsMount.parentNode.insertBefore(selectButton, controlsMount);
         } else if (titleLink?.parentNode) {
             titleLink.parentNode.insertBefore(selectButton, titleLink.nextSibling);
         } else if (sectionTitle?.parentNode) {
