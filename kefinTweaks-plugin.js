@@ -815,7 +815,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         const content = document.createElement('div');
         content.style.display = 'flex';
         content.style.flexDirection = 'column';
-        content.style.gap = '1.5em';
+        content.style.gap = '0.5em';
 
         // Enabled checkbox
         const isEnabled = currentConfig?.enabled !== false;
@@ -823,6 +823,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         enabledContainer.style.display = 'flex';
         enabledContainer.style.alignItems = 'center';
         enabledContainer.style.gap = '0.75em';
+        enabledContainer.style.marginBottom = '0.75em';
         
         const enabledCheckbox = document.createElement('input');
         enabledCheckbox.type = 'checkbox';
@@ -836,7 +837,6 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         enabledLabel.style.margin = '0';
         enabledLabel.style.display = 'flex';
         enabledLabel.style.alignItems = 'center';
-        enabledLabel.style.gap = '0.75em';
         
         const enabledText = document.createElement('span');
         enabledText.textContent = isEnabled ? 'Enabled' : 'Disabled';
@@ -857,7 +857,6 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         const sourceTypeLabel = document.createElement('label');
         sourceTypeLabel.textContent = 'Install From:';
         sourceTypeLabel.style.display = 'block';
-        sourceTypeLabel.style.marginBottom = '0.5em';
 
         const sourceTypeSelect = document.createElement('select');
         sourceTypeSelect.className = 'fld emby-select emby-select-withcolor';
@@ -871,7 +870,6 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         const sourceLabel = document.createElement('label');
         sourceLabel.textContent = 'Version:';
         sourceLabel.style.display = 'block';
-        sourceLabel.style.marginBottom = '0.5em';
 
         const sourceSelect = document.createElement('select');
         sourceSelect.className = 'fld emby-select emby-select-withcolor';
@@ -905,11 +903,68 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         commitHashInput.autocomplete = 'off';
         commitHashInput.value = sourceInfo.commit || '';
 
+        // Resolved hash readout for Development / Experimental
+        const resolvedHashEl = document.createElement('div');
+        resolvedHashEl.id = 'kefinTweaksResolvedHash';
+        resolvedHashEl.className = 'listItemBodyText secondary';
+        resolvedHashEl.style.display = 'none';
+        resolvedHashEl.style.marginTop = '0.35em';
+        resolvedHashEl.style.fontFamily = 'monospace';
+        resolvedHashEl.style.fontSize = '0.9em';
+        resolvedHashEl.style.wordBreak = 'break-all';
+
+        function extractShaFromRoot(root) {
+            if (!root || typeof root !== 'string') return null;
+            const m = root.match(/@([0-9a-f]{7,40})(?:\/|$)/i);
+            return m ? m[1].toLowerCase() : null;
+        }
+
+        async function updateResolvedHashVisibility() {
+            const show =
+                sourceTypeSelect.value === 'github' &&
+                (sourceSelect.value === DEVELOPMENT_NAME || sourceSelect.value === EXPERIMENTAL_NAME);
+            if (!show) {
+                resolvedHashEl.style.display = 'none';
+                resolvedHashEl.textContent = '';
+                return;
+            }
+
+            resolvedHashEl.style.display = 'block';
+            resolvedHashEl.textContent = 'Resolved commit: …';
+
+            let sha = extractShaFromRoot(currentConfig?.kefinTweaksRootResolved);
+            const symbolicMatchesSelection =
+                (sourceSelect.value === DEVELOPMENT_NAME && /@(main|master)(\/|$)/.test(currentRoot || '')) ||
+                (sourceSelect.value === EXPERIMENTAL_NAME && /@experimental(\/|$)/.test(currentRoot || ''));
+
+            // Prefer stored resolved hash when it matches the selected branch; otherwise resolve live
+            if (!sha || !symbolicMatchesSelection || sourceSelect.value !== sourceInfo.version) {
+                try {
+                    const branchRoot =
+                        sourceSelect.value === EXPERIMENTAL_NAME
+                            ? `${JSDELIVR_BASE}@experimental/`
+                            : `${JSDELIVR_BASE}@main/`;
+                    const resolved = await resolveRootVersion(branchRoot);
+                    sha = extractShaFromRoot(resolved) || sha;
+                } catch (e) {
+                    console.warn('[KefinTweaks Installer] Could not resolve branch hash:', e);
+                }
+            }
+
+            if (sha) {
+                const short = sha.length > 12 ? sha.slice(0, 12) : sha;
+                resolvedHashEl.textContent = `Resolved commit: ${short}${sha.length > 12 ? ` (${sha})` : ''}`;
+            } else {
+                resolvedHashEl.textContent = 'Resolved commit: unavailable';
+            }
+        }
+
         const updateCommitHashVisibility = () => {
             const showCommit = sourceTypeSelect.value === 'github'
                 && sourceSelect.value === SPECIFIC_BUILD_NAME;
             commitHashLabel.style.display = showCommit ? 'block' : 'none';
             commitHashInput.style.display = showCommit ? 'block' : 'none';
+            updateResolvedHashVisibility();
         };
 
         // Set initial visibility based on source type
@@ -946,6 +1001,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         content.appendChild(sourceTypeSelect);
         content.appendChild(sourceLabel);
         content.appendChild(sourceSelect);
+        content.appendChild(resolvedHashEl);
         content.appendChild(commitHashLabel);
         content.appendChild(commitHashInput);
         content.appendChild(customUrlInput);
