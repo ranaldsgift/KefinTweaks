@@ -706,6 +706,7 @@
         const maxPosition = getMaxPositionFromPadding(scroller, readScrollerPadding(scroller), readSampleCardPadding(scroller));
         leftButton.disabled = pos <= 20;
         rightButton.disabled = pos >= maxPosition;
+        scrollButtons.classList.toggle('hide', leftButton.disabled && rightButton.disabled);
     }
 
     /**
@@ -2399,6 +2400,8 @@
                             ...sectionConfig.spotlightConfig,
                         });
                     } else {
+                        // Stale cached paint may still refresh — defer scroll-button register until final apply
+                        const registerScrollButtons = isStaticQuery || section.result?.isStale !== true;
                         content = createScrollableContainer(
                             dataItems,
                             getSectionTitleForMultiQuery(sectionConfig),
@@ -2406,6 +2409,7 @@
                             sectionConfig.overflowCard,
                             finalCardFormat,
                             sectionConfig,
+                            registerScrollButtons,
                         );
                     }
 
@@ -7000,7 +7004,15 @@
         }
     }
 
-    function createScrollableContainer(items, title, viewMoreUrl = null, overflowCard = false, cardFormat = null, sectionConfig = null) {
+    function createScrollableContainer(
+        items,
+        title,
+        viewMoreUrl = null,
+        overflowCard = false,
+        cardFormat = null,
+        sectionConfig = null,
+        registerScrollButtons = true,
+    ) {
         const normalizedFormat = (cardFormat || '').toLowerCase();
         const isButtonLayout = normalizedFormat === 'button';
 
@@ -7071,7 +7083,9 @@
         }
         verticalSection.appendChild(scroller);
 
-        registerScrollSectionScrollButtons(verticalSection);
+        if (registerScrollButtons) {
+            registerScrollSectionScrollButtons(verticalSection);
+        }
         return verticalSection;
     }
 
@@ -7784,6 +7798,7 @@
         }
         leftButton.disabled = scrollX <= 20;
         rightButton.disabled = scrollX >= maxScroll - 1;
+        scrollButtons.classList.toggle('hide', leftButton.disabled && rightButton.disabled);
     }
 
     /**
@@ -8491,7 +8506,6 @@
                     invalidateLastRowPadding(itemsContainer);
                     patchCardsUserData(sectionElement, items);
                     ensureCardBorders(sectionElement);
-                    //updateScrollButtonStateForSection(sectionElement);
                     if (typeof onComplete === 'function') {
                         onComplete();
                     }
@@ -8605,6 +8619,7 @@
             sectionConfig.overflowCard,
             finalCardFormat,
             sectionConfig,
+            false,
         );
         content.style.cssText = sectionElement.style.cssText;
         content.className = sectionElement.className;
@@ -8641,12 +8656,17 @@
         });
     }
 
-    function markSectionEnhanced(sectionElement, sectionConfig) {
+    function markSectionEnhanced(sectionElement, sectionConfig, { updateScrollButtons = false } = {}) {
         if (!sectionElement) return;
         unobserveSkeletonShimmer(sectionElement);
         sectionElement.dataset.enhanced = 'true';
         if (typeof sectionConfig?._onSectionEnhanced === 'function') {
             sectionConfig._onSectionEnhanced(sectionElement, sectionConfig);
+        }
+        if (updateScrollButtons) {
+            const scroller = sectionElement.querySelector?.('.emby-scroller');
+            if (scroller) invalidateScrollerMetrics(scroller);
+            registerScrollSectionScrollButtons(sectionElement);
         }
     }
 
@@ -8734,7 +8754,12 @@
         return result.dataPromise || null;
     }
 
-    function applyProgressiveEnhancement(sectionElement, section, result, { revealSectionsSequentially = false } = {}) {
+    function applyProgressiveEnhancement(
+        sectionElement,
+        section,
+        result,
+        { revealSectionsSequentially = false, updateScrollButtons = false } = {},
+    ) {
         if (!sectionElement?.isConnected || !section?.config) return;
 
         sectionElement.dataset.refreshing = 'false';
@@ -8748,6 +8773,7 @@
         const isSpotlight = sectionConfig.spotlight || sectionConfig.renderMode === 'Spotlight';
         const isSkeleton = !!sectionElement.querySelector('.skeleton-card, .skeleton-spotlight-item');
         const hasSkeletonTitle = !!sectionElement.querySelector('.skeleton-section-title');
+        const enhanceMarkOpts = { updateScrollButtons: !!updateScrollButtons };
 
         if (items.length === 0) {
             const holdMs = getDismissEmptySectionTimerMs();
@@ -8762,7 +8788,7 @@
         // Skeleton spotlight needs full createSpotlightSection wiring via replaceWith
         if (isSkeleton && isSpotlight) {
             const content = replaceSectionWithFreshCards(sectionElement, items, sectionConfig, dataItems, revealSectionsSequentially);
-            markSectionEnhanced(content, sectionConfig);
+            markSectionEnhanced(content, sectionConfig, enhanceMarkOpts);
             return;
         }
 
@@ -8770,7 +8796,7 @@
         if (isSkeleton && hasSkeletonTitle && !isSpotlight) {
             rebuildSectionTitleInPlace(sectionElement, sectionConfig);
             replaceItemsContainerContents(sectionElement, items, sectionConfig);
-            markSectionEnhanced(sectionElement, sectionConfig);
+            markSectionEnhanced(sectionElement, sectionConfig, enhanceMarkOpts);
             return;
         }
 
@@ -8786,7 +8812,7 @@
                 : items.map((item) => item?.Id).filter(Boolean);
             const match = classifyIdSequence(paintedIds, freshIds);
             if (match.type === 'perfect') {
-                markSectionEnhanced(sectionElement, sectionConfig);
+                markSectionEnhanced(sectionElement, sectionConfig, enhanceMarkOpts);
                 return;
             }
             // In-place inactive slides only (keepCurrentSlide); no full-section replaceWith
@@ -8797,7 +8823,7 @@
                 dataItems,
                 revealSectionsSequentially,
             );
-            markSectionEnhanced(spotlightContent, sectionConfig);
+            markSectionEnhanced(spotlightContent, sectionConfig, enhanceMarkOpts);
             return;
         }
 
@@ -8810,7 +8836,7 @@
 
             if (match.type === 'perfect') {
                 patchCardsUserData(sectionElement, items);
-                markSectionEnhanced(sectionElement, sectionConfig);
+                markSectionEnhanced(sectionElement, sectionConfig, enhanceMarkOpts);
                 return;
             }
 
@@ -8820,7 +8846,7 @@
 
             if (match.type === 'reconcile' && layout === 'row') {
                 reconcileRowItems(sectionElement, items, sectionConfig, () => {
-                    markSectionEnhanced(sectionElement, sectionConfig);
+                    markSectionEnhanced(sectionElement, sectionConfig, enhanceMarkOpts);
                 });
                 return;
             }
@@ -8828,19 +8854,19 @@
             const cardFormat = sectionElement.getAttribute('data-card-format') || sectionConfig.cardFormat;
             if (isButtonCardFormat(cardFormat) && match.type === 'replace') {
                 replaceItemsContainerContents(sectionElement, items, sectionConfig);
-                markSectionEnhanced(sectionElement, sectionConfig);
+                markSectionEnhanced(sectionElement, sectionConfig, enhanceMarkOpts);
                 return;
             }
 
             fadeReplaceRowItems(sectionElement, items, sectionConfig, () => {
-                markSectionEnhanced(sectionElement, sectionConfig);
+                markSectionEnhanced(sectionElement, sectionConfig, enhanceMarkOpts);
             });
             return;
         }
 
         // Skeleton cards without skeleton title: swap itemsContainer contents in place
         replaceItemsContainerContents(sectionElement, items, sectionConfig);
-        markSectionEnhanced(sectionElement, sectionConfig);
+        markSectionEnhanced(sectionElement, sectionConfig, enhanceMarkOpts);
     }
 
     function parseEnhanceRootMargin(rootMargin) {
@@ -8913,21 +8939,25 @@
                 let items = result?.Items ?? result ?? [];
                 if (!Array.isArray(items)) items = [];
 
-                const applyOrDefer = (payload) => {
+                const applyOrDefer = (payload, { updateScrollButtons = false } = {}) => {
+                    const applyOpts = {
+                        ...enhanceOptions,
+                        updateScrollButtons: !!updateScrollButtons,
+                    };
                     if (!deferUntilVisible) {
-                        applyProgressiveEnhancementQueued(sectionElement, section, payload, enhanceOptions);
+                        applyProgressiveEnhancementQueued(sectionElement, section, payload, applyOpts);
                         return;
                     }
                     const margin = sectionEnhanceObserverRootMargin || '30% 0px 30% 0px';
                     const inMargin = isSectionWithinEnhanceMargin(sectionElement, margin);
                     if (inMargin) {
-                        applyProgressiveEnhancementQueued(sectionElement, section, payload, enhanceOptions);
+                        applyProgressiveEnhancementQueued(sectionElement, section, payload, applyOpts);
                     } else {
                         // Data ready but section left the enhance margin — wait until it re-enters
                         delete sectionElement.dataset.enhanceScheduled;
                         sectionEnhancePending.set(sectionElement, {
                             section,
-                            options: enhanceOptions,
+                            options: applyOpts,
                             pendingResult: payload,
                         });
                         observeSectionForEnhance(sectionElement);
@@ -8939,10 +8969,13 @@
                     sectionElement.dataset.refreshing = 'true';
                 } else if (items.length === 0) {
                     // Empty sections: dismiss immediately even if scrolled away
-                    applyProgressiveEnhancementQueued(sectionElement, section, result, enhanceOptions);
+                    applyProgressiveEnhancementQueued(sectionElement, section, result, {
+                        ...enhanceOptions,
+                        updateScrollButtons: !hasPendingRefresh,
+                    });
                     return;
                 } else {
-                    applyOrDefer(result);
+                    applyOrDefer(result, { updateScrollButtons: !hasPendingRefresh });
                 }
 
                 if (!hasPendingRefresh) return;
@@ -8955,14 +8988,18 @@
                         const pending = sectionEnhancePending.get(sectionElement);
                         if (pending && pending.pendingResult !== undefined) {
                             pending.pendingResult = fresh;
+                            pending.options = {
+                                ...(pending.options || enhanceOptions),
+                                updateScrollButtons: true,
+                            };
                             return;
                         }
                         if (skipStalePaint) {
-                            applyOrDefer(fresh);
+                            applyOrDefer(fresh, { updateScrollButtons: true });
                             return;
                         }
                         // Refresh through same FIFO + margin gate as initial enhance
-                        applyOrDefer(fresh);
+                        applyOrDefer(fresh, { updateScrollButtons: true });
                     })
                     .catch((err) => {
                         console.warn('[KefinTweaks CardBuilder] Background refresh failed:', section?.config?.id, err);
@@ -8970,7 +9007,7 @@
                         sectionElement.dataset.refreshing = 'false';
                         // Random non-spotlight skipped stale paint — fall back so we are not stuck on skeletons
                         if (skipStalePaint) {
-                            applyOrDefer(result);
+                            applyOrDefer(result, { updateScrollButtons: true });
                         }
                     });
             })
