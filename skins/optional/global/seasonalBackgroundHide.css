@@ -1,4 +1,3 @@
-// Hide seasonal background images
 /* Hide seasonal background images */
 html[data-active-page="home"] body[data-seasonal-background="true"] .backdropContainer .backdropImage {
 	background: initial !important;
@@ -7,4 +6,25 @@ html[data-active-page="home"] body[data-seasonal-background="true"] #reactRoot >
 	display: none !important;
 	content: none !important;
 	background: none !important;
+}
+
+/* Hide seasonal Halloween header decorations (modern + legacy) */
+html[data-active-page="home"] [data-seasonal-theme="seasonal-halloween"][data-seasonal-background="true"] header.MuiAppBar-root,
+html[data-active-page="home"] [data-seasonal-theme="seasonal-halloween"][data-seasonal-background="true"] .skinHeader:not(.osdHeader) .headerTop {
+	box-shadow: none !important;
+	border-bottom: none !important;
+}
+
+html[data-active-page="home"] [data-seasonal-theme="seasonal-halloween"][data-seasonal-background="true"] header.MuiAppBar-root::before,
+html[data-active-page="home"] [data-seasonal-theme="seasonal-halloween"][data-seasonal-background="true"] header.MuiAppBar-root::after,
+html[data-active-page="home"] [data-seasonal-theme="seasonal-halloween"][data-seasonal-background="true"] .skinHeader:not(.osdHeader) .headerTop::before,
+html[data-active-page="home"] [data-seasonal-theme="seasonal-halloween"][data-seasonal-background="true"] .skinHeader:not(.osdHeader) .headerTop::after {
+	display: none !important;
+	content: none !important;
+	background: none !important;
+	background-image: none !important;
+	-webkit-mask-image: none !important;
+	mask-image: none !important;
+	height: 0 !important;
+	opacity: 0 !important;
 }
