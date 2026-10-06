@@ -699,7 +699,7 @@
         { name: 'Dreamworks Animation', file: 'DreamWorks_Animation.svg' },
         { name: 'FX', file: 'FX.svg' },
         { name: 'HBO', file: 'HBO.svg' },
-        { name: 'Lucasfilm', file: 'Lucasfilm.svg' },
+        { name: 'Lucasfilm Ltd.', file: 'Lucasfilm.svg' },
         { name: 'Marvel Studios', file: 'Marvel_Studios.svg' },
         { name: 'New Line Cinema', file: 'New_Line_Cinema.svg' },
         { name: 'Paramount Pictures', file: 'Paramount_Pictures.svg' },
@@ -709,12 +709,43 @@
         { name: 'Walt Disney Pictures', file: 'Walt_Disney_Pictures.svg' },
         { name: 'Warner Bros.', file: 'Warner_Bros..svg' },
         { name: 'HBO Max', file: 'HBO_Max.svg' },
-        { name: 'Prime Video', file: 'Prime_Video.svg' }
+        { name: 'Prime Video', file: 'Prime_Video.svg' },
+        { name: 'Hulu', file: 'Hulu.svg' },
+        { name: 'Peacock', file: 'Peacock.svg' }
     ];
 
     const BROWSE_BY_STUDIO_SECTION_ID = 'browse-by-studio';
     const BROWSE_BY_STUDIO_GROUP_ID = 'home-popular-studios';
     const BROWSE_BY_STUDIO_GROUP_NAME = 'Popular Studios';
+
+    const RECENTLY_ADDED_GROUPED_MOVIES_ID = 'recently-added-grouped-movies';
+    const RECENTLY_ADDED_GROUPED_TVSHOWS_ID = 'recently-added-grouped-tvshows';
+    const RECENTLY_ADDED_GROUPED_SHELL_IDS = new Set([
+        RECENTLY_ADDED_GROUPED_MOVIES_ID,
+        RECENTLY_ADDED_GROUPED_TVSHOWS_ID
+    ]);
+
+    function buildGroupedRecentlyAddedShell(collectionType) {
+        const isMovies = collectionType === 'movies';
+        return {
+            id: isMovies ? RECENTLY_ADDED_GROUPED_MOVIES_ID : RECENTLY_ADDED_GROUPED_TVSHOWS_ID,
+            name: isMovies ? 'Recently Added Movies' : 'Recently Added TV Shows',
+            enabled: false,
+            order: 61,
+            cardFormat: 'Poster',
+            jellyfinId: 'latestmedia',
+            userConfigurable: true,
+            queries: [{
+                path: '/Items/Latest',
+                queryOptions: {
+                    Fields: 'PrimaryImageAspectRatio,Path',
+                    Limit: 16,
+                    ImageTypeLimit: 1,
+                    EnableImageTypes: 'Primary,Backdrop,Thumb'
+                }
+            }]
+        };
+    }
 
     let browseStudiosFetchPromise = null;
 
@@ -937,6 +968,9 @@
 
                     const sectionsToRemove = groupSections.filter(s => {
                         if (!s.id || !s.id.startsWith(template.idPrefix)) return false;
+                        if (template.idPrefix === 'recently-added-' && RECENTLY_ADDED_GROUPED_SHELL_IDS.has(s.id)) {
+                            return false;
+                        }
                         const libId = s.id.replace(template.idPrefix, '');
                         return !currentLibraryIds.has(libId);
                     });
@@ -961,11 +995,42 @@
                     });
                 }
 
+                // Style-only grouped Movies/TV shells when multiple libraries of that type exist
+                {
+                    const recentlyAddedGroup = updatedGroups.find(
+                        (g) => g.id === 'home-recently-added' || g.name === 'Recently Added'
+                    );
+                    if (recentlyAddedGroup) {
+                        if (!Array.isArray(recentlyAddedGroup.sections)) {
+                            recentlyAddedGroup.sections = [];
+                        }
+                        const movieCount = filteredLibraries.filter((l) => l.CollectionType === 'movies').length;
+                        const tvCount = filteredLibraries.filter((l) => l.CollectionType === 'tvshows').length;
+                        const shellSpecs = [
+                            { id: RECENTLY_ADDED_GROUPED_MOVIES_ID, want: movieCount > 1, collectionType: 'movies' },
+                            { id: RECENTLY_ADDED_GROUPED_TVSHOWS_ID, want: tvCount > 1, collectionType: 'tvshows' }
+                        ];
+                        for (const spec of shellSpecs) {
+                            const idx = recentlyAddedGroup.sections.findIndex((s) => s?.id === spec.id);
+                            if (spec.want && idx === -1) {
+                                recentlyAddedGroup.sections.push(buildGroupedRecentlyAddedShell(spec.collectionType));
+                                hasChanges = true;
+                                LOG(`Added grouped recently-added shell: ${spec.id}`);
+                            } else if (!spec.want && idx !== -1) {
+                                recentlyAddedGroup.sections.splice(idx, 1);
+                                hasChanges = true;
+                                LOG(`Removed grouped recently-added shell: ${spec.id}`);
+                            }
+                        }
+                    }
+                }
+
                 // Remove stale library sections from any HOME group (e.g. misplaced sections)
                 for (const group of updatedGroups) {
                     const beforeCount = (group.sections || []).length;
                     group.sections = (group.sections || []).filter(s => {
                         if (!s?.id) return true;
+                        if (RECENTLY_ADDED_GROUPED_SHELL_IDS.has(s.id)) return true;
                         for (const template of libraryTemplates) {
                             if (s.id.startsWith(template.idPrefix)) {
                                 const libId = s.id.replace(template.idPrefix, '');
@@ -1002,6 +1067,20 @@
                 }
 
                 const browseSection = studiosGroup.sections.find((s) => s?.id === BROWSE_BY_STUDIO_SECTION_ID);
+                const catalogNames = new Set(BROWSE_BY_STUDIO_CATALOG.map((entry) => entry.name));
+
+                // Prune items no longer in Kefin catalog (even when catalog is otherwise fully resolved)
+                if (browseSection && Array.isArray(browseSection.items)) {
+                    const beforeLen = browseSection.items.length;
+                    browseSection.items = browseSection.items.filter(
+                        (item) => item?.Name && catalogNames.has(item.Name)
+                    );
+                    if (browseSection.items.length !== beforeLen) {
+                        hasChanges = true;
+                        LOG(`Pruned ${beforeLen - browseSection.items.length} browse-by-studio studios not in catalog`);
+                    }
+                }
+
                 const existingItems = Array.isArray(browseSection?.items) ? browseSection.items : [];
 
                 if (browseSection && isBrowseByStudioCatalogFullyResolved(existingItems)) {
@@ -1070,10 +1149,15 @@
 
     const KEFIN_DEFAULT_GROUP_KEYS = ['HOME_SECTION_GROUPS', 'SEASONAL_SECTION_GROUPS', 'DISCOVERY_SECTION_GROUPS'];
     const LIBRARY_RESOLVED_ID_PREFIXES = ['recently-added-', 'popular-genres-'];
-    const FIXED_TEMPLATE_SECTION_IDS = new Set([BROWSE_BY_STUDIO_SECTION_ID]);
+    const FIXED_TEMPLATE_SECTION_IDS = new Set([
+        BROWSE_BY_STUDIO_SECTION_ID,
+        RECENTLY_ADDED_GROUPED_MOVIES_ID,
+        RECENTLY_ADDED_GROUPED_TVSHOWS_ID
+    ]);
 
     function isLibraryResolvedSectionId(sectionId) {
         if (!sectionId) return false;
+        if (RECENTLY_ADDED_GROUPED_SHELL_IDS.has(sectionId)) return true;
         return LIBRARY_RESOLVED_ID_PREFIXES.some((prefix) => sectionId.startsWith(prefix));
     }
 
