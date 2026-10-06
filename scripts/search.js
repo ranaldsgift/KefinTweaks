@@ -73,6 +73,66 @@
         return toInternalSearchType(searchType) === toInternalSearchType(activeSearchType);
     }
 
+    function ensureKefinNoItemsMessage(searchPage) {
+        if (!searchPage) return null;
+        let el = searchPage.querySelector('.noItemsMessage.kefin-noItemsMessage');
+        if (!el) {
+            // Migrate legacy empty dummy if present
+            const dummy = searchPage.querySelector('.noItemsMessage.dummy-section');
+            if (dummy) {
+                el = dummy;
+                el.classList.remove('dummy-section');
+                el.classList.add('kefin-noItemsMessage', 'centerMessage');
+            } else {
+                el = document.createElement('div');
+                el.className = 'noItemsMessage kefin-noItemsMessage centerMessage';
+                searchPage.appendChild(el);
+            }
+        }
+        return el;
+    }
+
+    function hideNativeNoItemsMessages(searchPage) {
+        if (!searchPage) return;
+        searchPage.querySelectorAll('.noItemsMessage:not(.kefin-noItemsMessage)').forEach((el) => {
+            el.style.display = 'none';
+        });
+    }
+
+    function setKefinNoItemsVisible(searchPage, { show, searchTerm } = {}) {
+        if (!searchPage) return;
+        const el = ensureKefinNoItemsMessage(searchPage);
+        if (!el) return;
+        if (show) {
+            hideNativeNoItemsMessages(searchPage);
+            const term = String(searchTerm || '').trim();
+            el.textContent = term
+                ? `Sorry! No results found for "${term}"`
+                : 'Sorry! No results found';
+            el.style.display = '';
+        } else {
+            el.style.display = 'none';
+        }
+    }
+
+    async function searchSectionsHaveItems(sections) {
+        const list = (sections || []).filter(Boolean);
+        if (!list.length) return false;
+        const counts = await Promise.all(list.map(async (section) => {
+            try {
+                const raw = typeof section.result?.ensureData === 'function'
+                    ? await section.result.ensureData()
+                    : await section.result?.dataPromise;
+                if (Array.isArray(raw)) return raw.length;
+                if (Array.isArray(raw?.Items)) return raw.Items.length;
+                return 0;
+            } catch {
+                return 0;
+            }
+        }));
+        return counts.some((n) => n > 0);
+    }
+
     // Function to clear search results except jellyseerr-section
     function clearSearchResultsExceptJellyseerr() {
         LOG('Clearing search results except jellyseerr-section');
@@ -82,6 +142,9 @@
         if (resultsContainer) {
             resultsContainer.innerHTML = '';
         }
+        const searchPage = document.getElementById('searchPage');
+        if (searchPage) setKefinNoItemsVisible(searchPage, { show: false });
+
     }
 
     function getTypeGroups(searchType) {
@@ -324,13 +387,8 @@
             searchSuggestions.style.display = trimmed ? 'none' : 'block';
         }
 
-        let noItemsMessage = searchPage.querySelector('.noItemsMessage.dummy-section');
-        if (!noItemsMessage) {
-            noItemsMessage = document.createElement('div');
-            noItemsMessage.className = 'noItemsMessage dummy-section';
-            noItemsMessage.style.display = 'none';
-            searchPage.appendChild(noItemsMessage);
-        }
+        hideNativeNoItemsMessages(searchPage);
+        setKefinNoItemsVisible(searchPage, { show: false });
 
         // Update URL with search query and type
         const urlType = internalType === 'core' ? 'videos' : internalType;
@@ -343,6 +401,7 @@
 
         if (!trimmed) {
             resultsContainer.innerHTML = '';
+            setKefinNoItemsVisible(searchPage, { show: false });
             return;
         }
 
@@ -375,7 +434,8 @@
                 return;
             }
 
-            const validSections = sections.filter(Boolean).map((section) => Promise.resolve(section));
+            const resolvedSections = sections.filter(Boolean);
+            const validSections = resolvedSections.map((section) => Promise.resolve(section));
             if (!isSearchStillWanted(trimmed, internalType)) {
                 LOG('Skipping stale search paint', { trimmed, internalType });
                 return;
@@ -391,8 +451,14 @@
                 // Empty clear owns the DOM — remove anything this run may have painted
                 if (!getLiveSearchTerm()) {
                     resultsContainer.innerHTML = '';
+                    setKefinNoItemsVisible(searchPage, { show: false });
                 }
+                return;
             }
+
+            const hasItems = await searchSectionsHaveItems(resolvedSections);
+            if (!isSearchStillWanted(trimmed, internalType)) return;
+            setKefinNoItemsVisible(searchPage, { show: !hasItems, searchTerm: trimmed });
         } catch (e) {
             ERR('performSmartSearch error', e);
         }
@@ -597,6 +663,8 @@
                     if (searchSuggestions) {
                         searchSuggestions.style.display = 'block';
                     }
+                    const searchPageEl = document.getElementById('searchPage');
+                    if (searchPageEl) setKefinNoItemsVisible(searchPageEl, { show: false });
 
                     return;
                 }

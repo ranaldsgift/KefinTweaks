@@ -8,15 +8,16 @@
 	align-items: center;
 }
 
-.layout-desktop .searchFieldsInner {
-	padding-left: calc(30px + 1em);
+div#smart-search-wrapper:not([style*="display: none"]) ~ #jellyseerr-search-icon {
+	transform: translateX(calc(100% + 1.5em)) translateY(calc(-50%));
+	position: absolute;  
+	top: 24px;
+	right: 0;
 }
 
 div#smart-search-wrapper:not([style*="display: none"]) ~ #jellyseerr-search-icon {
-	transform: translateX(calc(100% + 1.5em));
-	position: absolute;
-	top: 0;
-	right: 0;
+	width: 30px;
+	height: 30px;
 }
 
 .smart-search-mode .searchFieldsInner {
