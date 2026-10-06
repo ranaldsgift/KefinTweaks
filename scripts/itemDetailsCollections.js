@@ -6,9 +6,13 @@
     const WARN = (...args) => console.warn('[KefinTweaks ItemDetailsCollections]', ...args);
     const ERR = (...args) => console.error('[KefinTweaks ItemDetailsCollections]', ...args);
 
-    const COLLECTIONS_CHILD_COUNT_KEY = `kefinTweaks_${ApiClient.getCurrentUserId()}_allCollectionsChildCount`;
+    function getCollectionsChildCountKey() {
+        const userId = window.ApiClient?.getCurrentUserId?.();
+        return `kefinTweaks_${userId || 'anonymous'}_allCollectionsChildCount`;
+    }
     const CACHE_NAME = 'collections';
     const COLLECTION_FETCH_CHUNK_SIZE = 8;
+    const COLLECTION_LIST_FIELDS = 'ChildCount,PrimaryImageAspectRatio,ImageTags,BackdropImageTags,ParentId';
 
     const state = {
         allCollections: null,
@@ -36,8 +40,10 @@
                     Id: coll.Id,
                     Type: coll.Type,
                     Name: coll.Name,
+                    ParentId: coll.ParentId,
                     ParentIndexNumber: coll.ParentIndexNumber,
                     IndexNumber: coll.IndexNumber,
+                    PrimaryImageAspectRatio: coll.PrimaryImageAspectRatio,
                     ImageTags: coll.ImageTags,
                     BackdropImageTags: coll.BackdropImageTags,
                     ProductionYear: coll.ProductionYear,
@@ -101,17 +107,18 @@
             state.allCollections = await ApiClient.getItems(ApiClient.getCurrentUserId(), {
                 IncludeItemTypes: 'BoxSet,CollectionFolder',
                 Recursive: true,
-                Fields: 'ChildCount'
+                Fields: COLLECTION_LIST_FIELDS
             });
         }
 
         const allCollectionsChildCount = (state.allCollections.Items || [])
             .reduce((sum, coll) => sum + (coll.ChildCount || 0), 0);
 
-        const cachedAllCollectionsChildCount = Number(localStorage.getItem(COLLECTIONS_CHILD_COUNT_KEY));
+        const collectionsChildCountKey = getCollectionsChildCountKey();
+        const cachedAllCollectionsChildCount = Number(localStorage.getItem(collectionsChildCountKey));
 
         if (allCollectionsChildCount !== cachedAllCollectionsChildCount) {
-            localStorage.setItem(COLLECTIONS_CHILD_COUNT_KEY, allCollectionsChildCount);
+            localStorage.setItem(collectionsChildCountKey, allCollectionsChildCount);
             invalidate = true;
             LOG('Collections Child Count has changed, invalidating cache');
         }
@@ -158,6 +165,42 @@
             .map(entry => entry.CollectionItem);
     }
 
+    function collectionNeedsImageEnrich(coll) {
+        return !coll?.ImageTags?.Primary;
+    }
+
+    async function enrichCollectionsWithImageFields(collections) {
+        const items = Array.isArray(collections) ? collections.slice() : [];
+        const missingIds = items
+            .filter(collectionNeedsImageEnrich)
+            .map((c) => c?.Id)
+            .filter(Boolean);
+        if (!missingIds.length || !window.ApiClient?.getItems) return items;
+
+        try {
+            const response = await ApiClient.getItems(ApiClient.getCurrentUserId(), {
+                Ids: missingIds.join(','),
+                Fields: COLLECTION_LIST_FIELDS
+            });
+            const byId = new Map((response?.Items || []).map((it) => [it.Id, it]));
+            return items.map((coll) => {
+                if (!collectionNeedsImageEnrich(coll)) return coll;
+                const enriched = byId.get(coll.Id);
+                if (!enriched) return coll;
+                return {
+                    ...coll,
+                    ParentId: enriched.ParentId ?? coll.ParentId,
+                    PrimaryImageAspectRatio: enriched.PrimaryImageAspectRatio ?? coll.PrimaryImageAspectRatio,
+                    ImageTags: enriched.ImageTags ?? coll.ImageTags,
+                    BackdropImageTags: enriched.BackdropImageTags ?? coll.BackdropImageTags
+                };
+            });
+        } catch (err) {
+            WARN('Failed to enrich collection image fields', err);
+            return items;
+        }
+    }
+
     async function renderCollectionsSection(item) {
         if (!item || !item.Id) return;
 
@@ -167,10 +210,10 @@
         // Prevent redundant runs on the same page element
         if (activePage.dataset.collectionsChecked === 'true') return;
 
-        const parentCollectionItems = await getParentCollections(item.Id);
+        let parentCollectionItems = await getParentCollections(item.Id);
         if (!parentCollectionItems || parentCollectionItems.length === 0) return;
 
-        if (!window.cardBuilder || !window.cardBuilder.renderCards) {
+        if (!window.cardBuilder?.renderCards) {
             WARN('cardBuilder.renderCards not available');
             return;
         }
@@ -182,6 +225,8 @@
         if (activePage.querySelector('.collections-section')) return;
 
         try {
+            parentCollectionItems = await enrichCollectionsWithImageFields(parentCollectionItems);
+
             const collectionsSection = window.cardBuilder.renderCards(
                 parentCollectionItems,
                 'Included In',
@@ -204,6 +249,11 @@
                 similarSection.before(collectionsSection);
             } else {
                 detailPageContent.appendChild(collectionsSection);
+            }
+
+            // Push-register lazy images (no body MutationObserver)
+            if (typeof window.cardBuilder.registerLazyImagesInSection === 'function') {
+                window.cardBuilder.registerLazyImagesInSection(collectionsSection);
             }
 
             activePage.dataset.collectionsChecked = 'true';
