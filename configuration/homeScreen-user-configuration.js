@@ -21,6 +21,34 @@
         'activerecordings'
     ];
 
+    // Jellyfin native defaults when CustomPrefs has no/empty homesectionN
+    // (jellyfin-web DEFAULT_SECTIONS / DisplayPreferencesController)
+    const DEFAULT_NATIVE_HOME_SECTIONS = [
+        'smalllibrarytiles',
+        'resume',
+        'resumeaudio',
+        'resumebook',
+        'livetv',
+        'nextup',
+        'latestmedia',
+        'none',
+        'none',
+        'none'
+    ];
+
+    /**
+     * Resolve a single native homesection slot the same way Jellyfin web does:
+     * present non-empty value wins; otherwise use DEFAULT_NATIVE_HOME_SECTIONS[index].
+     * Explicit "none" is kept (truthy string).
+     */
+    function resolveHomesectionValue(customPrefs, index) {
+        const raw = customPrefs?.[`homesection${index}`];
+        if (raw != null && String(raw).trim() !== '') {
+            return String(raw).toLowerCase();
+        }
+        return DEFAULT_NATIVE_HOME_SECTIONS[index] || 'none';
+    }
+
     // Map Jellyfin sections to their KefinTweaks equivalents
     // When a KefinTweaks section exists, it replaces the Jellyfin section in the UI
     const JELLYFIN_HOME_SECTIONS_MAP = {
@@ -30,6 +58,59 @@
         'nextup': 'nextUp',
         'latestmedia': 'recently-added*' // Pattern match - any section starting with 'recently-added-'
     };
+
+    /**
+     * User whose Home prefs are being edited on mypreferenceshome / userpreferences.
+     * Prefers ?userId= from the hash or query (admin editing another user); else session user.
+     */
+    function resolvePreferencesTargetUserId() {
+        try {
+            const hash = String(window.location.hash || '');
+            const search = String(window.location.search || '');
+            const tryParse = (src) => {
+                if (!src) return null;
+                const qIndex = src.indexOf('?');
+                const queryPart = qIndex >= 0 ? src.slice(qIndex + 1) : src.replace(/^[?#]/, '');
+                if (!queryPart) return null;
+                try {
+                    const params = new URLSearchParams(queryPart);
+                    const id = params.get('userId');
+                    if (id) return decodeURIComponent(String(id).replace(/\+/g, ' '));
+                } catch (_) { /* fall through */ }
+                const match = src.match(/[?&]userId=([^&]+)/i);
+                if (match?.[1]) {
+                    return decodeURIComponent(match[1].replace(/\+/g, ' '));
+                }
+                return null;
+            };
+            return tryParse(hash) || tryParse(search) || window.ApiClient?.getCurrentUserId?.() || null;
+        } catch (_) {
+            return window.ApiClient?.getCurrentUserId?.() || null;
+        }
+    }
+
+    async function getEditorDisplayPreferences() {
+        const userId = resolvePreferencesTargetUserId();
+        if (!userId) return null;
+        const currentId = window.ApiClient?.getCurrentUserId?.();
+        if (userId !== currentId && window.userHelper?.getUserDisplayPreferencesForUser) {
+            return window.userHelper.getUserDisplayPreferencesForUser(userId);
+        }
+        if (!window.userHelper?.getUserDisplayPreferences) return null;
+        const { promise } = await window.userHelper.getUserDisplayPreferences();
+        return promise;
+    }
+
+    async function saveEditorDisplayPreferences(displayPrefs) {
+        const userId = resolvePreferencesTargetUserId();
+        if (!userId || !displayPrefs) return false;
+        if (window.userHelper?.updateDisplayPreferencesForUser) {
+            return window.userHelper.updateDisplayPreferencesForUser(userId, displayPrefs, {
+                updateCache: userId === window.ApiClient?.getCurrentUserId?.()
+            });
+        }
+        return !!(await window.userHelper?.updateDisplayPreferences?.(displayPrefs));
+    }
 
     /**
      * Flatten section groups into a flat array
@@ -284,6 +365,14 @@
 
     async function saveKefinTweaksSectionState(sectionState, displayPrefs) {
         try {
+            if (displayPrefs?.CustomPrefs && window.userHelper?.parseKefinTweaks) {
+                const kefin = window.userHelper.parseKefinTweaks(displayPrefs);
+                kefin.sectionState = sectionState || createEmptySectionState();
+                displayPrefs.CustomPrefs.kefinTweaks = JSON.stringify(kefin);
+                const ok = await saveEditorDisplayPreferences(displayPrefs);
+                if (ok) LOG('kefinTweaks sectionState saved');
+                return ok;
+            }
             if (!window.userHelper?.setKefinTweaksFeature) {
                 ERR('userHelper.setKefinTweaksFeature not available');
                 return false;
@@ -990,8 +1079,8 @@
     }
 
     async function fetchUserViewsItems() {
-        if (!window.ApiClient?.getCurrentUserId) return [];
-        const userId = window.ApiClient.getCurrentUserId();
+        const userId = resolvePreferencesTargetUserId();
+        if (!userId || !window.ApiClient) return [];
         if (window.ApiClient.getUserViews) {
             const result = await window.ApiClient.getUserViews({}, userId);
             if (Array.isArray(result)) return result;
@@ -1009,7 +1098,13 @@
         const list = Array.isArray(sections) ? sections : [];
         let user = null;
         try {
-            user = await window.ApiClient?.getCurrentUser?.();
+            const targetId = resolvePreferencesTargetUserId();
+            const currentId = window.ApiClient?.getCurrentUserId?.();
+            if (targetId && currentId && targetId !== currentId && typeof window.ApiClient?.getUser === 'function') {
+                user = await window.ApiClient.getUser(targetId);
+            } else {
+                user = await window.ApiClient?.getCurrentUser?.();
+            }
         } catch (e) {
             WARN('getCurrentUser failed during recently-added reshape:', e);
         }
@@ -1150,8 +1245,8 @@
 
         const nativeTypes = [];
         for (let i = 0; i <= 9; i++) {
-            const raw = prefs[`homesection${i}`];
-            if (!raw || raw === '' || String(raw).toLowerCase() === 'none') continue;
+            const raw = resolveHomesectionValue(prefs, i);
+            if (!raw || String(raw).toLowerCase() === 'none') continue;
             nativeTypes.push(String(raw).toLowerCase());
         }
         const uniqueNative = [...new Set(nativeTypes)];
@@ -1218,9 +1313,8 @@
 
         let customPrefs = {};
         let displayPrefs = null;
-        if (window.userHelper?.getUserDisplayPreferences) {
-            const { promise } = await window.userHelper.getUserDisplayPreferences();
-            displayPrefs = await promise;
+        if (window.userHelper?.getUserDisplayPreferences || window.userHelper?.getUserDisplayPreferencesForUser) {
+            displayPrefs = await getEditorDisplayPreferences();
             customPrefs = displayPrefs?.CustomPrefs || {};
         }
 
@@ -1276,7 +1370,7 @@
             sanitizePersistInFlight = true;
             try {
                 if (!displayPrefs.CustomPrefs) displayPrefs.CustomPrefs = customPrefs;
-                const ok = await window.userHelper?.updateDisplayPreferences?.(displayPrefs);
+                const ok = await saveEditorDisplayPreferences(displayPrefs);
                 if (ok) {
                     LOG('Persisted Jellyfin homesectionN from Kefin homeScreen');
                 } else {
@@ -1512,7 +1606,7 @@
                 kefin.homeScreen = sanitized;
                 displayPrefs.CustomPrefs.kefinTweaks = JSON.stringify(kefin);
                 displayPrefs.CustomPrefs.kefinHomeScreen = JSON.stringify(homeScreenToLegacyArray(sanitized));
-                const ok = await window.userHelper.updateDisplayPreferences(displayPrefs);
+                const ok = await saveEditorDisplayPreferences(displayPrefs);
                 if (ok) LOG('kefinTweaks homeScreen saved');
                 return ok;
             }
@@ -1537,7 +1631,7 @@
     async function saveSectionItemsLayout(sectionId, layout, options = {}) {
         if (!sectionId) return false;
         try {
-            if (!window.userHelper?.getUserDisplayPreferences) {
+            if (!window.userHelper?.getUserDisplayPreferences && !window.userHelper?.getUserDisplayPreferencesForUser) {
                 ERR('userHelper not available');
                 return false;
             }
@@ -1554,8 +1648,7 @@
             const storedId = getStoredSectionPrefId(sectionEl
                 ? { id: sectionId, dataset: sectionEl.dataset, type: resolvedType }
                 : { id: sectionId, type: resolvedType });
-            const { promise } = await window.userHelper.getUserDisplayPreferences();
-            const displayPrefs = await promise;
+            const displayPrefs = await getEditorDisplayPreferences();
             const useHomeScreen = isHomeScreenSection(resolvedType);
             let bucket = useHomeScreen
                 ? parseKefinTweaksHomeScreen(displayPrefs?.CustomPrefs)
@@ -1591,7 +1684,7 @@
     async function saveSectionUseGaplessCards(sectionId, useGaplessCards, options = {}) {
         if (!sectionId) return false;
         try {
-            if (!window.userHelper?.getUserDisplayPreferences) {
+            if (!window.userHelper?.getUserDisplayPreferences && !window.userHelper?.getUserDisplayPreferencesForUser) {
                 ERR('userHelper not available');
                 return false;
             }
@@ -1607,8 +1700,7 @@
             const storedId = getStoredSectionPrefId(sectionEl
                 ? { id: sectionId, dataset: sectionEl.dataset, type: resolvedType }
                 : { id: sectionId, type: resolvedType });
-            const { promise } = await window.userHelper.getUserDisplayPreferences();
-            const displayPrefs = await promise;
+            const displayPrefs = await getEditorDisplayPreferences();
             const useHomeScreen = isHomeScreenSection(resolvedType);
             let bucket = useHomeScreen
                 ? parseKefinTweaksHomeScreen(displayPrefs?.CustomPrefs)
@@ -1641,9 +1733,8 @@
     async function loadSectionItemsLayout(sectionId, options = {}) {
         if (!sectionId) return null;
         try {
-            if (!window.userHelper?.getUserDisplayPreferences) return null;
-            const { promise } = await window.userHelper.getUserDisplayPreferences();
-            const displayPrefs = await promise;
+            if (!window.userHelper?.getUserDisplayPreferences && !window.userHelper?.getUserDisplayPreferencesForUser) return null;
+            const displayPrefs = await getEditorDisplayPreferences();
             const typeHint = options.type
                 || (String(sectionId).startsWith('series-episodes-') ? 'series-episodes' : 'home');
             const bucket = isHomeScreenSection(typeHint)
@@ -1692,11 +1783,11 @@
         const sections = [];
         const customPrefs = displayPrefs?.CustomPrefs || {};
         
-        // Build a set of all base IDs that appear in any homesectionN field (0-8)
+        // Build a set of all base IDs that appear in any homesectionN field (0-9)
         const enabledBaseIds = new Set();
-        for (let i = 0; i <= 8; i++) {
-            const homesectionValue = customPrefs[`homesection${i}`];
-            if (homesectionValue && homesectionValue !== '' && homesectionValue !== 'none') {
+        for (let i = 0; i <= 9; i++) {
+            const homesectionValue = resolveHomesectionValue(customPrefs, i);
+            if (homesectionValue && homesectionValue !== 'none') {
                 enabledBaseIds.add(homesectionValue);
             }
         }
@@ -1836,13 +1927,12 @@
     async function loadUserPreferences(displayPrefs = null) {
         try {
             if (!displayPrefs) {
-                if (!window.userHelper || !window.userHelper.getUserDisplayPreferences) {
+                if (!window.userHelper || (!window.userHelper.getUserDisplayPreferences && !window.userHelper.getUserDisplayPreferencesForUser)) {
                     WARN('userHelper not available');
                     return { kefinHomeScreen: [], homesections: {} };
                 }
 
-                const { promise } = await window.userHelper.getUserDisplayPreferences();
-                displayPrefs = await promise;
+                displayPrefs = await getEditorDisplayPreferences();
             }
             
             if (!displayPrefs || !displayPrefs.CustomPrefs) {
@@ -1853,11 +1943,11 @@
             const homeScreen = parseKefinTweaksHomeScreen(customPrefs);
             const kefinHomeScreen = homeScreenToLegacyArray(homeScreen);
 
-            // Extract homesectionN values
+            // Extract homesectionN values (Jellyfin defaults when keys absent/empty)
             const homesections = {};
-            for (let i = 0; i <= 8; i++) {
+            for (let i = 0; i <= 9; i++) {
                 const key = `homesection${i}`;
-                homesections[key] = customPrefs[key] || 'none';
+                homesections[key] = resolveHomesectionValue(customPrefs, i);
             }
 
             return {
@@ -2103,11 +2193,11 @@
         const prefMap = getSectionPrefMap(homeScreen);
         const customPrefs = displayPrefs?.CustomPrefs || {};
 
-        // Build set of base IDs that appear in ANY homesectionN field (0-8) for Jellyfin sections
+        // Build set of base IDs that appear in ANY homesectionN field (0-9) for Jellyfin sections
         const enabledJellyfinBaseIds = new Set();
-        for (let i = 0; i <= 8; i++) {
-            const homesectionValue = customPrefs[`homesection${i}`];
-            if (homesectionValue && homesectionValue !== '' && homesectionValue !== 'none') {
+        for (let i = 0; i <= 9; i++) {
+            const homesectionValue = resolveHomesectionValue(customPrefs, i);
+            if (homesectionValue && homesectionValue !== 'none') {
                 enabledJellyfinBaseIds.add(homesectionValue);
             }
         }
@@ -2180,14 +2270,13 @@
      */
     async function saveUserPreferences(sections, options = {}) {
         try {
-            if (!window.userHelper || !window.userHelper.getUserDisplayPreferences || !window.userHelper.updateDisplayPreferences) {
+            if (!window.userHelper || (!window.userHelper.getUserDisplayPreferences && !window.userHelper.getUserDisplayPreferencesForUser)) {
                 ERR('userHelper not available');
                 return false;
             }
 
-            // Get current display preferences
-            const { promise } = await window.userHelper.getUserDisplayPreferences();
-            const displayPrefs = await promise;
+            // Get display preferences for the user being edited (URL userId or session)
+            const displayPrefs = await getEditorDisplayPreferences();
             
             if (!displayPrefs) {
                 ERR('Could not load display preferences');
@@ -2233,7 +2322,7 @@
             syncNativeHomeSectionsFromKefin(sections, customPrefs, homeScreen, { syncUi: true });
 
             // Save
-            const success = await window.userHelper.updateDisplayPreferences(displayPrefs);
+            const success = await saveEditorDisplayPreferences(displayPrefs);
             if (success) {
                 LOG('User preferences saved successfully');
             } else {
@@ -2463,12 +2552,11 @@
                             if (confirmBtn) {
                                 confirmBtn.addEventListener('click', async () => {
                                     try {
-                                        if (!window.userHelper || !window.userHelper.getUserDisplayPreferences || !window.userHelper.updateDisplayPreferences) {
+                                        if (!window.userHelper || (!window.userHelper.getUserDisplayPreferences && !window.userHelper.getUserDisplayPreferencesForUser)) {
                                             WARN('userHelper not available');
                                             return;
                                         }
-                                        const { promise } = await window.userHelper.getUserDisplayPreferences();
-                                        const displayPrefs = await promise;
+                                        const displayPrefs = await getEditorDisplayPreferences();
                                         if (!displayPrefs) {
                                             WARN('Could not load display preferences');
                                             return;
@@ -2484,7 +2572,7 @@
                                         kefin.homeScreen = existing;
                                         displayPrefs.CustomPrefs.kefinTweaks = JSON.stringify(kefin);
                                         displayPrefs.CustomPrefs.kefinHomeScreen = '[]';
-                                        const ok = await window.userHelper.updateDisplayPreferences(displayPrefs);
+                                        const ok = await saveEditorDisplayPreferences(displayPrefs);
                                         if (ok) {
                                             window.ModalSystem.close(modalId);
                                             await renderUserHomeSectionsEditor(container);
@@ -2666,6 +2754,7 @@
         PINNED_DEFAULT_ORDER,
         homeScreenToLegacyArray,
         getConfig,
+        resolvePreferencesTargetUserId,
         enableJellyfinSectionsFromKefin,
         syncNativeHomeSectionsFromKefin,
         syncKefinEnabledFromNativeHomeSections,
@@ -2673,6 +2762,8 @@
         getServerPairNativeHomeSectionsDefault,
         buildHomesectionSlotsFromKefin,
         resolveSectionJellyfinId,
+        resolveHomesectionValue,
+        DEFAULT_NATIVE_HOME_SECTIONS,
         updateUserHomeScreenConfiguration,
         updateUserHomeScreenSectionConfiguration
     };
