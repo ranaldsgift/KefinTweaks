@@ -616,7 +616,9 @@
     function updateSectionInGroups(groups, sectionId, updatedSection) {
         const found = findSectionInGroups(groups, sectionId);
         if (found) {
-            found.group.sections[found.sectionIndex] = { ...found.section, ...updatedSection };
+            // Full replace: collectData returns a complete section clone; spread-merge
+            // would resurrect keys that collectData intentionally deleted/cleared.
+            found.group.sections[found.sectionIndex] = updatedSection;
             return true;
         }
         return false;
@@ -3161,26 +3163,37 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                 }
 
                 if (found) {
+                    const sectionTypeForRow = GROUP_TYPE_TO_SECTION_TYPE[found.groupType] || sectionData.type || 'home';
                     if (targetGroupName && targetGroupName !== found.group.name) {
                         found.group.sections.splice(found.sectionIndex, 1);
                         addSectionToGroup(currentConfig[found.groupType], targetGroupName, sectionData);
                         await saveConfig(currentConfig);
                         showToast('Section saved');
-                        refreshMainModal();
+                        refreshMainModal({
+                            focusSectionId: sectionData.id,
+                            sectionType: sectionTypeForRow
+                        });
                     } else {
                         updateSectionInGroups(currentConfig[found.groupType], sectionData.id, sectionData);
                         await saveConfig(currentConfig);
                         showToast('Section saved');
-                        const sectionTypeForRow = GROUP_TYPE_TO_SECTION_TYPE[found.groupType] || sectionData.type || 'home';
-                        if (!updateSectionRowInPlace(sectionData, sectionTypeForRow, found.group?.name)) {
-                            refreshMainModal();
+                        if (updateSectionRowInPlace(sectionData, sectionTypeForRow, found.group?.name)) {
+                            scrollSectionRowIntoView(sectionData.id);
+                        } else {
+                            refreshMainModal({
+                                focusSectionId: sectionData.id,
+                                sectionType: sectionTypeForRow
+                            });
                         }
                     }
                 } else {
                     addSectionToGroup(currentConfig.CUSTOM_SECTION_GROUPS, targetGroupName || 'Custom Sections', sectionData);
                     await saveConfig(currentConfig);
                     showToast('Saved new Home Screen Section');
-                    refreshMainModal();
+                    refreshMainModal({
+                        focusSectionId: sectionData.id,
+                        sectionType: 'custom'
+                    });
                 }
 
                 if (options.refreshHomeOnSave && !mainModalInstance) {
@@ -3265,15 +3278,48 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
     }
 
 
+    function escapeSectionIdForSelector(sectionId) {
+        if (typeof CSS !== 'undefined' && CSS.escape) {
+            return CSS.escape(sectionId);
+        }
+        return String(sectionId).replace(/["\\]/g, '\\$&');
+    }
+
+    /**
+     * Scroll a .section-row into view inside #section-content (the Edit Sections scrollport).
+     * @param {string} sectionId
+     * @returns {boolean}
+     */
+    function scrollSectionRowIntoView(sectionId) {
+        if (!mainModalInstance || !sectionId) return false;
+        const root = mainModalInstance.dialogContainer || mainModalInstance.dialogContent;
+        if (!root) return false;
+
+        const content = root.querySelector('#section-content');
+        if (!content) return false;
+
+        const escapedId = escapeSectionIdForSelector(sectionId);
+        const row = content.querySelector(`.section-row[data-section-id="${escapedId}"]`);
+        if (!row) return false;
+
+        const contentRect = content.getBoundingClientRect();
+        const rowRect = row.getBoundingClientRect();
+        const padding = 16;
+        if (rowRect.top < contentRect.top + padding) {
+            content.scrollTop += rowRect.top - contentRect.top - padding;
+        } else if (rowRect.bottom > contentRect.bottom - padding) {
+            content.scrollTop += rowRect.bottom - contentRect.bottom + padding;
+        }
+        return true;
+    }
+
     /**
      * Replace a single .section-row in the main modal without full refresh (preserves scroll).
      * @returns {boolean} true if row was updated
      */
     function updateSectionRowInPlace(sectionData, sectionType = 'home', groupName = null) {
         if (!mainModalInstance?.dialogContent || !sectionData?.id) return false;
-        const escapedId = typeof CSS !== 'undefined' && CSS.escape
-            ? CSS.escape(sectionData.id)
-            : String(sectionData.id).replace(/["\\]/g, '\\$&');
+        const escapedId = escapeSectionIdForSelector(sectionData.id);
         const row = mainModalInstance.dialogContent.querySelector(`.section-row[data-section-id="${escapedId}"]`);
         if (!row) return false;
 
@@ -3286,9 +3332,16 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         return true;
     }
 
-    function refreshMainModal() {
+    /**
+     * Refresh main modal content.
+     * @param {{ focusSectionId?: string, sectionType?: string }} [options]
+     */
+    function refreshMainModal(options = {}) {
         if (!mainModalInstance) return;
-        
+
+        const focusSectionId = options.focusSectionId || null;
+        const focusSectionType = options.sectionType || null;
+
         // Store current section type if on sections tab
         let currentSectionType = 'home';
         if (currentActiveTab === 'sections') {
@@ -3297,12 +3350,17 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                 currentSectionType = activeNavBtn.dataset.sectionType;
             }
         }
+        if (focusSectionType) {
+            currentSectionType = focusSectionType;
+        }
 
         // Store current active tab before refresh
-        const savedActiveTab = normalizeActiveTab(currentActiveTab);
+        const savedActiveTab = focusSectionId
+            ? 'sections'
+            : normalizeActiveTab(currentActiveTab);
 
-        const scrollEl = mainModalInstance.dialogContent;
-        const scrollTop = scrollEl?.scrollTop ?? 0;
+        const sectionContentEl = mainModalInstance.dialogContent?.querySelector('#section-content');
+        const sectionScrollTop = sectionContentEl?.scrollTop ?? 0;
 
         const content = document.createElement('div');
         content.innerHTML = buildMainConfigHTML();
@@ -3317,7 +3375,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         // Re-attach event listeners (including tab listeners)
         attachMainModalListeners();
         attachTabListeners(mainModalInstance); */
-        
+
         // Restore active tab
         if (savedActiveTab) {
             const dialog = mainModalInstance.dialogContainer;
@@ -3328,9 +3386,9 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                 }
             }
         }
-        
-        // If we were on sections tab, restore the section type navigation
-        if (currentActiveTab === 'sections') {
+
+        // If we were on sections tab (or focusing a section), restore the section type navigation
+        if (savedActiveTab === 'sections' || currentActiveTab === 'sections') {
             const dialog = mainModalInstance.dialogContainer;
             const navBtns = dialog.querySelectorAll('.section-type-nav-btn');
             navBtns.forEach(btn => {
@@ -3340,12 +3398,18 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             });
         }
 
-        const restoreScroll = () => {
-            const el = mainModalInstance?.dialogContent;
-            if (el) el.scrollTop = scrollTop;
+        const restoreOrFocus = () => {
+            if (focusSectionId) {
+                scrollSectionRowIntoView(focusSectionId);
+                return;
+            }
+            if (savedActiveTab === 'sections' || currentActiveTab === 'sections') {
+                const el = mainModalInstance?.dialogContent?.querySelector('#section-content');
+                if (el) el.scrollTop = sectionScrollTop;
+            }
         };
-        restoreScroll();
-        requestAnimationFrame(restoreScroll);
+        restoreOrFocus();
+        requestAnimationFrame(restoreOrFocus);
     }
 
 
@@ -5650,11 +5714,17 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             throw new Error('Section has no queries to preview');
         }
 
+        // Match home-screen selection: picker / random load one query; otherwise merge all
+        const resolveQueries = window.cardBuilder.resolveQueriesToLoad;
+        const queriesToLoad = typeof resolveQueries === 'function'
+            ? resolveQueries(previewSection, { initialize: true })
+            : queries;
+
         const useSpotlightFields = options.useSpotlightFields === true
             || previewSection.renderMode === 'Spotlight';
 
         let allItems = [];
-        for (const query of queries) {
+        for (const query of queriesToLoad) {
             const previewQuery = withPreviewQueryOptions(query);
             let queryUrl = null;
 
@@ -5684,7 +5754,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             return { items: [], limit: 0, section: previewSection };
         }
 
-        const limit = withPreviewQueryOptions(queries[0]).queryOptions.Limit
+        const limit = withPreviewQueryOptions(queriesToLoad[0]).queryOptions.Limit
             || previewSection.itemLimit
             || PREVIEW_DEFAULT_LIMIT;
         allItems = window.cardBuilder.postProcessItems(previewSection, allItems);

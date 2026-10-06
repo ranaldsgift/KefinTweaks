@@ -2664,14 +2664,9 @@
                     section.useMultiQueryPicker = dialog.querySelector('#hsae-use-multi-query-picker')?.checked === true;
 
                     const pickerLabel = dialog.querySelector('#hsae-multi-query-picker-label')?.value?.trim();
-                    if (pickerLabel) section.multiQueryPickerLabel = pickerLabel;
-                    else delete section.multiQueryPickerLabel;
-
-                    if (dialog.querySelector('#hsae-use-query-names-for-section')?.checked === true) {
-                        section.useQueryNamesForSection = true;
-                    } else {
-                        delete section.useQueryNamesForSection;
-                    }
+                    section.multiQueryPickerLabel = pickerLabel || '';
+                    section.useQueryNamesForSection =
+                        dialog.querySelector('#hsae-use-query-names-for-section')?.checked === true;
                 } else {
                     delete section.useRandomQuery;
                     delete section.useMultiQueryPicker;
