@@ -1008,7 +1008,7 @@
             if (activePopover.popover.parentElement !== mountElement) {
                 mountElement.appendChild(activePopover.popover);
             }
-            requestAnimationFrame(() => repositionActivePopover());
+            requestAnimationFrame(() => repositionActivePopover({ force: true }));
         }
     }
 
@@ -1868,6 +1868,7 @@
                 flipItems.forEach(({ el }) => clearSectionFlipStyles(el));
                 clearOverflowAnchorNone(anchorEls || []);
                 if (activePopover) activePopover.isAnimating = false;
+                repositionActivePopover({ force: true });
                 resolve();
             };
 
@@ -1880,6 +1881,7 @@
                     el.style.transform = `translateY(${invertY * (1 - eased)}px)`;
                 });
                 setScrollY(scrollRoot, startScroll + scrollDelta * eased);
+                repositionActivePopover({ force: true });
 
                 if (t < 1) requestAnimationFrame(frame);
                 else finish();
@@ -1921,6 +1923,7 @@
             setScrollY(scrollRoot, getScrollY(scrollRoot) - delta);
             void currentEl.offsetHeight;
             clearOverflowAnchorNone(anchorEls);
+            repositionActivePopover({ force: true });
             return;
         }
 
@@ -1981,6 +1984,7 @@
             setScrollY(scrollRoot, getScrollY(scrollRoot) - delta);
             void currentEl.offsetHeight;
             clearOverflowAnchorNone(anchorEls);
+            repositionActivePopover({ force: true });
             return;
         }
 
@@ -2103,21 +2107,22 @@
         sectionElement?.classList.remove('kefin-section-configure-popover-open');
     }
 
-    function repositionActivePopover() {
-        if (!activePopover || activePopover.isAnimating) return;
-        // Once placed, never move — scrolling/resize/reorder must not shift targets mid-click.
-        if (activePopover.placementLocked) return;
+    function repositionActivePopover({ force = false } = {}) {
+        if (!activePopover || (activePopover.isAnimating && !force)) return;
+        // Once placed, never move on scroll/resize — reorder/remount can force a re-anchor.
+        if (activePopover.placementLocked && !force) return;
         const anchor = activePopover.anchorButton || getConfigureAnchorButton(activePopover.entry);
         const mount = activePopover.mountElement
             || resolvePopoverMount(anchor, activePopover.entry?.element);
         if (!anchor || !mount || !document.body.contains(anchor) || !document.body.contains(mount)) return;
-        activePopover.anchorButton = anchor;
+        activePopover.anchorButton = getConfigureAnchorButton(activePopover.entry) || anchor;
         activePopover.mountElement = mount;
         if (activePopover.entry?.element) {
-            activePopover.entry.element = anchor.closest('[data-section-id]') || activePopover.entry.element;
+            activePopover.entry.element = activePopover.anchorButton?.closest('[data-section-id]')
+                || activePopover.entry.element;
             activePopover.sectionElement = activePopover.entry.element;
         }
-        positionConfigurePopover(activePopover.popover, anchor, mount);
+        positionConfigurePopover(activePopover.popover, activePopover.anchorButton, mount);
         activePopover.placementLocked = true;
         if (activePopover.formatMenu && activePopover.formatMenuAnchor) {
             positionFormatMenu(activePopover.formatMenu, activePopover.formatMenuAnchor);
@@ -2273,18 +2278,19 @@
         const buttonRect = anchorButton.getBoundingClientRect();
         const popoverWidth = popover.offsetWidth || popover.getBoundingClientRect().width || 280;
         const margin = 8;
+        const edgeMargin = 16;
         const gap = 8;
 
         let leftViewport = buttonRect.left + (buttonRect.width / 2) - (popoverWidth / 2);
-        const minLeft = Math.max(sectionRect.left + margin, margin);
-        const maxLeft = Math.min(sectionRect.right - popoverWidth - margin, window.innerWidth - popoverWidth - margin);
+        const minLeft = Math.max(sectionRect.left + margin, edgeMargin);
+        const maxLeft = Math.min(sectionRect.right - popoverWidth - margin, window.innerWidth - popoverWidth - edgeMargin);
 
         if (maxLeft >= minLeft) {
             leftViewport = Math.min(Math.max(leftViewport, minLeft), maxLeft);
         } else {
             leftViewport = Math.min(
-                Math.max(sectionRect.left + margin, margin),
-                Math.max(margin, window.innerWidth - popoverWidth - margin)
+                Math.max(sectionRect.left + margin, edgeMargin),
+                Math.max(edgeMargin, window.innerWidth - popoverWidth - edgeMargin)
             );
         }
 
@@ -2300,16 +2306,18 @@
             if (activePopover) activePopover.anchorMode = placeBelow ? 'below' : 'above';
         }
 
+        const scrollX = window.scrollX || window.pageXOffset || 0;
+        const scrollY = window.scrollY || window.pageYOffset || 0;
+
         popover.classList.toggle('is-below', placeBelow);
-        popover.style.position = 'fixed';
-        popover.style.left = `${leftViewport}px`;
+        popover.style.position = 'absolute';
+        popover.style.left = `${leftViewport + scrollX}px`;
+        popover.style.bottom = 'auto';
         if (placeBelow) {
-            popover.style.top = `${buttonRect.bottom + gap}px`;
-            popover.style.bottom = 'auto';
+            popover.style.top = `${buttonRect.bottom + gap + scrollY}px`;
         } else {
             const height = getPopoverPlacementHeight(popover, popover.classList.contains('is-expanded'));
-            popover.style.top = `${Math.max(margin, buttonRect.top - gap - height)}px`;
-            popover.style.bottom = 'auto';
+            popover.style.top = `${Math.max(scrollY + margin, buttonRect.top - gap - height + scrollY)}px`;
         }
     }
 
@@ -2869,7 +2877,7 @@
             overflow: visible;
         }
         .kefin-section-configure-popover {
-            position: fixed;
+            position: absolute;
             z-index: 12000;
             box-sizing: border-box;
             display: flex;

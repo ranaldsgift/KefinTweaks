@@ -784,21 +784,23 @@
     function flattenSeriesEpisodes(items) {
         if (!items || items.length === 0) return items;
 
-        // Keep only the first item in the array for any given series
-        const seriesMap = new Map();
-        items.forEach((item) => {
-            if (item.Type !== 'Episode') {
-                return;
+        const seenSeries = new Set();
+        const result = [];
+
+        for (const item of items) {
+            if (item.Type === 'Episode') {
+                // Only keep the first episode seen for a given SeriesId
+                if (item.SeriesId && !seenSeries.has(item.SeriesId)) {
+                    seenSeries.add(item.SeriesId);
+                    result.push(item);
+                }
+            } else {
+                // Keep non-Episode items as-is, in order
+                result.push(item);
             }
+        }
 
-            if (seriesMap.has(item.SeriesId)) {
-                return;
-            }
-
-            seriesMap.set(item.SeriesId, item);
-        });
-
-        return Array.from(seriesMap.values());
+        return result;
     }
 
     function formatAirDate(premiereDate) {
@@ -1665,26 +1667,35 @@
         }
 
         let activePopover = null;
+        let activePopoverCloseHandler = null;
         const closePopover = () => {
+            if (activePopoverCloseHandler) {
+                document.removeEventListener('click', activePopoverCloseHandler);
+                activePopoverCloseHandler = null;
+            }
             if (activePopover) {
                 activePopover.remove();
                 activePopover = null;
             }
         };
 
-        if (!document.getElementById('kefinTweaks-multiQueryPopover-style')) {
-            const styleElement = document.createElement('style');
-            styleElement.id = 'kefinTweaks-multiQueryPopover-style';
-            styleElement.textContent = `
+        const multiQueryPopoverCss = `
                 .multiQueryPopover {
                     background-color: rgba(0, 0, 0, 0.95);
                     position: absolute !important;
                     z-index: 1001;
                     display: block;
+                    overflow-y: auto;
+                    box-sizing: border-box;
                 }
             `;
-            document.head.appendChild(styleElement);
+        let multiQueryStyleEl = document.getElementById('kefinTweaks-multiQueryPopover-style');
+        if (!multiQueryStyleEl) {
+            multiQueryStyleEl = document.createElement('style');
+            multiQueryStyleEl.id = 'kefinTweaks-multiQueryPopover-style';
+            document.head.appendChild(multiQueryStyleEl);
         }
+        multiQueryStyleEl.textContent = multiQueryPopoverCss;
 
         selectButton.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -1763,15 +1774,37 @@
                 popover.appendChild(itemElement);
             });
 
-            titleContainer.style.position = 'relative';
-            selectButton.parentNode.insertBefore(popover, selectButton.nextSibling);
+            // Mount on body with absolute + document coords so the menu scrolls with the button
+            document.body.appendChild(popover);
+            const margin = 8;
+            const edgeMargin = 16;
+            const gap = 8;
+            const scrollX = window.scrollX || window.pageXOffset || 0;
+            const scrollY = window.scrollY || window.pageYOffset || 0;
             const buttonRect = selectButton.getBoundingClientRect();
-            const containerRect = titleContainer.getBoundingClientRect();
-            popover.style.left = `${Math.max(0, buttonRect.left - containerRect.left)}px`;
-            popover.style.top = '100%';
+            const popoverWidth = popover.offsetWidth || popover.getBoundingClientRect().width || 200;
+            const spaceBelow = window.innerHeight - buttonRect.bottom - margin;
+            const spaceAbove = buttonRect.top - margin;
+            const placeBelow = spaceBelow >= Math.min(spaceAbove, 160) || spaceBelow >= spaceAbove;
+            const available = placeBelow ? spaceBelow : spaceAbove;
+            const maxHeight = Math.max(120, Math.min(window.innerHeight * 0.6, available - gap));
+
+            let leftViewport = buttonRect.left;
+            leftViewport = Math.min(
+                Math.max(edgeMargin, leftViewport),
+                Math.max(edgeMargin, window.innerWidth - popoverWidth - edgeMargin),
+            );
+
+            popover.style.position = 'absolute';
+            popover.style.left = `${leftViewport + scrollX}px`;
+            popover.style.maxHeight = `${maxHeight}px`;
             popover.style.bottom = 'auto';
-            popover.style.marginTop = '8px';
-            popover.style.marginBottom = '0';
+            if (placeBelow) {
+                popover.style.top = `${buttonRect.bottom + gap + scrollY}px`;
+            } else {
+                const height = Math.min(popover.offsetHeight || maxHeight, maxHeight);
+                popover.style.top = `${Math.max(scrollY + margin, buttonRect.top - gap - height + scrollY)}px`;
+            }
             activePopover = popover;
 
             if (selectedItemElement) {
@@ -1784,14 +1817,13 @@
                 }, 10);
             }
 
-            const closeHandler = (ev) => {
+            activePopoverCloseHandler = (ev) => {
                 if (!popover.contains(ev.target) && !selectButton.contains(ev.target)) {
                     closePopover();
-                    document.removeEventListener('click', closeHandler);
                 }
             };
             setTimeout(() => {
-                document.addEventListener('click', closeHandler);
+                document.addEventListener('click', activePopoverCloseHandler);
             }, 100);
         });
     }
@@ -3669,12 +3701,8 @@
             imageUrl = `${serverAddress}/Items/${itemId}/Images/Logo?${imageParams}&quality=96&tag=${logoTag}`;
         } else if (cardFormat === 'clear art' && item.ImageTags?.Art) {
             imageUrl = `${serverAddress}/Items/${item.Id}/Images/Art?${imageParams}&quality=96&tag=${item.ImageTags.Art}`;
-        } else if (cardFormat === 'banner') {
-            if (item.ImageTags?.Banner) {
-                imageUrl = `${serverAddress}/Items/${item.Id}/Images/Banner?${imageParams}&quality=96&tag=${item.ImageTags.Banner}`;
-            } else {
-                imageUrl = `${serverAddress}/Items/${item.SeriesId || item.ParentId}/Images/Banner?${imageParams}&quality=96`;
-            }
+        } else if (cardFormat === 'banner' && item.ImageTags?.Banner) {
+            imageUrl = `${serverAddress}/Items/${item.Id}/Images/Banner?${imageParams}&quality=96&tag=${item.ImageTags.Banner}`;
         } else if (cardFormat === 'disc' && item.ImageTags?.Disc) {
             imageUrl = `${serverAddress}/Items/${item.Id}/Images/Disc?${imageParams}&quality=96&tag=${item.ImageTags.Disc}`;
         } else if (item.ImageTags?.Primary) {
