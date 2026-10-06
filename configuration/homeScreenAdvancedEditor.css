@@ -1655,3 +1655,7 @@
 .hsae-root[data-editor-profile="normal"] .hsae-advanced-limit-before-sort {
 	grid-column: -1 / 1;
 }
+
+.layout-mobile .hsae-appearance-preview-col {
+	display: none !important;
+}

@@ -79,7 +79,7 @@
 	-ms-overflow-style: none;
 }
 
-[data-modal-id="kefin-homescreen-section-create-flow"] .hsse-flow-body > * {
+html:not(.layout-mobile) [data-modal-id="kefin-homescreen-section-create-flow"] .hsse-flow-body > * {
 	width: 800px;
 	margin-left: auto !important;
 	margin-right: auto !important;
