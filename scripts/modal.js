@@ -107,12 +107,103 @@ window.ModalSystem = (function() {
         );
     }
 
+    let anchoredPopoverStylesInjected = false;
+
+    function ensureAnchoredPopoverStyles() {
+        if (anchoredPopoverStylesInjected) return;
+        anchoredPopoverStylesInjected = true;
+        const style = document.createElement('style');
+        style.id = 'kefinTweaks-anchoredPopover-styles';
+        style.textContent = `
+            .dialogContainer.kefin-modal-anchored-container {
+                contain: none !important;
+                overflow: visible !important;
+            }
+            .dialogContainer.kefin-modal-anchored-container > .dialog.kefin-anchored-popover-dialog {
+                position: relative !important;
+                inset: auto !important;
+                top: auto !important;
+                right: auto !important;
+                bottom: auto !important;
+                left: auto !important;
+                width: auto !important;
+                height: auto !important;
+                max-height: none !important;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
     /**
-     * Position a dialog near an anchor (fixed coords, viewport-clamped).
+     * Document-absolute shell: override Jellyfin fixed full-screen dialogContainer.
+     * @param {HTMLElement|null|undefined} dialogContainer
+     */
+    function prepareAnchoredDialogContainer(dialogContainer) {
+        if (!dialogContainer) return;
+        ensureAnchoredPopoverStyles();
+        dialogContainer.classList.add('kefin-modal-anchored-container');
+        dialogContainer.setAttribute('data-kefin-anchored', 'true');
+        dialogContainer.style.position = 'absolute';
+        dialogContainer.style.right = 'auto';
+        dialogContainer.style.bottom = 'auto';
+        dialogContainer.style.inset = 'auto';
+        dialogContainer.style.width = 'auto';
+        dialogContainer.style.height = 'auto';
+        dialogContainer.style.overflow = 'visible';
+        dialogContainer.style.contain = 'none';
+        dialogContainer.style.pointerEvents = 'none';
+        if (!dialogContainer.style.zIndex) {
+            dialogContainer.style.zIndex = '1100';
+        }
+    }
+
+    /**
+     * Inner dialog is in-flow inside the anchored container (not viewport-fixed / inset fill).
+     * @param {HTMLElement|null|undefined} dialog
+     */
+    function prepareAnchoredPopoverDialog(dialog) {
+        if (!dialog) return;
+        ensureAnchoredPopoverStyles();
+        dialog.classList.add('kefin-anchored-popover-dialog');
+        dialog.classList.remove('centeredDialog', 'formDialog', 'smoothScrollY', 'dialog-fixedSize');
+        dialog.style.position = 'relative';
+        dialog.style.inset = 'auto';
+        dialog.style.top = 'auto';
+        dialog.style.right = 'auto';
+        dialog.style.bottom = 'auto';
+        dialog.style.left = 'auto';
+        dialog.style.margin = '0';
+        dialog.style.width = 'auto';
+        dialog.style.height = 'auto';
+        dialog.style.maxHeight = 'none';
+        dialog.style.pointerEvents = 'auto';
+        dialog.style.overflow = 'visible';
+    }
+
+    /**
+     * Place anchored popover shell in document space; dialog lays out inside the container.
+     * @param {HTMLElement|null|undefined} dialogContainer
+     * @param {HTMLElement|null|undefined} dialog
+     * @param {number} leftViewport
+     * @param {number} topViewport
+     */
+    function positionAnchoredPopoverShell(dialogContainer, dialog, leftViewport, topViewport) {
+        prepareAnchoredDialogContainer(dialogContainer);
+        prepareAnchoredPopoverDialog(dialog);
+        if (!dialogContainer) return;
+        const scrollX = window.scrollX || window.pageXOffset || 0;
+        const scrollY = window.scrollY || window.pageYOffset || 0;
+        dialogContainer.style.left = `${leftViewport + scrollX}px`;
+        dialogContainer.style.top = `${topViewport + scrollY}px`;
+    }
+
+    /**
+     * Position a dialog near an anchor (document-absolute shell + scroll offsets).
      * @param {HTMLElement} dialog
      * @param {HTMLElement} anchor
+     * @param {{ dialogContainer?: HTMLElement|null }} [options]
      */
-    function positionNearAnchor(dialog, anchor) {
+    function positionNearAnchor(dialog, anchor, options = {}) {
         if (!dialog || !anchor) return;
         const margin = 8;
         const gap = 8;
@@ -138,12 +229,10 @@ window.ModalSystem = (function() {
         }
         top = Math.min(Math.max(top, margin), window.innerHeight - Math.min(dialogHeight, window.innerHeight - margin * 2) - margin);
 
-        dialog.style.position = 'fixed';
-        dialog.style.left = `${left}px`;
-        dialog.style.top = `${top}px`;
-        dialog.style.margin = '0';
-        dialog.style.right = 'auto';
-        dialog.style.bottom = 'auto';
+        const dialogContainer = options.dialogContainer
+            || dialog.closest?.('.dialogContainer')
+            || null;
+        positionAnchoredPopoverShell(dialogContainer, dialog, left, top);
     }
 
     function focusElement(el) {
@@ -562,8 +651,9 @@ window.ModalSystem = (function() {
         if (anchor instanceof HTMLElement) {
             dialog.classList.remove('centeredDialog', 'formDialog', 'smoothScrollY', 'dialog-fixedSize');
             dialog.style.maxHeight = 'none';
+            prepareAnchoredDialogContainer(dialogContainer);
             requestAnimationFrame(() => {
-                positionNearAnchor(dialog, anchor);
+                positionNearAnchor(dialog, anchor, { dialogContainer });
             });
         }
 
@@ -622,7 +712,7 @@ window.ModalSystem = (function() {
             }
         }
 
-        // Remove dialog from DOM
+        // Remove dialog container from DOM (dialog stays a child for anchored popovers)
         if (modal.dialogContainer && modal.dialogContainer.parentNode) {
             modal.dialogContainer.parentNode.removeChild(modal.dialogContainer);
         }
@@ -710,6 +800,9 @@ window.ModalSystem = (function() {
         closeAll: closeAllModals,
         applyOpenAnimation,
         attachFocusTrap,
+        prepareAnchoredDialogContainer,
+        prepareAnchoredPopoverDialog,
+        positionAnchoredPopoverShell,
         positionNearAnchor,
         getFocusableElements,
     };

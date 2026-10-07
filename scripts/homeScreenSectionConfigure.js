@@ -1066,18 +1066,15 @@
         const maxLeft = window.innerWidth - menu.offsetWidth - margin;
         left = Math.min(Math.max(left, margin), maxLeft);
 
-        menu.style.top = `${top}px`;
-        menu.style.left = `${left}px`;
+        const container = menu.closest?.('.dialogContainer');
+        if (typeof window.ModalSystem?.positionAnchoredPopoverShell === 'function') {
+            window.ModalSystem.positionAnchoredPopoverShell(container, menu, left, top);
+        }
     }
 
     function styleAnchoredPopoverDialog(modal, anchorBtn) {
         if (!modal?.dialog || !anchorBtn) return;
-        modal.dialog.classList.remove('centeredDialog', 'formDialog', 'smoothScrollY');
-        modal.dialog.style.position = 'fixed';
-        modal.dialog.style.margin = '0';
-        modal.dialog.style.maxHeight = 'none';
         modal.dialog.style.minWidth = '8rem';
-        modal.dialog.style.width = 'auto';
         if (typeof window.ModalSystem?.applyOpenAnimation === 'function') {
             window.ModalSystem.applyOpenAnimation(modal.dialog);
         } else {
@@ -1091,11 +1088,12 @@
         if (modal.backdrop) {
             modal.backdrop.style.background = 'transparent';
         }
-        if (modal.dialogContainer) {
-            modal.dialogContainer.style.pointerEvents = 'none';
+        if (typeof window.ModalSystem?.prepareAnchoredPopoverDialog === 'function') {
+            window.ModalSystem.prepareAnchoredPopoverDialog(modal.dialog);
         }
-        modal.dialog.style.pointerEvents = 'auto';
-        modal.dialog.style.overflow = 'visible';
+        if (typeof window.ModalSystem?.prepareAnchoredDialogContainer === 'function') {
+            window.ModalSystem.prepareAnchoredDialogContainer(modal.dialogContainer);
+        }
         requestAnimationFrame(() => positionFormatMenu(modal.dialog, anchorBtn));
     }
 
@@ -1190,6 +1188,13 @@
     function openOptionMenu(anchorBtn, options, opts) {
         if (!window.ModalSystem?.create) {
             WARN('ModalSystem unavailable for option menu');
+            return null;
+        }
+        if (
+            window.ModalSystem.isOpen?.(OPTION_MENU_MODAL_ID)
+            && activePopover?.formatMenuAnchor === anchorBtn
+        ) {
+            closeActiveFormatMenu();
             return null;
         }
         closeActiveFormatMenu();
@@ -1396,6 +1401,13 @@
     function openCardTitleOptionsMenu(anchorBtn, entry, serverDefaults) {
         if (!window.ModalSystem?.create) {
             WARN('ModalSystem unavailable for card title options');
+            return null;
+        }
+        if (
+            window.ModalSystem.isOpen?.(CARD_TITLE_MENU_MODAL_ID)
+            && activePopover?.cardTitleMenuAnchor === anchorBtn
+        ) {
+            closeCardTitleMenu();
             return null;
         }
         closeCardTitleMenu();
@@ -2139,7 +2151,7 @@
     }
 
     function startPopoverTracking() {
-        // Placement is fixed for the life of the open popover.
+        // Placement is locked after first place — no scroll/resize chasing (0c11842).
         return () => {};
     }
 
@@ -2167,6 +2179,12 @@
     }
 
     function finalizeConfigurePopoverClose() {
+        if (window.ModalSystem?.isOpen?.(OPTION_MENU_MODAL_ID)) {
+            window.ModalSystem.close(OPTION_MENU_MODAL_ID);
+        }
+        if (window.ModalSystem?.isOpen?.(CARD_TITLE_MENU_MODAL_ID)) {
+            window.ModalSystem.close(CARD_TITLE_MENU_MODAL_ID);
+        }
         if (!activePopover) return;
         const { entry, stopTracking, mountElement, sectionElement, outsideHandler } = activePopover;
         stopTracking?.();
@@ -2333,16 +2351,18 @@
         }
 
         popover.classList.toggle('is-below', placeBelow);
-        popover.style.position = 'fixed';
-        popover.style.left = `${leftViewport}px`;
-        popover.style.bottom = 'auto';
-        popover.style.right = 'auto';
-        popover.style.margin = '0';
+        let topViewport;
         if (placeBelow) {
-            popover.style.top = `${buttonRect.bottom + gap}px`;
+            topViewport = buttonRect.bottom + gap;
         } else {
             const height = getPopoverPlacementHeight(popover, popover.classList.contains('is-expanded'));
-            popover.style.top = `${Math.max(margin, buttonRect.top - gap - height)}px`;
+            topViewport = Math.max(margin, buttonRect.top - gap - height);
+        }
+        const container = activePopover?.modal?.dialogContainer;
+        if (typeof window.ModalSystem?.positionAnchoredPopoverShell === 'function') {
+            window.ModalSystem.positionAnchoredPopoverShell(container, popover, leftViewport, topViewport);
+        } else if (typeof window.ModalSystem?.prepareAnchoredPopoverDialog === 'function') {
+            window.ModalSystem.prepareAnchoredPopoverDialog(popover);
         }
     }
 
@@ -2507,14 +2527,14 @@
             },
             onOpen: (modalInstance) => {
                 if (modalInstance.backdrop) modalInstance.backdrop.style.background = 'transparent';
-                if (modalInstance.dialogContainer) modalInstance.dialogContainer.style.pointerEvents = 'none';
+                if (typeof window.ModalSystem?.prepareAnchoredDialogContainer === 'function') {
+                    window.ModalSystem.prepareAnchoredDialogContainer(modalInstance.dialogContainer);
+                }
+                if (typeof window.ModalSystem?.prepareAnchoredPopoverDialog === 'function') {
+                    window.ModalSystem.prepareAnchoredPopoverDialog(modalInstance.dialog);
+                }
                 if (modalInstance.dialog) {
-                    modalInstance.dialog.classList.remove('centeredDialog', 'formDialog', 'smoothScrollY', 'dialog-fixedSize');
-                    modalInstance.dialog.style.pointerEvents = 'auto';
-                    modalInstance.dialog.style.maxHeight = 'none';
                     modalInstance.dialog.style.minHeight = '0';
-                    modalInstance.dialog.style.height = 'auto';
-                    modalInstance.dialog.style.width = 'auto';
                 }
                 if (modalInstance.dialogContent) {
                     modalInstance.dialogContent.style.padding = '0';
@@ -2526,6 +2546,12 @@
         });
 
         const popover = modal.dialog;
+        if (typeof window.ModalSystem?.prepareAnchoredDialogContainer === 'function') {
+            window.ModalSystem.prepareAnchoredDialogContainer(modal.dialogContainer);
+        }
+        if (typeof window.ModalSystem?.prepareAnchoredPopoverDialog === 'function') {
+            window.ModalSystem.prepareAnchoredPopoverDialog(modal.dialog);
+        }
         // Queries / expand state use the dialog root (has kefin-section-configure-popover)
 
         const openEditorBtn = popover.querySelector('.kefin-section-open-editor-btn');
@@ -2863,10 +2889,15 @@
     function createConfigureButton(sectionConfig, sectionElement) {
         const button = document.createElement('button');
         button.type = 'button';
-        button.className = 'section-configure-button material-icons settings paper-icon-button-light';
+        button.setAttribute('is', 'paper-icon-button-light');
+        button.className = 'section-configure-button paper-icon-button-light';
         if (isTvLayout()) button.classList.add('show-focus');
         button.title = 'Configure';
         button.setAttribute('aria-label', 'Configure');
+        const icon = document.createElement('span');
+        icon.className = 'material-icons settings';
+        icon.setAttribute('aria-hidden', 'true');
+        button.appendChild(icon);
         button.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -2944,7 +2975,7 @@
             overflow: visible;
         }
         .kefin-section-configure-popover {
-            position: fixed;
+            position: relative;
             z-index: 12000;
             box-sizing: border-box;
             display: flex;
@@ -2953,6 +2984,7 @@
             min-width: 14rem;
             padding: 0.5em;
             overflow: visible;
+            inset: auto;
         }
         .kefin-section-configure-popover [data-name="kefin-modal-content"] {
             padding: 0 !important;

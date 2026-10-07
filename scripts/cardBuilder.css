@@ -520,7 +520,6 @@
 	font-size: 18px;
 	font-weight: 600;
 	z-index: 2;
-	padding: 8px 16px;
 	letter-spacing: 2px;
 	word-spacing: 2px;
 }
@@ -1930,6 +1929,7 @@
 	top: initial !important;
 	transform: initial !important;
 	align-items: center;
+	height: auto !important;
 }
 
 .spotlight-section-title.headerTabs.sectionTabs,
@@ -1941,7 +1941,6 @@
 	justify-content: start;
 	width: auto;
 	font-size: revert !important;
-	height: 40px !important;
 	align-items: center;
 }
 
@@ -1968,7 +1967,8 @@
 
 .spotlight-section:not(.hide) .spotlight-nav-buttons-container {
 	display: flex !important;
-	padding: 0 0.5em !important;
+	padding: 0 0 !important;
+	height: auto !important;
 }
 .spotlight-section:not(.hide) .spotlight-nav-buttons-container button {
 	padding: 0.5em;

@@ -1701,6 +1701,7 @@
                     max-height: min(60vh, 420px);
                     overflow: hidden;
                     padding: 0 !important;
+					min-width: initial !important;
                 }
                 .kefin-multi-query-modal [data-name="kefin-modal-content"] {
                     overflow-y: auto !important;
@@ -1813,8 +1814,7 @@
                 dialogClassName: 'kefin-multi-query-modal',
                 onOpen: (modal) => {
                     if (modal.backdrop) modal.backdrop.style.background = 'transparent';
-                    if (modal.dialogContainer) modal.dialogContainer.style.pointerEvents = 'none';
-                    if (modal.dialog) modal.dialog.style.pointerEvents = 'auto';
+                    // Document-absolute shell via ModalSystem.positionNearAnchor.
                     if (modal.dialogContent) {
                         modal.dialogContent.style.padding = '0';
                         modal.dialogContent.style.overflowY = 'auto';
