@@ -2945,14 +2945,14 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         }
 
         let page = '';
-        const homeTabMatch = hash.match(/[?&]tab=(\d+)/);
-        const homeTab = homeTabMatch ? homeTabMatch[1] : null;
+        const tabMatch = hash.match(/[?&]tab=(\d+)/);
+        const tabIndex = tabMatch ? tabMatch[1] : null;
 
-        if (hash.includes('/home') && homeTab === '1') {
+        if (hash.includes('/home') && tabIndex === '1') {
             page = 'favorites';
         } else if (watchlistUrl && hash.includes(watchlistUrl)) {
             page = 'watchlist';
-        } else if (hash.includes('#/home') || hash === '#/' || hash === '#' || hash === '') {
+        } else if (hash === '#/' || hash === '#' || hash === '' || (hash.includes('#/home') && (tabIndex === 0 || tabIndex === null))) {
             page = 'home';
         } else if (hash.includes('#/tv')) {
             page = 'tv';
