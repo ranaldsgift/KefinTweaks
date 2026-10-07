@@ -897,6 +897,7 @@
                                     viewMoreUrl: viewMoreUrl,
                                     jellyfinId: 'latestmedia',
                                     userConfigurable: true,
+                                    ttl: 0,
                                     queries: [{
                                         path: '/Items/Latest',
                                         queryOptions: {
