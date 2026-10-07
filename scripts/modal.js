@@ -519,9 +519,6 @@ window.ModalSystem = (function() {
         if (anchor instanceof HTMLElement) {
             dialog.classList.remove('centeredDialog', 'formDialog', 'smoothScrollY', 'dialog-fixedSize');
             dialog.style.maxHeight = 'none';
-            if (dialogContent) {
-                dialogContent.style.padding = dialogContent.style.padding || '0.25em 0';
-            }
             requestAnimationFrame(() => {
                 positionNearAnchor(dialog, anchor);
             });

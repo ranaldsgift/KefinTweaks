@@ -1680,7 +1680,6 @@
                     padding: 0 !important;
                 }
                 .kefin-multi-query-modal [data-name="kefin-modal-content"] {
-                    padding: 0.25em 0 !important;
                     overflow-y: auto !important;
                     max-height: min(60vh, 420px);
                 }
@@ -1794,7 +1793,7 @@
                     if (modal.dialogContainer) modal.dialogContainer.style.pointerEvents = 'none';
                     if (modal.dialog) modal.dialog.style.pointerEvents = 'auto';
                     if (modal.dialogContent) {
-                        modal.dialogContent.style.padding = '0.25em 0';
+                        modal.dialogContent.style.padding = '0';
                         modal.dialogContent.style.overflowY = 'auto';
                         modal.dialogContent.style.minHeight = '0';
                         modal.dialogContent.style.flex = '0 1 auto';

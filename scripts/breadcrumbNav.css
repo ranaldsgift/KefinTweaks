@@ -131,6 +131,7 @@
 	padding: 0 !important;
 	overflow-y: auto !important;
 	backdrop-filter: blur(50px);
+	margin-top: 0 !important;
 }
 .kefinTweaks-popover.itemDetailsGroup:has(.detailsGroupItem:not(.hide)) .kefinTweaks-popover-item.detailsGroupItem {
 	padding: 0.5em 2em;
