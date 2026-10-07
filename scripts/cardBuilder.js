@@ -1454,6 +1454,26 @@
     }
 
     /**
+     * Paper-icon button with Material Icon on a child span (native Jellyfin pattern).
+     * Keep material-icons off the button — paper-icon-button-light sets font-family: inherit.
+     */
+    function createPaperIconButton({ className = '', icon = '', title = '', ariaLabel = '', showFocus = false } = {}) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.setAttribute('is', 'paper-icon-button-light');
+        button.className = `${className} paper-icon-button-light`.trim();
+        if (showFocus) button.classList.add('show-focus');
+        if (title) button.title = title;
+        if (ariaLabel || title) button.setAttribute('aria-label', ariaLabel || title);
+
+        const iconSpan = document.createElement('span');
+        iconSpan.className = `material-icons ${icon}`.trim();
+        iconSpan.setAttribute('aria-hidden', 'true');
+        button.appendChild(iconSpan);
+        return button;
+    }
+
+    /**
      * Show checkmark icon temporarily, then revert to refresh icon
      * @param {HTMLElement} button - The refresh button element
      */
@@ -1462,15 +1482,13 @@
         // This ensures the transition from spinning to checkmark looks natural
         await new Promise((resolve) => requestAnimationFrame(resolve));
 
-        // Fade out current icon
-        /*         button.classList.add('icon-fade-out');
+        const icon = button.querySelector('.material-icons') || button;
 
-        // Wait for fade out to complete
-        await new Promise(resolve => setTimeout(resolve, 200));*/
-
-        // Change to checkmark icon
+        // Change to checkmark icon (state classes on button for CSS; glyph on icon span)
         button.classList.remove('refresh', 'icon-fade-out');
         button.classList.add('check_circle', 'icon-fade-in');
+        icon.classList.remove('refresh', 'icon-fade-out');
+        icon.classList.add('check_circle', 'icon-fade-in');
 
         await new Promise((resolve) => requestAnimationFrame(resolve));
         await new Promise((resolve) => setTimeout(resolve, 0));
@@ -1478,20 +1496,25 @@
         // Wait for fade in to complete
         await new Promise((resolve) => setTimeout(resolve, 200));
         button.classList.remove('icon-fade-in');
+        icon.classList.remove('icon-fade-in');
 
         // After 1.5 seconds, fade out checkmark and fade in refresh icon
         setTimeout(async () => {
             // Fade out checkmark
             button.classList.add('icon-fade-out');
+            icon.classList.add('icon-fade-out');
             await new Promise((resolve) => setTimeout(resolve, 200));
 
             // Change to refresh icon
             button.classList.remove('check_circle', 'icon-fade-out');
             button.classList.add('refresh', 'icon-fade-in');
+            icon.classList.remove('check_circle', 'icon-fade-out');
+            icon.classList.add('refresh', 'icon-fade-in');
 
             // Wait for fade in to complete
             await new Promise((resolve) => setTimeout(resolve, 200));
             button.classList.remove('icon-fade-in');
+            icon.classList.remove('icon-fade-in');
         }, 1500);
     }
 
@@ -1824,12 +1847,12 @@
             const inline = document.createElement('div');
             inline.className = 'section-controls-inline';
 
-            const moreButton = document.createElement('button');
-            moreButton.type = 'button';
-            moreButton.className = 'section-controls-more material-icons more_vert paper-icon-button-light';
-            if (isTvLayout()) moreButton.classList.add('show-focus');
-            moreButton.title = 'More';
-            moreButton.setAttribute('aria-label', 'More');
+            const moreButton = createPaperIconButton({
+                className: 'section-controls-more',
+                icon: 'more_vert',
+                title: 'More',
+                showFocus: isTvLayout(),
+            });
 
             controls.appendChild(inline);
             controls.appendChild(moreButton);
@@ -6263,12 +6286,12 @@
 
         visibleDefinitions.forEach((def) => {
             const label = typeof def.getLabel === 'function' ? def.getLabel() : def.label;
-            const button = document.createElement('button');
-            button.type = 'button';
-            button.className = `${def.className} material-icons ${def.icon} paper-icon-button-light`;
-            if (isTvLayout()) button.classList.add('show-focus');
-            button.title = label;
-            button.setAttribute('aria-label', label);
+            const button = createPaperIconButton({
+                className: def.className || '',
+                icon: def.icon || '',
+                title: label,
+                showFocus: isTvLayout(),
+            });
             button.dataset.sectionControlId = def.id;
             button.addEventListener('click', (e) => {
                 def.onClick(e, button);
@@ -6280,9 +6303,16 @@
         });
 
         const newMoreButton = moreButton.cloneNode(true);
-        if (isTvLayout()) {
-            newMoreButton.classList.add('paper-icon-button-light', 'show-focus');
+        newMoreButton.classList.add('paper-icon-button-light');
+        if (isTvLayout()) newMoreButton.classList.add('show-focus');
+        if (!newMoreButton.querySelector('.material-icons')) {
+            const iconSpan = document.createElement('span');
+            iconSpan.className = 'material-icons more_vert';
+            iconSpan.setAttribute('aria-hidden', 'true');
+            newMoreButton.appendChild(iconSpan);
         }
+        // Ensure legacy more buttons no longer carry icon font classes on the button itself
+        newMoreButton.classList.remove('material-icons', 'more_vert');
         moreButton.replaceWith(newMoreButton);
 
         const MORE_CONTROLS_MODAL_ID = 'kefin-section-controls-more';
