@@ -385,6 +385,129 @@
         observer.observe(sectionEl, { childList: true, subtree: true });
     }
 
+    function mulberry32(seed) {
+        let t = seed >>> 0;
+        return () => {
+            t += 0x6D2B79F5;
+            let r = Math.imul(t ^ (t >>> 15), 1 | t);
+            r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+            return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+        };
+    }
+
+    /**
+     * Dense procedural blood edge for Halloween header (mostly filled, tiny gaps,
+     * uneven height up to 10px). Returns a CSS url(...) data SVG.
+     */
+    function generateHalloweenBloodSplatter({
+        width = 1400,
+        height = 10,
+        dropletCount = 420,
+        clusterCount = 5,
+        gapCount = 4,
+        seed = (Date.now() ^ (Math.random() * 1e9)) >>> 0,
+    } = {}) {
+        const rand = mulberry32(seed);
+
+        const clusters = Array.from({ length: clusterCount }, () => ({
+            x: rand() * width,
+            r: 60 + rand() * 120,
+            weight: 1.4 + rand() * 1.8,
+            tall: rand() < 0.55,
+        }));
+
+        const gaps = Array.from({ length: gapCount }, () => ({
+            x: rand() * width,
+            r: 14 + rand() * 28,
+        }));
+
+        const inGap = (x) => gaps.some((g) => Math.abs(x - g.x) < g.r);
+
+        const sampleCluster = (x) => {
+            let boost = 0;
+            let tall = false;
+            for (const c of clusters) {
+                const d = Math.abs(x - c.x) / c.r;
+                if (d < 1) {
+                    const w = c.weight * (1 - d) * (1 - d);
+                    boost += w;
+                    if (c.tall && w > 0.35) tall = true;
+                }
+            }
+            return { boost, tall };
+        };
+
+        const drops = [];
+        let attempts = 0;
+        while (drops.length < dropletCount && attempts < dropletCount * 16) {
+            attempts += 1;
+            const x = rand() * width;
+            if (inGap(x)) continue;
+
+            const { boost, tall } = sampleCluster(x);
+            const accept = 0.82 + Math.min(0.18, boost * 0.08);
+            if (rand() > accept) continue;
+
+            let maxRise = 3.5 + rand() * 2.5;
+            if (tall) maxRise = height * (0.75 + rand() * 0.25);
+            else if (rand() < 0.06) maxRise = height * (0.7 + rand() * 0.3);
+
+            const y = height - rand() * maxRise;
+            const maxR = tall ? (0.9 + rand() * 1.6) : (0.45 + rand() * 1.1);
+            const r = 0.3 + rand() * maxR;
+            const fill = rand() < 0.3 ? '#990000' : (rand() < 0.55 ? '#8b0000' : '#7a0000');
+
+            if (rand() < 0.16) {
+                drops.push(
+                    `<ellipse cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" rx="${(r * (1.1 + rand())).toFixed(2)}" ry="${(r * (0.4 + rand() * 0.45)).toFixed(2)}" fill="${fill}"/>`,
+                );
+            } else {
+                drops.push(`<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${r.toFixed(2)}" fill="${fill}"/>`);
+            }
+        }
+
+        const svg =
+            `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">` +
+            drops.join('') +
+            `</svg>`;
+
+        return {
+            seed,
+            cssUrl: `url("data:image/svg+xml,${encodeURIComponent(svg)}")`,
+        };
+    }
+
+    const HALLOWEEN_BLOOD_STYLE_ID = 'kefin-halloween-blood-styles';
+
+    function clearHalloweenBloodInlinePollution(body = document.body) {
+        if (!body) return;
+        body.style.removeProperty('--halloween-blood-band');
+        body.style.removeProperty('--halloween-blood-opacity');
+        body.style.removeProperty('--halloween-blood-splatter');
+        delete body.dataset.halloweenBloodSeed;
+        try {
+            sessionStorage.removeItem('kefin-halloween-blood-seed');
+        } catch (_) { /* private mode */ }
+    }
+
+    /** Inject procedural blood SVG via a <style> tag (once per page load). */
+    function applyHalloweenBloodVars() {
+        if (document.getElementById(HALLOWEEN_BLOOD_STYLE_ID)) return;
+
+        clearHalloweenBloodInlinePollution(document.body);
+
+        const { cssUrl } = generateHalloweenBloodSplatter();
+        const style = document.createElement('style');
+        style.id = HALLOWEEN_BLOOD_STYLE_ID;
+        style.textContent =
+            `html[data-active-page="home"] body[data-seasonal-theme="seasonal-halloween"][data-seasonal-background="true"]{` +
+            `--halloween-blood-band:10px;` +
+            `--halloween-blood-opacity:0.95;` +
+            `--halloween-blood-splatter:${cssUrl};` +
+            `}`;
+        document.head.appendChild(style);
+    }
+
     async function manageBodyClasses() {
         
         const homeScreenConfig = await window.KefinHomeScreen.getConfig();
@@ -442,6 +565,10 @@
             if (backgroundImage) {
                 document.body.style.setProperty('--seasonal-background-image', backgroundImage);
             }
+        }
+
+        if (enableSeasonalBackground && activeSeasonalThemeGroup.id === 'seasonal-halloween') {
+            applyHalloweenBloodVars();
         }
 
         if (enableSeasonalAnimations && !document.body.dataset.seasonalAnimations) {
@@ -1943,6 +2070,7 @@
             applyActiveHomeCategory(homeChromeActiveCategory || 'none');
         }
         syncHomeCategoryRailScrollListener();
+        syncCategoryRailTvFocus();
     }
 
     function ensureHomeChromeVisibilityObserver() {
@@ -2236,6 +2364,180 @@
         homeChromeCategoryMounted = true;
         applyActiveHomeCategory(desiredCategory);
         syncHomeCategoryRailScrollListener();
+        syncCategoryRailTvFocus();
+    }
+
+    function isTvLayoutChrome() {
+        return document.documentElement.classList.contains('layout-tv');
+    }
+
+    let homeChromeRailReturnFocus = null;
+    let homeChromeRailKeyHandler = null;
+
+    function getRailCategoryButtons() {
+        const rail = document.getElementById(HOME_CHROME_CATEGORY_RAIL_ID);
+        if (!rail || rail.classList.contains('hide')) return [];
+        return Array.from(rail.querySelectorAll('.kefin-home-category-btn'));
+    }
+
+    function isFocusInsideCategoryRail(el) {
+        return !!el?.closest?.(`#${HOME_CHROME_CATEGORY_RAIL_ID}`);
+    }
+
+    function isLeftmostContentFocus(el) {
+        if (!el || isFocusInsideCategoryRail(el)) return false;
+        // Skip when a Kefin/Jellyfin dialog owns focus
+        if (el.closest?.('.dialogContainer, .focuscontainer.dialog, .kefin-section-configure-popover')) {
+            return false;
+        }
+
+        const row = el.closest?.('.focuscontainer-x, .itemsContainer-tv, .sectionTitleContainer, .spotlight-section-title-container');
+        if (row) {
+            const focusables = Array.from(
+                row.querySelectorAll(
+                    'button:not([disabled]):not([tabindex="-1"]), a[href]:not([tabindex="-1"]), [tabindex]:not([tabindex="-1"])',
+                ),
+            ).filter((node) => {
+                const style = window.getComputedStyle(node);
+                return style.display !== 'none' && style.visibility !== 'hidden';
+            });
+            if (focusables.length && focusables[0] === el) return true;
+            // First card in a horizontal row
+            const cards = focusables.filter((n) => n.classList?.contains('card') || n.classList?.contains('itemAction'));
+            if (cards.length && cards[0] === el) return true;
+        }
+
+        // Geometric fallback: among visible home content focusables, this is among the leftmost
+        const homeRoot =
+            document.querySelector('.homeSectionsContainer, .sections.homeSectionsContainer, .homePage') || document.body;
+        const candidates = Array.from(
+            homeRoot.querySelectorAll(
+                'button:not([disabled]):not([tabindex="-1"]), a[href]:not([tabindex="-1"]), .card.itemAction, .itemAction[data-action="link"]',
+            ),
+        ).filter((node) => {
+            if (isFocusInsideCategoryRail(node)) return false;
+            if (node.closest?.('.dialogContainer, .focuscontainer.dialog')) return false;
+            const r = node.getBoundingClientRect();
+            return r.width > 0 && r.height > 0;
+        });
+        if (!candidates.length) return false;
+        let minLeft = Infinity;
+        candidates.forEach((node) => {
+            minLeft = Math.min(minLeft, node.getBoundingClientRect().left);
+        });
+        const elLeft = el.getBoundingClientRect().left;
+        return elLeft <= minLeft + 8;
+    }
+
+    function focusCategoryRailFromContent(fromEl) {
+        const buttons = getRailCategoryButtons();
+        if (!buttons.length) return false;
+        homeChromeRailReturnFocus = fromEl;
+        const active =
+            buttons.find((b) => b.classList.contains('is-active') || b.getAttribute('aria-pressed') === 'true') ||
+            buttons[0];
+        try {
+            active.focus({ preventScroll: true });
+        } catch (_) {
+            active.focus();
+        }
+        return true;
+    }
+
+    function exitCategoryRailToContent() {
+        const buttons = getRailCategoryButtons();
+        const returnEl =
+            (homeChromeRailReturnFocus && document.contains(homeChromeRailReturnFocus) && homeChromeRailReturnFocus) ||
+            document.querySelector(
+                '.homeSectionsContainer .card.itemAction, .homeSectionsContainer a.sectionTitle-link, .sections .card.itemAction',
+            );
+        homeChromeRailReturnFocus = null;
+        if (returnEl && typeof returnEl.focus === 'function') {
+            try {
+                returnEl.focus({ preventScroll: true });
+            } catch (_) {
+                returnEl.focus();
+            }
+            return true;
+        }
+        if (buttons[0]) buttons[0].blur();
+        return false;
+    }
+
+    function moveCategoryRailFocus(delta) {
+        const buttons = getRailCategoryButtons();
+        if (!buttons.length) return;
+        const active = document.activeElement;
+        const idx = Math.max(0, buttons.indexOf(active));
+        const next = buttons[Math.min(buttons.length - 1, Math.max(0, idx + delta))];
+        if (next && next !== active) {
+            try {
+                next.focus({ preventScroll: true });
+            } catch (_) {
+                next.focus();
+            }
+        }
+    }
+
+    function onCategoryRailTvKeydown(e) {
+        if (!isTvLayoutChrome()) return;
+        const key = e.key;
+        if (key !== 'ArrowLeft' && key !== 'ArrowRight' && key !== 'ArrowUp' && key !== 'ArrowDown') return;
+
+        const active = document.activeElement;
+        const inRail = isFocusInsideCategoryRail(active);
+
+        if (inRail) {
+            if (key === 'ArrowRight') {
+                e.preventDefault();
+                e.stopPropagation();
+                exitCategoryRailToContent();
+                return;
+            }
+            if (key === 'ArrowUp' || key === 'ArrowDown') {
+                e.preventDefault();
+                e.stopPropagation();
+                moveCategoryRailFocus(key === 'ArrowUp' ? -1 : 1);
+                return;
+            }
+            if (key === 'ArrowLeft') {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            return;
+        }
+
+        if (key === 'ArrowLeft' && isLeftmostContentFocus(active)) {
+            if (focusCategoryRailFromContent(active)) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        }
+    }
+
+    function syncCategoryRailTvFocus() {
+        const rail = document.getElementById(HOME_CHROME_CATEGORY_RAIL_ID);
+        const buttons = getRailCategoryButtons();
+        const tv = isTvLayoutChrome();
+
+        buttons.forEach((btn) => {
+            if (tv) {
+                btn.setAttribute('tabindex', '-1');
+                btn.classList.add('show-focus');
+            } else {
+                btn.removeAttribute('tabindex');
+                btn.classList.remove('show-focus');
+            }
+        });
+
+        if (tv && rail && !homeChromeRailKeyHandler) {
+            homeChromeRailKeyHandler = onCategoryRailTvKeydown;
+            document.addEventListener('keydown', homeChromeRailKeyHandler, true);
+        } else if (!tv && homeChromeRailKeyHandler) {
+            document.removeEventListener('keydown', homeChromeRailKeyHandler, true);
+            homeChromeRailKeyHandler = null;
+            homeChromeRailReturnFocus = null;
+        }
     }
 
     function getMountedRailCategoryIds() {
@@ -2262,6 +2564,7 @@
             applyActiveHomeCategory(homeChromeActiveCategory || 'none');
         }
         syncHomeScreenChromeVisibility();
+        syncCategoryRailTvFocus();
     }
 
     function escapeHtmlChrome(value) {

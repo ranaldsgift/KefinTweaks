@@ -323,6 +323,11 @@ div#discovery-loading-indicator:not(.show)::after {
 		opacity: 1;
 	}
 }
+/* TV: rail must be fully visible while focused (no hover) */
+.layout-tv #kefin-home-category-rail:focus-within,
+.layout-tv #kefin-home-category-rail:focus-within .kefin-home-category-rail {
+	opacity: 1;
+}
 .kefin-home-chrome.hide,
 #kefin-home-category-rail.hide,
 #kefin-home-category-rail.hide .kefin-home-category-rail {
@@ -603,11 +608,9 @@ html[data-active-page="home"] body[data-seasonal-background="true"] #reactRoot >
 
 html[data-active-page="home"] [data-seasonal-theme="seasonal-halloween"][data-seasonal-background="true"] header.MuiAppBar-root,
 html[data-active-page="home"] [data-seasonal-theme="seasonal-halloween"][data-seasonal-background="true"] .skinHeader:not(.osdHeader) .headerTop {
+	position: relative;
 	box-shadow: 0 3px 12px rgba(180, 0, 0, 0.7) !important;
 	border-bottom: 2px solid #8b0000;
-}
-html[data-active-page="home"] [data-seasonal-theme="seasonal-halloween"][data-seasonal-background="true"] .skinHeader:not(.osdHeader) .headerTop {
-	position: relative;
 }
 
 html[data-active-page="home"] [data-seasonal-theme="seasonal-halloween"][data-seasonal-background="true"] header.MuiAppBar-root::after,
@@ -627,36 +630,27 @@ html[data-active-page="home"] [data-seasonal-theme="seasonal-halloween"][data-se
 	mask-size: 100% 100%;
 }
 
+/* Procedural blood edge (SVG via --halloween-blood-splatter from homeScreen3.js) */
 html[data-active-page="home"] [data-seasonal-theme="seasonal-halloween"][data-seasonal-background="true"] header.MuiAppBar-root::before,
 html[data-active-page="home"] [data-seasonal-theme="seasonal-halloween"][data-seasonal-background="true"] .skinHeader:not(.osdHeader) .headerTop::before {
 	content: "";
 	position: absolute;
-	top: 0;
+	top: auto;
+	bottom: 0;
 	left: 0;
 	width: 100%;
-	height: 100%;
+	height: var(--halloween-blood-band, 10px);
 	pointer-events: none;
-	opacity: 0.88;
-	background-image: 
-		url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="%238b0000"><path d="M50 20 C42 28, 15 18, 22 38 C10 42, 8 62, 28 68 C22 82, 42 88, 52 72 C62 88, 82 72, 72 58 C88 52, 82 28, 68 32 C72 18, 58 12, 50 20 Z"/><circle cx="14" cy="16" r="3"/><circle cx="82" cy="18" r="2.5"/><circle cx="8" cy="82" r="3.5"/><circle cx="88" cy="74" r="2"/><circle cx="44" cy="94" r="2"/></svg>'),
-		url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="%237a0000"><path d="M45 10 C35 22, 10 32, 20 52 C5 60, 25 80, 40 70 C50 92, 75 80, 68 62 C85 62, 92 40, 75 32 C80 15, 60 20, 45 10 Z"/><circle cx="28" cy="10" r="2"/><circle cx="90" cy="28" r="3.5"/><circle cx="16" cy="65" r="2"/><circle cx="82" cy="85" r="2.5"/><circle cx="58" cy="92" r="3"/></svg>'),
-		url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="%23550000"><path d="M55 25 C38 18, 22 35, 12 28 C18 48, 5 68, 28 72 C35 88, 58 82, 62 68 C78 78, 92 58, 80 42 C92 28, 72 15, 55 25 Z"/><circle cx="8" cy="22" r="2"/><circle cx="82" cy="12" r="3"/><circle cx="94" cy="48" r="2.5"/><circle cx="70" cy="88" r="1.8"/></svg>'),
-		url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 40" fill="%23990000"><ellipse cx="8" cy="15" rx="4" ry="1.5"/><ellipse cx="28" cy="24" rx="2" ry="3"/><ellipse cx="50" cy="10" rx="5" ry="1.8"/><ellipse cx="72" cy="28" rx="3" ry="1.2"/><ellipse cx="98" cy="16" rx="2" ry="1"/></svg>'),
-		url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 40" fill="%237a0000"><ellipse cx="12" cy="22" rx="2.5" ry="1.2"/><ellipse cx="32" cy="10" rx="3.5" ry="2"/><ellipse cx="58" cy="26" rx="2" ry="1"/><ellipse cx="78" cy="14" rx="4" ry="1.5"/><ellipse cx="108" cy="22" rx="1.8" ry="1"/></svg>'),
-		radial-gradient(ellipse at center, #990000 0%, #990000 50%, transparent 65%),
-		radial-gradient(circle, #7a0000 0%, #7a0000 55%, transparent 60%),
-		radial-gradient(ellipse at center, #550000 0%, #550000 50%, transparent 65%),
-		radial-gradient(circle, #8b0000 0%, #8b0000 55%, transparent 60%),
-		radial-gradient(circle, #7a0000 0%, #7a0000 55%, transparent 60%);
+	opacity: var(--halloween-blood-opacity, 0.95);
+	z-index: 1;
+	background-image: var(--halloween-blood-splatter, none);
 	background-repeat: no-repeat !important;
-	background-size: 
-		54px 40px,
-		36px 48px,
-		58px 58px,
-		120px 30px, 90px 38px, 
-		10px 6px,   6px 6px,  12px 7px,  5px 5px,  8px 8px;
-	background-position: 
-		7% 2px,    31% 8px,   68% -4px, 
-		15% 16px,  82% 6px, 
-		21% 4px,   44% 20px,  52% 6px,   76% 24px, 94% 10px;
+	background-size: 100% 100%;
+	background-position: bottom center;
+}
+
+@media (hover: hover) and (pointer: fine) and (min-width: 900px) {
+	#kefin-home-category-rail .kefin-home-category-rail.kefin-home-chrome {
+		pointer-events: auto;
+	}
 }
