@@ -1648,6 +1648,7 @@
         const selectButton = document.createElement('button');
         selectButton.type = 'button';
         selectButton.className = 'emby-button raised multi-query-picker-button';
+        if (isTvLayout()) selectButton.classList.add('show-focus');
         selectButton.textContent = getMultiQueryPickerButtonLabel(sectionConfig);
         selectButton.style.cssText = 'margin-left: 1em; padding: 0.5em 1em; font-size: 0.9em;';
         selectButton.setAttribute('aria-label', 'Select query');
@@ -1666,27 +1667,22 @@
             titleContainer.appendChild(selectButton);
         }
 
-        let activePopover = null;
-        let activePopoverCloseHandler = null;
-        const closePopover = () => {
-            if (activePopoverCloseHandler) {
-                document.removeEventListener('click', activePopoverCloseHandler);
-                activePopoverCloseHandler = null;
-            }
-            if (activePopover) {
-                activePopover.remove();
-                activePopover = null;
-            }
-        };
+        const MULTI_QUERY_MODAL_ID = 'kefin-multi-query-picker';
 
         const multiQueryPopoverCss = `
-                .multiQueryPopover {
-                    background-color: rgba(0, 0, 0, 0.95);
-                    position: absolute !important;
+                .kefin-multi-query-modal {
+                    background-color: rgba(0, 0, 0, 0.95) !important;
                     z-index: 1001;
-                    display: block;
-                    overflow-y: auto;
-                    box-sizing: border-box;
+                    min-width: 12rem;
+                    max-width: min(90vw, 320px);
+                    max-height: min(60vh, 420px);
+                    overflow: hidden;
+                    padding: 0 !important;
+                }
+                .kefin-multi-query-modal [data-name="kefin-modal-content"] {
+                    padding: 0.25em 0 !important;
+                    overflow-y: auto !important;
+                    max-height: min(60vh, 420px);
                 }
             `;
         let multiQueryStyleEl = document.getElementById('kefinTweaks-multiQueryPopover-style');
@@ -1701,130 +1697,115 @@
             e.stopPropagation();
             e.preventDefault();
 
-            if (activePopover) {
-                closePopover();
+            if (!window.ModalSystem?.create) return;
+            if (window.ModalSystem.isOpen?.(MULTI_QUERY_MODAL_ID)) {
+                window.ModalSystem.close(MULTI_QUERY_MODAL_ID);
                 return;
             }
 
-            const popover = document.createElement('div');
-            popover.className = 'kefinTweaks-popover multiQueryPopover itemDetailsGroup';
+            const list = document.createElement('div');
+            list.className = 'kefinTweaks-popover multiQueryPopover itemDetailsGroup';
             const selectedIndex = resolveActiveQueryIndex(sectionConfig, { initialize: false });
             let selectedItemElement = null;
 
+            const selectQuery = async (index) => {
+                window.ModalSystem.close(MULTI_QUERY_MODAL_ID);
+                if (index === resolveActiveQueryIndex(sectionConfig, { initialize: false })) {
+                    return;
+                }
+
+                sectionConfig._selectedQueryIndex = index;
+
+                const sectionIdAttr =
+                    typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+                        ? CSS.escape(String(sectionConfig.id))
+                        : String(sectionConfig.id).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
+                let activeSectionEl =
+                    document.querySelector(
+                        `.verticalSection[data-section-id="${sectionIdAttr}"], .spotlight-section[data-section-id="${sectionIdAttr}"]`,
+                    ) || sectionElement;
+
+                const livePicker = activeSectionEl.querySelector('.multi-query-picker-button');
+                if (livePicker) {
+                    livePicker.textContent = getMultiQueryPickerButtonLabel(sectionConfig);
+                }
+                updateSectionTitleText(activeSectionEl, getSectionTitleForMultiQuery(sectionConfig), getSectionCaption(sectionConfig));
+                updateSectionViewMoreLink(activeSectionEl, getActiveViewMoreUrl(sectionConfig));
+                activeSectionEl.dataset.refreshing = 'true';
+
+                try {
+                    const loaded = await loadActiveSectionQueryItems(sectionConfig);
+                    let newContent = null;
+
+                    if (loaded.canPaintCached) {
+                        newContent = await replaceSectionContent(sectionConfig, activeSectionEl, loaded.items);
+                    } else {
+                        activeSectionEl = showSectionQuerySkeletons(sectionConfig, activeSectionEl);
+                        const freshItems = await loaded.itemsPromise;
+                        newContent = await replaceSectionContent(sectionConfig, activeSectionEl, freshItems);
+                    }
+
+                    if (typeof sectionConfig._onMultiQueryChange === 'function') {
+                        sectionConfig._onMultiQueryChange(index, sectionConfig, newContent);
+                    }
+                } catch (error) {
+                    console.error('[KefinTweaks CardBuilder] Error switching query:', error);
+                    const live =
+                        document.querySelector(
+                            `.verticalSection[data-section-id="${sectionIdAttr}"], .spotlight-section[data-section-id="${sectionIdAttr}"]`,
+                        ) || activeSectionEl;
+                    if (live) live.dataset.refreshing = 'false';
+                }
+            };
+
             queries.forEach((query, index) => {
-                const itemElement = document.createElement('div');
-                itemElement.className = 'kefinTweaks-popover-item detailsGroupItem';
+                const itemElement = document.createElement('button');
+                itemElement.type = 'button';
+                itemElement.className = 'kefinTweaks-popover-item detailsGroupItem emby-button button-flat';
                 if (index === selectedIndex) {
-                    itemElement.classList.add('selected');
+                    itemElement.classList.add('selected', 'is-active');
                     selectedItemElement = itemElement;
                 }
                 itemElement.textContent = getQueryDisplayName(query, index);
-                itemElement.addEventListener('click', async () => {
-                    closePopover();
-                    if (index === resolveActiveQueryIndex(sectionConfig, { initialize: false })) {
-                        return;
-                    }
-
-                    sectionConfig._selectedQueryIndex = index;
-
-                    const sectionIdAttr =
-                        typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
-                            ? CSS.escape(String(sectionConfig.id))
-                            : String(sectionConfig.id).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-
-                    // Prefer the live section node (may have been replaced by a prior switch).
-                    let activeSectionEl =
-                        document.querySelector(
-                            `.verticalSection[data-section-id="${sectionIdAttr}"], .spotlight-section[data-section-id="${sectionIdAttr}"]`,
-                        ) || sectionElement;
-
-                    const livePicker = activeSectionEl.querySelector('.multi-query-picker-button');
-                    if (livePicker) {
-                        livePicker.textContent = getMultiQueryPickerButtonLabel(sectionConfig);
-                    }
-                    updateSectionTitleText(activeSectionEl, getSectionTitleForMultiQuery(sectionConfig), getSectionCaption(sectionConfig));
-                    updateSectionViewMoreLink(activeSectionEl, getActiveViewMoreUrl(sectionConfig));
-                    activeSectionEl.dataset.refreshing = 'true';
-
-                    try {
-                        const loaded = await loadActiveSectionQueryItems(sectionConfig);
-                        let newContent = null;
-
-                        if (loaded.canPaintCached) {
-                            newContent = await replaceSectionContent(sectionConfig, activeSectionEl, loaded.items);
-                        } else {
-                            // Skeletons before awaiting network — cache check already finished above.
-                            activeSectionEl = showSectionQuerySkeletons(sectionConfig, activeSectionEl);
-                            const freshItems = await loaded.itemsPromise;
-                            newContent = await replaceSectionContent(sectionConfig, activeSectionEl, freshItems);
-                        }
-
-                        if (typeof sectionConfig._onMultiQueryChange === 'function') {
-                            sectionConfig._onMultiQueryChange(index, sectionConfig, newContent);
-                        }
-                    } catch (error) {
-                        console.error('[KefinTweaks CardBuilder] Error switching query:', error);
-                        const live =
-                            document.querySelector(
-                                `.verticalSection[data-section-id="${sectionIdAttr}"], .spotlight-section[data-section-id="${sectionIdAttr}"]`,
-                            ) || activeSectionEl;
-                        if (live) live.dataset.refreshing = 'false';
-                    }
+                itemElement.addEventListener('click', (ev) => {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    selectQuery(index);
                 });
-                popover.appendChild(itemElement);
+                list.appendChild(itemElement);
             });
 
-            // Mount on body with absolute + document coords so the menu scrolls with the button
-            document.body.appendChild(popover);
-            const margin = 8;
-            const edgeMargin = 16;
-            const gap = 8;
-            const scrollX = window.scrollX || window.pageXOffset || 0;
-            const scrollY = window.scrollY || window.pageYOffset || 0;
-            const buttonRect = selectButton.getBoundingClientRect();
-            const popoverWidth = popover.offsetWidth || popover.getBoundingClientRect().width || 200;
-            const spaceBelow = window.innerHeight - buttonRect.bottom - margin;
-            const spaceAbove = buttonRect.top - margin;
-            const placeBelow = spaceBelow >= Math.min(spaceAbove, 160) || spaceBelow >= spaceAbove;
-            const available = placeBelow ? spaceBelow : spaceAbove;
-            const maxHeight = Math.max(120, Math.min(window.innerHeight * 0.6, available - gap));
-
-            let leftViewport = buttonRect.left;
-            leftViewport = Math.min(
-                Math.max(edgeMargin, leftViewport),
-                Math.max(edgeMargin, window.innerWidth - popoverWidth - edgeMargin),
-            );
-
-            popover.style.position = 'absolute';
-            popover.style.left = `${leftViewport + scrollX}px`;
-            popover.style.maxHeight = `${maxHeight}px`;
-            popover.style.bottom = 'auto';
-            if (placeBelow) {
-                popover.style.top = `${buttonRect.bottom + gap + scrollY}px`;
-            } else {
-                const height = Math.min(popover.offsetHeight || maxHeight, maxHeight);
-                popover.style.top = `${Math.max(scrollY + margin, buttonRect.top - gap - height + scrollY)}px`;
-            }
-            activePopover = popover;
-
-            if (selectedItemElement) {
-                setTimeout(() => {
-                    selectedItemElement.scrollIntoView({
-                        behavior: 'instant',
-                        block: 'nearest',
-                        inline: 'nearest',
-                    });
-                }, 10);
-            }
-
-            activePopoverCloseHandler = (ev) => {
-                if (!popover.contains(ev.target) && !selectButton.contains(ev.target)) {
-                    closePopover();
-                }
-            };
-            setTimeout(() => {
-                document.addEventListener('click', activePopoverCloseHandler);
-            }, 100);
+            window.ModalSystem.create({
+                id: MULTI_QUERY_MODAL_ID,
+                title: null,
+                content: list,
+                footer: null,
+                showCloseButton: false,
+                closeOnBackdrop: true,
+                closeOnEscape: true,
+                fixedSize: false,
+                returnFocus: selectButton,
+                initialFocus: selectedItemElement,
+                anchor: selectButton,
+                dialogClassName: 'kefin-multi-query-modal',
+                onOpen: (modal) => {
+                    if (modal.backdrop) modal.backdrop.style.background = 'transparent';
+                    if (modal.dialogContainer) modal.dialogContainer.style.pointerEvents = 'none';
+                    if (modal.dialog) modal.dialog.style.pointerEvents = 'auto';
+                    if (modal.dialogContent) {
+                        modal.dialogContent.style.padding = '0.25em 0';
+                        modal.dialogContent.style.overflowY = 'auto';
+                        modal.dialogContent.style.minHeight = '0';
+                        modal.dialogContent.style.flex = '0 1 auto';
+                    }
+                    if (selectedItemElement) {
+                        requestAnimationFrame(() => {
+                            selectedItemElement.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+                        });
+                    }
+                },
+            });
         });
     }
 
@@ -1846,7 +1827,8 @@
 
             const moreButton = document.createElement('button');
             moreButton.type = 'button';
-            moreButton.className = 'section-controls-more material-icons more_vert';
+            moreButton.className = 'section-controls-more material-icons more_vert paper-icon-button-light';
+            if (isTvLayout()) moreButton.classList.add('show-focus');
             moreButton.title = 'More';
             moreButton.setAttribute('aria-label', 'More');
 
@@ -2189,7 +2171,7 @@
             useParentCard = false,
             borderStyle = null,
         ) {
-            return createJellyfinCardElement(item, overflowCard, cardFormat, customFooterText, useParentCard, borderStyle);
+            return createCardElement(item, overflowCard, cardFormat, customFooterText, useParentCard, borderStyle);
         },
 
         /** Push-register lazy images under an attached root (parallel native path). */
@@ -4216,18 +4198,146 @@
     }
 
     /**
-     * Renders a spotlight section (Netflix-style slim banner carousel)
-     * @param {Array} items - Array of Jellyfin item objects
-     * @param {string} title - Title for the spotlight section
-     * @param {Object} options - Options for the spotlight carousel
-     * @param {boolean} options.autoPlay - Auto-cycle through items (default: true)
-     * @param {number} options.interval - Auto-play interval in ms (default: 10000)
-     * @param {boolean} options.showSlideState - Show slide state container (dots or numeric) (default: true)
-     * @param {boolean} options.showDots - When showSlideState is true: true = dots (max 5), false = numeric "N / X" (default: true)
-     * @param {boolean} options.showNavButtons - Show prev/next buttons (default: true)
-     * @param {boolean} options.pauseOnHover - Pause auto-cycle when cursor is over spotlight (default: true, false when fullScreen)
-     * @returns {HTMLElement} - The constructed spotlight container
+     * TV layout detection (Jellyfin sets layout-tv on <html>).
+     * Evaluated at call time so Display Mode changes are respected after re-render.
      */
+    function isTvLayout() {
+        return document.documentElement.classList.contains('layout-tv');
+    }
+
+    /**
+     * Prefer TV button cards when layout-tv is active; otherwise desktop cards.
+     */
+    function createCardElement(
+        item,
+        overflowCard = false,
+        cardFormat = null,
+        customFooterText = null,
+        useParentCard = false,
+        borderStyle = null,
+    ) {
+        if (isTvLayout()) {
+            return buildTvCardElement(item, overflowCard, cardFormat, customFooterText, useParentCard, borderStyle);
+        }
+        return createJellyfinCardElement(item, overflowCard, cardFormat, customFooterText, useParentCard, borderStyle);
+    }
+
+    /**
+     * Convert a desktop card DOM tree into a Jellyfin TV focusable button card.
+     * Reuses desktop image/footer construction, then strips hover overlays and linked titles.
+     */
+    function convertDesktopCardToTvButton(sourceCard, item) {
+        const button = document.createElement('button');
+        button.type = 'button';
+
+        Array.from(sourceCard.attributes).forEach((attr) => {
+            if (attr.name === 'class') return;
+            button.setAttribute(attr.name, attr.value);
+        });
+
+        const classes = String(sourceCard.className || '')
+            .split(/\s+/)
+            .filter((c) => c && c !== 'card-hoverable');
+        if (!classes.includes('show-focus')) classes.push('show-focus');
+        if (!classes.includes('show-animation')) classes.push('show-animation');
+        if (!classes.includes('itemAction')) classes.push('itemAction');
+        button.className = classes.join(' ');
+        button.setAttribute('data-action', 'link');
+        button.setAttribute('aria-label', item?.Name || sourceCard.getAttribute('aria-label') || 'Unknown');
+
+        while (sourceCard.firstChild) {
+            button.appendChild(sourceCard.firstChild);
+        }
+
+        const imageLink = button.querySelector('a.cardImageContainer');
+        if (imageLink) {
+            const imageDiv = document.createElement('div');
+            Array.from(imageLink.attributes).forEach((attr) => {
+                if (attr.name === 'href') return;
+                imageDiv.setAttribute(attr.name, attr.value);
+            });
+            while (imageLink.firstChild) {
+                imageDiv.appendChild(imageLink.firstChild);
+            }
+            imageLink.replaceWith(imageDiv);
+        }
+
+        button.querySelectorAll('.cardOverlayContainer').forEach((el) => el.remove());
+
+        button.querySelectorAll('a.textActionButton').forEach((link) => {
+            const text = link.textContent || '';
+            const bdi = link.closest('bdi');
+            if (bdi) {
+                bdi.textContent = text;
+            } else {
+                link.replaceWith(document.createTextNode(text));
+            }
+        });
+
+        // Match Jellyfin TV backdrop image request size when easy
+        const imageEl = button.querySelector('.cardImageContainer[data-src]');
+        if (imageEl) {
+            const src = imageEl.getAttribute('data-src') || '';
+            if (src.includes('fillHeight=267') && src.includes('fillWidth=474')) {
+                imageEl.setAttribute(
+                    'data-src',
+                    src
+                        .replace('fillHeight=267', 'fillHeight=335')
+                        .replace('fillWidth=474', 'fillWidth=596'),
+                );
+            }
+        }
+
+        // Custom / external cards: overlay link was removed — navigate on activate
+        const customUrl = item?.cardUrl;
+        if (customUrl) {
+            button.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (customUrl.startsWith('#') || customUrl.startsWith('/')) {
+                    window.location.href = customUrl;
+                } else {
+                    window.open(customUrl, '_blank', 'noopener,noreferrer');
+                }
+            });
+        }
+
+        return button;
+    }
+
+    /**
+     * Dedicated TV card builder (button root, no overlays, plain titles).
+     * Same argument shape as createJellyfinCardElement.
+     */
+    function buildTvCardElement(
+        item,
+        overflowCard = false,
+        cardFormat = null,
+        customFooterText = null,
+        useParentCard = false,
+        borderStyle = null,
+    ) {
+        const normalizedFormat = (cardFormat || '').toLowerCase() || null;
+        if (normalizedFormat === 'button') {
+            const libraryButton = createLibraryButtonElement(item);
+            libraryButton.classList.add('show-focus', 'show-animation', 'itemAction');
+            if (!libraryButton.getAttribute('data-action')) {
+                libraryButton.setAttribute('data-action', 'link');
+            }
+            return libraryButton;
+        }
+
+        const desktopCard = createJellyfinCardElement(
+            item,
+            overflowCard,
+            cardFormat,
+            customFooterText,
+            useParentCard,
+            borderStyle,
+        );
+        return convertDesktopCardToTvButton(desktopCard, item);
+    }
+
     /**
      * Resolve spotlight layout/size/tileCount from options (incl. legacy fullScreen).
      * Shared by live create, skeleton create, and configure/defaults callers.
@@ -4332,6 +4442,7 @@
         {
             const sectionTitleContainer = document.createElement('div');
             sectionTitleContainer.className = 'spotlight-section-title-container';
+            if (isTvLayout()) sectionTitleContainer.classList.add('focuscontainer-x');
 
             if (title) {
                 let sectionTitleEl;
@@ -4342,8 +4453,10 @@
                     titleLink.textContent = title;
                     titleLink.title = 'See All';
                     titleLink.style.textDecoration = 'none';
+                    if (isTvLayout()) titleLink.classList.add('show-focus');
 
                     if (typeof viewMoreUrl === 'function') {
+                        if (isTvLayout()) titleLink.setAttribute('tabindex', '0');
                         titleLink.addEventListener('click', (e) => {
                             e.preventDefault();
                             e.stopPropagation();
@@ -4673,6 +4786,7 @@
                         nameElement.className = 'spotlight-person-link';
                         nameElement.href = `${serverAddress}/web/#/details?id=${itemData.id}&serverId=${serverId}`;
                         nameElement.textContent = itemData.name;
+                        if (isTvLayout()) nameElement.classList.add('show-focus');
                         nameElement.addEventListener('click', (e) => {
                             e.stopPropagation();
                         });
@@ -4681,12 +4795,14 @@
                         nameElement.className = 'spotlight-genre-link';
                         nameElement.href = `${serverAddress}/web/#/list.html?genreId=${itemData.id}&serverId=${serverId}`;
                         nameElement.textContent = itemData.name;
+                        if (isTvLayout()) nameElement.classList.add('show-focus');
                         nameElement.addEventListener('click', (e) => e.stopPropagation());
                     } else if (useStudioLinks && itemData.id) {
                         nameElement = document.createElement('a');
                         nameElement.className = 'spotlight-studio-link';
                         nameElement.href = `${serverAddress}/web/#/list.html?studioId=${itemData.id}&serverId=${serverId}`;
                         nameElement.textContent = itemData.name;
+                        if (isTvLayout()) nameElement.classList.add('show-focus');
                         nameElement.addEventListener('click', (e) => e.stopPropagation());
                     } else {
                         nameElement = document.createElement('span');
@@ -4707,8 +4823,8 @@
                     }
                 });
 
-                // Tooltip when more items exist (full list on hover)
-                if (hasMore) {
+                // Tooltip when more items exist (full list on hover) — skip on TV (no hover; links steal focus)
+                if (hasMore && !isTvLayout()) {
                     // Tooltip: full list as vertical stack with clickable links (no layout shift)
                     const tooltip = document.createElement('div');
                     tooltip.className = 'spotlight-truncated-list-tooltip';
@@ -4901,11 +5017,13 @@
             // Buttons container
             const buttonsContainer = document.createElement('div');
             buttonsContainer.className = 'spotlight-buttons-container mainDetailButtons';
+            if (isTvLayout()) buttonsContainer.classList.add('focuscontainer-x');
 
             // Play button (material icon span button)
             const playButton = document.createElement('button');
             playButton.className = 'emby-button raised button-flat btnPlay detailButton';
             playButton.title = 'Play';
+            if (isTvLayout()) playButton.classList.add('show-focus');
             const playIcon = document.createElement('span');
             playIcon.className = 'material-icons';
             playIcon.textContent = 'play_arrow';
@@ -4937,6 +5055,7 @@
                 watchlistButton = document.createElement('button');
                 watchlistButton.type = 'button';
                 watchlistButton.className = 'watchlist-button spotlight-watchlist-button emby-button button-flat paper-icon-button-light';
+                if (isTvLayout()) watchlistButton.classList.add('show-focus');
                 watchlistButton.setAttribute('data-action', 'none');
                 watchlistButton.setAttribute('data-id', item.Id);
                 watchlistButton.setAttribute('data-active', isLiked ? 'true' : 'false');
@@ -4955,14 +5074,15 @@
             // Info button (shows overview on hover)
             const infoButton = document.createElement('button');
             infoButton.className = 'emby-button button-flat spotlight-info-button paper-icon-button-light';
+            if (isTvLayout()) infoButton.classList.add('show-focus');
             const infoIcon = document.createElement('span');
             infoIcon.className = 'material-icons';
             infoIcon.textContent = 'info';
             infoIcon.title = 'Go To Item';
             infoButton.appendChild(infoIcon);
 
-            // Overview tooltip (hidden by default, shown on hover)
-            if (item.Overview) {
+            // Overview tooltip (hover only) — skip on TV
+            if (item.Overview && !isTvLayout()) {
                 const overviewTooltip = document.createElement('div');
                 overviewTooltip.className = 'spotlight-overview-tooltip';
                 overviewTooltip.textContent = item.Overview;
@@ -4997,6 +5117,7 @@
 
             const metadataContainer = document.createElement('div');
             metadataContainer.className = 'metadata-container';
+            if (isTvLayout()) metadataContainer.classList.add('focuscontainer-x');
 
             if (metadataRow.children.length > 0) {
                 metadataContainer.appendChild(metadataRow);
@@ -5091,6 +5212,29 @@
             firstItemActive.setAttribute('data-active', 'true');
         }
 
+        function syncSpotlightTvFocus() {
+            if (!isTvLayout()) return;
+            const isTooltipFocusable = (el) =>
+                !!el.closest?.('.spotlight-truncated-list-tooltip, .spotlight-overview-tooltip');
+            bannerContainer.querySelectorAll('.spotlight-item').forEach((slide) => {
+                const active = slide.getAttribute('data-active') === 'true';
+                slide.querySelectorAll('a[href], button').forEach((el) => {
+                    if (el.classList.contains('spotlight-dot') || isTooltipFocusable(el)) {
+                        el.setAttribute('tabindex', '-1');
+                        return;
+                    }
+                    if (active) {
+                        if (el.getAttribute('tabindex') === '-1') el.removeAttribute('tabindex');
+                    } else {
+                        el.setAttribute('tabindex', '-1');
+                    }
+                });
+            });
+            bannerContainer.querySelectorAll('.spotlight-dot').forEach((dot) => {
+                dot.setAttribute('tabindex', '-1');
+            });
+        }
+
         if (!inert) {
             // Delegated handler: info button click -> navigate to item details for the current slide
             bannerContainer.addEventListener('click', (e) => {
@@ -5131,6 +5275,7 @@
 
                 const prevButton = document.createElement('button');
                 prevButton.className = 'spotlight-nav-button spotlight-nav-prev emby-button';
+                if (isTvLayout()) prevButton.classList.add('show-focus');
                 const prevIcon = document.createElement('span');
                 prevIcon.className = 'material-icons';
                 prevIcon.textContent = 'chevron_left';
@@ -5143,6 +5288,7 @@
 
                 const nextButton = document.createElement('button');
                 nextButton.className = 'spotlight-nav-button spotlight-nav-next emby-button';
+                if (isTvLayout()) nextButton.classList.add('show-focus');
                 const nextIcon = document.createElement('span');
                 nextIcon.className = 'material-icons';
                 nextIcon.textContent = 'chevron_right';
@@ -5169,6 +5315,7 @@
                 if (navButtonsContainer) {
                     const pauseButton = document.createElement('button');
                     pauseButton.className = 'spotlight-pause-button spotlight-nav-button emby-button';
+                    if (isTvLayout()) pauseButton.classList.add('show-focus');
                     const pauseIcon = document.createElement('span');
                     pauseIcon.className = 'material-icons';
                     pauseIcon.textContent = 'pause';
@@ -5494,6 +5641,8 @@
                     advanceDue = false;
                     startAutoPlay();
                 }
+
+                syncSpotlightTvFocus();
             }
 
             // Auto-play: single-timeout per slide, controlled only by pause/visibility (hover is ignored)
@@ -5681,7 +5830,10 @@
                 if (!items[idx]) return;
                 createAndAppendSlide(items[idx], idx, idx === currentIndex);
             });
+            syncSpotlightTvFocus();
         };
+
+        syncSpotlightTvFocus();
 
         return container;
     }
@@ -5697,6 +5849,8 @@
     };
 
     function resolveItemsLayout(sectionConfig) {
+        // Jellyfin TV rows are horizontal-only; never expand to grid/tiles on layout-tv
+        if (isTvLayout()) return 'row';
         if (!sectionConfig) return 'row';
         if (sectionConfig.itemsLayout === 'grid') return 'grid';
         if (sectionConfig.itemsLayout === 'row') return 'row';
@@ -6080,7 +6234,7 @@
                 getLabel: () => getShowAllControlLabel(sectionElement),
                 label: 'Grid layout',
                 className: 'show-all-button',
-                isVisible: () => true,
+                isVisible: () => !isTvLayout(),
                 onClick: (e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -6112,7 +6266,8 @@
             const label = typeof def.getLabel === 'function' ? def.getLabel() : def.label;
             const button = document.createElement('button');
             button.type = 'button';
-            button.className = `${def.className} material-icons ${def.icon}`;
+            button.className = `${def.className} material-icons ${def.icon} paper-icon-button-light`;
+            if (isTvLayout()) button.classList.add('show-focus');
             button.title = label;
             button.setAttribute('aria-label', label);
             button.dataset.sectionControlId = def.id;
@@ -6126,6 +6281,9 @@
         });
 
         const newMoreButton = moreButton.cloneNode(true);
+        if (isTvLayout()) {
+            newMoreButton.classList.add('paper-icon-button-light', 'show-focus');
+        }
         moreButton.replaceWith(newMoreButton);
 
         const MORE_CONTROLS_MODAL_ID = 'kefin-section-controls-more';
@@ -6286,6 +6444,76 @@
 
     function isMobileLayout() {
         return document.documentElement.classList.contains('layout-mobile') || window.innerWidth < 900;
+    }
+
+    function createTvScrollerElement() {
+        const scroller = document.createElement('div');
+        scroller.setAttribute('is', 'emby-scroller');
+        scroller.setAttribute('data-centerfocus', 'true');
+        scroller.className = 'padded-top-focusscale padded-bottom-focusscale emby-scroller';
+        scroller.style.overflow = 'hidden';
+        return scroller;
+    }
+
+    function createTvItemsSliderElement() {
+        const itemsContainer = document.createElement('div');
+        itemsContainer.setAttribute('is', 'emby-itemscontainer');
+        itemsContainer.className = 'scrollSlider focuscontainer-x itemsContainer animatedScrollX itemsContainer-tv';
+        itemsContainer.style.whiteSpace = 'nowrap';
+        return itemsContainer;
+    }
+
+    /**
+     * TV-mode scrollable section: native emby-scroller + itemsContainer-tv.
+     * No Kefin custom-scroller drag/wheel, no scroll buttons — Jellyfin owns row motion on focus.
+     */
+    function createTvScrollableContainer(
+        items,
+        title,
+        viewMoreUrl = null,
+        overflowCard = false,
+        cardFormat = null,
+        sectionConfig = null,
+    ) {
+        const verticalSection = document.createElement('div');
+        verticalSection.className = 'verticalSection emby-scroller-container';
+        const facetRowType = getFacetRowType(items);
+        if (facetRowType) {
+            verticalSection.style.setProperty('--row-hue', `${Math.floor(Math.random() * 360)}deg`);
+            verticalSection.dataset.facetRowType = facetRowType;
+        }
+
+        if (cardFormat) {
+            verticalSection.setAttribute('data-card-format', cardFormat);
+        }
+
+        const sectionTitleContainer = document.createElement('div');
+        sectionTitleContainer.className = 'sectionTitleContainer sectionTitleContainer-cards padded-left';
+
+        appendSectionTitleContent(sectionTitleContainer, {
+            title,
+            caption: getSectionCaption(sectionConfig),
+            captionUrl: getSectionCaptionUrl(sectionConfig),
+            viewMoreUrl,
+        });
+
+        ensureSectionControlsMount(sectionTitleContainer);
+
+        const scroller = createTvScrollerElement();
+        const itemsContainer = createTvItemsSliderElement();
+
+        const useParentCard = !!sectionConfig?.useParentCard;
+        const borderStyle = sectionConfig?.borderStyle || null;
+        items.forEach((item, index) => {
+            const card = buildTvCardElement(item, overflowCard, cardFormat, item.cardFooter, useParentCard, borderStyle);
+            card.setAttribute('data-index', index);
+            itemsContainer.appendChild(card);
+        });
+
+        scroller.appendChild(itemsContainer);
+        verticalSection.appendChild(sectionTitleContainer);
+        verticalSection.appendChild(scroller);
+        return verticalSection;
     }
 
     function getSectionSkeletonCount(sectionConfig, cardFormat = null, itemsLayout = null) {
@@ -6974,6 +7202,7 @@
         } else if (viewMoreUrl) {
             const titleLink = document.createElement('a');
             titleLink.className = 'sectionTitle-link button-flat button-flat-mini sectionTitleTextButton emby-button';
+            if (isTvLayout()) titleLink.classList.add('show-focus');
             titleLink.style.cssText = 'text-decoration: none; cursor: pointer; display: flex; align-items: center;';
 
             if (typeof viewMoreUrl === 'function') {
@@ -7015,6 +7244,7 @@
             } else if (captionUrl) {
                 captionEl = document.createElement('a');
                 captionEl.className = 'sectionTitle sectionCaption button-flat button-flat-mini sectionTitleTextButton emby-button';
+                if (isTvLayout()) captionEl.classList.add('show-focus');
                 if (typeof captionUrl === 'function') {
                     captionEl.addEventListener('click', (e) => {
                         e.preventDefault();
@@ -7042,6 +7272,10 @@
         sectionConfig = null,
         registerScrollButtons = true,
     ) {
+        if (isTvLayout()) {
+            return createTvScrollableContainer(items, title, viewMoreUrl, overflowCard, cardFormat, sectionConfig);
+        }
+
         const normalizedFormat = (cardFormat || '').toLowerCase();
         const isButtonLayout = normalizedFormat === 'button';
 
@@ -7322,9 +7556,13 @@
         overflowCard = false,
         sectionConfig = null,
     ) {
-        // Create the main vertical section container (same structure as createScrollableContainer)
+        const tvLayout = isTvLayout();
+
+        // Create the main vertical section container (same structure as createScrollableContainer / TV path)
         const verticalSection = document.createElement('div');
-        verticalSection.className = 'verticalSection emby-scroller-container custom-scroller-container';
+        verticalSection.className = tvLayout
+            ? 'verticalSection emby-scroller-container'
+            : 'verticalSection emby-scroller-container custom-scroller-container';
 
         // Persist the card format if provided (ensures consistency for random/updates)
         if (cardFormat) {
@@ -7355,11 +7593,11 @@
 
         ensureSectionControlsMount(sectionTitleContainer);
 
-        const scroller = createScrollerElement();
+        const scroller = tvLayout ? createTvScrollerElement() : createScrollerElement();
         // Sticky is=emby-itemscontainer on skeleton shell — never recreate on enhance
-        const itemsContainer = createItemsSliderElement(true);
+        const itemsContainer = tvLayout ? createTvItemsSliderElement() : createItemsSliderElement(true);
 
-        const itemsLayout = resolveItemsLayout(sectionConfig);
+        const itemsLayout = tvLayout ? 'row' : resolveItemsLayout(sectionConfig);
         const skeletonCount = getSectionSkeletonCount(sectionConfig, cardFormat, itemsLayout);
         for (let i = 0; i < skeletonCount; i++) {
             const skeletonCard = createSkeletonCard(cardFormat, overflowCard, sectionConfig);
@@ -7369,11 +7607,12 @@
 
         scroller.appendChild(itemsContainer);
 
-        const scrollButtons = attachScrollableSectionChrome(verticalSection, scroller);
-
         verticalSection.appendChild(sectionTitleContainer);
-        if (scrollButtons) {
-            verticalSection.appendChild(scrollButtons);
+        if (!tvLayout) {
+            const scrollButtons = attachScrollableSectionChrome(verticalSection, scroller);
+            if (scrollButtons) {
+                verticalSection.appendChild(scrollButtons);
+            }
         }
         verticalSection.appendChild(scroller);
 
@@ -8362,7 +8601,7 @@
     ) {
         const cards = [];
         items.forEach((item, offset) => {
-            const card = createJellyfinCardElement(item, overflowCard, cardFormat, item.cardFooter, useParentCard, borderStyle);
+            const card = createCardElement(item, overflowCard, cardFormat, item.cardFooter, useParentCard, borderStyle);
             card.setAttribute('data-index', String(startIndex + offset));
             itemsContainer.appendChild(card);
             cards.push(card);
@@ -8454,7 +8693,7 @@
                 return;
             }
 
-            const card = createJellyfinCardElement(
+            const card = createCardElement(
                 item,
                 overflowCard,
                 cardFormat,
@@ -8553,7 +8792,11 @@
         const cardFormat = sectionElement.getAttribute('data-card-format') || sectionConfig.cardFormat;
         const normalizedFormat = (cardFormat || '').toLowerCase();
         const layoutFromDom = itemsContainer.getAttribute('data-layout');
-        const layout = layoutFromDom === 'grid' || layoutFromDom === 'row' ? layoutFromDom : resolveItemsLayout(sectionConfig);
+        const layout = isTvLayout()
+            ? 'row'
+            : layoutFromDom === 'grid' || layoutFromDom === 'row'
+              ? layoutFromDom
+              : resolveItemsLayout(sectionConfig);
         const gapless = itemsContainer.getAttribute('data-gapless') === 'true' || resolveUseGaplessCards(sectionConfig);
 
         invalidateLastRowPadding(itemsContainer);
@@ -8569,7 +8812,7 @@
             const useParentCard = !!sectionConfig?.useParentCard;
             const borderStyle = sectionConfig?.borderStyle || null;
             items.forEach((item, index) => {
-                const card = createJellyfinCardElement(item, overflowCard, cardFormat, item.cardFooter, useParentCard, borderStyle);
+                const card = createCardElement(item, overflowCard, cardFormat, item.cardFooter, useParentCard, borderStyle);
                 card.setAttribute('data-index', String(index));
                 fragment.appendChild(card);
             });

@@ -16,6 +16,11 @@
     const CARD_TITLE_MENU_MODAL_ID = 'kefin-section-card-title-menu';
     const RESTORE_SECTION_MODAL_ID = 'kefin-section-restore-defaults';
     const PUBLISH_SECTION_MODAL_ID = 'kefin-section-publish-defaults';
+    const CONFIGURE_MODAL_ID = 'kefin-section-configure';
+
+    function isTvLayout() {
+        return document.documentElement.classList.contains('layout-tv');
+    }
 
     /** True when the current pointer gesture started inside a Pickr app (drag may end outside). */
     let pickrGestureFromApp = false;
@@ -1003,11 +1008,8 @@
             activePopover.entry = entry;
             activePopover.sectionElement = entry.element;
             activePopover.anchorButton = getConfigureAnchorButton(entry);
-            const mountElement = preparePopoverMount(activePopover.anchorButton, entry.element);
-            activePopover.mountElement = mountElement;
-            if (activePopover.popover.parentElement !== mountElement) {
-                mountElement.appendChild(activePopover.popover);
-            }
+            activePopover.mountElement = resolvePopoverMount(activePopover.anchorButton, entry.element);
+            preparePopoverMount(activePopover.anchorButton, entry.element);
             requestAnimationFrame(() => repositionActivePopover({ force: true }));
         }
     }
@@ -1083,7 +1085,7 @@
         }
         if (modal.dialogContent) {
             modal.dialogContent.style.padding = '0.25em 0';
-            modal.dialogContent.style.overflow = 'hidden';
+            modal.dialogContent.style.overflow = 'visible';
             modal.dialogContent.style.minHeight = '0';
         }
         if (modal.backdrop) {
@@ -1093,6 +1095,7 @@
             modal.dialogContainer.style.pointerEvents = 'none';
         }
         modal.dialog.style.pointerEvents = 'auto';
+        modal.dialog.style.overflow = 'visible';
         requestAnimationFrame(() => positionFormatMenu(modal.dialog, anchorBtn));
     }
 
@@ -1259,6 +1262,9 @@
             closeOnBackdrop: true,
             closeOnEscape: true,
             fixedSize: false,
+            returnFocus: anchorBtn,
+            initialFocus: '.kefin-section-format-option.is-active',
+            anchor: anchorBtn,
             onOpen: (modalInstance) => {
                 styleAnchoredPopoverDialog(modalInstance, anchorBtn);
                 const root = modalInstance.dialogContent;
@@ -1403,7 +1409,7 @@
 
         const content = `
             <div class="kefin-section-card-title-menu-body">
-                <div class="kefin-section-card-title-menu-icons">
+                <div class="kefin-section-card-title-menu-icons" data-kefin-focus-row>
                     <button type="button" is="paper-icon-button-light" class="paper-icon-button-light emby-button kefin-section-card-title-visibility-btn${titlesVisible ? '' : ' is-hidden-visibility'}" title="${titlesVisible ? 'Hide card titles' : 'Show card titles'}" aria-label="${titlesVisible ? 'Hide card titles' : 'Show card titles'}" aria-pressed="${titlesVisible}">
                         <span class="material-icons" aria-hidden="true">${titlesVisible ? 'visibility' : 'visibility_off'}</span>
                     </button>
@@ -1445,6 +1451,9 @@
             closeOnBackdrop: true,
             closeOnEscape: true,
             fixedSize: false,
+            returnFocus: anchorBtn,
+            initialFocus: '.kefin-section-card-title-visibility-btn',
+            anchor: anchorBtn,
             onOpen: (modalInstance) => {
                 styleAnchoredPopoverDialog(modalInstance, anchorBtn);
                 const root = modalInstance.dialogContent;
@@ -2135,7 +2144,7 @@
     }
 
     function closePopover() {
-        if (!activePopover) return;
+        if (!activePopover && !window.ModalSystem?.isOpen?.(CONFIGURE_MODAL_ID)) return;
         closeCardTitleMenu();
         if (window.ModalSystem?.isOpen?.(RESTORE_SECTION_MODAL_ID)) {
             window.ModalSystem.close(RESTORE_SECTION_MODAL_ID);
@@ -2143,11 +2152,28 @@
         if (window.ModalSystem?.isOpen?.(PUBLISH_SECTION_MODAL_ID)) {
             window.ModalSystem.close(PUBLISH_SECTION_MODAL_ID);
         }
-        const { popover, entry, stopTracking, mountElement, sectionElement } = activePopover;
+        if (window.ModalSystem?.isOpen?.(OPTION_MENU_MODAL_ID)) {
+            window.ModalSystem.close(OPTION_MENU_MODAL_ID);
+        }
+        if (window.ModalSystem?.isOpen?.(CARD_TITLE_MENU_MODAL_ID)) {
+            window.ModalSystem.close(CARD_TITLE_MENU_MODAL_ID);
+        }
+        // Closing the ModalSystem dialog runs onClose → finalizeConfigurePopoverClose
+        if (window.ModalSystem?.isOpen?.(CONFIGURE_MODAL_ID)) {
+            window.ModalSystem.close(CONFIGURE_MODAL_ID);
+            return;
+        }
+        finalizeConfigurePopoverClose();
+    }
+
+    function finalizeConfigurePopoverClose() {
+        if (!activePopover) return;
+        const { entry, stopTracking, mountElement, sectionElement, outsideHandler } = activePopover;
         stopTracking?.();
-        popover.remove();
+        if (outsideHandler) {
+            document.removeEventListener('click', outsideHandler, true);
+        }
         cleanupPopoverMount(mountElement, sectionElement || entry?.element);
-        document.removeEventListener('click', activePopover.outsideHandler, true);
         pickrGestureFromApp = false;
         activePopover = null;
     }
@@ -2306,18 +2332,17 @@
             if (activePopover) activePopover.anchorMode = placeBelow ? 'below' : 'above';
         }
 
-        const scrollX = window.scrollX || window.pageXOffset || 0;
-        const scrollY = window.scrollY || window.pageYOffset || 0;
-
         popover.classList.toggle('is-below', placeBelow);
-        popover.style.position = 'absolute';
-        popover.style.left = `${leftViewport + scrollX}px`;
+        popover.style.position = 'fixed';
+        popover.style.left = `${leftViewport}px`;
         popover.style.bottom = 'auto';
+        popover.style.right = 'auto';
+        popover.style.margin = '0';
         if (placeBelow) {
-            popover.style.top = `${buttonRect.bottom + gap + scrollY}px`;
+            popover.style.top = `${buttonRect.bottom + gap}px`;
         } else {
             const height = getPopoverPlacementHeight(popover, popover.classList.contains('is-expanded'));
-            popover.style.top = `${Math.max(scrollY + margin, buttonRect.top - gap - height + scrollY)}px`;
+            popover.style.top = `${Math.max(margin, buttonRect.top - gap - height)}px`;
         }
     }
 
@@ -2390,11 +2415,16 @@
         const spotlightTilesLabel = spotlightNextTileCount === 1
             ? '1 tile'
             : `${spotlightNextTileCount} tiles`;
-        const popover = document.createElement('div');
-        popover.className = 'kefin-section-configure-popover dialog';
-        popover.innerHTML = `
+        if (!window.ModalSystem?.create) {
+            WARN('ModalSystem unavailable for configure popover');
+            return;
+        }
+
+        const contentRoot = document.createElement('div');
+        contentRoot.className = 'kefin-section-configure-popover-body';
+        contentRoot.innerHTML = `
             <div class="kefin-section-configure-title-container">
-                <div class="kefin-section-configure-title-row">
+                <div class="kefin-section-configure-title-row" data-kefin-focus-row>
                     <h3>${escapeHtml(sectionConfig.name)}</h3>
                     <button type="button" is="paper-icon-button-light" class="paper-icon-button-light emby-button kefin-section-restore-defaults-btn${sectionDirty ? '' : ' is-disabled'}" title="Restore defaults" aria-label="Restore defaults" ${sectionDirty ? '' : 'hidden disabled'} aria-disabled="${sectionDirty ? 'false' : 'true'}">
                         <span class="material-icons" aria-hidden="true">settings_backup_restore</span>
@@ -2412,14 +2442,14 @@
                 </div>
                 <hr class="kefin-section-configure-separator" aria-hidden="true">
             </div>
-            <div class="kefin-section-configure-more-panel">
-                <div class="kefin-section-configure-more-panel-inner">
+            <div class="kefin-section-configure-more-panel" aria-hidden="true">
+                <div class="kefin-section-configure-more-panel-inner" data-kefin-focus-row>
                     ${moreModeRows}
                 </div>
             </div>
             <hr class="kefin-section-configure-separator" aria-hidden="true">
             <div class="kefin-section-configure-footer">
-                <div class="kefin-section-configure-primary-row">
+                <div class="kefin-section-configure-primary-row" data-kefin-focus-row>
                     <div class="kefin-section-configure-order">
                         <button type="button" is="paper-icon-button-light" class="paper-icon-button-light emby-button kefin-section-order-up" title="Move section up. Long press to move to top." aria-label="Move section up"><span class="material-icons" aria-hidden="true">arrow_upward</span></button>
                         <button type="button" is="paper-icon-button-light" class="paper-icon-button-light emby-button kefin-section-order-down" title="Move section down. Long press to move to bottom." aria-label="Move section down"><span class="material-icons" aria-hidden="true">arrow_downward</span></button>
@@ -2458,8 +2488,45 @@
         `;
 
         const mountElement = preparePopoverMount(anchorButton, sectionElement);
-        mountElement.appendChild(popover);
         applyPresentationToElement(entry);
+
+        const modal = window.ModalSystem.create({
+            id: CONFIGURE_MODAL_ID,
+            title: null,
+            content: contentRoot,
+            footer: null,
+            showCloseButton: false,
+            closeOnBackdrop: true,
+            closeOnEscape: true,
+            fixedSize: false,
+            returnFocus: anchorButton,
+            initialFocus: '.kefin-section-order-up',
+            dialogClassName: 'kefin-section-configure-popover',
+            onClose: () => {
+                finalizeConfigurePopoverClose();
+            },
+            onOpen: (modalInstance) => {
+                if (modalInstance.backdrop) modalInstance.backdrop.style.background = 'transparent';
+                if (modalInstance.dialogContainer) modalInstance.dialogContainer.style.pointerEvents = 'none';
+                if (modalInstance.dialog) {
+                    modalInstance.dialog.classList.remove('centeredDialog', 'formDialog', 'smoothScrollY', 'dialog-fixedSize');
+                    modalInstance.dialog.style.pointerEvents = 'auto';
+                    modalInstance.dialog.style.maxHeight = 'none';
+                    modalInstance.dialog.style.minHeight = '0';
+                    modalInstance.dialog.style.height = 'auto';
+                    modalInstance.dialog.style.width = 'auto';
+                }
+                if (modalInstance.dialogContent) {
+                    modalInstance.dialogContent.style.padding = '0';
+                    modalInstance.dialogContent.style.overflow = 'visible';
+                    modalInstance.dialogContent.style.minHeight = '0';
+                    modalInstance.dialogContent.style.flex = '0 0 auto';
+                }
+            },
+        });
+
+        const popover = modal.dialog;
+        // Queries / expand state use the dialog root (has kefin-section-configure-popover)
 
         const openEditorBtn = popover.querySelector('.kefin-section-open-editor-btn');
         const publishBtn = popover.querySelector('.kefin-section-publish-btn');
@@ -2748,21 +2815,19 @@
             popover.classList.toggle('is-expanded', willExpand);
             const moreBtn = popover.querySelector('.kefin-section-more-toggle');
             if (moreBtn) moreBtn.setAttribute('aria-expanded', String(willExpand));
+            const morePanel = popover.querySelector('.kefin-section-configure-more-panel');
+            if (morePanel) {
+                if (willExpand) morePanel.removeAttribute('aria-hidden');
+                else morePanel.setAttribute('aria-hidden', 'true');
+            }
         });
 
+        // Backdrop close is handled by ModalSystem; ignore Pickr / nested modal hosts via capture filter
         const outsideHandler = (e) => {
-            // Drag started in Pickr but released outside — not a real dismiss click
             if (pickrGestureFromApp) return;
-            if (popover.contains(e.target) || anchorButton.contains(e.target)) return;
-            // Pickr mounts its app on document.body (outside our modals)
-            if (e.target.closest?.('.pcr-app, .pickr, .kefin-pickr-app')) return;
-            const modalHost = e.target.closest?.('[data-modal-id]');
-            const modalId = modalHost?.getAttribute('data-modal-id');
-            if (modalId === OPTION_MENU_MODAL_ID || modalId === CARD_TITLE_MENU_MODAL_ID || modalId === RESTORE_SECTION_MODAL_ID || modalId === PUBLISH_SECTION_MODAL_ID) return;
-            if (e.target.closest(
-                '.kefin-section-format-btn, .kefin-section-border-style-btn, .kefin-section-card-title-btn, .kefin-section-spotlight-layout-btn, .kefin-section-spotlight-size-btn, .kefin-section-spotlight-tiles-btn'
-            )) return;
-            closePopover();
+            if (e.target.closest?.('.pcr-app, .pickr, .kefin-pickr-app')) {
+                e.stopPropagation();
+            }
         };
         setTimeout(() => document.addEventListener('click', outsideHandler, true), 0);
 
@@ -2770,6 +2835,7 @@
 
         activePopover = {
             popover,
+            modal,
             entry,
             anchorButton,
             mountElement,
@@ -2797,7 +2863,8 @@
     function createConfigureButton(sectionConfig, sectionElement) {
         const button = document.createElement('button');
         button.type = 'button';
-        button.className = 'section-configure-button material-icons settings';
+        button.className = 'section-configure-button material-icons settings paper-icon-button-light';
+        if (isTvLayout()) button.classList.add('show-focus');
         button.title = 'Configure';
         button.setAttribute('aria-label', 'Configure');
         button.addEventListener('click', (e) => {
@@ -2877,16 +2944,25 @@
             overflow: visible;
         }
         .kefin-section-configure-popover {
-            position: absolute;
+            position: fixed;
             z-index: 12000;
             box-sizing: border-box;
             display: flex;
             flex-direction: column;
             width: auto;
             min-width: 14rem;
-            max-width: min(100vw - 16px, 380px);
             padding: 0.5em;
-            overflow: hidden;
+            overflow: visible;
+        }
+        .kefin-section-configure-popover.dialog.formDialog,
+        .kefin-section-configure-popover.dialog {
+            background: var(--dialog-bg, #101010);
+        }
+        .kefin-section-configure-popover [data-name="kefin-modal-content"] {
+            padding: 0 !important;
+            overflow: visible !important;
+            flex: 0 0 auto !important;
+            min-height: 0 !important;
         }
         .kefin-section-configure-popover.is-below {
             flex-direction: column-reverse;
@@ -2939,6 +3015,7 @@
             display: flex;
             align-items: center;
             gap: 0.2em;
+            padding: 0.15em;
         }
         .kefin-section-configure-order {
             display: flex;

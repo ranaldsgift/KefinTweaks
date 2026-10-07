@@ -868,6 +868,14 @@
 	display: none !important;
 }
 
+/* TV: no hover tooltips; keep them out of the focus tree */
+.layout-tv .spotlight-truncated-list-tooltip,
+.layout-tv .spotlight-overview-tooltip {
+	display: none !important;
+	pointer-events: none !important;
+	visibility: hidden !important;
+}
+
 .spotlight-section:not(.hide)[data-section-id] > .spotlight-banner-container > .spotlight-nav-container {
 	position: absolute !important;
 	display: flex;
@@ -2114,6 +2122,7 @@
 	flex-direction: column;
 	justify-content: end;
 	align-items: center;
+	grid-gap: 3em;
 }
 
 .layout-mobile .spotlight-overview-section,
@@ -4199,4 +4208,60 @@ html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"
 }
 [data-section-id="liveTv-on-now"] .card[data-type="Program"] .cardTextStack .cardText-secondary:nth-child(3) {
     display: block;
+}
+
+/* TV layout: native emby-scroller + button cards (match Jellyfin layout-tv rows) */
+.layout-tv .emby-scroller-container > .emby-scroller.no-padding {
+	overflow: hidden;
+}
+
+.layout-tv .itemsContainer-tv > button.card {
+	-webkit-appearance: none;
+	appearance: none;
+	display: inline-block;
+	border: 0;
+	background: transparent;
+	padding: 0;
+	margin: 0;
+	font: inherit;
+	color: inherit;
+	text-align: inherit;
+	vertical-align: top;
+	cursor: pointer;
+}
+
+/* Section controls are hover-only on desktop; TV has no hover */
+.layout-tv .emby-scroller-container .section-refresh-button,
+.layout-tv .emby-scroller-container .section-configure-button,
+.layout-tv .emby-scroller-container .section-controls-more,
+.layout-tv .spotlight-section .section-refresh-button,
+.layout-tv .spotlight-section .section-configure-button {
+	opacity: 0.65;
+	visibility: visible;
+	pointer-events: auto;
+}
+
+.verticalSection[data-card-title-position^="overlay-"] .cardScalable::after,
+.emby-scroller-container[data-card-title-position^="overlay-"] .cardScalable::after {
+  pointer-events: none !important;
+}
+
+.verticalSection[data-card-title-position^="overlay-"] .cardTextStack a,
+.verticalSection[data-card-title-position^="overlay-"] .cardTextStack button,
+.emby-scroller-container[data-card-title-position^="overlay-"] .cardTextStack a,
+.emby-scroller-container[data-card-title-position^="overlay-"] .cardTextStack button {
+  pointer-events: auto !important;
+  position: relative;
+  z-index: 1;
+}
+
+.spotlight-section-title-container {
+	position: absolute;
+	z-index: 5;
+	isolation: isolate;
+	transform: translateZ(0);
+}
+
+.emby-scroller-container[data-section-id] {
+	z-index: 1;
 }

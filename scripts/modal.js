@@ -14,6 +14,20 @@ window.ModalSystem = (function() {
     let savedBodyOverflow = null;
     let savedHtmlOverflow = null;
 
+    const FOCUSABLE_SELECTOR = [
+        'button:not([disabled]):not([tabindex="-1"])',
+        '[href]:not([tabindex="-1"])',
+        'input:not([disabled]):not([type="hidden"]):not([tabindex="-1"])',
+        'select:not([disabled]):not([tabindex="-1"])',
+        'textarea:not([disabled]):not([tabindex="-1"])',
+        '[tabindex]:not([tabindex="-1"])',
+        '[role="button"]:not([tabindex="-1"])',
+    ].join(',');
+
+    function isTvLayout() {
+        return document.documentElement.classList.contains('layout-tv');
+    }
+
     function lockBodyScroll() {
         if (bodyScrollLockCount === 0) {
             savedBodyOverflow = document.body.style.overflow;
@@ -52,20 +66,243 @@ window.ModalSystem = (function() {
         dialog.addEventListener('animationend', onEnd);
     }
 
+    function getFocusableElements(root) {
+        if (!root) return [];
+        return Array.from(root.querySelectorAll(FOCUSABLE_SELECTOR)).filter((el) => {
+            if (el.closest('[hidden], [aria-hidden="true"]')) return false;
+            const style = window.getComputedStyle(el);
+            if (style.display === 'none' || style.visibility === 'hidden') return false;
+            if (el.disabled) return false;
+            return true;
+        });
+    }
+
+    function stampShowFocus(root) {
+        if (!root || !isTvLayout()) return;
+        root.querySelectorAll('button, a.emby-button, .emby-button, .paper-icon-button-light, [role="button"]').forEach((el) => {
+            if (el.getAttribute('tabindex') === '-1') return;
+            el.classList.add('show-focus');
+        });
+    }
+
+    function resolveInitialFocus(root, initialFocus) {
+        if (!root) return null;
+        if (initialFocus instanceof HTMLElement && root.contains(initialFocus)) {
+            return initialFocus;
+        }
+        if (typeof initialFocus === 'string') {
+            const bySelector = root.querySelector(initialFocus);
+            if (bySelector) return bySelector;
+        }
+        return (
+            root.querySelector('[data-autofocus]') ||
+            root.querySelector('.is-active') ||
+            root.querySelector('.selected') ||
+            getFocusableElements(root)[0] ||
+            null
+        );
+    }
+
+    /**
+     * Position a dialog near an anchor (fixed coords, viewport-clamped).
+     * @param {HTMLElement} dialog
+     * @param {HTMLElement} anchor
+     */
+    function positionNearAnchor(dialog, anchor) {
+        if (!dialog || !anchor) return;
+        const margin = 8;
+        const gap = 8;
+        const edgeMargin = 16;
+        const btnRect = anchor.getBoundingClientRect();
+        const dialogWidth = dialog.offsetWidth || dialog.getBoundingClientRect().width || 200;
+        const dialogHeight = dialog.offsetHeight || dialog.getBoundingClientRect().height || 120;
+        const spaceBelow = window.innerHeight - btnRect.bottom - margin;
+        const spaceAbove = btnRect.top - margin;
+        const placeBelow = spaceBelow >= Math.min(spaceAbove, 160) || spaceBelow >= spaceAbove;
+
+        let left = btnRect.left;
+        left = Math.min(
+            Math.max(edgeMargin, left),
+            Math.max(edgeMargin, window.innerWidth - dialogWidth - edgeMargin),
+        );
+
+        let top;
+        if (placeBelow) {
+            top = btnRect.bottom + gap;
+        } else {
+            top = Math.max(margin, btnRect.top - gap - dialogHeight);
+        }
+        top = Math.min(Math.max(top, margin), window.innerHeight - Math.min(dialogHeight, window.innerHeight - margin * 2) - margin);
+
+        dialog.style.position = 'fixed';
+        dialog.style.left = `${left}px`;
+        dialog.style.top = `${top}px`;
+        dialog.style.margin = '0';
+        dialog.style.right = 'auto';
+        dialog.style.bottom = 'auto';
+    }
+
+    function focusElement(el) {
+        if (!el || typeof el.focus !== 'function') return;
+        try {
+            el.focus({ preventScroll: true });
+        } catch (_) {
+            el.focus();
+        }
+    }
+
+    function owningDialog(el) {
+        return el && typeof el.closest === 'function' ? el.closest('.dialog') : null;
+    }
+
+    function getFocusRows(dialogEl) {
+        const rows = Array.from(dialogEl.querySelectorAll('[data-kefin-focus-row]'));
+        const withItems = rows.map((row) => ({
+            row,
+            items: getFocusableElements(row).filter((el) => el.closest('[data-kefin-focus-row]') === row),
+        })).filter((entry) => entry.items.length);
+        withItems.sort((a, b) => {
+            const at = a.row.getBoundingClientRect();
+            const bt = b.row.getBoundingClientRect();
+            if (Math.abs(at.top - bt.top) > 4) return at.top - bt.top;
+            return at.left - bt.left;
+        });
+        return withItems;
+    }
+
+    /**
+     * Attach focus trap to a dialog element. Returns a dispose function.
+     * @param {HTMLElement} dialogEl
+     * @param {{ returnFocusEl?: HTMLElement|null, initialFocusEl?: HTMLElement|string|null, onEscape?: Function|null }} options
+     */
+    function attachFocusTrap(dialogEl, options = {}) {
+        if (!dialogEl) return () => {};
+        const returnFocusEl = options.returnFocusEl || null;
+        const onEscape = typeof options.onEscape === 'function' ? options.onEscape : null;
+
+        dialogEl.classList.add('focuscontainer');
+        stampShowFocus(dialogEl);
+
+        const focusInitial = () => {
+            const target = resolveInitialFocus(dialogEl, options.initialFocusEl);
+            if (target) {
+                focusElement(target);
+            } else if (typeof dialogEl.focus === 'function') {
+                if (!dialogEl.hasAttribute('tabindex')) dialogEl.setAttribute('tabindex', '-1');
+                focusElement(dialogEl);
+            }
+        };
+
+        requestAnimationFrame(() => {
+            requestAnimationFrame(focusInitial);
+        });
+
+        const keydownHandler = (e) => {
+            if (!dialogEl.isConnected) return;
+
+            const active = document.activeElement;
+            const activeDialog = owningDialog(active);
+            // Nested/child modal owns keys until it closes
+            if (activeDialog && activeDialog !== dialogEl) return;
+
+            const isNavKey = e.key === 'ArrowDown' || e.key === 'ArrowUp'
+                || e.key === 'ArrowLeft' || e.key === 'ArrowRight'
+                || e.key === 'Tab';
+
+            if (!dialogEl.contains(active) && e.key !== 'Escape') {
+                if (isNavKey) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+                    focusInitial();
+                }
+                return;
+            }
+
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
+                if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+                if (onEscape) onEscape(e);
+                return;
+            }
+
+            const focusables = getFocusableElements(dialogEl);
+            if (!focusables.length) return;
+
+            const currentIndex = focusables.indexOf(active);
+            const at = currentIndex >= 0 ? currentIndex : 0;
+            const rows = getFocusRows(dialogEl);
+            const useRows = rows.length >= 2;
+
+            const consume = () => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+            };
+
+            if (e.key === 'Tab') {
+                consume();
+                const next = e.shiftKey
+                    ? focusables[(at - 1 + focusables.length) % focusables.length]
+                    : focusables[(at + 1) % focusables.length];
+                focusElement(next);
+                return;
+            }
+
+            if (useRows && (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+                consume();
+                let rowIndex = rows.findIndex((entry) => entry.items.includes(active));
+                if (rowIndex < 0) {
+                    rowIndex = rows.findIndex((entry) => entry.row.contains(active));
+                }
+                if (rowIndex < 0) rowIndex = 0;
+                const row = rows[rowIndex];
+                let col = row.items.indexOf(active);
+                if (col < 0) col = 0;
+
+                if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                    const nextCol = e.key === 'ArrowRight'
+                        ? (col + 1) % row.items.length
+                        : (col - 1 + row.items.length) % row.items.length;
+                    focusElement(row.items[nextCol]);
+                    return;
+                }
+
+                const nextRowIndex = e.key === 'ArrowDown'
+                    ? (rowIndex + 1) % rows.length
+                    : (rowIndex - 1 + rows.length) % rows.length;
+                const nextRow = rows[nextRowIndex];
+                const nextCol = Math.min(col, nextRow.items.length - 1);
+                focusElement(nextRow.items[nextCol]);
+                return;
+            }
+
+            if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+                consume();
+                focusElement(focusables[(at + 1) % focusables.length]);
+                return;
+            }
+            if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+                consume();
+                focusElement(focusables[(at - 1 + focusables.length) % focusables.length]);
+            }
+        };
+
+        // Document capture so Left/Right are not taken by Jellyfin spatial navigation
+        document.addEventListener('keydown', keydownHandler, true);
+
+        return () => {
+            document.removeEventListener('keydown', keydownHandler, true);
+            if (returnFocusEl && typeof returnFocusEl.focus === 'function' && document.contains(returnFocusEl)) {
+                focusElement(returnFocusEl);
+            }
+        };
+    }
+
     /**
      * Create a Jellyfin-style modal dialog
      * @param {Object} options - Modal configuration
-     * @param {string} options.id - Unique modal ID
-     * @param {string} options.title - Modal title
-     * @param {string|HTMLElement} options.content - HTML content for the modal body
-     * @param {string|HTMLElement} options.footer - Optional footer HTML content
-     * @param {Function} options.onClose - Callback when modal closes
-     * @param {Function} options.onOpen - Callback when modal opens
-     * @param {boolean} options.closeOnBackdrop - Whether to close when clicking backdrop (default: true)
-     * @param {boolean} options.closeOnEscape - Whether to close on Escape key (default: true)
-     * @param {boolean} options.showCloseButton - Whether to show close button in header (default: true if title exists)
-     * @param {boolean} [options.fixedSize] - Use dialog-fixedSize. If undefined, enable when window width < 900.
-     * @param {Object} [options.dialogStyle] - CSS styles applied to the dialog before open (e.g. width/height).
      * @returns {Object} Modal instance
      */
     function createModal(options = {}) {
@@ -80,7 +317,12 @@ window.ModalSystem = (function() {
             closeOnEscape = true,
             showCloseButton = true,
             fixedSize,
-            dialogStyle
+            dialogStyle,
+            returnFocus,
+            initialFocus,
+            trapFocus,
+            anchor = null,
+            dialogClassName = '',
         } = options;
 
         if (!id) {
@@ -94,9 +336,19 @@ window.ModalSystem = (function() {
             || (fixedSize !== false && typeof window !== 'undefined' && window.innerWidth < 900);
 
         let _showCloseButton = showCloseButton;
-        if (window.innerWidth < 900 && useFixedSize) {
+        if (title == null && showCloseButton === false) {
+            _showCloseButton = false;
+        } else if (window.innerWidth < 900 && useFixedSize && showCloseButton !== false && title) {
             _showCloseButton = true;
         }
+
+        const shouldTrap = trapFocus === true || (trapFocus !== false && isTvLayout());
+        const returnFocusEl =
+            returnFocus instanceof HTMLElement
+                ? returnFocus
+                : document.activeElement instanceof HTMLElement
+                  ? document.activeElement
+                  : null;
 
         // Create modal elements
         const backdrop = document.createElement('div');
@@ -108,7 +360,8 @@ window.ModalSystem = (function() {
         dialogContainer.setAttribute('data-modal-id', id);
 
         const dialog = document.createElement('div');
-        dialog.className = `focuscontainer dialog smoothScrollY ui-body-a background-theme-a formDialog ${useFixedSize ? 'dialog-fixedSize' : 'centeredDialog'} opened`;
+        const extraClasses = dialogClassName ? ` ${dialogClassName}` : '';
+        dialog.className = `focuscontainer dialog smoothScrollY ui-body-a background-theme-a formDialog ${useFixedSize ? 'dialog-fixedSize' : 'centeredDialog'} opened${extraClasses}`;
         dialog.setAttribute('data-history', 'true');
         dialog.setAttribute('data-autofocus', 'true');
         dialog.setAttribute('data-removeonclose', 'true');
@@ -126,42 +379,43 @@ window.ModalSystem = (function() {
 
         // Create header if title is provided
         let dialogHeader = null;
-        dialogHeader = document.createElement('div');
-        dialogHeader.className = 'formDialogHeader';
-        dialogHeader.style.display = 'flex';
-        dialogHeader.style.justifyContent = 'space-between';
-        dialogHeader.style.alignItems = 'center';
-        dialogHeader.style.padding = '1.25em 1.5em';
-        dialogHeader.style.borderBottom = '1px solid rgba(255,255,255,0.1)';
-        dialogHeader.style.flexShrink = '0';
-        
-        if (title) {
-            const titleElement = document.createElement('h2');
-            titleElement.style.margin = '0';
-            titleElement.style.textAlign = 'left';
-            titleElement.textContent = title;
-            dialogHeader.appendChild(titleElement);
-        }
+        if (title || _showCloseButton) {
+            dialogHeader = document.createElement('div');
+            dialogHeader.className = 'formDialogHeader';
+            dialogHeader.style.display = 'flex';
+            dialogHeader.style.justifyContent = 'space-between';
+            dialogHeader.style.alignItems = 'center';
+            dialogHeader.style.padding = '1.25em 1.5em';
+            dialogHeader.style.borderBottom = '1px solid rgba(255,255,255,0.1)';
+            dialogHeader.style.flexShrink = '0';
 
-        // Add close button if enabled
-        if (_showCloseButton) {
-            const closeButton = document.createElement('button');
-            closeButton.setAttribute('is', 'paper-icon-button-light');
-            closeButton.className = 'btnCancel btnClose autoSize paper-icon-button-light';
-            closeButton.setAttribute('tabindex', '-1');
-            closeButton.title = 'Close';
-            closeButton.onclick = () => closeModal(id);
+            if (title) {
+                const titleElement = document.createElement('h2');
+                titleElement.style.margin = '0';
+                titleElement.style.textAlign = 'left';
+                titleElement.textContent = title;
+                dialogHeader.appendChild(titleElement);
+            }
 
-            const closeIcon = document.createElement('span');
-            closeIcon.className = 'material-icons close';
-            closeIcon.setAttribute('aria-hidden', 'true');
-            closeButton.appendChild(closeIcon);
+            if (_showCloseButton) {
+                const closeButton = document.createElement('button');
+                closeButton.setAttribute('is', 'paper-icon-button-light');
+                closeButton.className = 'btnCancel btnClose autoSize paper-icon-button-light';
+                closeButton.setAttribute('tabindex', '-1');
+                closeButton.title = 'Close';
+                closeButton.onclick = () => closeModal(id);
 
-            dialogHeader.appendChild(closeButton);
-        }
+                const closeIcon = document.createElement('span');
+                closeIcon.className = 'material-icons close';
+                closeIcon.setAttribute('aria-hidden', 'true');
+                closeButton.appendChild(closeIcon);
 
-        if (dialogHeader.childNodes.length > 0) {
-            dialog.appendChild(dialogHeader);
+                dialogHeader.appendChild(closeButton);
+            }
+
+            if (dialogHeader.childNodes.length > 0) {
+                dialog.appendChild(dialogHeader);
+            }
         }
 
         // Create scrollable content area
@@ -227,11 +481,15 @@ window.ModalSystem = (function() {
             dialogHeader,
             dialogFooter,
             isOpen: true,
+            onClose: typeof onClose === 'function' ? onClose : null,
+            returnFocusEl,
             close: () => closeModal(id),
             updateContent: (newContent) => updateModalContent(id, newContent),
             addEventListener: (event, handler) => {
                 dialog.addEventListener(event, handler);
-            }
+            },
+            _disposeFocusTrap: null,
+            _escapeHandler: null,
         };
 
         // Store modal instance
@@ -248,7 +506,7 @@ window.ModalSystem = (function() {
             });
         }
 
-        if (closeOnEscape) {
+        if (closeOnEscape && !shouldTrap) {
             const escapeHandler = (e) => {
                 if (e.key === 'Escape') {
                     closeModal(id);
@@ -256,6 +514,27 @@ window.ModalSystem = (function() {
             };
             document.addEventListener('keydown', escapeHandler);
             modalInstance._escapeHandler = escapeHandler;
+        }
+
+        if (anchor instanceof HTMLElement) {
+            dialog.classList.remove('centeredDialog', 'formDialog', 'smoothScrollY', 'dialog-fixedSize');
+            dialog.style.maxHeight = 'none';
+            if (dialogContent) {
+                dialogContent.style.padding = dialogContent.style.padding || '0.25em 0';
+            }
+            requestAnimationFrame(() => {
+                positionNearAnchor(dialog, anchor);
+            });
+        }
+
+        if (shouldTrap) {
+            modalInstance._disposeFocusTrap = attachFocusTrap(dialog, {
+                returnFocusEl,
+                initialFocusEl: initialFocus,
+                onEscape: closeOnEscape ? () => closeModal(id) : null,
+            });
+        } else if (isTvLayout()) {
+            stampShowFocus(dialog);
         }
 
         // Call onOpen callback
@@ -277,6 +556,18 @@ window.ModalSystem = (function() {
         // Remove escape handler if it exists
         if (modal._escapeHandler) {
             document.removeEventListener('keydown', modal._escapeHandler);
+            modal._escapeHandler = null;
+        }
+
+        if (typeof modal._disposeFocusTrap === 'function') {
+            modal._disposeFocusTrap();
+            modal._disposeFocusTrap = null;
+        } else if (modal.returnFocusEl && typeof modal.returnFocusEl.focus === 'function' && document.contains(modal.returnFocusEl)) {
+            try {
+                modal.returnFocusEl.focus({ preventScroll: true });
+            } catch (_) {
+                modal.returnFocusEl.focus();
+            }
         }
 
         // Remove from DOM
@@ -323,6 +614,7 @@ window.ModalSystem = (function() {
             modal.dialogContent.innerHTML = '';
             modal.dialogContent.appendChild(content);
         }
+        stampShowFocus(modal.dialog);
     }
 
     /**
@@ -359,6 +651,9 @@ window.ModalSystem = (function() {
         isOpen: isModalOpen,
         getActiveIds: getActiveModalIds,
         closeAll: closeAllModals,
-        applyOpenAnimation
+        applyOpenAnimation,
+        attachFocusTrap,
+        positionNearAnchor,
+        getFocusableElements,
     };
 })();
