@@ -1527,16 +1527,18 @@
 		background 0.2s ease;
 }
 
-/* Fade in/out transitions for icon changes */
-.section-refresh-button::after {
+/* Fade in/out transitions for icon changes (glyph lives on child .material-icons) */
+.section-refresh-button .material-icons {
 	transition: opacity 0.2s ease;
 }
 
-.section-refresh-button.icon-fade-out::after {
+.section-refresh-button.icon-fade-out .material-icons,
+.section-refresh-button .material-icons.icon-fade-out {
 	opacity: 0;
 }
 
-.section-refresh-button.icon-fade-in::after {
+.section-refresh-button.icon-fade-in .material-icons,
+.section-refresh-button .material-icons.icon-fade-in {
 	opacity: 1;
 }
 
@@ -4182,14 +4184,12 @@ html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"
 	display: none !important;
 }
 
-.spotlight-section {
-	pointer-events: none;
-}
-
-.spotlight-section .spotlight-section-title-container,
-.spotlight-section .spotlight-nav-container,
-.spotlight-section .spotlight-overlay * {
-	pointer-events: all;
+.spotlight-section .spotlight-section-title-container > *,
+.spotlight-section .spotlight-section-title-container .section-controls,
+.spotlight-section .spotlight-section-title-container a,
+.spotlight-section .spotlight-section-title-container button,
+.spotlight-section .spotlight-nav-container {
+	pointer-events: auto;
 }
 
 .sectionTitleContainer {
@@ -4257,11 +4257,15 @@ html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"
 
 .spotlight-section-title-container {
 	position: absolute;
-	z-index: 5;
+	z-index: 2;
 	isolation: isolate;
 	transform: translateZ(0);
 }
 
 .emby-scroller-container[data-section-id] {
 	z-index: 1;
+}
+
+.section-controls span.material-icons {
+    font-size: 18px !important;
 }
