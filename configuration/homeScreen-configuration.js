@@ -3889,6 +3889,20 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         });
     }
 
+    function getServerEnabledSectionsForUpdatePreview() {
+        const config = currentConfig || getConfig();
+        if (!config) return [];
+        const inSeason = (s) => (s.startDate && s.endDate ? isInSeasonalPeriod(s.startDate, s.endDate) : true);
+        const enabledFrom = (groups) => flattenSectionGroups(groups || []).filter(
+            (s) => s.enabled === true && s.discoveryEnabled !== true && inSeason(s)
+        );
+        return [
+            ...enabledFrom(config.HOME_SECTION_GROUPS),
+            ...enabledFrom(config.SEASONAL_SECTION_GROUPS),
+            ...enabledFrom(config.CUSTOM_SECTION_GROUPS)
+        ];
+    }
+
     function confirmAndUpdateAllUsers() {
         if (!window.ModalSystem) {
             ERR('ModalSystem not available for update confirmation');
@@ -3898,10 +3912,26 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             window.ModalSystem.close(UPDATE_ALL_CONFIRM_MODAL_ID);
         }
 
+        // Reflect current order UI before previewing native slots
+        try {
+            applyOrderListFromForm(mainModalInstance?.dialogContent);
+        } catch (_) { /* preview best-effort */ }
+
+        const serverEnabled = getServerEnabledSectionsForUpdatePreview();
+        const slots = window.KefinUserHomeScreenConfig?.buildHomesectionSlotsFromKefin?.(serverEnabled) || [];
+        const pairedSlotPreview = slots.filter((id) => id && id !== 'none').join(', ') || '(none)';
+
         const content = document.createElement('div');
         content.innerHTML = `
             <div class="listItemBodyText" style="line-height: 1.5;">
                 WARNING: This will forcefully update the KefinTweaks Home Screen user preferences for all accounts on your server. Any changes those users have made to customize their home screen will be lost.
+            </div>
+            <div class="listItemBodyText" style="line-height: 1.5; margin-top: 0.75em;">
+                Users with Pair Home Sections on will get these native Jellyfin slots:
+                <code style="display: block; margin-top: 0.35em; word-break: break-word;">${pairedSlotPreview}</code>
+            </div>
+            <div class="listItemBodyText" style="line-height: 1.5; margin-top: 0.75em;">
+                Users with Pair Home Sections off get all native slots set to <code>none</code>.
             </div>
         `;
         const footer = document.createElement('div');

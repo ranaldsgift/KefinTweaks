@@ -862,10 +862,28 @@
     }
 
     /**
-     * Clear all section overrides for every user (pins preserved).
+     * Resolve admin-enabled server catalog sections used to pack native homesectionN on Update.
+     */
+    function getServerEnabledSectionsForNativeSync() {
+        const config = window.KefinHomeScreen?.getConfig?.();
+        if (Array.isArray(config?.ENABLED_NORMAL_SECTIONS)) {
+            return config.ENABLED_NORMAL_SECTIONS.filter((s) => s?.enabled === true);
+        }
+        const sectionsApi = window.KefinHomeScreen?.getSections;
+        if (typeof sectionsApi === 'function') {
+            const { enabledHomeSections = [] } = sectionsApi() || {};
+            return (enabledHomeSections || []).filter((s) => s?.enabled === true);
+        }
+        return [];
+    }
+
+    /**
+     * Clear all section overrides for every user (pins preserved) and rewrite homesection0–9
+     * from the server-enabled catalog (honors each user's pairNativeHomeSections).
      * @param {{ onProgress?: Function }} [options]
      */
     async function updateUserHomeScreenConfiguration(options = {}) {
+        const serverEnabledSections = getServerEnabledSectionsForNativeSync();
         const users = await listServerUsers();
         const total = users.length;
         let done = 0;
@@ -876,14 +894,23 @@
             const userName = user.Name || user.name || userId;
             try {
                 const prefs = await window.userHelper.getUserDisplayPreferencesForUser(userId);
-                const homeScreen = parseKefinTweaksHomeScreen(prefs?.CustomPrefs);
-                if ((homeScreen.sections || []).length > 0) {
-                    homeScreen.sections = [];
+                if (!prefs.CustomPrefs) prefs.CustomPrefs = {};
+                const homeScreen = parseKefinTweaksHomeScreen(prefs.CustomPrefs);
+                const hadOverrides = (homeScreen.sections || []).length > 0;
+                homeScreen.sections = [];
+
+                const jellyfinSync = syncNativeHomeSectionsFromKefin(
+                    serverEnabledSections,
+                    prefs.CustomPrefs,
+                    homeScreen
+                );
+
+                if (hadOverrides || jellyfinSync.changed) {
                     await saveHomeScreenForUser(userId, homeScreen, prefs);
                 }
             } catch (e) {
                 failed += 1;
-                WARN(`Failed clearing homeScreen sections for ${userName}:`, e);
+                WARN(`Failed updating homeScreen / native sections for ${userName}:`, e);
             }
             done += 1;
             options.onProgress?.({ done, total, failed, userName });
@@ -894,19 +921,55 @@
     }
 
     /**
-     * Resolve Jellyfin pairing id for a catalog section.
-     * Prefer section.jellyfinId; fall back to map / recently-added-* pattern.
+     * All Jellyfin pairing ids for a catalog section (jellyfinId + jellyfinId2).
+     * Falls back to map / recently-added-* when neither is set.
+     * @returns {string[]} lowercased unique non-empty ids (excludes 'none')
+     */
+    function getSectionJellyfinIds(section) {
+        if (!section) return [];
+        const ids = [];
+        const push = (value) => {
+            if (value == null || value === '') return;
+            const normalized = String(value).toLowerCase();
+            if (!normalized || normalized === 'none') return;
+            if (!ids.includes(normalized)) ids.push(normalized);
+        };
+
+        push(section.jellyfinId);
+        push(section.jellyfinId2);
+
+        if (!ids.length) {
+            const id = section.id || '';
+            if (id.startsWith('recently-added-')) {
+                push('latestmedia');
+            } else {
+                for (const [jellyfinId, kefinId] of Object.entries(JELLYFIN_HOME_SECTIONS_MAP)) {
+                    if (jellyfinId === 'latestmedia' && id.startsWith('recently-added-')) {
+                        push('latestmedia');
+                        break;
+                    }
+                    if (kefinId === id) {
+                        push(jellyfinId);
+                        break;
+                    }
+                }
+            }
+        }
+        return ids;
+    }
+
+    function sectionMatchesNativeType(section, nativeType) {
+        const type = String(nativeType || '').toLowerCase();
+        if (!type || type === 'none') return false;
+        return getSectionJellyfinIds(section).includes(type);
+    }
+
+    /**
+     * Primary Jellyfin pairing id for a catalog section (first of getSectionJellyfinIds).
      */
     function resolveSectionJellyfinId(section) {
-        if (!section) return null;
-        if (section.jellyfinId) return String(section.jellyfinId).toLowerCase();
-        const id = section.id || '';
-        if (id.startsWith('recently-added-')) return 'latestmedia';
-        for (const [jellyfinId, kefinId] of Object.entries(JELLYFIN_HOME_SECTIONS_MAP)) {
-            if (jellyfinId === 'latestmedia' && id.startsWith('recently-added-')) return 'latestmedia';
-            if (kefinId === id) return String(jellyfinId).toLowerCase();
-        }
-        return null;
+        const ids = getSectionJellyfinIds(section);
+        return ids[0] || null;
     }
 
     /**
@@ -918,15 +981,10 @@
         const collected = [];
         (sections || []).forEach((section) => {
             if (section.enabled !== true) return;
-            const jellyfinId = resolveSectionJellyfinId(section);
-            if (!jellyfinId || jellyfinId === 'none') return;
-
             const order = section.order || 0;
-            collected.push({ jellyfinId, order });
-
-            if (section.id === 'continueWatchingAndNextUp') {
-                collected.push({ jellyfinId: 'nextup', order });
-            }
+            getSectionJellyfinIds(section).forEach((jellyfinId) => {
+                collected.push({ jellyfinId, order });
+            });
         });
 
         collected.sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -975,26 +1033,21 @@
 
     /**
      * Candidate Kefin sections for a native homesection type (inbound enable sync).
-     * resume → continueWatching only; livetv/latestmedia → all matches.
+     * Matches jellyfinId or jellyfinId2 (e.g. resume/nextup both hit continueWatchingAndNextUp).
+     * latestmedia also includes recently-added-* rows.
      */
     function resolveKefinCandidatesForNative(nativeType, catalogSections) {
         const type = String(nativeType || '').toLowerCase();
         if (!type || type === 'none') return [];
         const catalog = catalogSections || [];
 
-        if (type === 'resume') {
-            return catalog.filter((s) => s?.id === 'continueWatching');
-        }
         if (type === 'latestmedia') {
             return catalog.filter((s) => {
                 const id = s?.id || '';
-                return id.startsWith('recently-added-') || resolveSectionJellyfinId(s) === 'latestmedia';
+                return id.startsWith('recently-added-') || sectionMatchesNativeType(s, 'latestmedia');
             });
         }
-        if (type === 'livetv') {
-            return catalog.filter((s) => resolveSectionJellyfinId(s) === 'livetv');
-        }
-        return catalog.filter((s) => resolveSectionJellyfinId(s) === type);
+        return catalog.filter((s) => sectionMatchesNativeType(s, type));
     }
 
     const RECENTLY_ADDED_PREFIX = 'recently-added-';
@@ -1267,9 +1320,13 @@
         uniqueNative.forEach((nativeType) => {
             const candidates = resolveKefinCandidatesForNative(nativeType, catalog);
             if (!candidates.length) return;
+            // Covered if any candidate is already on (includes continueWatchingAndNextUp)
             if (candidates.some(sectionIsEnabled)) return;
 
             candidates.forEach((section) => {
+                // Never auto-enable the combined Continue Watching + Next Up row
+                if (section.id === 'continueWatchingAndNextUp') return;
+
                 const storedId = getStoredSectionPrefId(section);
                 const existing = prefMap.get(getPrefDedupeKey({ id: section.id }))
                     || prefMap.get(getPrefDedupeKey({ id: storedId }))
@@ -2761,6 +2818,8 @@
         resolvePairNativeHomeSections,
         getServerPairNativeHomeSectionsDefault,
         buildHomesectionSlotsFromKefin,
+        getSectionJellyfinIds,
+        sectionMatchesNativeType,
         resolveSectionJellyfinId,
         resolveHomesectionValue,
         DEFAULT_NATIVE_HOME_SECTIONS,
