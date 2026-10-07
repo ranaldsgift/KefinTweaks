@@ -129,7 +129,7 @@
     }    // Current config state
     let currentConfig = null;
     let mainModalInstance = null;
-    let currentActiveTab = 'settings'; // Track the currently active tab
+    let currentActiveTab = 'sections'; // Track the currently active tab
     let currentGlobalSettingsSubTab = 'general'; // Track active sub-tab in Global Settings (general, spotlight, discovery, cache)
     let globalSettingsSaveTimer = null;
     const UPDATE_ALL_CONFIRM_MODAL_ID = 'kefin-homescreen-config-update-all-confirm';
@@ -180,7 +180,7 @@
     function normalizeActiveTab(tab) {
         if (tab === 'community') return 'import-export';
         if (tab === 'benchmark') return 'troubleshoot';
-        return tab || 'settings';
+        return tab || 'sections';
     }
 
     /**
@@ -2473,13 +2473,13 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
 
                 <!-- Tab Navigation -->
                 <div class="config-tab-nav">
-                    <button type="button" class="config-tab-btn ${activeTab === 'settings' ? 'active' : ''}" data-tab="settings" title="Global Settings">
-                        <span class="material-icons config-tab-icon" aria-hidden="true">settings</span>
-                        <span class="config-tab-label">Global Settings</span>
-                    </button>
                     <button type="button" class="config-tab-btn ${activeTab === 'sections' ? 'active' : ''}" data-tab="sections" title="Edit Sections">
                         <span class="material-icons config-tab-icon" aria-hidden="true">edit</span>
                         <span class="config-tab-label">Edit Sections</span>
+                    </button>
+                    <button type="button" class="config-tab-btn ${activeTab === 'settings' ? 'active' : ''}" data-tab="settings" title="Global Settings">
+                        <span class="material-icons config-tab-icon" aria-hidden="true">settings</span>
+                        <span class="config-tab-label">Global Settings</span>
                     </button>
                     <button type="button" class="config-tab-btn ${activeTab === 'order' ? 'active' : ''}" data-tab="order" title="Order Sections">
                         <span class="material-icons config-tab-icon" aria-hidden="true">reorder</span>
