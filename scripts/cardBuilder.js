@@ -1460,7 +1460,6 @@
     function createPaperIconButton({ className = '', icon = '', title = '', ariaLabel = '', showFocus = false } = {}) {
         const button = document.createElement('button');
         button.type = 'button';
-        button.setAttribute('is', 'paper-icon-button-light');
         button.className = `${className} paper-icon-button-light`.trim();
         if (showFocus) button.classList.add('show-focus');
         if (title) button.title = title;
@@ -3966,7 +3965,6 @@
             buttonContainer.appendChild(favoriteButton);
 
             const moreButton = document.createElement('button');
-            moreButton.setAttribute('is', 'paper-icon-button-light');
             moreButton.className = 'cardOverlayButton cardOverlayButton-hover itemAction paper-icon-button-light';
             moreButton.setAttribute('data-action', 'menu');
             moreButton.title = 'More';
@@ -8687,6 +8685,7 @@
     }
 
     function reconcileRowItems(sectionElement, items, sectionConfig, onComplete) {
+		console.log(`[KefinTweaks CardBuilder] Reconciling row items for section: ${sectionConfig.name} with ${items.length} items`);
         const itemsContainer = sectionElement.querySelector('.itemsContainer');
         const scroller = sectionElement.querySelector('.emby-scroller');
         if (!itemsContainer) return false;
