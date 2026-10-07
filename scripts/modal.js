@@ -6,8 +6,12 @@
 window.ModalSystem = (function() {
     'use strict';
 
-    // Store active modals
+    // Store active modals (insertion order = stack order)
     const activeModals = new Map();
+
+    // Single shared backdrop for the whole stack (max one in the DOM)
+    let sharedBackdropEl = null;
+    let sharedBackdropClickBound = false;
 
     // Body scroll lock while any kefin modal is open (replaces non-passive wheel trap)
     let bodyScrollLockCount = 0;
@@ -153,6 +157,48 @@ window.ModalSystem = (function() {
 
     function owningDialog(el) {
         return el && typeof el.closest === 'function' ? el.closest('.dialog') : null;
+    }
+
+    function getTopmostModalId() {
+        const ids = Array.from(activeModals.keys());
+        return ids.length ? ids[ids.length - 1] : null;
+    }
+
+    /** Backdrop click closes the topmost modal that opted into closeOnBackdrop. */
+    function onSharedBackdropClick() {
+        const ids = Array.from(activeModals.keys());
+        for (let i = ids.length - 1; i >= 0; i--) {
+            const modal = activeModals.get(ids[i]);
+            if (modal?.closeOnBackdrop) {
+                closeModal(ids[i]);
+                return;
+            }
+        }
+    }
+
+    function ensureSharedBackdrop(backdrop) {
+        const existing = sharedBackdropEl
+            && document.body.contains(sharedBackdropEl)
+            ? sharedBackdropEl
+            : document.body.querySelector('.dialogBackdrop[data-kefin-modal-backdrop="true"]');
+
+        if (existing) {
+            sharedBackdropEl = existing;
+            if (!sharedBackdropClickBound) {
+                existing.addEventListener('click', onSharedBackdropClick);
+                sharedBackdropClickBound = true;
+            }
+            return existing;
+        }
+
+        backdrop.setAttribute('data-kefin-modal-backdrop', 'true');
+        document.body.appendChild(backdrop);
+        sharedBackdropEl = backdrop;
+        if (!sharedBackdropClickBound) {
+            backdrop.addEventListener('click', onSharedBackdropClick);
+            sharedBackdropClickBound = true;
+        }
+        return backdrop;
     }
 
     function getFocusRows(dialogEl) {
@@ -464,23 +510,21 @@ window.ModalSystem = (function() {
         }
         dialogContainer.appendChild(dialog);
 
-        // Add to DOM
-        // Check if the modal backdrop is already in the DOM
-        if (!document.body.querySelector('.dialogBackdrop')) {
-            document.body.appendChild(backdrop);
-        }
+        // Single shared backdrop for the stack; nested modals reuse the same DOM node
+        const resolvedBackdrop = ensureSharedBackdrop(backdrop);
         document.body.appendChild(dialogContainer);
 
         // Create modal instance
         const modalInstance = {
             id,
-            backdrop,
+            backdrop: resolvedBackdrop,
             dialogContainer,
             dialog,
             dialogContent,
             dialogHeader,
             dialogFooter,
             isOpen: true,
+            closeOnBackdrop: !!closeOnBackdrop,
             onClose: typeof onClose === 'function' ? onClose : null,
             returnFocusEl,
             close: () => closeModal(id),
@@ -496,9 +540,8 @@ window.ModalSystem = (function() {
         activeModals.set(id, modalInstance);
         //lockBodyScroll();
 
-        // Add event listeners
+        // dialogContainer click closes this modal; shared backdrop always closes topmost
         if (closeOnBackdrop) {
-            backdrop.addEventListener('click', () => closeModal(id));
             dialogContainer.addEventListener('click', (e) => {
                 if (e.target === dialogContainer) {
                     closeModal(id);
@@ -543,12 +586,24 @@ window.ModalSystem = (function() {
     }
 
     /**
-     * Close a modal by ID
+     * Close a modal by ID. Closes later-opened (nested) modals first.
      * @param {string} id - Modal ID
+     * @param {{ fromCascade?: boolean }} [options]
      */
-    function closeModal(id) {
+    function closeModal(id, options = {}) {
         const modal = activeModals.get(id);
         if (!modal) return;
+
+        // Close nested modals opened after this one (reverse stack order)
+        if (!options.fromCascade) {
+            const ids = Array.from(activeModals.keys());
+            const idx = ids.indexOf(id);
+            if (idx >= 0) {
+                for (let i = ids.length - 1; i > idx; i--) {
+                    closeModal(ids[i], { fromCascade: true });
+                }
+            }
+        }
 
         // Remove escape handler if it exists
         if (modal._escapeHandler) {
@@ -567,16 +622,21 @@ window.ModalSystem = (function() {
             }
         }
 
-        // Remove from DOM
-        if (modal.backdrop && modal.backdrop.parentNode) {
-            modal.backdrop.parentNode.removeChild(modal.backdrop);
-        }
+        // Remove dialog from DOM
         if (modal.dialogContainer && modal.dialogContainer.parentNode) {
             modal.dialogContainer.parentNode.removeChild(modal.dialogContainer);
         }
 
-        // Remove from active modals
+        // Remove from active modals before deciding on shared backdrop
         activeModals.delete(id);
+
+        // Shared backdrop stays while any modal remains; remove only when stack is empty
+        if (activeModals.size === 0 && sharedBackdropEl && sharedBackdropEl.parentNode) {
+            sharedBackdropEl.removeEventListener('click', onSharedBackdropClick);
+            sharedBackdropClickBound = false;
+            sharedBackdropEl.parentNode.removeChild(sharedBackdropEl);
+            sharedBackdropEl = null;
+        }
         //unlockBodyScroll();
 
         // Call onClose callback if modal instance has it
