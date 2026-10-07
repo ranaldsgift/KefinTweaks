@@ -608,9 +608,11 @@ html[data-active-page="home"] body[data-seasonal-background="true"] #reactRoot >
 
 html[data-active-page="home"] [data-seasonal-theme="seasonal-halloween"][data-seasonal-background="true"] header.MuiAppBar-root,
 html[data-active-page="home"] [data-seasonal-theme="seasonal-halloween"][data-seasonal-background="true"] .skinHeader:not(.osdHeader) .headerTop {
-	position: relative;
 	box-shadow: 0 3px 12px rgba(180, 0, 0, 0.7) !important;
 	border-bottom: 2px solid #8b0000;
+}
+html[data-active-page="home"] [data-seasonal-theme="seasonal-halloween"][data-seasonal-background="true"] .skinHeader:not(.osdHeader) .headerTop {
+	position: relative;
 }
 
 html[data-active-page="home"] [data-seasonal-theme="seasonal-halloween"][data-seasonal-background="true"] header.MuiAppBar-root::after,
