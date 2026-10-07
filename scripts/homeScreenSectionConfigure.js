@@ -2954,10 +2954,6 @@
             padding: 0.5em;
             overflow: visible;
         }
-        .kefin-section-configure-popover.dialog.formDialog,
-        .kefin-section-configure-popover.dialog {
-            background: var(--dialog-bg, #101010);
-        }
         .kefin-section-configure-popover [data-name="kefin-modal-content"] {
             padding: 0 !important;
             overflow: visible !important;
