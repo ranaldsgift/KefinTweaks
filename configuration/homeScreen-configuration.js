@@ -3951,7 +3951,11 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             closeOnBackdrop: true,
             closeOnEscape: true,
             showCloseButton: true,
-            fixedSize: true,
+            fixedSize: false,
+            dialogStyle: {
+                width: 'min(28rem, calc(100vw - 2rem))',
+                maxWidth: '28rem'
+            },
             onOpen: (modal) => {
                 modal.dialogFooter?.querySelector('#hsc-update-all-cancel')?.addEventListener('click', () => {
                     window.ModalSystem.close(UPDATE_ALL_CONFIRM_MODAL_ID);
