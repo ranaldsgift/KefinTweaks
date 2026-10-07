@@ -1707,6 +1707,10 @@
                     overflow-y: auto !important;
                     max-height: min(60vh, 420px);
                 }
+				.kefinTweaks-popover.multiQueryPopover {
+					margin-top: 0 !important;
+					display: grid;
+				}
             `;
         let multiQueryStyleEl = document.getElementById('kefinTweaks-multiQueryPopover-style');
         if (!multiQueryStyleEl) {
