@@ -272,6 +272,17 @@
     window.KefinTweaksToaster = {
         toast
     };
+
+    // Drain deferred root-update toast queued by kefinTweaks-plugin before toaster loaded
+    try {
+        const pending = window.__kefinPendingRootUpdateToast;
+        if (pending?.message) {
+            window.__kefinPendingRootUpdateToast = null;
+            toast(pending.message, '5');
+        }
+    } catch (e) {
+        WARN('Failed to flush pending root-update toast:', e);
+    }
     
     LOG('Initialized successfully');
     LOG('Available at window.KefinTweaksToaster');

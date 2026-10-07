@@ -313,6 +313,77 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         }
     }
 
+    function normalizeKefinRootUrl(root) {
+        if (!root || typeof root !== 'string') return '';
+        return root.endsWith('/') ? root : root + '/';
+    }
+
+    function isFloatingKefinRoot(root) {
+        return /@(latest|main|master|experimental)(\/|$)/i.test(String(root || ''));
+    }
+
+    /** Human label for a newly pinned resolved root (channel-aware). */
+    function formatResolvedUpdateLabel(symbolicRoot, resolvedRoot) {
+        const symbolic = String(symbolicRoot || '');
+        const resolved = String(resolvedRoot || '');
+        const verMatch = resolved.match(/@v?(\d+\.\d+\.\d+)/i);
+        if (verMatch) {
+            return `v${verMatch[1]}`;
+        }
+        const shaMatch = resolved.match(/@([0-9a-f]{7,40})(?:\/|$)/i);
+        const shortSha = shaMatch ? shaMatch[1].substring(0, 7).toLowerCase() : null;
+        if (/@experimental(\/|$)/i.test(symbolic)) {
+            return shortSha ? `Experimental (#${shortSha})` : 'Experimental';
+        }
+        if (/@(main|master)(\/|$)/i.test(symbolic)) {
+            return shortSha ? `Dev (#${shortSha})` : 'Development';
+        }
+        if (shortSha) {
+            return `Dev (#${shortSha})`;
+        }
+        return 'a new version';
+    }
+
+    function flushPendingRootUpdateToast() {
+        const pending = window.__kefinPendingRootUpdateToast;
+        if (!pending?.message) return false;
+        if (typeof window.KefinTweaksToaster?.toast !== 'function') return false;
+        window.__kefinPendingRootUpdateToast = null;
+        try {
+            window.KefinTweaksToaster.toast(pending.message, '5');
+        } catch (e) {
+            console.warn('[KefinTweaks Installer] Failed to show root-update toast:', e);
+            return false;
+        }
+        return true;
+    }
+
+    function queueRootUpdateToast(message) {
+        if (!message) return;
+        window.__kefinPendingRootUpdateToast = { message };
+        if (flushPendingRootUpdateToast()) return;
+        const start = Date.now();
+        const poll = () => {
+            if (flushPendingRootUpdateToast()) return;
+            if (Date.now() - start > 30000) return;
+            setTimeout(poll, 250);
+        };
+        setTimeout(poll, 250);
+    }
+
+    /**
+     * Queue toast after a floating root's resolved URL was persisted (skip first pin).
+     */
+    function maybeQueueResolvedRootUpdateToast({ symbolicRoot, previousResolved, nextResolved, persisted }) {
+        if (!persisted) return;
+        if (!isFloatingKefinRoot(symbolicRoot)) return;
+        const previous = normalizeKefinRootUrl(previousResolved);
+        const next = normalizeKefinRootUrl(nextResolved);
+        if (!previous || !next || previous === next) return;
+        const label = formatResolvedUpdateLabel(symbolicRoot, next);
+        queueRootUpdateToast(`KefinTweaks updated to ${label}`);
+    }
+
     function isKefinInjectorAttachedOnPage() {
         return !!(
             window.KefinTweaksInjectorAttached
@@ -350,19 +421,15 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         }
 
         try {
-            const normalize = (r) => {
-                if (!r || typeof r !== 'string') return '';
-                return r.endsWith('/') ? r : r + '/';
-            };
-
-            const expected = normalize(await resolveRootVersion(rootRaw));
-            const current = normalize(config.kefinTweaksRootResolved || '');
+            const expected = normalizeKefinRootUrl(await resolveRootVersion(rootRaw));
+            const current = normalizeKefinRootUrl(config.kefinTweaksRootResolved || '');
+            const resolvedRootUpdated = !!(current && expected && current !== expected);
             if (!current || current !== expected) {
                 config.kefinTweaksRootResolved = expected;
                 console.log('[KefinTweaks Installer] Updated kefinTweaksRootResolved:', current || '(none)', '->', expected);
             }
 
-            const loadRoot = normalize(config.kefinTweaksRootResolved || rootRaw);
+            const loadRoot = normalizeKefinRootUrl(config.kefinTweaksRootResolved || rootRaw);
             await loadKefinTweaksLoaderFromRoot(loadRoot);
             const Loader = window.KefinTweaksLoader;
             if (!Loader) {
@@ -421,6 +488,15 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                     ok: false,
                     reason: `POST failed HTTP ${response.status}: ${response.statusText}`
                 };
+            }
+
+            if (resolvedRootUpdated) {
+                maybeQueueResolvedRootUpdateToast({
+                    symbolicRoot: rootRaw,
+                    previousResolved: current,
+                    nextResolved: expected,
+                    persisted: true
+                });
             }
 
             console.log('[KefinTweaks Installer] Auto-created KefinTweaks-injector with', plan.assets.length, 'assets');
@@ -1978,22 +2054,25 @@ main.MuiBox-root .customPage.libraryPage:not(.noSecondaryNavPage)[data-kefin-cus
             console.log('[KefinTweaks Installer] Resolved root from', rootUrl, 'to', resolvedRoot);
         }
 
-        // Persist commit-SHA root when floating GitHub refs resolve to a new URL
+        // Persist commit-SHA / release-tag root when floating GitHub refs resolve to a new URL
         try {
-            const normalize = (r) => {
-                if (!r || typeof r !== 'string') return '';
-                return r.endsWith('/') ? r : r + '/';
-            };
-            const expected = normalize(resolvedRoot);
+            const expected = normalizeKefinRootUrl(resolvedRoot);
             if (!window.KefinTweaksConfig) {
                 window.KefinTweaksConfig = {};
             }
-            const current = normalize(window.KefinTweaksConfig.kefinTweaksRootResolved || '');
+            const symbolicRoot = window.KefinTweaksConfig.kefinTweaksRoot || rootUrl;
+            const current = normalizeKefinRootUrl(window.KefinTweaksConfig.kefinTweaksRootResolved || '');
             if (expected && expected !== current) {
                 window.KefinTweaksConfig.kefinTweaksRootResolved = expected;
                 console.log('[KefinTweaks Installer] Updated kefinTweaksRootResolved:', current || '(none)', '->', expected);
                 if (isLoggedInForInjectorWrite()) {
                     await saveConfigToJavaScriptInjector(window.KefinTweaksConfig);
+                    maybeQueueResolvedRootUpdateToast({
+                        symbolicRoot,
+                        previousResolved: current,
+                        nextResolved: expected,
+                        persisted: true
+                    });
                 } else {
                     console.warn('[KefinTweaks Installer] kefinTweaksRootResolved updated in memory; not logged in to persist');
                 }
