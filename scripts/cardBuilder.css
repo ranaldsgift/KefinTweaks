@@ -1017,14 +1017,15 @@
 	margin-top: 0.15em;
 }
 
-/* One shimmer overlay per skeleton section — gated by .skeleton-shimmer-active (IO) */
-.itemsContainer {
+/* One shimmer overlay per skeleton section — real sibling node, gated by .skeleton-shimmer-active (IO) */
+.itemsContainer,
+.emby-scroller,
+.custom-scroller,
+.spotlight-banner-container {
 	position: relative;
 }
 
-.skeleton-section .itemsContainer::after,
-.skeleton-section .spotlight-items-container::after {
-	content: "";
+.skeleton-shimmer {
 	position: absolute;
 	inset: 0;
 	pointer-events: none;
@@ -1041,15 +1042,13 @@
 	opacity: 0;
 }
 
-.skeleton-section.skeleton-shimmer-active .itemsContainer::after,
-.skeleton-section.skeleton-shimmer-active .spotlight-items-container::after {
+.skeleton-section.skeleton-shimmer-active .skeleton-shimmer {
 	opacity: 1;
 	animation: skeleton-shimmer-sweep 1.4s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.skeleton-section.skeleton-shimmer-active .itemsContainer::after,
-	.skeleton-section.skeleton-shimmer-active .spotlight-items-container::after {
+	.skeleton-section.skeleton-shimmer-active .skeleton-shimmer {
 		animation: none !important;
 		opacity: 0 !important;
 	}

@@ -1454,6 +1454,17 @@
     }
 
     /**
+     * Toggle data-refreshing (drives refresh-button spin CSS). Manual refresh only —
+     * do not set true during enhance / stale revalidate / multi-query switch.
+     * @param {HTMLElement|null|undefined} el
+     * @param {boolean} refreshing
+     */
+    function setSectionRefreshing(el, refreshing) {
+        if (!el?.dataset) return;
+        el.dataset.refreshing = refreshing ? 'true' : 'false';
+    }
+
+    /**
      * Paper-icon button with Material Icon on a child span (native Jellyfin pattern).
      * Keep material-icons off the button — paper-icon-button-light sets font-family: inherit.
      */
@@ -1543,7 +1554,7 @@
             });
             const content = refreshed.content;
             ensureCardBorders(content);
-            content.dataset.refreshing = 'false';
+            setSectionRefreshing(content, false);
             attachSectionControlButtons(sectionConfig, content, freshItems);
             ensureSectionRevealObservation(content);
             return content;
@@ -1578,7 +1589,7 @@
             sectionElement.replaceWith(content);
             ensureCardBorders(content);
             attachSectionControlButtons(sectionConfig, content, freshItems);
-            content.dataset.refreshing = 'false';
+            setSectionRefreshing(content, false);
             registerLazyImagesInSection(content);
             ensureSectionRevealObservation(content);
             return content;
@@ -1589,7 +1600,7 @@
             cardFormat: finalCardFormat,
         });
         unobserveSkeletonShimmer(sectionElement);
-        sectionElement.dataset.refreshing = 'false';
+        setSectionRefreshing(sectionElement, false);
         ensureSectionRevealObservation(sectionElement);
         return sectionElement;
     }
@@ -1637,7 +1648,8 @@
             skeleton.setAttribute('data-card-format', finalCardFormat);
         }
         applySectionPresentationAttrs(skeleton, sectionConfig);
-        skeleton.dataset.refreshing = 'true';
+        // Preserve data-refreshing from the replaced section if already set (manual refresh);
+        // do not force true here — multi-query / enhance must not spin the button.
 
         const oldItemsContainer = sectionElement.querySelector('.itemsContainer');
         const layoutFromDom = oldItemsContainer?.getAttribute('data-layout');
@@ -1758,7 +1770,6 @@
                 }
                 updateSectionTitleText(activeSectionEl, getSectionTitleForMultiQuery(sectionConfig), getSectionCaption(sectionConfig));
                 updateSectionViewMoreLink(activeSectionEl, getActiveViewMoreUrl(sectionConfig));
-                activeSectionEl.dataset.refreshing = 'true';
 
                 try {
                     const loaded = await loadActiveSectionQueryItems(sectionConfig);
@@ -1781,7 +1792,7 @@
                         document.querySelector(
                             `.verticalSection[data-section-id="${sectionIdAttr}"], .spotlight-section[data-section-id="${sectionIdAttr}"]`,
                         ) || activeSectionEl;
-                    if (live) live.dataset.refreshing = 'false';
+                    setSectionRefreshing(live, false);
                 }
             };
 
@@ -1898,7 +1909,7 @@
      * @returns {Promise<HTMLElement|null>} refresh button on the new section, if any
      */
     async function executeSectionRefresh(sectionConfig, sectionElement) {
-        sectionElement.dataset.refreshing = 'true';
+        setSectionRefreshing(sectionElement, true);
 
         try {
             const hasStaticItems = Array.isArray(sectionConfig.items) && sectionConfig.items.length > 0;
@@ -1906,7 +1917,7 @@
 
             if (hasStaticItems) {
                 if (!sectionHasRandomQuerySort(sectionConfig)) {
-                    sectionElement.dataset.refreshing = 'false';
+                    setSectionRefreshing(sectionElement, false);
                     const refreshButton = sectionElement.querySelector('.section-refresh-button');
                     if (refreshButton) {
                         showRefreshComplete(refreshButton);
@@ -1916,7 +1927,7 @@
 
                 freshItems = postProcessItems(sectionConfig, normalizeStaticSectionItems(sectionConfig));
                 if (freshItems.length === 0) {
-                    sectionElement.dataset.refreshing = 'false';
+                    setSectionRefreshing(sectionElement, false);
                     return null;
                 }
             } else {
@@ -1945,7 +1956,7 @@
                 });
                 content = refreshed.content;
                 ensureCardBorders(content);
-                content.dataset.refreshing = 'false';
+                setSectionRefreshing(content, false);
                 const newButton = attachSectionControlButtons(sectionConfig, content, freshItems);
                 if (newButton) {
                     showRefreshComplete(newButton);
@@ -1963,7 +1974,7 @@
                     cardFormat: finalCardFormat,
                 });
                 unobserveSkeletonShimmer(sectionElement);
-                sectionElement.dataset.refreshing = 'false';
+                setSectionRefreshing(sectionElement, false);
                 ensureSectionRevealObservation(sectionElement);
                 const newButton = sectionElement.querySelector('.section-refresh-button');
                 if (newButton) {
@@ -1996,7 +2007,7 @@
             ensureCardBorders(content);
 
             const newButton = attachSectionControlButtons(sectionConfig, content, freshItems);
-            content.dataset.refreshing = 'false';
+            setSectionRefreshing(content, false);
             registerLazyImagesInSection(content);
             ensureSectionRevealObservation(content);
             if (newButton) {
@@ -2005,7 +2016,7 @@
             return newButton;
         } catch (error) {
             console.error('[KefinTweaks CardBuilder] Error refreshing section:', error);
-            sectionElement.dataset.refreshing = 'false';
+            setSectionRefreshing(sectionElement, false);
             return null;
         }
     }
@@ -4473,7 +4484,7 @@
 
                 if (viewMoreUrl) {
                     const titleLink = document.createElement('a');
-                    titleLink.className = 'emby-tab-button emby-tab-button-active';
+                    titleLink.className = 'emby-tab-button emby-tab-button-active emby-button';
                     titleLink.textContent = title;
                     titleLink.title = 'See All';
                     titleLink.style.textDecoration = 'none';
@@ -4496,7 +4507,7 @@
                     sectionTitleEl = titleLink;
                 } else {
                     sectionTitleEl = document.createElement('div');
-                    sectionTitleEl.className = 'emby-tab-button emby-tab-button-active emby-button-foreground';
+                    sectionTitleEl.className = 'emby-tab-button emby-tab-button-active emby-button-foreground emby-button';
                     sectionTitleEl.textContent = title;
                 }
 
@@ -5283,14 +5294,8 @@
                 }
             });
 
-            // Apply initial pan animation to the starting slide (helper also sets up completion tracking)
-            if (panAnimation && items.length > 0) {
-                const firstItemPan = bannerContainer.querySelector(`.spotlight-item[data-index="${currentIndex}"]`);
-                if (firstItemPan) {
-                    applyPanAnimationToSlide(firstItemPan);
-                    startCycleBackdropTimer(firstItemPan, items[currentIndex].Id);
-                }
-            }
+            // Initial Ken Burns (.animate) is deferred until first visibilityObserver intersect + one rAF
+            // (see visibilityObserver below). Navigation/timer still applies sync via goToItem.
 
             // Navigation buttons (top right)
             if (showNavButtons && items.length > 1) {
@@ -5694,7 +5699,9 @@
                 }
             }
 
-            // Only cycle when spotlight is in view: pause CSS pan + stop timers when off-screen
+            // Only cycle when spotlight is in view: pause CSS pan + stop timers when off-screen.
+            // First intersect also gates initial .animate (post one rAF so IO + animate don't stack).
+            let initialPanScheduled = false;
             const visibilityObserver = new IntersectionObserver(
                 (entries) => {
                     const entry = entries[0];
@@ -5712,15 +5719,44 @@
                         }
                         setSlideAnimationPlayState(currentSlide, 'paused');
                     } else {
-                        // Re-entering viewport: resume pan, ensure current media painted, restart timers
-                        setSlideAnimationPlayState(currentSlide, 'running');
                         ensureSlideImagesLoaded(currentIndex);
                         if (items.length > 1) {
                             ensureSlideImagesLoaded((currentIndex + 1) % items.length);
                         }
-                        if (currentSlide && items[currentIndex]) {
-                            startCycleBackdropTimer(currentSlide, items[currentIndex].Id);
+
+                        const needsInitialPan =
+                            panAnimation &&
+                            currentSlide &&
+                            !initialPanScheduled &&
+                            !currentSlide.querySelector(
+                                '.spotlight-background-layer img.animate, .spotlight-background-single img.animate',
+                            );
+
+                        if (needsInitialPan) {
+                            initialPanScheduled = true;
+                            requestAnimationFrame(() => {
+                                if (!container.isConnected || !panAnimation || !isVisible) return;
+                                const slide = getCurrentSpotlightSlide();
+                                if (!slide) return;
+                                if (
+                                    !slide.querySelector(
+                                        '.spotlight-background-layer img.animate, .spotlight-background-single img.animate',
+                                    )
+                                ) {
+                                    applyPanAnimationToSlide(slide);
+                                }
+                                if (items[currentIndex]) {
+                                    startCycleBackdropTimer(slide, items[currentIndex].Id);
+                                }
+                            });
+                        } else {
+                            // Re-entering viewport: resume pan, restart timers
+                            setSlideAnimationPlayState(currentSlide, 'running');
+                            if (currentSlide && items[currentIndex]) {
+                                startCycleBackdropTimer(currentSlide, items[currentIndex].Id);
+                            }
                         }
+
                         if (autoPlay && !isPaused) {
                             startAutoPlay();
                         }
@@ -5924,11 +5960,46 @@
         removeLayoutDummies(itemsContainer);
         itemsContainer.removeAttribute('data-last-row-padding');
         itemsContainer.removeAttribute('data-last-row-padding-layout');
+        itemsContainer.removeAttribute('data-last-row-padding-width');
         itemsContainer.removeAttribute('data-measuring');
     }
 
     function canMeasureLastRowPadding(itemsContainer) {
         return !!(itemsContainer?.isConnected && itemsContainer.clientWidth >= 1);
+    }
+
+    function getLastRowPaddingCache(itemsContainer, layout) {
+        if (!itemsContainer || layout !== 'grid') return null;
+        const cachedPad = itemsContainer.getAttribute('data-last-row-padding');
+        const cachedLayout = itemsContainer.getAttribute('data-last-row-padding-layout');
+        const cachedWidth = itemsContainer.getAttribute('data-last-row-padding-width');
+        if (cachedPad == null || cachedPad === '' || cachedLayout !== layout || !/^\d+$/.test(cachedPad)) {
+            return null;
+        }
+        if (cachedWidth == null || !/^\d+$/.test(cachedWidth)) return null;
+        return {
+            padding: parseInt(cachedPad, 10),
+            width: parseInt(cachedWidth, 10),
+        };
+    }
+
+    function setLastRowPaddingCache(itemsContainer, layout, padding, width) {
+        itemsContainer.setAttribute('data-last-row-padding', String(padding));
+        itemsContainer.setAttribute('data-last-row-padding-layout', layout);
+        itemsContainer.setAttribute('data-last-row-padding-width', String(width));
+    }
+
+    function countLayoutDummies(itemsContainer) {
+        if (!itemsContainer) return 0;
+        return itemsContainer.querySelectorAll(':scope > .card-layout-dummy').length;
+    }
+
+    /** True when cache matches current container width and dummy count already equals padding. */
+    function lastRowPaddingIsCurrent(itemsContainer, layout) {
+        const cache = getLastRowPaddingCache(itemsContainer, layout);
+        if (!cache || !canMeasureLastRowPadding(itemsContainer)) return false;
+        if (cache.width !== itemsContainer.clientWidth) return false;
+        return countLayoutDummies(itemsContainer) === cache.padding;
     }
 
     function createLayoutDummyCard(templateCard, layout) {
@@ -6005,29 +6076,34 @@
     function syncLastRowPadding(itemsContainer, layout) {
         if (!itemsContainer || layout !== 'grid') return;
 
-        const cachedPad = itemsContainer.getAttribute('data-last-row-padding');
-        const cachedLayout = itemsContainer.getAttribute('data-last-row-padding-layout');
-        const hasCache = cachedPad != null && cachedPad !== '' && cachedLayout === layout && /^\d+$/.test(cachedPad);
+        // Already correct for this width — skip remove/recreate.
+        if (lastRowPaddingIsCurrent(itemsContainer, layout)) return;
+
+        const cache = getLastRowPaddingCache(itemsContainer, layout);
+        const width = canMeasureLastRowPadding(itemsContainer) ? itemsContainer.clientWidth : 0;
+        const widthMatches = !!(cache && width >= 1 && cache.width === width);
 
         // Disconnected / zero-width: do not measure or cache (retry when laid out).
-        if (!hasCache && !canMeasureLastRowPadding(itemsContainer)) return;
-
-        removeLayoutDummies(itemsContainer);
+        if (!widthMatches && !canMeasureLastRowPadding(itemsContainer)) return;
 
         let padding;
-        if (hasCache) {
-            padding = parseInt(cachedPad, 10);
+        if (widthMatches) {
+            padding = cache.padding;
+            if (countLayoutDummies(itemsContainer) === padding) return;
+            removeLayoutDummies(itemsContainer);
         } else {
-            itemsContainer.removeAttribute('data-last-row-padding');
-            itemsContainer.removeAttribute('data-last-row-padding-layout');
+            // Dummies must be gone before measuring natural items-per-row.
+            removeLayoutDummies(itemsContainer);
             const cards = getRealLayoutCards(itemsContainer);
-            if (!cards.length) return;
+            if (!cards.length) {
+                invalidateLastRowPadding(itemsContainer);
+                return;
+            }
             const perRow = countItemsPerRow(itemsContainer);
             if (perRow <= 0) return;
             const rem = cards.length % perRow;
             padding = rem === 0 ? 0 : perRow - rem;
-            itemsContainer.setAttribute('data-last-row-padding', String(padding));
-            itemsContainer.setAttribute('data-last-row-padding-layout', layout);
+            setLastRowPaddingCache(itemsContainer, layout, padding, itemsContainer.clientWidth);
         }
 
         if (padding <= 0) return;
@@ -6047,6 +6123,7 @@
         lastRowPaddingResizeTimer = setTimeout(() => {
             document.querySelectorAll('.itemsContainer[data-layout="grid"]').forEach((container) => {
                 const layout = container.getAttribute('data-layout');
+                if (lastRowPaddingIsCurrent(container, layout)) return;
                 invalidateLastRowPadding(container);
                 syncLastRowPadding(container, layout);
             });
@@ -6074,6 +6151,7 @@
                 targets.forEach((el) => {
                     const layout = el.getAttribute?.('data-layout');
                     if (layout !== 'grid') return;
+                    if (lastRowPaddingIsCurrent(el, layout)) return;
                     invalidateLastRowPadding(el);
                     syncLastRowPadding(el, layout);
                 });
@@ -6156,8 +6234,10 @@
             if (section) applyItemsLayoutState(section, layout, gapless);
             else {
                 observeLastRowPadding(itemsContainer);
-                invalidateLastRowPadding(itemsContainer);
-                syncLastRowPadding(itemsContainer, layout);
+                if (!lastRowPaddingIsCurrent(itemsContainer, layout)) {
+                    invalidateLastRowPadding(itemsContainer);
+                    syncLastRowPadding(itemsContainer, layout);
+                }
             }
         });
     }
@@ -7564,6 +7644,7 @@
 
         itemsContainer.appendChild(skeletonItem);
         bannerContainer.appendChild(itemsContainer);
+        ensureSkeletonShimmerSibling(itemsContainer);
         container.appendChild(bannerContainer);
 
         container.classList.add('skeleton-section');
@@ -7637,6 +7718,7 @@
         }
 
         scroller.appendChild(itemsContainer);
+        ensureSkeletonShimmerSibling(itemsContainer);
 
         verticalSection.appendChild(sectionTitleContainer);
         if (!tvLayout) {
@@ -7734,10 +7816,44 @@
         return skeletonShimmerObserver;
     }
 
+    /**
+     * Insert a .skeleton-shimmer sibling after the items host (inside scroller / banner).
+     * @param {HTMLElement|null|undefined} itemsHost .itemsContainer or .spotlight-items-container
+     * @returns {HTMLElement|null}
+     */
+    function ensureSkeletonShimmerSibling(itemsHost) {
+        if (!itemsHost?.parentElement) return null;
+        const parent = itemsHost.parentElement;
+        let shimmer = null;
+        if (itemsHost.nextElementSibling?.classList?.contains('skeleton-shimmer')) {
+            shimmer = itemsHost.nextElementSibling;
+        } else {
+            shimmer = parent.querySelector(':scope > .skeleton-shimmer');
+        }
+        if (!shimmer) {
+            shimmer = document.createElement('div');
+            shimmer.className = 'skeleton-shimmer';
+            shimmer.setAttribute('aria-hidden', 'true');
+            itemsHost.insertAdjacentElement('afterend', shimmer);
+        } else if (shimmer.previousElementSibling !== itemsHost) {
+            itemsHost.insertAdjacentElement('afterend', shimmer);
+        }
+        return shimmer;
+    }
+
+    function removeSkeletonShimmerOverlays(root) {
+        if (!root?.querySelectorAll) return;
+        root.querySelectorAll('.skeleton-shimmer').forEach((el) => el.remove());
+    }
+
     function observeSkeletonShimmer(sectionElement) {
         if (!sectionElement?.classList) return;
         sectionElement.classList.add('skeleton-section');
         sectionElement.classList.remove('skeleton-shimmer-active');
+        const itemsHost =
+            sectionElement.querySelector('.spotlight-items-container') ||
+            sectionElement.querySelector('.itemsContainer');
+        ensureSkeletonShimmerSibling(itemsHost);
         const observer = ensureSkeletonShimmerObserver();
         if (observer) observer.observe(sectionElement);
     }
@@ -7750,6 +7866,7 @@
             skeletonShimmerRafBySection.delete(sectionElement);
         }
         sectionElement.classList?.remove('skeleton-shimmer-active', 'skeleton-section');
+        removeSkeletonShimmerOverlays(sectionElement);
         if (skeletonShimmerObserver) {
             try {
                 skeletonShimmerObserver.unobserve(sectionElement);
@@ -7761,6 +7878,7 @@
 
     function stripCopiedSkeletonSectionClasses(el) {
         el?.classList?.remove('skeleton-section', 'skeleton-shimmer-active');
+        removeSkeletonShimmerOverlays(el);
     }
 
     // Add skeleton loading animation CSS if not already present
@@ -7845,6 +7963,7 @@
         if (cardImageContainer.getAttribute('data-src') !== imageUrl) return;
         // Cancelled / unloaded before apply drained
         if (!cardImageContainer.hasAttribute('data-loading')) return;
+        // Style writes first, then one class/attr batch so paint absorbs a single invalidation.
         if (isSvg) {
             const maskUrl = `url("${imageUrl}")`;
             cardImageContainer.style.webkitMaskImage = maskUrl;
@@ -7856,14 +7975,16 @@
             cardImageContainer.style.webkitMaskSize = 'contain';
             cardImageContainer.style.maskSize = 'contain';
             cardImageContainer.style.backgroundColor = 'white';
-            cardImageContainer.classList.add('lazy-masked-svg');
         } else {
             cardImageContainer.style.backgroundImage = `url("${imageUrl}")`;
         }
-        cardImageContainer.classList.remove('lazy');
-        cardImageContainer.classList.add('lazy-loaded');
+        cardImageContainer.classList.remove('lazy', 'lazy-hidden');
+        if (isSvg) {
+            cardImageContainer.classList.add('lazy-loaded', 'lazy-masked-svg');
+        } else {
+            cardImageContainer.classList.add('lazy-loaded');
+        }
         cardImageContainer.removeAttribute('data-loading');
-        cardImageContainer.classList.remove('lazy-hidden');
         const icon = cardImageContainer.querySelector('.cardImageIcon');
         if (icon) icon.remove();
         const canvas = cardImageContainer.previousElementSibling;
@@ -9066,7 +9187,7 @@
     ) {
         if (!sectionElement?.isConnected || !section?.config) return;
 
-        sectionElement.dataset.refreshing = 'false';
+        setSectionRefreshing(sectionElement, false);
         sectionElement.dataset.enhanceApplied = 'true';
 
         const sectionConfig = section.config;
@@ -9220,12 +9341,6 @@
 
         const enhanceOptions = { revealSectionsSequentially, deferUntilVisible };
 
-        section.result.isStalePromise?.then((isStale) => {
-            if (isStale) {
-                sectionElement.dataset.refreshing = 'true';
-            }
-        });
-
         dataPromise
             .then((result) => {
                 if (!sectionElement.isConnected) return;
@@ -9236,9 +9351,6 @@
                 const isSpotlight = !!(sectionConfig?.spotlight || sectionConfig?.renderMode === 'Spotlight');
                 // Non-spotlight Random: keep skeleton until fresh refresh — avoid stale paint → fadeReplace
                 const skipStalePaint = hasPendingRefresh && sectionHasRandomQuerySort(sectionConfig) && !isSpotlight;
-
-                // Keep refreshing indicator while a background revalidate is in flight
-                sectionElement.dataset.refreshing = hasPendingRefresh ? 'true' : 'false';
 
                 let items = result?.Items ?? result ?? [];
                 if (!Array.isArray(items)) items = [];
@@ -9268,26 +9380,24 @@
                     }
                 };
 
-                if (skipStalePaint) {
-                    // Do not paint stale Random cache or stash it in pending — wait for refreshPromise
-                    sectionElement.dataset.refreshing = 'true';
-                } else if (items.length === 0) {
-                    // Empty sections: dismiss immediately even if scrolled away
-                    applyProgressiveEnhancementQueued(sectionElement, section, result, {
-                        ...enhanceOptions,
-                        updateScrollButtons: !hasPendingRefresh,
-                    });
-                    return;
-                } else {
+                if (!skipStalePaint) {
+                    if (items.length === 0) {
+                        // Empty sections: dismiss immediately even if scrolled away
+                        applyProgressiveEnhancementQueued(sectionElement, section, result, {
+                            ...enhanceOptions,
+                            updateScrollButtons: !hasPendingRefresh,
+                        });
+                        return;
+                    }
                     applyOrDefer(result, { updateScrollButtons: !hasPendingRefresh });
                 }
+                // skipStalePaint: do not paint stale Random cache — wait for refreshPromise below
 
                 if (!hasPendingRefresh) return;
 
                 refreshPromise
                     .then((fresh) => {
                         if (!sectionElement.isConnected) return;
-                        sectionElement.dataset.refreshing = 'false';
                         // Prefer live DOM apply; if still pending observe, update pending snapshot
                         const pending = sectionEnhancePending.get(sectionElement);
                         if (pending && pending.pendingResult !== undefined) {
@@ -9308,7 +9418,6 @@
                     .catch((err) => {
                         console.warn('[KefinTweaks CardBuilder] Background refresh failed:', section?.config?.id, err);
                         if (!sectionElement.isConnected) return;
-                        sectionElement.dataset.refreshing = 'false';
                         // Random non-spotlight skipped stale paint — fall back so we are not stuck on skeletons
                         if (skipStalePaint) {
                             applyOrDefer(result, { updateScrollButtons: true });
@@ -9318,7 +9427,7 @@
             .catch((err) => {
                 console.error('[KefinTweaks CardBuilder] Progressive enhance failed:', section?.config?.id, err);
                 if (!sectionElement.isConnected) return;
-                sectionElement.dataset.refreshing = 'false';
+                setSectionRefreshing(sectionElement, false);
                 delete sectionElement.dataset.enhanceScheduled;
                 applyProgressiveEnhancementQueued(sectionElement, section, { Items: [] }, enhanceOptions);
             });
