@@ -1459,6 +1459,7 @@
 	display: inline-block !important;
 	overflow: hidden;
 	max-width: calc(100% - max(env(safe-area-inset-left), 3.3%));
+	justify-self: start;
 }
 
 .sectionTitle-wrapper {
@@ -2323,6 +2324,17 @@ html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"
 .custom-scroller-container {
 	position: relative;
 	z-index: 1;
+}
+
+/* Row scroll lives on the slidee (JF .scrollSlider), not the outer frame */
+.custom-scroller-container .custom-scroller,
+.emby-scroller-container .custom-scroller {
+	overflow: hidden;
+}
+
+.custom-scroller-container .scrollSlider,
+.emby-scroller-container .scrollSlider {
+	will-change: transform;
 }
 
 [dir="ltr"] .emby-scrollbuttons {

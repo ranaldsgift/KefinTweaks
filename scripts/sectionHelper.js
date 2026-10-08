@@ -113,6 +113,16 @@
         const escaped = typeof CSS !== 'undefined' && CSS.escape
             ? CSS.escape(id)
             : String(id).replace(/["\\]/g, '\\$&');
+
+        // Do not upgrade skeleton/empty titles into links — that eats .skeleton-section-title
+        // and leaves an empty <a>, so enhance skips rebuildSectionTitleInPlace.
+        // viewMoreUrl stays on sectionConfig for rebuild / appendSectionTitleContent.
+        const titleReadyForLinkUpgrade = (el) => {
+            if (!el) return false;
+            if (el.querySelector?.('.skeleton-section-title, .skeleton-text-line')) return false;
+            return !!(el.textContent && el.textContent.trim());
+        };
+
         document.querySelectorAll(
             `.verticalSection[data-section-id="${escaped}"], .spotlight-section[data-section-id="${escaped}"]`
         ).forEach((sectionElement) => {
@@ -121,12 +131,19 @@
                 sectionElement.querySelector('.spotlight-section-title a.emby-tab-button');
             if (existingLink) {
                 existingLink.href = viewMoreUrl;
+                // Recover empty links left by an earlier race (href only, no title text)
+                if (!existingLink.textContent?.trim() && sectionConfig.name) {
+                    const nestedTitle = existingLink.querySelector('.sectionTitle.sectionTitle-cards');
+                    if (nestedTitle) nestedTitle.textContent = sectionConfig.name;
+                    else existingLink.textContent = sectionConfig.name;
+                }
                 return;
             }
             const plainTitle = sectionElement.querySelector(
                 '.sectionTitleContainer .sectionTitle.sectionTitle-cards:not(a)'
             );
             if (plainTitle) {
+                if (!titleReadyForLinkUpgrade(plainTitle)) return;
                 const link = document.createElement('a');
                 link.className = 'sectionTitle sectionTitle-cards sectionTitle-link emby-button';
                 link.href = viewMoreUrl;
@@ -138,6 +155,7 @@
                 '.spotlight-section-title .emby-tab-button:not(a)'
             );
             if (spotTitle) {
+                if (!titleReadyForLinkUpgrade(spotTitle)) return;
                 const link = document.createElement('a');
                 link.className = 'emby-tab-button emby-tab-button-active emby-button';
                 link.href = viewMoreUrl;

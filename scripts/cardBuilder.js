@@ -7170,27 +7170,10 @@
         return pad;
     }
 
-    function getFullyVisibleCardCount(scroller, cards) {
-        const epsilon = 1;
-        const pad = readScrollerPadding(scroller);
-        const cardPad = readSampleCardPadding(scroller);
-        const endInset = Math.max(pad.right, pad.left);
-        const scrollerRect = scroller.getBoundingClientRect();
-        const currentPosition = getCurrentPosition(scroller);
-        const contentWidth = Math.max(0, scroller.clientWidth - pad.left - endInset);
-        const visibleLeft = scrollerRect.left + currentPosition + pad.left;
-        const visibleRight = visibleLeft + contentWidth;
-        let count = 0;
-        cards.forEach((card) => {
-            const cardRect = card.getBoundingClientRect();
-            if (cardRect.width <= 0) return;
-            const cardContentLeft = cardRect.left + cardPad.left;
-            const cardContentRight = cardRect.right - cardPad.right;
-            if (cardContentLeft >= visibleLeft - epsilon && cardContentRight <= visibleRight + epsilon) {
-                count++;
-            }
-        });
-        return count;
+    /** Inner slidee that receives translateX (Jellyfin .scrollSlider), not the outer frame. */
+    function getScrollSlidee(scroller) {
+        if (!scroller) return null;
+        return scroller.querySelector('.scrollSlider') || scroller.querySelector('.itemsContainer');
     }
 
     function getCurrentPosition(scroller) {
@@ -7208,6 +7191,134 @@
     function setMaxScrollPosition(scroller, maxScroll) {
         const metrics = getScrollerMetrics(scroller);
         if (metrics) metrics.maxScroll = maxScroll;
+    }
+
+    /**
+     * Apply row scroll as translateX on the slidee (itemsContainer), matching Jellyfin.
+     * Clears any leftover transform on the outer scroller frame.
+     */
+    function setSlideePosition(scroller, position, options = {}) {
+        if (!scroller) return 0;
+        const opts = options || {};
+        const slidee = getScrollSlidee(scroller);
+
+        if (opts.freshMax) {
+            const metrics = getScrollerMetrics(scroller);
+            if (metrics) {
+                metrics.maxScroll = null;
+                metrics.pad = null;
+                metrics.cardPad = null;
+            }
+        }
+
+        const max = Math.max(
+            0,
+            getMaxPositionFromPadding(scroller, readScrollerPadding(scroller), readSampleCardPadding(scroller)),
+        );
+        const scrollPosition = Math.min(Math.max(position, 0), max);
+        const clampedPosition = scrollPosition > 20 ? scrollPosition : 0;
+
+        if (scroller.style.transform) scroller.style.transform = '';
+        if (scroller.style.transition) scroller.style.transition = '';
+
+        if (slidee) {
+            if (opts.animate) {
+                slidee.style.transition = 'transform 270ms ease-out';
+                slidee.style.willChange = 'transform';
+            } else {
+                slidee.style.transition = 'none';
+            }
+            slidee.style.transform = `translateX(-${clampedPosition}px)`;
+        }
+
+        setStoredScrollPosition(scroller, clampedPosition);
+        return clampedPosition;
+    }
+
+    /**
+     * Content-space X of a card relative to the scroller frame (undoes slidee translate).
+     */
+    function getCardContentOffsetX(scroller, card) {
+        if (!scroller || !card) return 0;
+        const current = getCurrentPosition(scroller);
+        const scrollerRect = scroller.getBoundingClientRect();
+        const cardRect = card.getBoundingClientRect();
+        return cardRect.left - scrollerRect.left + current;
+    }
+
+    /**
+     * JF-style toCenter: put card center on frame center, clamped to [0, max].
+     * Early cards stay left-aligned (desired < 0 → 0); mid/late track center.
+     */
+    function toCenterCard(scroller, card, options = {}) {
+        if (!scroller || !card || !scroller.contains(card)) return;
+        if (card.classList.contains('skeleton-card') || card.classList.contains('card-layout-dummy')) return;
+
+        const animate = options.animate !== false;
+        const metrics = getScrollerMetrics(scroller);
+        if (metrics) metrics.maxScroll = null;
+
+        const pad = readScrollerPadding(scroller);
+        const cardPad = readSampleCardPadding(scroller);
+        const contentOffset = getCardContentOffsetX(scroller, card);
+        const cardWidth = card.offsetWidth || card.getBoundingClientRect().width || 0;
+        // Center within the padded content box (same gutters as desktop snap)
+        const frameInnerWidth = Math.max(0, scroller.clientWidth - pad.left - Math.max(pad.right, pad.left));
+        const cardCenterInContent = contentOffset + cardWidth / 2 - pad.left;
+        const desired = cardCenterInContent - frameInnerWidth / 2;
+        const max = getMaxPositionFromPadding(scroller, pad, cardPad);
+        setSlideePosition(scroller, Math.min(Math.max(desired, 0), max), { animate: animate });
+    }
+
+    function attachTvFocusScroll(scroller) {
+        if (!scroller || scroller.dataset.tvFocusScroll === '1') return;
+        scroller.dataset.tvFocusScroll = '1';
+
+        let rafId = 0;
+        let pendingCard = null;
+
+        scroller.addEventListener(
+            'focusin',
+            (e) => {
+                const card = e.target?.closest?.('.card');
+                if (!card || !scroller.contains(card)) return;
+                if (card.classList.contains('skeleton-card') || card.classList.contains('card-layout-dummy')) return;
+                pendingCard = card;
+                if (rafId) return;
+                rafId = requestAnimationFrame(() => {
+                    rafId = 0;
+                    const target = pendingCard;
+                    pendingCard = null;
+                    if (target && scroller.contains(target)) {
+                        toCenterCard(scroller, target, { animate: true });
+                    }
+                });
+            },
+            true,
+        );
+    }
+
+    function getFullyVisibleCardCount(scroller, cards) {
+        const epsilon = 1;
+        const pad = readScrollerPadding(scroller);
+        const cardPad = readSampleCardPadding(scroller);
+        const endInset = Math.max(pad.right, pad.left);
+        const scrollerRect = scroller.getBoundingClientRect();
+        // Slidee is translated; frame is fixed — visible window is the scroller clip
+        const contentWidth = Math.max(0, scroller.clientWidth - pad.left - endInset);
+        const visibleLeft = scrollerRect.left + pad.left;
+        const visibleRight = visibleLeft + contentWidth;
+        let count = 0;
+        cards.forEach((card) => {
+            const cardRect = card.getBoundingClientRect();
+            if (cardRect.width <= 0) return;
+            const cardContentLeft = cardRect.left + cardPad.left;
+            const cardContentRight = cardRect.right - cardPad.right;
+            if (cardContentLeft >= visibleLeft - epsilon && cardContentRight <= visibleRight + epsilon) {
+                count++;
+            }
+        });
+        return count;
     }
 
     /**
@@ -7233,7 +7344,9 @@
         const { left, right } = pad || { left: 0, right: 0 };
         const cp = cardPad || { left: 0, right: 0 };
         const endInset = Math.max(right, left);
-        const base = Math.max(0, scroller.scrollWidth - scroller.clientWidth + endInset);
+        const slidee = getScrollSlidee(scroller);
+        const contentWidth = slidee ? slidee.scrollWidth : scroller.scrollWidth;
+        const base = Math.max(0, contentWidth - scroller.clientWidth + endInset);
         const maxScroll = base + (cp.left || 0) + (cp.right || 0);
         setMaxScrollPosition(scroller, maxScroll);
         return maxScroll;
@@ -7252,6 +7365,7 @@
         scroller.style.overscrollBehaviorX = 'contain';
         scroller.style.overscrollBehaviorY = 'auto';
         scroller.style.webkitOverflowScrolling = 'touch';
+        scroller.style.overflow = 'hidden';
         setStoredScrollPosition(scroller, 0);
 
         return scroller;
@@ -7263,7 +7377,8 @@
         if (isEmbyItemscontainer) {
             itemsContainer.setAttribute('is', 'emby-itemscontainer');
         }
-        itemsContainer.className = `focuscontainer-x itemsContainer scrollSlider${!isMobile ? " animatedScrollX" : ""}`;
+        const tvClass = isTvLayout() ? ' itemsContainer-tv' : '';
+        itemsContainer.className = `focuscontainer-x itemsContainer scrollSlider${!isMobile ? " animatedScrollX" : ""}${tvClass}`;
         itemsContainer.style.whiteSpace = 'nowrap';
         return itemsContainer;
     }
@@ -7327,31 +7442,26 @@
 
         function setPosition(newPosition, options) {
             const opts = options || {};
-            const maxPosition = Math.max(0, opts.freshMax ? getMaxPositionFresh() : getMaxPosition());
-            const position = Math.min(Math.max(newPosition, 0), maxPosition);
-            const clampedPosition = position > 20 ? position : 0;
-
-            if (opts.animate) {
-                scroller.style.transition = 'transform 270ms ease-out';
-            } else {
-                scroller.style.transition = 'none';
-            }
-
-            scroller.style.transform = `translateX(-${clampedPosition}px)`;
-            setStoredScrollPosition(scroller, clampedPosition);
+            const slidee = getScrollSlidee(scroller);
+            const clampedPosition = setSlideePosition(scroller, newPosition, {
+                animate: !!opts.animate,
+                freshMax: !!opts.freshMax,
+            });
 
             const section = scroller.closest('.emby-scroller-container');
             if (section && typeof applyScrollButtonState === 'function') {
-                if (opts.animate) {
-                    const onTransitionEnd = () => {
-                        scroller.removeEventListener('transitionend', onTransitionEnd);
+                if (opts.animate && slidee) {
+                    const onTransitionEnd = (e) => {
+                        if (e && e.target !== slidee) return;
+                        slidee.removeEventListener('transitionend', onTransitionEnd);
                         applyScrollButtonState(section);
                     };
-                    scroller.addEventListener('transitionend', onTransitionEnd);
+                    slidee.addEventListener('transitionend', onTransitionEnd);
                 } else {
                     requestAnimationFrame(() => applyScrollButtonState(section));
                 }
             }
+            return clampedPosition;
         }
 
         function getScrollCards() {
@@ -7362,17 +7472,15 @@
 
         function getCardScrollLeft(card) {
             // Align card content edge (border-box left + card paddingLeft) to the
-            // scroller's padded content gutter.
+            // scroller's padded content gutter. Content-space (undoes slidee translate).
             const pad = readScrollerPadding(scroller);
             const cardPad = readSampleCardPadding(scroller);
-            const scrollerRect = scroller.getBoundingClientRect();
-            const cardRect = card.getBoundingClientRect();
-            return cardRect.left - scrollerRect.left - pad.left + cardPad.left;
+            return getCardContentOffsetX(scroller, card) - pad.left + cardPad.left;
         }
 
         /**
          * Cards fully inside the padded content clip (not the browser viewport / border box).
-         * Undo translateX, then inset by scroller + card padding so visibility matches snap targets.
+         * Frame is fixed; slidee translate moves cards — use live rects vs scroller clip.
          * When the skin only pads the left, treat trailing inset as max(left, right).
          */
         function getFullyVisibleCardIndices(cards) {
@@ -7382,9 +7490,8 @@
             const cardPad = readSampleCardPadding(scroller);
             const endInset = Math.max(pad.right, pad.left);
             const scrollerRect = scroller.getBoundingClientRect();
-            const currentPosition = getCurrentPosition();
             const contentWidth = Math.max(0, scroller.clientWidth - pad.left - endInset);
-            const visibleLeft = scrollerRect.left + currentPosition + pad.left;
+            const visibleLeft = scrollerRect.left + pad.left;
             const visibleRight = visibleLeft + contentWidth;
             cards.forEach((card, index) => {
                 const cardRect = card.getBoundingClientRect();
@@ -7843,18 +7950,23 @@
         const scroller = createScrollerElement();
         const itemsContainer = createItemsSliderElement();
 
-        // Add items to container
+        // Add items to container (TV → button cards via createCardElement)
         const useParentCard = !!sectionConfig?.useParentCard;
         const borderStyle = sectionConfig?.borderStyle || null;
         items.forEach((item, index) => {
-            const card = createJellyfinCardElement(item, overflowCard, cardFormat, item.cardFooter, useParentCard, borderStyle);
+            const card = createCardElement(item, overflowCard, cardFormat, item.cardFooter, useParentCard, borderStyle);
             card.setAttribute('data-index', index);
             itemsContainer.appendChild(card);
         });
 
         scroller.appendChild(itemsContainer);
 
-        const scrollButtons = attachScrollableSectionChrome(verticalSection, scroller);
+        let scrollButtons = null;
+        if (isTvLayout()) {
+            attachTvFocusScroll(scroller);
+        } else {
+            scrollButtons = attachScrollableSectionChrome(verticalSection, scroller);
+        }
 
         // Assemble the section
         verticalSection.appendChild(sectionTitleContainer);
@@ -7863,7 +7975,7 @@
         }
         verticalSection.appendChild(scroller);
 
-        if (registerScrollButtons) {
+        if (registerScrollButtons && scrollButtons) {
             registerScrollSectionScrollButtons(verticalSection);
         }
         return verticalSection;
@@ -8081,11 +8193,9 @@
     ) {
         const tvLayout = isTvLayout();
 
-        // Create the main vertical section container (same structure as createScrollableContainer / TV path)
+        // Create the main vertical section container (same structure as createScrollableContainer)
         const verticalSection = document.createElement('div');
-        verticalSection.className = tvLayout
-            ? 'verticalSection emby-scroller-container'
-            : 'verticalSection emby-scroller-container custom-scroller-container';
+        verticalSection.className = 'verticalSection emby-scroller-container custom-scroller-container';
 
         // Persist the card format if provided (ensures consistency for random/updates)
         if (cardFormat) {
@@ -8131,7 +8241,9 @@
         ensureSkeletonShimmerSibling(itemsContainer);
 
         verticalSection.appendChild(sectionTitleContainer);
-        if (!tvLayout) {
+        if (tvLayout) {
+            attachTvFocusScroll(scroller);
+        } else {
             const scrollButtons = attachScrollableSectionChrome(verticalSection, scroller);
             if (scrollButtons) {
                 verticalSection.appendChild(scrollButtons);
@@ -9075,28 +9187,41 @@
         if (!scroller) return;
         const metrics = getScrollerMetrics(scroller);
         if (metrics) metrics.maxScroll = null;
-        const maxPosition = getMaxPositionFromPadding(scroller, readScrollerPadding(scroller), readSampleCardPadding(scroller));
-        const scrollPosition = Math.min(Math.max(position, 0), maxPosition);
-        const clamped = scrollPosition > 20 ? scrollPosition : 0;
 
         if (scroller.classList.contains('scrollX')) {
+            const maxPosition = getMaxPositionFromPadding(
+                scroller,
+                readScrollerPadding(scroller),
+                readSampleCardPadding(scroller),
+            );
+            const scrollPosition = Math.min(Math.max(position, 0), maxPosition);
+            const clamped = scrollPosition > 20 ? scrollPosition : 0;
             scroller.scrollTo({ left: clamped, behavior: animate ? 'smooth' : 'auto' });
             setStoredScrollPosition(scroller, clamped);
         } else {
-            scroller.style.transition = animate ? 'transform 400ms ease-out' : 'none';
-            scroller.style.transform = `translateX(-${clamped}px)`;
-            setStoredScrollPosition(scroller, clamped);
+            const slidee = getScrollSlidee(scroller);
+            setSlideePosition(scroller, position, { animate: !!animate, freshMax: true });
+
+            const section = scroller.closest('.emby-scroller-container');
+            if (section) {
+                if (animate && slidee) {
+                    const onTransitionEnd = (e) => {
+                        if (e && e.target !== slidee) return;
+                        slidee.removeEventListener('transitionend', onTransitionEnd);
+                        applyScrollButtonState(section);
+                    };
+                    slidee.addEventListener('transitionend', onTransitionEnd);
+                    requestAnimationFrame(() => applyScrollButtonState(section));
+                } else {
+                    applyScrollButtonState(section);
+                }
+            }
+            return;
         }
 
         const section = scroller.closest('.emby-scroller-container');
         if (section) {
             if (animate) {
-                const onTransitionEnd = () => {
-                    scroller.removeEventListener('transitionend', onTransitionEnd);
-                    applyScrollButtonState(section);
-                };
-                scroller.addEventListener('transitionend', onTransitionEnd);
-                // Native scrollX has no transitionend — refresh after a frame too
                 requestAnimationFrame(() => applyScrollButtonState(section));
             } else {
                 applyScrollButtonState(section);
@@ -9137,9 +9262,7 @@
 
         const pad = readScrollerPadding(scroller);
         const cardPad = readSampleCardPadding(scroller);
-        const scrollerRect = scroller.getBoundingClientRect();
-        const cardRect = cards[clampedIndex].getBoundingClientRect();
-        const targetLeft = cardRect.left - scrollerRect.left - pad.left + cardPad.left;
+        const targetLeft = getCardContentOffsetX(scroller, cards[clampedIndex]) - pad.left + cardPad.left;
         setScrollerPosition(scroller, targetLeft, animate);
 
         const section = scroller.closest('.emby-scroller-container');
@@ -9332,7 +9455,11 @@
                     outgoing.forEach((card) => card.remove());
                     inserted.forEach(clearCardReconcileStyles);
                     itemsContainer.classList.remove('cardbuilder-row-animating');
-                    if (scroller) scroller.style.transition = '';
+                    if (scroller) {
+                        scroller.style.transition = '';
+                        const slidee = getScrollSlidee(scroller);
+                        if (slidee) slidee.style.transition = '';
+                    }
                     reindexSectionCards(itemsContainer);
                     invalidateLastRowPadding(itemsContainer);
                     patchCardsUserData(sectionElement, items);
@@ -9387,7 +9514,16 @@
         ensureCardBorders(sectionElement);
         attachSectionControlButtons(sectionConfig, sectionElement, items);
         registerLazyImagesIn(itemsContainer);
-        invalidateScrollerMetrics(sectionElement.querySelector('.emby-scroller'));
+
+        const scroller = sectionElement.querySelector('.emby-scroller');
+        invalidateScrollerMetrics(scroller);
+        if (scroller && isTvLayout()) {
+            attachTvFocusScroll(scroller);
+            const focusedCard = document.activeElement?.closest?.('.card');
+            if (focusedCard && scroller.contains(focusedCard)) {
+                requestAnimationFrame(() => toCenterCard(scroller, focusedCard, { animate: false }));
+            }
+        }
 
         return sectionElement;
     }
@@ -9501,7 +9637,17 @@
         if (updateScrollButtons) {
             const scroller = sectionElement.querySelector?.('.emby-scroller');
             if (scroller) invalidateScrollerMetrics(scroller);
-            registerScrollSectionScrollButtons(sectionElement);
+            if (isTvLayout()) {
+                if (scroller) {
+                    attachTvFocusScroll(scroller);
+                    const focusedCard = document.activeElement?.closest?.('.card');
+                    if (focusedCard && scroller.contains(focusedCard)) {
+                        requestAnimationFrame(() => toCenterCard(scroller, focusedCard, { animate: false }));
+                    }
+                }
+            } else {
+                registerScrollSectionScrollButtons(sectionElement);
+            }
         }
     }
 
