@@ -3132,9 +3132,65 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	const watchlistLikedIds = new Set();
 	let watchlistLikedIdsLoaded = false;
 	let watchlistLikedIdsLoadPromise = null;
+	let watchlistLikedIdsBaselineScheduled = false;
+	const WATCHLIST_LIKED_IDS_SETTLE_DELAY_MS = 15000;
 
 	function isWatchlistSupportedType(itemType) {
 		return WATCHLIST_SUPPORTED_TYPES.includes(itemType);
+	}
+
+	function normalizeServerAddressForStorage(serverAddress) {
+		if (!serverAddress) return '';
+		return String(serverAddress).replace(/\/+$/, '');
+	}
+
+	function getLikedIdsStorageKey() {
+		const userId = window.ApiClient?.getCurrentUserId?.();
+		const serverAddress = normalizeServerAddressForStorage(window.ApiClient?.serverAddress?.());
+		if (!userId || !serverAddress) return null;
+		return `kefinTweaks_watchlistLikedIds_${userId}_${encodeURIComponent(serverAddress)}`;
+	}
+
+	function readLikedIdsFromStorage() {
+		const key = getLikedIdsStorageKey();
+		if (!key) return null;
+		try {
+			const raw = localStorage.getItem(key);
+			if (!raw) return null;
+			const parsed = JSON.parse(raw);
+			if (!Array.isArray(parsed)) return null;
+			return parsed.filter((id) => typeof id === 'string' && id);
+		} catch (err) {
+			WARN('Failed to read watchlist liked Ids from localStorage:', err);
+			return null;
+		}
+	}
+
+	function writeLikedIdsToStorage() {
+		const key = getLikedIdsStorageKey();
+		if (!key) return;
+		try {
+			localStorage.setItem(key, JSON.stringify([...watchlistLikedIds]));
+		} catch (err) {
+			WARN('Failed to write watchlist liked Ids to localStorage:', err);
+		}
+	}
+
+	function hydrateWatchlistLikedIdsFromStorage() {
+		const ids = readLikedIdsFromStorage();
+		if (!ids) return false;
+		watchlistLikedIds.clear();
+		ids.forEach((id) => watchlistLikedIds.add(id));
+		watchlistLikedIdsLoaded = true;
+		LOG(`Hydrated watchlist liked Id cache from localStorage: ${watchlistLikedIds.size} items`);
+		return true;
+	}
+
+	function waitForDocumentComplete() {
+		if (document.readyState === 'complete') return Promise.resolve();
+		return new Promise((resolve) => {
+			window.addEventListener('load', () => resolve(), { once: true });
+		});
 	}
 
 	function isItemInLikedIdCache(itemId) {
@@ -3145,6 +3201,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		if (!itemId) return;
 		if (isLiked) watchlistLikedIds.add(itemId);
 		else watchlistLikedIds.delete(itemId);
+		writeLikedIdsToStorage();
 	}
 
 	function mergeLikedIdsFromItems(items) {
@@ -3152,6 +3209,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		list.forEach((item) => {
 			if (item?.Id) watchlistLikedIds.add(item.Id);
 		});
+		writeLikedIdsToStorage();
 	}
 
 	function applyWatchlistButtonActiveState(button, isActive) {
@@ -3167,8 +3225,8 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		});
 	}
 
-	async function loadWatchlistLikedIdsBaseline() {
-		if (watchlistLikedIdsLoaded) return watchlistLikedIds;
+	/** Network refresh of liked-Id set (always runs when scheduled; not skipped after hydrate). */
+	async function refreshWatchlistLikedIdsFromNetwork() {
 		if (watchlistLikedIdsLoadPromise) return watchlistLikedIdsLoadPromise;
 
 		watchlistLikedIdsLoadPromise = (async () => {
@@ -3188,6 +3246,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				watchlistLikedIds.clear();
 				mergeLikedIdsFromItems(result);
 				watchlistLikedIdsLoaded = true;
+				writeLikedIdsToStorage();
 				LOG(`Loaded watchlist liked Id cache: ${watchlistLikedIds.size} items`);
 				syncOverlayWatchlistButtons();
 				processExistingOverlayContainers();
@@ -3200,6 +3259,28 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		})();
 
 		return watchlistLikedIdsLoadPromise;
+	}
+
+	async function scheduleWatchlistLikedIdsBaseline() {
+		if (watchlistLikedIdsBaselineScheduled) return;
+		watchlistLikedIdsBaselineScheduled = true;
+
+		try {
+			if (window.userHelper?.waitForLogin) {
+				await window.userHelper.waitForLogin();
+			}
+
+			if (hydrateWatchlistLikedIdsFromStorage()) {
+				syncOverlayWatchlistButtons();
+				processExistingOverlayContainers();
+			}
+
+			await waitForDocumentComplete();
+			await new Promise((resolve) => setTimeout(resolve, WATCHLIST_LIKED_IDS_SETTLE_DELAY_MS));
+			await refreshWatchlistLikedIdsFromNetwork();
+		} catch (err) {
+			ERR('Failed to schedule watchlist liked Id baseline:', err);
+		}
 	}
 
 	let watchlistRenderGeneration = 0;
@@ -4876,6 +4957,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		resetWatchlistItemsByType();
 		watchlistLikedIds.clear();
 		watchlistLikedIdsLoaded = true;
+		writeLikedIdsToStorage();
 		syncOverlayWatchlistButtons();
 
 		// Refresh watchlist
@@ -7750,8 +7832,8 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	// Initialize the observer
 	setupWatchlistButtonObserver();
 
-	// Baseline liked-Id cache for overlay button state (one query after login)
-	loadWatchlistLikedIdsBaseline();
+	// Hydrate liked-Id cache from localStorage; network refresh after settle + 5s
+	scheduleWatchlistLikedIdsBaseline();
 
 	// Expose helpers so cardBuilder can keep overlay buttons / Set aligned on UserData.Likes
 	window.KefinWatchlistLikedIds = {

@@ -95,11 +95,89 @@
         }
     }
 
+    /** Section configs waiting for movie-genres catalog before See All can resolve. */
+    const pendingGenreViewMoreConfigs = new Set();
+
+    function sectionNeedsGenreNameResolve(sectionConfig) {
+        if (!sectionConfig || sectionConfig.viewMoreUrl) return false;
+        const genres = sectionConfig.queries?.[0]?.queryOptions?.Genres;
+        if (typeof genres !== 'string' || !genres) return false;
+        return !/^\d+$/.test(genres);
+    }
+
+    function applyViewMoreUrlToSection(sectionConfig, viewMoreUrl) {
+        if (!sectionConfig || !viewMoreUrl) return;
+        sectionConfig.viewMoreUrl = viewMoreUrl;
+        const id = sectionConfig.id;
+        if (!id) return;
+        const escaped = typeof CSS !== 'undefined' && CSS.escape
+            ? CSS.escape(id)
+            : String(id).replace(/["\\]/g, '\\$&');
+        document.querySelectorAll(
+            `.verticalSection[data-section-id="${escaped}"], .spotlight-section[data-section-id="${escaped}"]`
+        ).forEach((sectionElement) => {
+            const existingLink =
+                sectionElement.querySelector('a.sectionTitle-link') ||
+                sectionElement.querySelector('.spotlight-section-title a.emby-tab-button');
+            if (existingLink) {
+                existingLink.href = viewMoreUrl;
+                return;
+            }
+            const plainTitle = sectionElement.querySelector(
+                '.sectionTitleContainer .sectionTitle.sectionTitle-cards:not(a)'
+            );
+            if (plainTitle) {
+                const link = document.createElement('a');
+                link.className = 'sectionTitle sectionTitle-cards sectionTitle-link emby-button';
+                link.href = viewMoreUrl;
+                link.textContent = plainTitle.textContent;
+                plainTitle.replaceWith(link);
+                return;
+            }
+            const spotTitle = sectionElement.querySelector(
+                '.spotlight-section-title .emby-tab-button:not(a)'
+            );
+            if (spotTitle) {
+                const link = document.createElement('a');
+                link.className = 'emby-tab-button emby-tab-button-active emby-button';
+                link.href = viewMoreUrl;
+                link.title = 'See All';
+                link.style.textDecoration = 'none';
+                link.textContent = spotTitle.textContent;
+                spotTitle.replaceWith(link);
+                sectionElement.querySelector('.spotlight-section-title')?.classList.remove('spotlight-title-link');
+            }
+        });
+    }
+
     function scheduleViewMoreUrl(sectionConfig) {
         resolveViewMoreUrl(sectionConfig).then((viewMoreUrl) => {
-            if (viewMoreUrl) sectionConfig.viewMoreUrl = viewMoreUrl;
+            if (viewMoreUrl) {
+                applyViewMoreUrlToSection(sectionConfig, viewMoreUrl);
+                pendingGenreViewMoreConfigs.delete(sectionConfig);
+                return;
+            }
+            if (sectionNeedsGenreNameResolve(sectionConfig)) {
+                pendingGenreViewMoreConfigs.add(sectionConfig);
+            }
         }).catch((err) => {
             WARN(`Failed to resolve viewMoreUrl for ${sectionConfig?.id}:`, err);
+            if (sectionNeedsGenreNameResolve(sectionConfig)) {
+                pendingGenreViewMoreConfigs.add(sectionConfig);
+            }
+        });
+    }
+
+    function reschedulePendingGenreViewMoreUrls() {
+        const pending = Array.from(pendingGenreViewMoreConfigs);
+        pending.forEach((sectionConfig) => {
+            resolveViewMoreUrl(sectionConfig).then((viewMoreUrl) => {
+                if (!viewMoreUrl) return;
+                applyViewMoreUrlToSection(sectionConfig, viewMoreUrl);
+                pendingGenreViewMoreConfigs.delete(sectionConfig);
+            }).catch((err) => {
+                WARN(`Failed to re-resolve viewMoreUrl for ${sectionConfig?.id}:`, err);
+            });
         });
     }
 
@@ -477,14 +555,13 @@
                 return `#/list.html?type=tag&tag=${encodeURIComponent(queryOptions.Tags)}&serverId=${serverId}`;
             }
 
-            // Check for Genres
+            // Check for Genres (name → Id via local catalog; never use unresolved names as genreId)
             if (queryOptions.Genres) {
                 let genreId = queryOptions.Genres;
                 if (typeof genreId === 'string' && !genreId.match(/^\d+$/)) {
                     const resolvedId = await ApiHelper.getGenreId(genreId);
-                    if (resolvedId) {
-                        genreId = resolvedId;
-                    }
+                    if (!resolvedId) return null;
+                    genreId = resolvedId;
                 }
                 return `#/list.html?genreId=${genreId}&serverId=${serverId}`;
             }
@@ -1251,6 +1328,16 @@
         markEmptyDiscoverySourceTemplate,
         isEmptyDiscoverySourceTemplate
     };
+
+    // After movie-genres catalog sync, fill in See All links that waited on name→Id
+    function bindMovieGenresSynced() {
+        const api = window.apiHelper || ApiHelper;
+        if (api?.onMovieGenresSynced) {
+            api.onMovieGenresSynced(reschedulePendingGenreViewMoreUrls);
+        }
+        window.addEventListener('kefinTweaksMovieGenresSynced', reschedulePendingGenreViewMoreUrls);
+    }
+    bindMovieGenresSynced();
 
     LOG('sectionHelper ready');
 })();

@@ -6065,6 +6065,10 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
     // Load user config script after a short delay to ensure this script is fully initialized
     //setTimeout(loadUserConfigurationScript, 100);
 
-    runStartupDefaultSectionSync().catch(err => ERR('Startup default section sync failed:', err));
+    // Defer admin library/studio catalog sync so it does not compete with home first paint
+    const STARTUP_DEFAULT_SECTION_SYNC_DELAY_MS = 15000;
+    setTimeout(() => {
+        runStartupDefaultSectionSync().catch(err => ERR('Startup default section sync failed:', err));
+    }, STARTUP_DEFAULT_SECTION_SYNC_DELAY_MS);
     
 })();
