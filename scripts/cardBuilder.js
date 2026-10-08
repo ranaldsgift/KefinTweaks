@@ -9,6 +9,21 @@
     // Developers can set this to false to disable the behavior.
     const FADE_IN_SECTIONS = true;
 
+    // Detect flex gap after DOM is ready (JMP/Qt often lacks flex gap).
+    // ensureNoFlexGapClass is a function declaration (hoisted in this IIFE).
+    function scheduleFlexGapDetect() {
+        if (!document.body) {
+            document.addEventListener('DOMContentLoaded', () => ensureNoFlexGapClass(), { once: true });
+            return;
+        }
+        ensureNoFlexGapClass();
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => ensureNoFlexGapClass(), { once: true });
+    } else {
+        scheduleFlexGapDetect();
+    }
+
     // Sliding window: render current slide + 4 prev + 4 next (9 total). As user navigates, remove/add slides.
     const SPOTLIGHT_WINDOW_PREV = 4;
     const SPOTLIGHT_WINDOW_NEXT = 4;
@@ -4240,6 +4255,104 @@
         return document.documentElement.classList.contains('layout-tv');
     }
 
+    /** Feature-detect flex gap once; JMP/Qt WebEngine often lacks it. */
+    function ensureNoFlexGapClass() {
+        const root = document.documentElement;
+        if (root.dataset.kefinFlexGapChecked === 'true') return;
+        root.dataset.kefinFlexGapChecked = 'true';
+        try {
+            const probe = document.createElement('div');
+            probe.style.cssText =
+                'display:flex;gap:1px;position:absolute;left:-9999px;top:0;width:auto;height:auto;visibility:hidden';
+            const a = document.createElement('div');
+            const b = document.createElement('div');
+            a.style.cssText = 'width:1px;height:1px';
+            b.style.cssText = 'width:1px;height:1px';
+            probe.appendChild(a);
+            probe.appendChild(b);
+            document.body.appendChild(probe);
+            const supported = probe.scrollWidth >= 3;
+            probe.remove();
+            root.classList.toggle('no-flex-gap', !supported);
+        } catch (_) {
+            root.classList.add('no-flex-gap');
+        }
+    }
+
+    function isFocusableTvEl(el) {
+        if (!el || el.nodeType !== 1) return false;
+        if (el.getAttribute('tabindex') === '-1') return false;
+        if (el.disabled || el.getAttribute('aria-hidden') === 'true') return false;
+        const tag = el.tagName;
+        if (tag === 'A' && el.hasAttribute('href')) return true;
+        if (tag === 'BUTTON' || tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return true;
+        const ti = el.getAttribute('tabindex');
+        return ti != null && ti !== '' && Number(ti) >= 0;
+    }
+
+    function getTvFocusables(root) {
+        if (!root?.querySelectorAll) return [];
+        return Array.from(root.querySelectorAll('a[href], button, [tabindex]')).filter(isFocusableTvEl);
+    }
+
+    /** Leftmost TV focus stop in spotlight header (skips plain section labels). */
+    function getFirstSpotlightHeaderFocusable(headerCluster) {
+        if (!headerCluster) return null;
+        return getTvFocusables(headerCluster)[0] || null;
+    }
+
+    function focusTvEl(el) {
+        if (!el || typeof el.focus !== 'function') return false;
+        try {
+            el.focus({ preventScroll: true });
+        } catch (_) {
+            el.focus();
+        }
+        return document.activeElement === el;
+    }
+
+    function getMetadataLinkFocusables(metaContainer) {
+        if (!metaContainer) return [];
+        return Array.from(
+            metaContainer.querySelectorAll(
+                'a.spotlight-genre-link, a.spotlight-person-link, a.spotlight-studio-link',
+            ),
+        ).filter((el) => el.getAttribute('tabindex') !== '-1' || metaContainer.dataset.metadataDrilled === 'true');
+    }
+
+    function getMetadataRows(metaContainer) {
+        if (!metaContainer) return [];
+        return Array.from(metaContainer.querySelectorAll(':scope > .spotlight-metadata-row'));
+    }
+
+    function setMetadataDrilled(metaContainer, drilled) {
+        if (!metaContainer) return;
+        metaContainer.dataset.metadataDrilled = drilled ? 'true' : 'false';
+        const links = metaContainer.querySelectorAll(
+            'a.spotlight-genre-link, a.spotlight-person-link, a.spotlight-studio-link',
+        );
+        links.forEach((link) => {
+            if (drilled) {
+                link.classList.add('show-focus');
+                if (link.getAttribute('tabindex') === '-1') link.removeAttribute('tabindex');
+            } else {
+                link.setAttribute('tabindex', '-1');
+            }
+        });
+        if (drilled) {
+            metaContainer.setAttribute('tabindex', '-1');
+        } else {
+            metaContainer.setAttribute('tabindex', '0');
+            metaContainer.classList.add('show-focus');
+        }
+    }
+
+    function collapseAllMetadataDrillIn(root) {
+        root?.querySelectorAll?.('.metadata-container').forEach((meta) => {
+            setMetadataDrilled(meta, false);
+        });
+    }
+
     /**
      * Prefer TV button cards when layout-tv is active; otherwise desktop cards.
      */
@@ -4472,12 +4585,16 @@
         const bannerContainer = document.createElement('div');
         bannerContainer.className = 'spotlight-banner-container';
 
+        // Header wraps title + nav so TV Left/Right stays in-family (one focuscontainer-x).
         // Title container hosts section name + refresh/configure controls.
         // Always create it so controls can attach even when the section has no name.
         {
+            const headerContainer = document.createElement('div');
+            headerContainer.className = 'spotlight-header-container';
+            if (isTvLayout()) headerContainer.classList.add('focuscontainer-x');
+
             const sectionTitleContainer = document.createElement('div');
             sectionTitleContainer.className = 'spotlight-section-title-container';
-            if (isTvLayout()) sectionTitleContainer.classList.add('focuscontainer-x');
 
             if (title) {
                 let sectionTitleEl;
@@ -4506,6 +4623,7 @@
 
                     sectionTitleEl = titleLink;
                 } else {
+                    // Label only — not a focus stop; section-controls / nav are first when entering header
                     sectionTitleEl = document.createElement('div');
                     sectionTitleEl.className = 'emby-tab-button emby-tab-button-active emby-button-foreground emby-button';
                     sectionTitleEl.textContent = title;
@@ -4517,7 +4635,8 @@
                 sectionTitleContainer.appendChild(sectionTitleWrapper);
             }
 
-            bannerContainer.appendChild(sectionTitleContainer);
+            headerContainer.appendChild(sectionTitleContainer);
+            bannerContainer.appendChild(headerContainer);
         }
 
         // Create items container (for fade transitions)
@@ -5176,16 +5295,35 @@
             // Build overlay content in order: Name, Rating, Year+Time+EndsAt+Genres, Directed by, Written by, Taglines, Buttons
             overlay.appendChild(titleEl);
 
-            const metadataContainer = document.createElement('div');
-            metadataContainer.className = 'metadata-container';
-            if (isTvLayout()) metadataContainer.classList.add('focuscontainer-x');
+            // TV: real emby-button so Jellyfin spatial nav lands on metadata (plain div is Tab-only)
+            const metadataContainer = isTvLayout()
+                ? document.createElement('button')
+                : document.createElement('div');
+            metadataContainer.className = isTvLayout()
+                ? 'metadata-container emby-button show-focus'
+                : 'metadata-container';
+            if (isTvLayout()) {
+                metadataContainer.type = 'button';
+                metadataContainer.setAttribute('tabindex', '0');
+                metadataContainer.setAttribute('aria-label', 'Item metadata');
+                metadataContainer.dataset.metadataDrilled = 'false';
+                // Collapsed click must not navigate; drill-in is Right/Enter only
+                metadataContainer.addEventListener('click', (e) => {
+                    if (metadataContainer.dataset.metadataDrilled !== 'true') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }
+                });
+            }
 
+            if (isTvLayout()) metadataRow.classList.add('focuscontainer-x');
             if (metadataRow.children.length > 0) {
                 metadataContainer.appendChild(metadataRow);
             }
             // For Series, show seasons/episodes. For Movies, show director/writer
             if (itemType === 'Series' || itemType === 'Season' || itemType === 'Episode') {
                 if (seriesInfoContainer) {
+                    if (isTvLayout()) seriesInfoContainer.classList.add('focuscontainer-x');
                     metadataContainer.appendChild(seriesInfoContainer);
                 }
             } else {
@@ -5198,12 +5336,14 @@
                 if (combinedContainer) {
                     const creditsRow = document.createElement('div');
                     creditsRow.className = 'spotlight-metadata-row spotlight-credits-row';
+                    if (isTvLayout()) creditsRow.classList.add('focuscontainer-x');
                     if (studioContainer) creditsRow.appendChild(studioContainer);
                     creditsRow.appendChild(combinedContainer);
                     metadataContainer.appendChild(creditsRow);
                 } else if (directorContainer || writerContainer) {
                     const creditsRow = document.createElement('div');
                     creditsRow.className = 'spotlight-metadata-row spotlight-credits-row';
+                    if (isTvLayout()) creditsRow.classList.add('focuscontainer-x');
                     if (studioContainer) creditsRow.appendChild(studioContainer);
                     if (directorContainer) creditsRow.appendChild(directorContainer);
                     if (writerContainer) creditsRow.appendChild(writerContainer);
@@ -5211,9 +5351,14 @@
                 } else if (studioContainer) {
                     const studioRow = document.createElement('div');
                     studioRow.className = 'spotlight-metadata-row spotlight-credits-row';
+                    if (isTvLayout()) studioRow.classList.add('focuscontainer-x');
                     studioRow.appendChild(studioContainer);
                     metadataContainer.appendChild(studioRow);
                 }
+            }
+            if (isTvLayout()) {
+                // Collapsed by default: links not in vertical focus path until Right/OK drill-in
+                setMetadataDrilled(metadataContainer, false);
             }
             // Fixed 4-section grid: Logo, Metadata, Overview, Buttons (always render all to prevent layout shift)
             const logoSection = document.createElement('div');
@@ -5277,23 +5422,134 @@
             if (!isTvLayout()) return;
             const isTooltipFocusable = (el) =>
                 !!el.closest?.('.spotlight-truncated-list-tooltip, .spotlight-overview-tooltip');
+            const isMetaLink = (el) =>
+                el.classList?.contains('spotlight-genre-link') ||
+                el.classList?.contains('spotlight-person-link') ||
+                el.classList?.contains('spotlight-studio-link');
             bannerContainer.querySelectorAll('.spotlight-item').forEach((slide) => {
                 const active = slide.getAttribute('data-active') === 'true';
+                const meta = slide.querySelector('.metadata-container');
+                const drilled = meta?.dataset?.metadataDrilled === 'true';
+
                 slide.querySelectorAll('a[href], button').forEach((el) => {
                     if (el.classList.contains('spotlight-dot') || isTooltipFocusable(el)) {
                         el.setAttribute('tabindex', '-1');
                         return;
                     }
-                    if (active) {
-                        if (el.getAttribute('tabindex') === '-1') el.removeAttribute('tabindex');
-                    } else {
+                    if (!active) {
                         el.setAttribute('tabindex', '-1');
+                        return;
                     }
+                    // Active slide: metadata links gated by drill-in
+                    if (isMetaLink(el)) {
+                        if (drilled) {
+                            if (el.getAttribute('tabindex') === '-1') el.removeAttribute('tabindex');
+                        } else {
+                            el.setAttribute('tabindex', '-1');
+                        }
+                        return;
+                    }
+                    if (el.getAttribute('tabindex') === '-1') el.removeAttribute('tabindex');
                 });
+
+                if (meta) {
+                    if (!active) {
+                        meta.setAttribute('tabindex', '-1');
+                    } else if (drilled) {
+                        meta.setAttribute('tabindex', '-1');
+                    } else {
+                        meta.setAttribute('tabindex', '0');
+                        meta.classList.add('show-focus');
+                    }
+                }
             });
             bannerContainer.querySelectorAll('.spotlight-dot').forEach((dot) => {
                 dot.setAttribute('tabindex', '-1');
             });
+        }
+
+        function captureSpotlightFocusSlot() {
+            if (!isTvLayout()) return null;
+            const ae = document.activeElement;
+            if (!ae || !container.contains(ae)) return null;
+            if (ae.closest('.spotlight-section-title-container')) return { slot: 'title' };
+            if (ae.closest('.spotlight-nav-container')) return { slot: 'nav' };
+            const meta = ae.closest('.metadata-container');
+            if (meta && container.contains(meta)) {
+                if (meta.dataset.metadataDrilled === 'true') {
+                    const links = Array.from(
+                        meta.querySelectorAll(
+                            'a.spotlight-genre-link, a.spotlight-person-link, a.spotlight-studio-link',
+                        ),
+                    );
+                    return { slot: 'metadata-drilled', linkIndex: Math.max(0, links.indexOf(ae)) };
+                }
+                return { slot: 'metadata' };
+            }
+            const btn = ae.closest('.spotlight-buttons-container');
+            if (btn && container.contains(btn)) {
+                let role = 'play';
+                if (ae.classList.contains('watchlist-button') || ae.closest('.watchlist-button')) role = 'watchlist';
+                else if (ae.classList.contains('spotlight-info-button') || ae.closest('.spotlight-info-button'))
+                    role = 'info';
+                else if (ae.classList.contains('btnPlay') || ae.closest('.btnPlay')) role = 'play';
+                return { slot: 'buttons', role };
+            }
+            return null;
+        }
+
+        function restoreSpotlightFocusSlot(slot) {
+            if (!slot || !isTvLayout()) return;
+            const activeSlide = bannerContainer.querySelector('.spotlight-item[data-active="true"]');
+            if (slot.slot === 'title') {
+                const headerCluster = bannerContainer.querySelector('.spotlight-header-container');
+                const first = getFirstSpotlightHeaderFocusable(headerCluster);
+                if (first) focusTvEl(first);
+                return;
+            }
+            if (slot.slot === 'nav') {
+                const nav = bannerContainer.querySelector('.spotlight-nav-buttons-container');
+                const first = getTvFocusables(nav)[0];
+                if (first) focusTvEl(first);
+                return;
+            }
+            if (!activeSlide) return;
+            if (slot.slot === 'metadata') {
+                collapseAllMetadataDrillIn(activeSlide);
+                const meta = activeSlide.querySelector('.metadata-container');
+                if (meta) {
+                    setMetadataDrilled(meta, false);
+                    focusTvEl(meta);
+                }
+                return;
+            }
+            if (slot.slot === 'metadata-drilled') {
+                const meta = activeSlide.querySelector('.metadata-container');
+                if (!meta) return;
+                setMetadataDrilled(meta, true);
+                const links = Array.from(
+                    meta.querySelectorAll(
+                        'a.spotlight-genre-link, a.spotlight-person-link, a.spotlight-studio-link',
+                    ),
+                );
+                const idx = Math.min(slot.linkIndex || 0, Math.max(0, links.length - 1));
+                if (links[idx]) focusTvEl(links[idx]);
+                else if (links[0]) focusTvEl(links[0]);
+                else {
+                    setMetadataDrilled(meta, false);
+                    focusTvEl(meta);
+                }
+                return;
+            }
+            if (slot.slot === 'buttons') {
+                const buttons = activeSlide.querySelector('.spotlight-buttons-container');
+                if (!buttons) return;
+                let target = null;
+                if (slot.role === 'watchlist') target = buttons.querySelector('.watchlist-button');
+                else if (slot.role === 'info') target = buttons.querySelector('.spotlight-info-button');
+                else target = buttons.querySelector('.btnPlay');
+                focusTvEl(target || getTvFocusables(buttons)[0]);
+            }
         }
 
         if (!inert) {
@@ -5361,7 +5617,9 @@
                 navContainer.className = 'spotlight-nav-container headerTabs sectionTabs';
                 navContainer.appendChild(navButtonsContainer);
 
-                bannerContainer.appendChild(navContainer);
+                const headerContainer =
+                    bannerContainer.querySelector('.spotlight-header-container') || bannerContainer;
+                headerContainer.appendChild(navContainer);
             }
 
             // Pause button (bottom right) — only when nav chrome exists (showNavButtons)
@@ -5607,6 +5865,7 @@
             // Go to item function (crossfade transition, then only active slide is visible)
             function goToItem(index, resetTimer = true) {
                 if (index === currentIndex) return;
+                const focusSlot = captureSpotlightFocusSlot();
                 if (cycleBackdropTimer) {
                     clearInterval(cycleBackdropTimer);
                     cycleBackdropTimer = null;
@@ -5698,6 +5957,9 @@
                 }
 
                 syncSpotlightTvFocus();
+                if (focusSlot) {
+                    requestAnimationFrame(() => restoreSpotlightFocusSlot(focusSlot));
+                }
             }
 
             // Auto-play: single-timeout per slide, controlled only by pause/visibility (hover is ignored)
@@ -5818,6 +6080,215 @@
             // Preload next slide soon after mount so transition has no pop
             if (items.length > 1) {
                 requestAnimationFrame(() => ensureSlideImagesLoaded(1));
+            }
+
+            // TV D-pad: metadata drill-in, row-scoped seams (header L/R is native focuscontainer-x)
+            if (isTvLayout()) {
+                const ARROW = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']);
+
+                function getHeaderCluster() {
+                    return bannerContainer.querySelector('.spotlight-header-container');
+                }
+                function getActiveMeta() {
+                    return bannerContainer.querySelector(
+                        '.spotlight-item[data-active="true"] .metadata-container',
+                    );
+                }
+                function getActiveButtons() {
+                    return bannerContainer.querySelector(
+                        '.spotlight-item[data-active="true"] .spotlight-buttons-container',
+                    );
+                }
+
+                function exitMetadataTo(direction) {
+                    const meta = getActiveMeta();
+                    if (meta) setMetadataDrilled(meta, false);
+                    if (direction === 'up') {
+                        focusTvEl(getFirstSpotlightHeaderFocusable(getHeaderCluster()));
+                    } else {
+                        const buttons = getActiveButtons();
+                        focusTvEl(getTvFocusables(buttons)[0]);
+                    }
+                }
+
+                function enterMetadataDrillIn() {
+                    const meta = getActiveMeta();
+                    if (!meta) return false;
+                    setMetadataDrilled(meta, true);
+                    const rows = getMetadataRows(meta);
+                    for (const row of rows) {
+                        const links = Array.from(
+                            row.querySelectorAll(
+                                'a.spotlight-genre-link, a.spotlight-person-link, a.spotlight-studio-link',
+                            ),
+                        );
+                        if (links[0]) {
+                            focusTvEl(links[0]);
+                            return true;
+                        }
+                    }
+                    setMetadataDrilled(meta, false);
+                    return false;
+                }
+
+                bannerContainer.addEventListener(
+                    'keydown',
+                    (e) => {
+                        if (!ARROW.has(e.key) && e.key !== 'Enter' && e.key !== ' ') return;
+                        const ae = document.activeElement;
+                        if (!ae || !bannerContainer.contains(ae)) return;
+
+                        const meta = getActiveMeta();
+                        const inMeta = !!(meta && meta.contains(ae));
+                        const drilled = meta?.dataset?.metadataDrilled === 'true';
+
+                        // Metadata container: Right/Enter drills in; Up/Down leave to neighbors
+                        if (inMeta && ae === meta && !drilled) {
+                            if (e.key === 'ArrowRight' || e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                enterMetadataDrillIn();
+                                return;
+                            }
+                            if (e.key === 'ArrowUp') {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                exitMetadataTo('up');
+                                return;
+                            }
+                            if (e.key === 'ArrowDown') {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                exitMetadataTo('down');
+                                return;
+                            }
+                        }
+
+                        // Metadata drilled: row-scoped L/R + Up/Down exit
+                        if (inMeta && drilled && meta) {
+                            const rows = getMetadataRows(meta).filter((row) =>
+                                row.querySelector(
+                                    'a.spotlight-genre-link, a.spotlight-person-link, a.spotlight-studio-link',
+                                ),
+                            );
+                            const row = ae.closest('.spotlight-metadata-row');
+                            const rowIndex = rows.indexOf(row);
+                            const rowLinks = row
+                                ? Array.from(
+                                      row.querySelectorAll(
+                                          'a.spotlight-genre-link, a.spotlight-person-link, a.spotlight-studio-link',
+                                      ),
+                                  )
+                                : [];
+                            const linkIndex = rowLinks.indexOf(ae);
+
+                            if (e.key === 'ArrowUp') {
+                                if (rowIndex <= 0) {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    exitMetadataTo('up');
+                                    return;
+                                }
+                                // Move to previous row rightmost for predictability when using Up between rows
+                                const prevLinks = Array.from(
+                                    rows[rowIndex - 1].querySelectorAll(
+                                        'a.spotlight-genre-link, a.spotlight-person-link, a.spotlight-studio-link',
+                                    ),
+                                );
+                                if (prevLinks.length) {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    focusTvEl(prevLinks[prevLinks.length - 1]);
+                                }
+                                return;
+                            }
+                            if (e.key === 'ArrowDown') {
+                                if (rowIndex < 0 || rowIndex >= rows.length - 1) {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    exitMetadataTo('down');
+                                    return;
+                                }
+                                const nextLinks = Array.from(
+                                    rows[rowIndex + 1].querySelectorAll(
+                                        'a.spotlight-genre-link, a.spotlight-person-link, a.spotlight-studio-link',
+                                    ),
+                                );
+                                if (nextLinks[0]) {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    focusTvEl(nextLinks[0]);
+                                }
+                                return;
+                            }
+                            if (e.key === 'ArrowLeft' && linkIndex === 0) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                if (rowIndex > 0) {
+                                    const prevLinks = Array.from(
+                                        rows[rowIndex - 1].querySelectorAll(
+                                            'a.spotlight-genre-link, a.spotlight-person-link, a.spotlight-studio-link',
+                                        ),
+                                    );
+                                    focusTvEl(prevLinks[prevLinks.length - 1] || meta);
+                                } else {
+                                    setMetadataDrilled(meta, false);
+                                    focusTvEl(meta);
+                                }
+                                return;
+                            }
+                            if (e.key === 'ArrowRight' && linkIndex === rowLinks.length - 1) {
+                                if (rowIndex >= 0 && rowIndex < rows.length - 1) {
+                                    const nextLinks = Array.from(
+                                        rows[rowIndex + 1].querySelectorAll(
+                                            'a.spotlight-genre-link, a.spotlight-person-link, a.spotlight-studio-link',
+                                        ),
+                                    );
+                                    if (nextLinks[0]) {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        focusTvEl(nextLinks[0]);
+                                    }
+                                } else {
+                                    // Right on last bottom link: stay (no wrap to top row / out)
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                }
+                                return;
+                            }
+                            // Left/Right mid-row: let focuscontainer-x / browser handle
+                        }
+                    },
+                    true,
+                );
+
+                // Vertical entry into header / buttons → snap leftmost
+                bannerContainer.addEventListener(
+                    'focusin',
+                    (e) => {
+                        const target = e.target;
+                        if (!target || !bannerContainer.contains(target)) return;
+                        const related = e.relatedTarget;
+
+                        const headerCluster = getHeaderCluster();
+                        const buttons = getActiveButtons();
+
+                        const enteredHeader =
+                            headerCluster?.contains(target) &&
+                            (!related || !headerCluster.contains(related));
+                        const enteredButtons =
+                            buttons?.contains(target) && (!related || !buttons.contains(related));
+
+                        if (enteredHeader) {
+                            const first = getFirstSpotlightHeaderFocusable(headerCluster);
+                            if (first && target !== first) focusTvEl(first);
+                        } else if (enteredButtons) {
+                            const fs = getTvFocusables(buttons);
+                            if (fs[0] && target !== fs[0]) focusTvEl(fs[0]);
+                        }
+                    },
+                    true,
+                );
             }
 
             // Touch swipe handling
@@ -6585,7 +7056,6 @@
 
     function createTvScrollerElement() {
         const scroller = document.createElement('div');
-        scroller.setAttribute('is', 'emby-scroller');
         scroller.setAttribute('data-centerfocus', 'true');
         scroller.className = 'padded-top-focusscale padded-bottom-focusscale emby-scroller';
         scroller.style.overflow = 'hidden';
@@ -7602,9 +8072,13 @@
         const bannerContainer = document.createElement('div');
         bannerContainer.className = 'spotlight-banner-container';
 
+        // Header wraps title (+ nav when present) to match live spotlight DOM.
         // Title container hosts section name + refresh/configure controls.
         // Always create it so controls can attach even when the section has no name.
         {
+            const headerContainer = document.createElement('div');
+            headerContainer.className = 'spotlight-header-container';
+
             const sectionTitleContainer = document.createElement('div');
             sectionTitleContainer.className = 'spotlight-section-title-container';
             if (useSkeletonTitle || title) {
@@ -7655,7 +8129,8 @@
                     sectionTitleContainer.appendChild(captionEl);
                 }
             }
-            bannerContainer.appendChild(sectionTitleContainer);
+            headerContainer.appendChild(sectionTitleContainer);
+            bannerContainer.appendChild(headerContainer);
         }
 
         // Create skeleton item (single full-container placeholder)
@@ -9161,6 +9636,7 @@
                 const body = sectionElement.querySelector('.spotlight-banner-container') || sectionElement;
                 Array.from(body.children).forEach((child) => {
                     if (
+                        !child.classList.contains('spotlight-header-container') &&
                         !child.classList.contains('spotlight-section-title-container') &&
                         !child.classList.contains('sectionTitleContainer')
                     ) {

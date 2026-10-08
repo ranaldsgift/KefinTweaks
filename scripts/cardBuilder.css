@@ -481,7 +481,8 @@
 .spotlight-overlay .spotlight-buttons-section,
 .spotlight-overlay .spotlight-buttons-container,
 .spotlight-overlay .spotlight-info-button,
-.spotlight-overlay .emby-button {
+.spotlight-overlay .emby-button,
+.spotlight-overlay button.metadata-container {
 	pointer-events: auto;
 }
 
@@ -875,11 +876,10 @@
 	visibility: hidden !important;
 }
 
-.spotlight-section:not(.hide)[data-section-id] > .spotlight-banner-container > .spotlight-nav-container {
-	position: absolute !important;
+.spotlight-section:not(.hide)[data-section-id] > .spotlight-banner-container .spotlight-nav-container {
 	display: flex;
 	gap: 8px;
-	z-index: 2;
+	flex-shrink: 0;
 }
 
 .spotlight-nav-button {
@@ -1574,7 +1574,8 @@
 	overflow: hidden;
 }
 
-/* Dark gradient overlays at top and bottom (like left-side overlay): graceful fade and better visibility when content overlaps */
+/* Dark gradient overlays at top and bottom (like left-side overlay): graceful fade and better visibility when content overlaps.
+   z-index above cycle-backdrops imgs (1/2) so vignettes do not flash during backdrop crossfade. */
 .spotlight-section .spotlight-item .spotlight-background-single::before,
 .spotlight-section .spotlight-item .spotlight-background-single::after,
 .spotlight-section .spotlight-item .spotlight-background-dual::before,
@@ -1673,14 +1674,10 @@
 
 /* Duplicate removed - clearart display:none already set for Borderless above */
 
-.spotlight-section[data-layout="Borderless"] .spotlight-section-title-container {
+.spotlight-section[data-layout="Borderless"] .spotlight-header-container {
 	left: var(--spotlight-fullscreen-horizontal);
 	top: calc(var(--spotlight-fullscreen-vertical) * 2.5);
-}
-
-.spotlight-section[data-layout="Borderless"] .spotlight-nav-container {
-	right: var(--spotlight-fullscreen-horizontal);
-	top: calc(var(--spotlight-fullscreen-vertical) * 2.5);
+	width: calc(100% - 2 * var(--spotlight-fullscreen-horizontal));
 }
 
 .spotlight-section[data-layout="Borderless"] .spotlight-dots {
@@ -1825,13 +1822,14 @@
 	padding: 9rem 1rem 6rem 1rem !important;
 }
 
-.layout-mobile .spotlight-section[data-layout="Borderless"] .spotlight-section-title-container {
+.layout-mobile .spotlight-section[data-layout="Borderless"] .spotlight-header-container {
 	top: 5rem;
 }
 
-.layout-mobile .spotlight-section .spotlight-section-title-container {
+.layout-mobile .spotlight-section .spotlight-header-container {
 	top: 15px;
 	max-width: calc(100% - 2rem);
+	width: calc(100% - 2rem);
 	left: unset !important;
 	justify-content: center;
 	margin: 0 auto !important;
@@ -1962,10 +1960,6 @@
 	display: none !important;
 }
 
-.spotlight-section[data-layout="Border"] .spotlight-section-title-container {
-	top: 0;
-}
-
 .spotlight-section:not(.hide) .spotlight-nav-buttons-container {
 	display: flex !important;
 	padding: 0 0 !important;
@@ -2014,9 +2008,10 @@
 .spotlight-section[data-layout="Borderless"][data-size="normal"] .spotlight-dots {
 	bottom: calc(var(--spotlight-fullscreen-vertical) * 1.5);
 }
-.spotlight-section[data-layout="Borderless"][data-size="normal"] .spotlight-nav-container {
-	right: var(--spotlight-fullscreen-horizontal);
+.spotlight-section[data-layout="Borderless"][data-size="normal"] .spotlight-header-container {
+	left: var(--spotlight-fullscreen-horizontal);
 	top: calc(var(--spotlight-fullscreen-vertical) * 2.5);
+	width: calc(100% - 2 * var(--spotlight-fullscreen-horizontal));
 }
 .spotlight-section[data-layout="Borderless"][data-size="normal"] .spotlight-overlay {
 	grid-template-rows: 1fr auto auto auto;
@@ -2069,23 +2064,16 @@
 .spotlight-section[data-layout="Border"][data-size="full"] .spotlight-overlay {
 	padding: 110px 40px 85px 40px;
 }
-.spotlight-section[data-layout="Border"] .spotlight-section-title-container {
+.spotlight-section[data-layout="Border"] .spotlight-header-container {
 	top: 15px;
 	left: 40px;
+	width: calc(100% - 80px);
 }
-.spotlight-section[data-layout="Border"][data-size="large"] .spotlight-section-title-container,
-.spotlight-section[data-layout="Border"][data-size="full"] .spotlight-section-title-container {
+.spotlight-section[data-layout="Border"][data-size="large"] .spotlight-header-container,
+.spotlight-section[data-layout="Border"][data-size="full"] .spotlight-header-container {
 	top: 2rem;
 	left: 2rem;
-}
-.spotlight-section[data-layout="Border"] .spotlight-nav-container {
-	top: 15px;
-	right: 40px;
-}
-.spotlight-section[data-layout="Border"][data-size="large"] .spotlight-nav-container,
-.spotlight-section[data-layout="Border"][data-size="full"] .spotlight-nav-container {
-	top: 2rem !important;
-	right: 2rem !important;
+	width: calc(100% - 4rem);
 }
 .spotlight-section[data-layout="Border"] .spotlight-banner-container {
 	border: 1px solid rgb(255 255 255 / 10%);
@@ -2298,12 +2286,24 @@ html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"
 	display: none;
 }
 
-.spotlight-section-title-container {
+.spotlight-header-container {
 	position: absolute;
-	width: 100%;
+	z-index: 2;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	width: calc(100% - 2 * var(--spotlight-fullscreen-horizontal, max(env(safe-area-inset-left), 3.3%)));
+	left: var(--spotlight-fullscreen-horizontal, max(env(safe-area-inset-left), 3.3%));
+	isolation: isolate;
+	transform: translateZ(0);
+	pointer-events: none;
+}
+
+.spotlight-section-title-container {
 	display: flex;
 	align-items: center;
 	gap: 0.35em;
+	min-width: 0;
 }
 
 .layout-mobile .spotlight-section-title-container .section-controls {
@@ -4185,6 +4185,7 @@ html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"
 	display: none !important;
 }
 
+.spotlight-section .spotlight-header-container > *,
 .spotlight-section .spotlight-section-title-container > *,
 .spotlight-section .spotlight-section-title-container .section-controls,
 .spotlight-section .spotlight-section-title-container a,
@@ -4256,17 +4257,137 @@ html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"
   z-index: 1;
 }
 
-.spotlight-section-title-container {
-	position: absolute;
-	z-index: 2;
-	isolation: isolate;
-	transform: translateZ(0);
-}
-
 .emby-scroller-container[data-section-id] {
 	z-index: 1;
 }
 
+/* TV metadata stop: look like the pill group, not a raised Jellyfin button */
+.layout-tv button.metadata-container.emby-button {
+	display: flex;
+	flex-direction: column;
+	align-items: start;
+	gap: 8px;
+	overflow: visible;
+	min-width: 0;
+	width: 100%;
+	background: transparent;
+	border: 0;
+	padding: 0;
+	margin: 0;
+	box-shadow: none;
+	font: inherit;
+	color: inherit;
+	text-align: inherit;
+	cursor: default;
+	-webkit-appearance: none;
+	appearance: none;
+	min-height: 0;
+}
+
 .section-controls span.material-icons {
     font-size: 18px !important;
+}
+
+/* --- TV spotlight focus: solid accent pills --- */
+.layout-tv .spotlight-section-title .emby-button.show-focus:focus,
+.layout-tv .spotlight-section-title .emby-tab-button.show-focus:focus,
+.layout-tv .spotlight-section-title-container .section-refresh-button.show-focus:focus,
+.layout-tv .spotlight-section-title-container .section-configure-button.show-focus:focus,
+.layout-tv .spotlight-nav-container .spotlight-nav-button.show-focus:focus,
+.layout-tv .metadata-container a.spotlight-genre-link.show-focus:focus,
+.layout-tv .metadata-container a.spotlight-person-link.show-focus:focus,
+.layout-tv .metadata-container a.spotlight-studio-link.show-focus:focus {
+	background-color: var(--theme-primary-color, #00a4dc) !important;
+	background: var(--theme-primary-color, #00a4dc) !important;
+	color: #fff !important;
+	outline: none;
+	box-shadow: none;
+}
+
+.layout-tv .metadata-container.show-focus:focus,
+.layout-tv button.metadata-container.emby-button.show-focus:focus {
+	border-radius: 0.2em;
+	outline: 2px solid var(--theme-primary-color, #00a4dc) !important;
+	outline-offset: 2px;
+	background: transparent !important;
+	box-shadow: none;
+	color: inherit !important;
+	width: auto;
+}
+
+.layout-tv .metadata-container[data-metadata-drilled="true"] a.spotlight-genre-link.show-focus:focus,
+.layout-tv .metadata-container[data-metadata-drilled="true"] a.spotlight-person-link.show-focus:focus,
+.layout-tv .metadata-container[data-metadata-drilled="true"] a.spotlight-studio-link.show-focus:focus {
+	border-radius: 0.15em;
+	padding: 0.1em 0.25em;
+}
+
+/* Transparent card formats: visible TV focus ring (cardBox chrome is forced transparent) */
+.layout-tv .emby-scroller-container[data-card-format="Logo"] .card.show-focus:focus .cardScalable,
+.layout-tv .emby-scroller-container[data-card-format="Clear Art"] .card.show-focus:focus .cardScalable,
+.layout-tv .emby-scroller-container[data-card-format="Disc"] .card.show-focus:focus .cardScalable,
+.layout-tv .emby-scroller-container[data-section-id="liveTv-channels"] .card.show-focus:focus .cardScalable,
+.layout-tv .emby-scroller-container[data-card-format="Logo"] .cardButton-tv.show-focus:focus .cardScalable,
+.layout-tv .emby-scroller-container[data-card-format="Clear Art"] .cardButton-tv.show-focus:focus .cardScalable,
+.layout-tv .emby-scroller-container[data-card-format="Disc"] .cardButton-tv.show-focus:focus .cardScalable {
+	outline: 3px solid #fff;
+	outline-offset: 2px;
+	border-radius: 2px;
+}
+
+/* --- JMP / no flex-gap: scoped margin fallbacks --- */
+html.no-flex-gap .spotlight-section:not(.hide) .spotlight-metadata-row {
+	gap: 0;
+}
+html.no-flex-gap .spotlight-section:not(.hide) .spotlight-metadata-row > * + * {
+	margin-left: 12px !important;
+}
+html.no-flex-gap .spotlight-section:not(.hide) .metadata-container {
+	gap: 0;
+}
+html.no-flex-gap .spotlight-section:not(.hide) .metadata-container > * + * {
+	margin-top: 8px !important;
+}
+html.no-flex-gap .spotlight-section:not(.hide) .spotlight-overlay {
+	gap: 0;
+}
+html.no-flex-gap .spotlight-section:not(.hide) .spotlight-overlay > * + * {
+	margin-top: 1em !important;
+}
+html.no-flex-gap .spotlight-section:not(.hide) .spotlight-buttons-container,
+html.no-flex-gap .spotlight-section:not(.hide) .mainDetailButtons.spotlight-buttons-container {
+	gap: 0;
+}
+html.no-flex-gap .spotlight-section:not(.hide) .spotlight-buttons-container > * + *,
+html.no-flex-gap .spotlight-section:not(.hide) .mainDetailButtons.spotlight-buttons-container > * + * {
+	margin-left: 2em !important;
+}
+html.no-flex-gap .spotlight-section:not(.hide) .section-controls,
+html.no-flex-gap .spotlight-section:not(.hide) .section-controls-inline {
+	gap: 0;
+}
+html.no-flex-gap .spotlight-section:not(.hide) .section-controls-inline > * + * {
+	margin-left: 0.15em !important;
+}
+html.no-flex-gap .spotlight-section:not(.hide) .custom-scroller-container .sectionTitleContainer,
+html.no-flex-gap .spotlight-section:not(.hide) .emby-scroller-container .sectionTitleContainer {
+	gap: 0;
+}
+html.no-flex-gap .spotlight-section:not(.hide) .sectionTitleContainer > * + * {
+	margin-left: 0.35em !important;
+}
+html.no-flex-gap .spotlight-section:not(.hide) .spotlight-nav-buttons-container {
+	gap: 0;
+}
+html.no-flex-gap .spotlight-section:not(.hide) .spotlight-nav-buttons-container > * + * {
+	margin-left: 8px !important;
+}
+html.no-flex-gap .itemsContainer:not([data-gapless="true"]) > * + * {
+    margin-left: 1em !important;
+}
+
+html.no-flex-gap .emby-scroller-container[data-card-format="Logo"]:not([data-border-style]) .itemsContainer:not([data-gapless="true"]) > * + *,
+html.no-flex-gap .emby-scroller-container[data-card-format="Clear Art"]:not([data-border-style]) .itemsContainer:not([data-gapless="true"]) > * + *,
+html.no-flex-gap .emby-scroller-container[data-card-format="Disc"]:not([data-border-style]) .itemsContainer:not([data-gapless="true"]) > * + * {
+	margin-left: 4em !important;
 }
