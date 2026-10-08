@@ -863,7 +863,7 @@
             }
 
             const libraries = await window.dataHelper.getLibraries();
-            const filteredLibraries = (libraries || []).filter(l => l.CollectionType && l.CollectionType !== 'boxsets' && l.CollectionType !== 'playlists');
+            const filteredLibraries = (libraries || []).filter(l => !l.CollectionType || (l.CollectionType !== 'boxsets' && l.CollectionType !== 'playlists'));
             const currentLibraryIds = new Set(filteredLibraries.map(l => l.Id));
 
             if (!libraries || libraries.length === 0) {
