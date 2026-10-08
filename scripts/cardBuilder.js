@@ -4558,7 +4558,31 @@
                     itemId: item.Id,
                     tag,
                 }));
-            }
+            } else {
+				// Handle Custom items with static images
+				const customImageOrder = [
+					"backdropUrl",
+					"thumbUrl",
+					"bannerUrl",
+					"squareUrl",
+					"posterUrl",
+					"imageUrl",
+					"logoUrl"
+				];
+				for (const key of customImageOrder) {
+					const url = item[key];
+					if (typeof url === "string" && url.trim()) {
+						// Use custom URL as only 'backdrop' for static slides
+						backdropSources = [{
+							itemId: null,
+							tag: null,
+							url: url.trim(),
+							key
+						}];
+						break;
+					}
+				}
+			}
 
             // Set backdrop width based on layout-mobile presence
             let backdropWidth = 0;
@@ -4566,7 +4590,7 @@
                 backdropWidth = 640;
             }
 
-            const buildBackdropUrl = (src, idx) =>
+            const buildBackdropUrl = (src, idx) => src.url ? src.url :
                 `${serverAddress}/Items/${src.itemId}/Images/Backdrop/${idx}?fillWidth=${backdropWidth}&quality=96&tag=${src.tag}`;
 
             /* Cap layers by available backdrops so we never build dual/triple with undefined sources. */
@@ -4632,8 +4656,10 @@
                 itemDiv.appendChild(dualBackgroundContainer);
             } else {
                 let singleUrl = '';
-                if (cycleBackdrops && tileCount === 1 && backdropSources.length > 0) {
-                    const shuffled = shuffleArray(backdropSources.map((s, i) => ({ src: s, idx: i })));
+				const shuffled = shuffleArray(backdropSources.map((s, i) => ({ src: s, idx: i })));
+				if (shuffled.length > 0 && shuffled.some(s => s.src.url)) {
+					singleUrl = shuffled.find(s => s.src.url).src.url;
+				} else if (cycleBackdrops && tileCount === 1 && backdropSources.length > 0) {
                     const urls = shuffled.map(
                         ({ src, idx }) =>
                             `${serverAddress}/Items/${src.itemId}/Images/Backdrop/${idx}?fillWidth=${backdropWidth}&quality=96&tag=${src.tag}`,
