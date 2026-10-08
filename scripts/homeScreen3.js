@@ -1287,7 +1287,8 @@
 
             await window.cardBuilder.renderProgressiveSections(targetContainer, sectionsToRender, {
                 waitForContainerClass: 'homeSectionsContainer',
-                showStaleDataBeforeRefresh
+                showStaleDataBeforeRefresh,
+                enhanceOnVisible: true,
             });
 
             // If MediaBar plugin is in use, call LayoutSync.update() to update the layout
