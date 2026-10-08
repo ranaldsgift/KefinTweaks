@@ -126,8 +126,8 @@
 	width: 100%;
 	height: 160%;
 	transform: translateY(-15%);
-	-webkit-mask-image: linear-gradient( to bottom, transparent 0%, black calc(var(--spotlight-fullscreen-vertical) * 8), black calc(100% - calc(var(--spotlight-fullscreen-vertical) * 8)), transparent 100% );
-	mask-image: linear-gradient( to bottom, transparent 0%, black calc(var(--spotlight-fullscreen-vertical) * 8), black calc(100% - calc(var(--spotlight-fullscreen-vertical) * 8)), transparent 100% );
+	-webkit-mask-image: linear-gradient( to bottom, transparent 0%, black calc(var(--spotlight-fullscreen-vertical) * 2), black calc(100% - calc(var(--spotlight-fullscreen-vertical) * 2)), transparent 100% );
+	mask-image: linear-gradient( to bottom, transparent 0%, black calc(var(--spotlight-fullscreen-vertical) * 2), black calc(100% - calc(var(--spotlight-fullscreen-vertical) * 2)), transparent 100% );
 	-webkit-mask-size: 100% 100%;
 	mask-size: 100% 100%;
 	-webkit-mask-position: 0 0;
@@ -1586,13 +1586,13 @@
 	right: 0;
 	height: 100%;
 	pointer-events: none;
-	z-index: 2;
+	z-index: 5;
 }
 
 .spotlight-background-single::before,
 .spotlight-background-dual::before {
-	width: 45%;
-	background: radial-gradient(farthest-corner at bottom left, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.7) 40%, rgba(0, 0, 0, 0) 70%);
+	width: 55%;
+	background: radial-gradient(farthest-corner at bottom left, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.8) 50%, rgba(0, 0, 0, 0) 70%);
 }
 
 .layout-mobile .spotlight-background-single::before,
@@ -1604,7 +1604,7 @@
 .spotlight-background-single::after,
 .spotlight-background-dual::after {
 	width: 100%;
-	background: linear-gradient( 180deg, black 0%, transparent 35%, transparent 65%, black 100% );	
+	background: linear-gradient( 180deg, black 0%, transparent 35%, transparent 65%, black 100% );
 }
 
 /* .spotlight-section[data-layout="Borderless"] .spotlight-item .spotlight-background-single:::before {
@@ -1885,6 +1885,8 @@
 .spotlight-section .spotlight-buttons-container.mainDetailButtons {
 	margin: 0px !important;
 	padding: 0px !important;
+	background: transparent !important;
+    backdrop-filter: none !important;
 }
 .spotlight-section .mainDetailButtons > :is(button.emby-button) {
 	padding: 0em !important;
