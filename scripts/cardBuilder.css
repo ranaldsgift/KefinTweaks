@@ -4282,6 +4282,7 @@ html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"
 	-webkit-appearance: none;
 	appearance: none;
 	min-height: 0;
+	transform: none;
 }
 
 .section-controls span.material-icons {
@@ -4305,14 +4306,18 @@ html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"
 }
 
 .layout-tv .metadata-container.show-focus:focus,
-.layout-tv button.metadata-container.emby-button.show-focus:focus {
+.layout-tv button.metadata-container.emby-button.show-focus:focus,
+.layout-tv button.metadata-container.emby-button.show-focus:focus:not(.skip),
+.layout-tv button.metadata-container.emby-button:focus {
 	border-radius: 0.2em;
 	outline: 2px solid var(--theme-primary-color, #00a4dc) !important;
 	outline-offset: 2px;
 	background: transparent !important;
-	box-shadow: none;
+	box-shadow: none !important;
 	color: inherit !important;
-	width: auto;
+	/* Override Jellyfin emby-button TV focus scale (block is too large to grow) */
+	transform: none !important;
+	-webkit-transform: none !important;
 }
 
 .layout-tv .metadata-container[data-metadata-drilled="true"] a.spotlight-genre-link.show-focus:focus,

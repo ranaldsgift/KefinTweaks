@@ -4704,13 +4704,13 @@
 			}
 
             // Set backdrop width based on layout-mobile presence
-            let backdropWidth = 0;
+            let backdropWidth = 2560;
             if (document.querySelector('.layout-mobile')) {
                 backdropWidth = 640;
             }
 
             const buildBackdropUrl = (src, idx) => src.url ? src.url :
-                `${serverAddress}/Items/${src.itemId}/Images/Backdrop/${idx}?fillWidth=${backdropWidth}&quality=96&tag=${src.tag}`;
+                `${serverAddress}/Items/${src.itemId}/Images/Backdrop/${idx}?maxWidth=${backdropWidth}&quality=96&tag=${src.tag}`;
 
             /* Cap layers by available backdrops so we never build dual/triple with undefined sources. */
             const effectiveTileCount = Math.min(tileCount, Math.max(1, backdropSources.length));
@@ -4781,16 +4781,16 @@
 				} else if (cycleBackdrops && tileCount === 1 && backdropSources.length > 0) {
                     const urls = shuffled.map(
                         ({ src, idx }) =>
-                            `${serverAddress}/Items/${src.itemId}/Images/Backdrop/${idx}?fillWidth=${backdropWidth}&quality=96&tag=${src.tag}`,
+                            `${serverAddress}/Items/${src.itemId}/Images/Backdrop/${idx}?maxWidth=${backdropWidth}&quality=96&tag=${src.tag}`,
                     );
                     const mapKey = sectionKey + '_' + item.Id;
                     cycleBackdropMap.set(mapKey, { shuffledUrls: urls, currentIndex: 0 });
                     singleUrl = urls[0];
                 } else if (backdropSources.length) {
                     const first = backdropSources[0];
-                    singleUrl = `${serverAddress}/Items/${first.itemId}/Images/Backdrop?fillWidth=${backdropWidth}&quality=96&tag=${first.tag}`;
+                    singleUrl = `${serverAddress}/Items/${first.itemId}/Images/Backdrop?maxWidth=${backdropWidth}&quality=96&tag=${first.tag}`;
                 } else if (item.ImageTags?.Primary) {
-                    singleUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?fillWidth=${backdropWidth}&quality=96&tag=${item.ImageTags.Primary}`;
+                    singleUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?maxWidth=${backdropWidth}&quality=96&tag=${item.ImageTags.Primary}`;
                 }
                 if (singleUrl) {
                     const singleBackdropContainer = document.createElement('div');
@@ -4832,7 +4832,7 @@
             if (hasLogo) {
                 // Use logo image instead of text title
                 const logoHeight = size === 'full' ? '300' : size === 'large' ? '250' : '200';
-                const logoUrl = `${serverAddress}/Items/${item.Id}/Images/Logo?fillHeight=${logoHeight}&quality=96&tag=${item.ImageTags.Logo}`;
+                const logoUrl = `${serverAddress}/Items/${item.Id}/Images/Logo?maxHeight=${logoHeight}&quality=96&tag=${item.ImageTags.Logo}`;
                 titleEl = document.createElement('div');
                 titleEl.className = 'spotlight-item-logo';
                 titleEl.setAttribute('data-background-url', logoUrl);
@@ -7054,75 +7054,6 @@
         return document.documentElement.classList.contains('layout-mobile') || window.innerWidth < 900;
     }
 
-    function createTvScrollerElement() {
-        const scroller = document.createElement('div');
-        scroller.setAttribute('data-centerfocus', 'true');
-        scroller.className = 'padded-top-focusscale padded-bottom-focusscale emby-scroller';
-        scroller.style.overflow = 'hidden';
-        return scroller;
-    }
-
-    function createTvItemsSliderElement() {
-        const itemsContainer = document.createElement('div');
-        itemsContainer.setAttribute('is', 'emby-itemscontainer');
-        itemsContainer.className = 'scrollSlider focuscontainer-x itemsContainer animatedScrollX itemsContainer-tv';
-        itemsContainer.style.whiteSpace = 'nowrap';
-        return itemsContainer;
-    }
-
-    /**
-     * TV-mode scrollable section: native emby-scroller + itemsContainer-tv.
-     * No Kefin custom-scroller drag/wheel, no scroll buttons — Jellyfin owns row motion on focus.
-     */
-    function createTvScrollableContainer(
-        items,
-        title,
-        viewMoreUrl = null,
-        overflowCard = false,
-        cardFormat = null,
-        sectionConfig = null,
-    ) {
-        const verticalSection = document.createElement('div');
-        verticalSection.className = 'verticalSection emby-scroller-container';
-        const facetRowType = getFacetRowType(items);
-        if (facetRowType) {
-            verticalSection.style.setProperty('--row-hue', `${Math.floor(Math.random() * 360)}deg`);
-            verticalSection.dataset.facetRowType = facetRowType;
-        }
-
-        if (cardFormat) {
-            verticalSection.setAttribute('data-card-format', cardFormat);
-        }
-
-        const sectionTitleContainer = document.createElement('div');
-        sectionTitleContainer.className = 'sectionTitleContainer sectionTitleContainer-cards padded-left';
-
-        appendSectionTitleContent(sectionTitleContainer, {
-            title,
-            caption: getSectionCaption(sectionConfig),
-            captionUrl: getSectionCaptionUrl(sectionConfig),
-            viewMoreUrl,
-        });
-
-        ensureSectionControlsMount(sectionTitleContainer);
-
-        const scroller = createTvScrollerElement();
-        const itemsContainer = createTvItemsSliderElement();
-
-        const useParentCard = !!sectionConfig?.useParentCard;
-        const borderStyle = sectionConfig?.borderStyle || null;
-        items.forEach((item, index) => {
-            const card = buildTvCardElement(item, overflowCard, cardFormat, item.cardFooter, useParentCard, borderStyle);
-            card.setAttribute('data-index', index);
-            itemsContainer.appendChild(card);
-        });
-
-        scroller.appendChild(itemsContainer);
-        verticalSection.appendChild(sectionTitleContainer);
-        verticalSection.appendChild(scroller);
-        return verticalSection;
-    }
-
     function getSectionSkeletonCount(sectionConfig, cardFormat = null, itemsLayout = null) {
         const raw = sectionConfig?.itemLimit || sectionConfig?.queries?.[0]?.queryOptions?.Limit || 0;
         const fullLimit = raw > 0 ? raw : 16;
@@ -7879,12 +7810,7 @@
         sectionConfig = null,
         registerScrollButtons = true,
     ) {
-        if (isTvLayout()) {
-            return createTvScrollableContainer(items, title, viewMoreUrl, overflowCard, cardFormat, sectionConfig);
-        }
-
         const normalizedFormat = (cardFormat || '').toLowerCase();
-        const isButtonLayout = normalizedFormat === 'button';
 
         // Create the main vertical section container
         const verticalSection = document.createElement('div');
@@ -7912,22 +7838,6 @@
         });
 
         ensureSectionControlsMount(sectionTitleContainer);
-
-        /* if (isButtonLayout) {
-            const itemsContainer = document.createElement('div');
-            //itemsContainer.setAttribute('is', 'emby-itemscontainer');
-            itemsContainer.className = 'itemsContainer padded-left padded-right focuscontainer-x';
-
-            items.forEach((item, index) => {
-                const button = createLibraryButtonElement(item);
-                button.setAttribute('data-index', index);
-                itemsContainer.appendChild(button);
-            });
-
-            verticalSection.appendChild(sectionTitleContainer);
-            verticalSection.appendChild(itemsContainer);
-            return verticalSection;
-        } */
 
         // Create scroller container
         const scroller = createScrollerElement();
@@ -8206,9 +8116,8 @@
 
         ensureSectionControlsMount(sectionTitleContainer);
 
-        const scroller = tvLayout ? createTvScrollerElement() : createScrollerElement();
-        // Sticky is=emby-itemscontainer on skeleton shell — never recreate on enhance
-        const itemsContainer = tvLayout ? createTvItemsSliderElement() : createItemsSliderElement(true);
+        const scroller = createScrollerElement();
+        const itemsContainer = createItemsSliderElement(true);
 
         const itemsLayout = tvLayout ? 'row' : resolveItemsLayout(sectionConfig);
         const skeletonCount = getSectionSkeletonCount(sectionConfig, cardFormat, itemsLayout);
