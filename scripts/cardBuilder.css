@@ -1435,10 +1435,13 @@
 	border-radius: 0 !important;
 }
 
-/* Hide section name text only; keep refresh/configure/show-all controls */
+/* Hide section name text only; keep refresh/configure/show-all controls (incl. inside wrapper) */
 [data-hide-section-name="true"] .sectionTitleContainer > .sectionTitle,
 [data-hide-section-name="true"] .sectionTitleContainer > .sectionTitle-link,
-[data-hide-section-name="true"] .sectionTitleContainer > .sectionTitle-wrapper,
+[data-hide-section-name="true"] .sectionTitle-wrapper > .sectionTitle,
+[data-hide-section-name="true"] .sectionTitle-wrapper > .sectionTitle-link,
+[data-hide-section-name="true"] .sectionTitle-wrapper > .sectionTitle.sectionTitle-cards,
+[data-hide-section-name="true"] .sectionTitle-wrapper > .sectionCaption,
 [data-hide-section-name="true"] .spotlight-section-title-container > .spotlight-section-title,
 [data-hide-section-name="true"] .spotlight-section-title,
 .spotlight-section[data-hide-section-name="true"] .spotlight-section-title {
@@ -4245,14 +4248,22 @@ html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"
 }
 
 /* Section controls are hover-only on desktop; TV has no hover */
+.layout-tv .emby-scroller-container .show-all-button,
 .layout-tv .emby-scroller-container .section-refresh-button,
 .layout-tv .emby-scroller-container .section-configure-button,
 .layout-tv .emby-scroller-container .section-controls-more,
+.layout-tv .spotlight-section .show-all-button,
 .layout-tv .spotlight-section .section-refresh-button,
 .layout-tv .spotlight-section .section-configure-button {
 	opacity: 0.65;
 	visibility: visible;
 	pointer-events: auto;
+}
+
+/* TV: L/R among section control buttons stays in-family */
+.layout-tv .section-controls-inline.focuscontainer-x {
+	display: inline-flex;
+	align-items: center;
 }
 
 .verticalSection[data-card-title-position^="overlay-"] .cardScalable::after,
@@ -4281,7 +4292,7 @@ html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"
 	gap: 8px;
 	overflow: visible;
 	min-width: 0;
-	width: 100%;
+	width: auto;
 	background: transparent;
 	border: 0;
 	padding: 0;
@@ -4304,8 +4315,12 @@ html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"
 /* --- TV spotlight focus: solid accent pills --- */
 .layout-tv .spotlight-section-title .emby-button.show-focus:focus,
 .layout-tv .spotlight-section-title .emby-tab-button.show-focus:focus,
+.layout-tv .spotlight-section-title-container .show-all-button.show-focus:focus,
 .layout-tv .spotlight-section-title-container .section-refresh-button.show-focus:focus,
 .layout-tv .spotlight-section-title-container .section-configure-button.show-focus:focus,
+.layout-tv .sectionTitleContainer .show-all-button.show-focus:focus,
+.layout-tv .sectionTitleContainer .section-refresh-button.show-focus:focus,
+.layout-tv .sectionTitleContainer .section-configure-button.show-focus:focus,
 .layout-tv .spotlight-nav-container .spotlight-nav-button.show-focus:focus,
 .layout-tv .metadata-container a.spotlight-genre-link.show-focus:focus,
 .layout-tv .metadata-container a.spotlight-person-link.show-focus:focus,

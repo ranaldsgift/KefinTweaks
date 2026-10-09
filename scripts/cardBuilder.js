@@ -1875,6 +1875,7 @@
 
             const inline = document.createElement('div');
             inline.className = 'section-controls-inline';
+            if (isTvLayout()) inline.classList.add('focuscontainer-x');
 
             const moreButton = createPaperIconButton({
                 className: 'section-controls-more',
@@ -1890,9 +1891,12 @@
             mountParent.appendChild(controls);
         }
 
+        const inline = controls.querySelector('.section-controls-inline');
+        if (inline && isTvLayout()) inline.classList.add('focuscontainer-x');
+
         return {
             controls,
-            inline: controls.querySelector('.section-controls-inline'),
+            inline,
             moreButton: controls.querySelector('.section-controls-more'),
         };
     }
@@ -6225,6 +6229,7 @@
                                 e.preventDefault();
                                 e.stopPropagation();
                                 if (rowIndex > 0) {
+                                    // Bottom/mid row first link → previous row (not category rail)
                                     const prevLinks = Array.from(
                                         rows[rowIndex - 1].querySelectorAll(
                                             'a.spotlight-genre-link, a.spotlight-person-link, a.spotlight-studio-link',
@@ -6232,8 +6237,8 @@
                                     );
                                     focusTvEl(prevLinks[prevLinks.length - 1] || meta);
                                 } else {
-                                    setMetadataDrilled(meta, false);
-                                    focusTvEl(meta);
+                                    // Top row first link → title / header
+                                    exitMetadataTo('up');
                                 }
                                 return;
                             }
@@ -6250,9 +6255,10 @@
                                         focusTvEl(nextLinks[0]);
                                     }
                                 } else {
-                                    // Right on last bottom link: stay (no wrap to top row / out)
+                                    // Right on last bottom link → buttons row
                                     e.preventDefault();
                                     e.stopPropagation();
+                                    exitMetadataTo('down');
                                 }
                                 return;
                             }
@@ -6406,8 +6412,6 @@
     };
 
     function resolveItemsLayout(sectionConfig) {
-        // Jellyfin TV rows are horizontal-only; never expand to grid/tiles on layout-tv
-        if (isTvLayout()) return 'row';
         if (!sectionConfig) return 'row';
         if (sectionConfig.itemsLayout === 'grid') return 'grid';
         if (sectionConfig.itemsLayout === 'row') return 'row';
@@ -6835,7 +6839,7 @@
                 getLabel: () => getShowAllControlLabel(sectionElement),
                 label: 'Grid layout',
                 className: 'show-all-button',
-                isVisible: () => !isTvLayout(),
+                isVisible: () => true,
                 onClick: (e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -8229,7 +8233,7 @@
         const scroller = createScrollerElement();
         const itemsContainer = createItemsSliderElement(true);
 
-        const itemsLayout = tvLayout ? 'row' : resolveItemsLayout(sectionConfig);
+        const itemsLayout = resolveItemsLayout(sectionConfig);
         const skeletonCount = getSectionSkeletonCount(sectionConfig, cardFormat, itemsLayout);
         for (let i = 0; i < skeletonCount; i++) {
             const skeletonCard = createSkeletonCard(cardFormat, overflowCard, sectionConfig);
@@ -9482,11 +9486,10 @@
         const cardFormat = sectionElement.getAttribute('data-card-format') || sectionConfig.cardFormat;
         const normalizedFormat = (cardFormat || '').toLowerCase();
         const layoutFromDom = itemsContainer.getAttribute('data-layout');
-        const layout = isTvLayout()
-            ? 'row'
-            : layoutFromDom === 'grid' || layoutFromDom === 'row'
-              ? layoutFromDom
-              : resolveItemsLayout(sectionConfig);
+        const layout =
+            layoutFromDom === 'grid' || layoutFromDom === 'row'
+                ? layoutFromDom
+                : resolveItemsLayout(sectionConfig);
         const gapless = itemsContainer.getAttribute('data-gapless') === 'true' || resolveUseGaplessCards(sectionConfig);
 
         invalidateLastRowPadding(itemsContainer);
