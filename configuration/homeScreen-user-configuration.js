@@ -1051,13 +1051,7 @@
     }
 
     const RECENTLY_ADDED_PREFIX = 'recently-added-';
-    const RECENTLY_ADDED_GROUPED_MOVIES_ID = 'recently-added-grouped-movies';
-    const RECENTLY_ADDED_GROUPED_TVSHOWS_ID = 'recently-added-grouped-tvshows';
     const LATEST_EXCLUDE_VIEW_TYPES = new Set(['playlists', 'livetv', 'boxsets', 'channels', 'folders']);
-
-    function isRecentlyAddedGroupedShellId(id) {
-        return id === RECENTLY_ADDED_GROUPED_MOVIES_ID || id === RECENTLY_ADDED_GROUPED_TVSHOWS_ID;
-    }
 
     function cloneRecentlyAddedSection(section) {
         const next = { ...section };
@@ -1082,12 +1076,14 @@
         return section;
     }
 
-    function buildMinimalGroupedRecentlyAddedShell(collectionType) {
+    /** Template for a combined UserView recently-added row (id overwritten at bind). */
+    function buildCombinedRecentlyAddedTemplate(collectionType) {
         const isMovies = collectionType === 'movies';
         return {
-            id: isMovies ? RECENTLY_ADDED_GROUPED_MOVIES_ID : RECENTLY_ADDED_GROUPED_TVSHOWS_ID,
+            id: '',
             name: isMovies ? 'Recently Added Movies' : 'Recently Added TV Shows',
-            enabled: false,
+            // Native Library Folders grouping produced this view ⇒ default on until user pref says otherwise
+            enabled: true,
             order: 61,
             cardFormat: 'Poster',
             jellyfinId: 'latestmedia',
@@ -1104,33 +1100,6 @@
         };
     }
 
-    /**
-     * Per-library recently-added rows folded into a combined Movies/TV UserView
-     * (library Id no longer appears in eligible UserViews).
-     */
-    function collectFoldedRecentlyAddedByType(sections, eligibleViewIds, libTypeById) {
-        const folded = { movies: [], tvshows: [] };
-        (sections || []).forEach((section) => {
-            const id = String(section?.id || '');
-            if (!id.startsWith(RECENTLY_ADDED_PREFIX) || isRecentlyAddedGroupedShellId(id)) return;
-            const libId = id.slice(RECENTLY_ADDED_PREFIX.length);
-            if (eligibleViewIds.has(libId)) return;
-            const ct = String(libTypeById.get(libId) || '').toLowerCase();
-            if (ct === 'movies' || ct === 'tvshows') {
-                folded[ct].push(section);
-            }
-        });
-        return folded;
-    }
-
-    /** Default grouped enabled = true if any merged per-lib recently-added source is enabled. */
-    function applyGroupedEnabledFromMergedSources(groupedSection, foldedSources) {
-        const sources = foldedSources || [];
-        if (!sources.length) return groupedSection;
-        groupedSection.enabled = sources.some((s) => s?.enabled === true);
-        return groupedSection;
-    }
-
     async function fetchUserViewsItems() {
         const userId = resolvePreferencesTargetUserId();
         if (!userId || !window.ApiClient) return [];
@@ -1144,7 +1113,8 @@
 
     /**
      * Reshape recently-added-* for the viewing user to match native Latest:
-     * UserViews membership, LatestItemsExcludes, grouped Movies/TV shells, HidePlayedInLatest.
+     * UserViews membership, LatestItemsExcludes, combined UserView rows, HidePlayedInLatest.
+     * Combined views use recently-added-{viewId}; defaults enabled when the view exists.
      * Returns in-memory clones only — does not persist queryOptions.
      */
     async function resolveRecentlyAddedSectionsForUser(sections) {
@@ -1180,23 +1150,22 @@
         }
 
         const physicalLibraryIds = new Set();
-        const libTypeById = new Map();
         try {
             if (window.dataHelper?.getLibraries) {
                 const libs = await window.dataHelper.getLibraries();
                 (libs || []).forEach((lib) => {
-                    if (lib?.Id) {
-                        physicalLibraryIds.add(String(lib.Id));
-                        libTypeById.set(String(lib.Id), String(lib.CollectionType || '').toLowerCase());
-                    }
+                    if (lib?.Id) physicalLibraryIds.add(String(lib.Id));
                 });
             }
         } catch (_) { /* fall through */ }
         if (physicalLibraryIds.size === 0) {
             list.forEach((section) => {
                 const id = String(section?.id || '');
-                if (!id.startsWith(RECENTLY_ADDED_PREFIX) || isRecentlyAddedGroupedShellId(id)) return;
-                physicalLibraryIds.add(id.slice(RECENTLY_ADDED_PREFIX.length));
+                if (!id.startsWith(RECENTLY_ADDED_PREFIX)) return;
+                const suffix = id.slice(RECENTLY_ADDED_PREFIX.length);
+                // Skip legacy catalog shells (recently-added-grouped-*)
+                if (!suffix || suffix.startsWith('grouped-')) return;
+                physicalLibraryIds.add(suffix);
             });
         }
 
@@ -1209,6 +1178,7 @@
         });
         const eligibleViewIds = new Set(eligibleViews.map((view) => String(view.Id)));
 
+        // Combined Movies/TV UserViews from native Library Folders grouping
         const combinedByType = new Map();
         eligibleViews.forEach((view) => {
             const ct = String(view.CollectionType || '').toLowerCase();
@@ -1217,21 +1187,29 @@
             }
         });
 
-        const foldedByType = collectFoldedRecentlyAddedByType(list, eligibleViewIds, libTypeById);
-
-        const sectionById = new Map();
-        list.forEach((section) => {
-            if (section?.id) sectionById.set(section.id, section);
-        });
-
         const result = [];
-        let emittedGroupedMovies = false;
-        let emittedGroupedTv = false;
 
-        function bindGroupedShell(ct, view, template) {
-            const shellId = ct === 'movies' ? RECENTLY_ADDED_GROUPED_MOVIES_ID : RECENTLY_ADDED_GROUPED_TVSHOWS_ID;
-            const next = cloneRecentlyAddedSection(template || buildMinimalGroupedRecentlyAddedShell(ct));
-            next.id = shellId;
+        for (const section of list) {
+            const id = String(section?.id || '');
+            if (!id.startsWith(RECENTLY_ADDED_PREFIX)) {
+                result.push(section);
+                continue;
+            }
+
+            const viewId = id.slice(RECENTLY_ADDED_PREFIX.length);
+            // Drop legacy grouped-* catalog shells; keep only eligible UserView ids
+            if (!viewId || viewId.startsWith('grouped-') || !eligibleViewIds.has(viewId)) continue;
+
+            const next = cloneRecentlyAddedSection(section);
+            if (hidePlayed) applyHidePlayedInLatestToSection(next);
+            result.push(next);
+        }
+
+        // Always synthesize combined UserView rows from UserViews (source of truth)
+        for (const [ct, view] of combinedByType) {
+            const sectionId = `${RECENTLY_ADDED_PREFIX}${view.Id}`;
+            const next = cloneRecentlyAddedSection(buildCombinedRecentlyAddedTemplate(ct));
+            next.id = sectionId;
             if (view.Name) next.name = `Recently Added ${view.Name}`;
             if (Array.isArray(next.queries)) {
                 next.queries = next.queries.map((q) => ({
@@ -1242,44 +1220,8 @@
                     }
                 }));
             }
-            applyGroupedEnabledFromMergedSources(next, foldedByType[ct]);
-            if (hidePlayed) applyHidePlayedInLatestToSection(next);
-            return next;
-        }
-
-        for (const section of list) {
-            const id = String(section?.id || '');
-            if (!id.startsWith(RECENTLY_ADDED_PREFIX)) {
-                result.push(section);
-                continue;
-            }
-
-            if (id === RECENTLY_ADDED_GROUPED_MOVIES_ID || id === RECENTLY_ADDED_GROUPED_TVSHOWS_ID) {
-                const ct = id === RECENTLY_ADDED_GROUPED_MOVIES_ID ? 'movies' : 'tvshows';
-                const view = combinedByType.get(ct);
-                if (!view) continue;
-                const template = sectionById.get(id) || buildMinimalGroupedRecentlyAddedShell(ct);
-                result.push(bindGroupedShell(ct, view, template));
-                if (ct === 'movies') emittedGroupedMovies = true;
-                else emittedGroupedTv = true;
-                continue;
-            }
-
-            const libId = id.slice(RECENTLY_ADDED_PREFIX.length);
-            if (!eligibleViewIds.has(libId)) continue;
-
-            const next = cloneRecentlyAddedSection(section);
             if (hidePlayed) applyHidePlayedInLatestToSection(next);
             result.push(next);
-        }
-
-        // Combined view exists but admin shell was missing from catalog — append synthesized row
-        for (const [ct, view] of combinedByType) {
-            if (ct === 'movies' && emittedGroupedMovies) continue;
-            if (ct === 'tvshows' && emittedGroupedTv) continue;
-            const shellId = ct === 'movies' ? RECENTLY_ADDED_GROUPED_MOVIES_ID : RECENTLY_ADDED_GROUPED_TVSHOWS_ID;
-            const template = sectionById.get(shellId) || buildMinimalGroupedRecentlyAddedShell(ct);
-            result.push(bindGroupedShell(ct, view, template));
         }
 
         return result;
@@ -1416,8 +1358,10 @@
             }
         }
 
-        // Align recently-added-* with native Latest (UserViews, excludes, grouped, HidePlayedInLatest)
+        // Align recently-added-* with native Latest (UserViews, excludes, combined views, HidePlayedInLatest)
         sections = await resolveRecentlyAddedSectionsForUser(sections);
+        // Prefs must win over synthesized defaults (combined rows default enabled:true)
+        sections = applyUserSectionOverrides(sections, homeScreen, { serverSectionsById });
 
         sections = sections.filter((section) => section.enabled || section.userConfigurable === true || section.userConfigurable === undefined);
         sections = deduplicateHomeScreenSections(sections);
