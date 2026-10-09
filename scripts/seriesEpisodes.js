@@ -68,6 +68,24 @@
         return season?.IndexNumber ?? season?.indexNumber;
     }
 
+    /** Prefer lowest IndexNumber >= 1 (Season 1); fall back to seasons[0] (e.g. Specials-only). */
+    function pickDefaultSeason(seasons) {
+        const list = Array.isArray(seasons) ? seasons : [];
+        if (!list.length) return null;
+        let best = null;
+        let bestIdx = Infinity;
+        for (const season of list) {
+            const n = seasonIndex(season);
+            if (n == null || !Number.isFinite(Number(n))) continue;
+            const num = Number(n);
+            if (num >= 1 && num < bestIdx) {
+                bestIdx = num;
+                best = season;
+            }
+        }
+        return best || list[0];
+    }
+
     function buildEpisodesQueryDef(seriesId, seasonIdValue) {
         return {
             path: `/Shows/${seriesId}/Episodes`,
@@ -654,7 +672,7 @@
             }
         }
         if (!targetSeason) {
-            targetSeason = seasons[0];
+            targetSeason = pickDefaultSeason(seasons);
         }
         if (!targetSeason) {
             WARN('No seasons available to render');
@@ -835,16 +853,16 @@
             }
         }
         
-        // Fallback to first season if NextUp not found or season not in list
+        // Fallback to Season 1 (lowest IndexNumber >= 1) if NextUp not found or season not in list
         if (!targetSeason) {
-            targetSeason = seasons[0];
-            // If we have NextUp but season not found, use first episode of first season
+            targetSeason = pickDefaultSeason(seasons);
+            // If we have NextUp but season not found, use first episode of default season
             if (targetEpisodeNumber && !seasons.find(s => s.IndexNumber === targetEpisodeNumber.season)) {
                 targetEpisodeNumber = { season: targetSeason.IndexNumber, episode: 1 };
-                LOG(`NextUp season not in seasons list, defaulting to first episode of first season`);
+                LOG(`NextUp season not in seasons list, defaulting to first episode of season ${targetSeason.IndexNumber}`);
             } else if (!targetEpisodeNumber) {
                 targetEpisodeNumber = { season: targetSeason.IndexNumber, episode: 1 };
-                LOG(`No NextUp found, defaulting to first episode of first season`);
+                LOG(`No NextUp found, defaulting to first episode of season ${targetSeason.IndexNumber}`);
             }
         }
 
