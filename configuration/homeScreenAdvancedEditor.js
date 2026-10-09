@@ -432,7 +432,7 @@
 
     const RANDOM_QUERY_TOGGLE_DESCRIPTIONS = {
         on: 'Randomly picks a query from the defined queries instead of merging all query results. If Query Picker is enabled, the section will initially show a random query from the defined queries.',
-        off: 'Merge results from all defined queries while respecting the sorting criteria specified below.'
+        off: 'Merge results from all defined queries while respecting the sorting criteria specified in the Advanced Options section below.'
     };
 
     const QUERY_PICKER_TOGGLE_DESCRIPTIONS = {
