@@ -572,7 +572,7 @@
         if (!root) return;
         const clear = (el) => {
             if (!el || !el.classList) return;
-            el.classList.remove('Mui-selected', 'Mui-focusVisible', 'selected');
+            el.classList.remove('Mui-selected', 'Mui-focusVisible', 'selected', 'Mui-disabled');
             el.removeAttribute('aria-current');
             el.removeAttribute('aria-selected');
         };
