@@ -1105,6 +1105,15 @@
         return document.querySelector('.headerTabs.sectionTabs .emby-tabs-slider');
     }
 
+    /** True when home is visible, main top-nav links are registered, but the legacy tabs slider has none. */
+    function legacyMainTopNavNeedsRepopulate() {
+        if (!customMenuLinkRegistry.some((e) => e.topNavigation === 'main')) return false;
+        if (!document.querySelector('.homePage:not(.hide)')) return false;
+        const slider = findLegacyTabsSlider();
+        if (!slider) return false;
+        return !slider.querySelector('[data-kefin-custom-menu-top-link]');
+    }
+
     function removeLegacyTopNavCustomTabLinks() {
         document.querySelectorAll(
             '.headerTabs.sectionTabs [data-kefin-custom-menu-top-link], .emby-tabs-slider > [data-kefin-custom-menu-top-link]'
@@ -1717,19 +1726,27 @@
         }
 
         let scheduled = false;
-        customMenuLinkObserver = new MutationObserver((mutations) => {
-            if (customMenuLinkReapplyDepth > 0) return;
-            if (!customMenuLinkRegistry.length) {
-                disconnectCustomMenuLinkObserver();
-                return;
-            }
-            if (!mutations.some(mutationShouldTriggerCustomMenuReapply)) return;
+        const scheduleCustomMenuReapply = () => {
             if (scheduled) return;
             scheduled = true;
             requestAnimationFrame(() => {
                 scheduled = false;
                 reapplyAllCustomMenuLinks();
             });
+        };
+        customMenuLinkObserver = new MutationObserver((mutations) => {
+            if (customMenuLinkReapplyDepth > 0) return;
+            if (!customMenuLinkRegistry.length) {
+                disconnectCustomMenuLinkObserver();
+                return;
+            }
+            // Empty legacy main tabs on home → reapply regardless of which nodes mutated
+            if (legacyMainTopNavNeedsRepopulate()) {
+                scheduleCustomMenuReapply();
+                return;
+            }
+            if (!mutations.some(mutationShouldTriggerCustomMenuReapply)) return;
+            scheduleCustomMenuReapply();
         });
 
         customMenuLinkObserver.observe(document.body, {
