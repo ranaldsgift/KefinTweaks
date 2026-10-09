@@ -151,6 +151,32 @@ div#discovery-loading-indicator:not(.show)::after {
 	justify-content: start;
 }
 
+/* Chevron mode: clickable Discover More (desktop optional; TV focus stop) */
+#indexPage[data-discovery-ready]:not([data-discovery-exhausted]) #discovery-loading-indicator:not(.show) {
+	cursor: pointer;
+}
+
+.layout-tv #discovery-loading-indicator.discovery-load-more-focusable {
+	outline: none;
+	min-height: 3em;
+	padding: 0.5em 1em;
+	box-sizing: border-box;
+}
+
+.layout-tv #discovery-loading-indicator.discovery-load-more-focusable.show-focus:focus {
+	background-color: var(--theme-primary-color, #00a4dc) !important;
+	background: var(--theme-primary-color, #00a4dc) !important;
+	color: #fff !important;
+	outline: none;
+	box-shadow: none;
+	border-radius: 8px;
+}
+
+.layout-tv #discovery-loading-indicator.discovery-load-more-focusable.show-focus:focus::before,
+.layout-tv #discovery-loading-indicator.discovery-load-more-focusable.show-focus:focus::after {
+	color: #fff !important;
+}
+
 .discovery-loading-indicator .spinner {
 	width: 30px;
 	height: 30px;
@@ -447,9 +473,6 @@ html:not([data-active-page="home"]) #kefin-home-create-section-btn {
 	:where(#kefin-home-category-rail) .kefin-home-category-rail:hover,
 	:where(#kefin-home-category-rail) .kefin-home-category-rail:focus-within {
 		opacity: 1;
-		background: var(--jf-palette-AppBar-darkBg, var(--AppBar-background)) !important;
-		border-radius: 0;
-		box-shadow: 1px 1px 1px 1px #fff !important;
 	}
 	.kefin-home-category-btn-label {
 		display: block;

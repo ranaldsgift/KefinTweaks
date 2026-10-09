@@ -154,6 +154,8 @@
                     container.parentNode.appendChild(loadingDiv);
                 }
             }
+            bindDiscoveryLoadMoreControl(loadingDiv);
+            syncDiscoveryLoadMoreFocus(loadingDiv);
             return loadingDiv;
         }
 
@@ -175,12 +177,81 @@
             container.parentNode.appendChild(loadingDiv);
         }
         LOG('Created discovery loading indicator as sibling of sections container');
-        
+        bindDiscoveryLoadMoreControl(loadingDiv);
+        syncDiscoveryLoadMoreFocus(loadingDiv);
         return loadingDiv;
     }
 
     function removeDiscoveryLoadingIndicator() {
         document.querySelectorAll('#discovery-loading-indicator').forEach((el) => el.remove());
+    }
+
+    function isDiscoveryLoadMoreInteractive() {
+        if (state.discoveryMode !== 'chevron') return false;
+        if (state.discoverySectionsRemain === false) return false;
+        if (state.isRenderingDiscovery) return false;
+        const page = getDiscoveryHomePageEl();
+        if (page?.dataset?.discoveryExhausted === 'true') return false;
+        const indicator = document.querySelector('#discovery-loading-indicator');
+        if (indicator?.classList.contains('show')) return false;
+        return true;
+    }
+
+    function syncDiscoveryLoadMoreFocus(indicator) {
+        const el = indicator
+            || document.querySelector('.homePage:not(.hide) #discovery-loading-indicator')
+            || document.querySelector('.libraryPage:not(.hide) #discovery-loading-indicator')
+            || document.querySelector('#discovery-loading-indicator');
+        if (!el) return;
+
+        const tv = document.documentElement.classList.contains('layout-tv');
+        const interactive = isDiscoveryLoadMoreInteractive();
+
+        if (tv && interactive) {
+            el.setAttribute('role', 'button');
+            el.setAttribute('tabindex', '0');
+            el.setAttribute('aria-label', 'Discover More');
+            el.classList.add('show-focus');
+            el.classList.add('discovery-load-more-focusable');
+        } else {
+            el.setAttribute('tabindex', '-1');
+            el.removeAttribute('role');
+            el.classList.remove('show-focus');
+            el.classList.remove('discovery-load-more-focusable');
+            if (state.discoverySectionsRemain === false || getDiscoveryHomePageEl()?.dataset?.discoveryExhausted === 'true') {
+                el.setAttribute('aria-label', 'No More Content to Discover');
+            } else {
+                el.removeAttribute('aria-label');
+            }
+        }
+    }
+
+    function activateDiscoveryLoadMore() {
+        if (!isDiscoveryLoadMoreInteractive()) return false;
+        if (!isDiscoveryHomeContext()) return false;
+        LOG('Discover More activated; loading next discovery group...');
+        renderNextDiscoveryGroup();
+        return true;
+    }
+
+    function bindDiscoveryLoadMoreControl(indicator) {
+        if (!indicator || indicator.dataset.loadMoreBound === '1') return;
+        indicator.dataset.loadMoreBound = '1';
+
+        indicator.addEventListener('click', (e) => {
+            if (!isDiscoveryLoadMoreInteractive()) return;
+            e.preventDefault();
+            e.stopPropagation();
+            activateDiscoveryLoadMore();
+        });
+
+        indicator.addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            if (!isDiscoveryLoadMoreInteractive()) return;
+            e.preventDefault();
+            e.stopPropagation();
+            activateDiscoveryLoadMore();
+        });
     }
 
     function getDiscoveryHomePageEl() {
@@ -198,6 +269,7 @@
         else delete page.dataset.infiniteScroll;
         if (exhausted) page.dataset.discoveryExhausted = 'true';
         else delete page.dataset.discoveryExhausted;
+        syncDiscoveryLoadMoreFocus();
     }
 
     function showDiscoveryLoadingIndicator() {
@@ -208,6 +280,7 @@
         loadingIndicator.classList.add('show');
         loadingIndicator.style.visibility = 'visible';
         loadingIndicator.style.display = 'flex';
+        syncDiscoveryLoadMoreFocus(loadingIndicator);
     }
 
     function hideDiscoveryLoadingIndicator() {
@@ -222,6 +295,7 @@
             loadingIndicator.style.visibility = 'hidden';
             loadingIndicator.style.display = 'none';
         }
+        syncDiscoveryLoadMoreFocus(loadingIndicator);
     }
 
     function isDiscoveryHomeContext() {
@@ -271,6 +345,7 @@
             loadingIndicator.classList.remove('show');
             loadingIndicator.style.visibility = '';
             loadingIndicator.style.display = '';
+            syncDiscoveryLoadMoreFocus(loadingIndicator);
         }
         LOG('Discovery exhausted — No More Content to Discover');
     }
@@ -1491,6 +1566,7 @@
         container.dataset.loadingDiscovery = 'true';
         container.classList.add('loading-discovery');
         showDiscoveryLoadingIndicator();
+        syncDiscoveryLoadMoreFocus();
 
         // Chevron mode: nudge scroll so newly appended sections start entering the viewport
         if (state.discoveryMode === 'chevron') {
@@ -1825,7 +1901,11 @@
         window.addEventListener('wheel', handleWheel, { passive: true });
         window.addEventListener('touchstart', handleTouchStart, { passive: true });
         window.addEventListener('touchmove', handleTouchMove, { passive: true });
-        LOG('Chevron Discover More enabled for discovery (scroll-again at bottom).');
+
+        const indicator = createDiscoveryLoadingIndicator(target);
+        bindDiscoveryLoadMoreControl(indicator);
+        syncDiscoveryLoadMoreFocus(indicator);
+        LOG('Chevron Discover More enabled for discovery (scroll-again at bottom / TV Enter).');
     }
 
     function isInSeasonalPeriod(start, end) {
@@ -2392,6 +2472,11 @@
             return false;
         }
 
+        // Undrilled spotlight metadata is a leftmost content stop (Left → category rail)
+        if (el.classList?.contains('metadata-container') && el.dataset?.metadataDrilled !== 'true') {
+            return true;
+        }
+
         const row = el.closest?.('.focuscontainer-x, .itemsContainer-tv, .sectionTitleContainer, .spotlight-section-title-container');
         if (row) {
             const focusables = Array.from(
@@ -2445,15 +2530,60 @@
         return true;
     }
 
+    function isVisibleFocusTarget(el) {
+        if (!el || !document.contains(el)) return false;
+        const style = window.getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) {
+            return false;
+        }
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+    }
+
+    /** Live spotlight target after slide change (inactive/drilled nodes go stale). */
+    function getActiveSpotlightReturnFocus() {
+        const activeSlide = document.querySelector(
+            '.homeSectionsContainer .spotlight-item[data-active="true"], .sections .spotlight-item[data-active="true"]',
+        );
+        if (!activeSlide) return null;
+        const meta = activeSlide.querySelector('.metadata-container');
+        if (meta && isVisibleFocusTarget(meta)) {
+            if (meta.dataset.metadataDrilled === 'true') {
+                meta.dataset.metadataDrilled = 'false';
+                meta.setAttribute('tabindex', '0');
+                meta.querySelectorAll(
+                    'a.spotlight-genre-link, a.spotlight-person-link, a.spotlight-studio-link',
+                ).forEach((link) => link.setAttribute('tabindex', '-1'));
+            }
+            return meta;
+        }
+        const header = activeSlide.closest('.spotlight-section')?.querySelector('.spotlight-header-container')
+            || document.querySelector('.spotlight-section .spotlight-header-container');
+        if (header) {
+            const focusable = Array.from(
+                header.querySelectorAll(
+                    'button:not([disabled]):not([tabindex="-1"]), a[href]:not([tabindex="-1"]), [tabindex]:not([tabindex="-1"])',
+                ),
+            ).find((node) => isVisibleFocusTarget(node));
+            if (focusable) return focusable;
+        }
+        return null;
+    }
+
     function exitCategoryRailToContent() {
         const buttons = getRailCategoryButtons();
-        const returnEl =
-            (homeChromeRailReturnFocus && document.contains(homeChromeRailReturnFocus) && homeChromeRailReturnFocus) ||
-            document.querySelector(
+        let returnEl = homeChromeRailReturnFocus;
+        homeChromeRailReturnFocus = null;
+
+        if (!isVisibleFocusTarget(returnEl)) {
+            returnEl = getActiveSpotlightReturnFocus();
+        }
+        if (!isVisibleFocusTarget(returnEl)) {
+            returnEl = document.querySelector(
                 '.homeSectionsContainer .card.itemAction, .homeSectionsContainer a.sectionTitle-link, .sections .card.itemAction',
             );
-        homeChromeRailReturnFocus = null;
-        if (returnEl && typeof returnEl.focus === 'function') {
+        }
+        if (returnEl && typeof returnEl.focus === 'function' && isVisibleFocusTarget(returnEl)) {
             try {
                 returnEl.focus({ preventScroll: true });
             } catch (_) {
