@@ -2329,9 +2329,9 @@ html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"
 	z-index: 1;
 }
 
-/* Row scroll lives on the slidee (JF .scrollSlider), not the outer frame */
-.custom-scroller-container .custom-scroller,
-.emby-scroller-container .custom-scroller {
+/* Desktop custom path: clip frame; slidee uses translateX. Mobile .scrollX keeps native overflow. */
+.custom-scroller-container .custom-scroller:not(.scrollX),
+.emby-scroller-container .custom-scroller:not(.scrollX) {
 	overflow: hidden;
 }
 

@@ -7363,13 +7363,16 @@
         scroller.setAttribute('data-horizontal', 'true');
         scroller.setAttribute('data-centerfocus', 'true');
         scroller.className = `padded-top-focusscale padded-bottom-focusscale emby-scroller padded-left custom-scroller${isMobile ? " scrollX hiddenScrollX" : ""}`;
-        scroller.setAttribute('data-scroll-mode-x', 'custom');
+        scroller.setAttribute('data-scroll-mode-x', isMobile ? 'native' : 'custom');
         scroller.style.scrollSnapType = 'none';
         scroller.style.touchAction = 'auto';
         scroller.style.overscrollBehaviorX = 'contain';
         scroller.style.overscrollBehaviorY = 'auto';
         scroller.style.webkitOverflowScrolling = 'touch';
-        scroller.style.overflow = 'hidden';
+        // Desktop custom path: clip frame + translateX slidee. Mobile scrollX: native overflow swipe.
+        if (!isMobile) {
+            scroller.style.overflow = 'hidden';
+        }
         setStoredScrollPosition(scroller, 0);
 
         return scroller;
@@ -7742,6 +7745,7 @@
             }
 
             scroller.addEventListener('mousedown', onPointerDown);
+            scroller.addEventListener('touchstart', onPointerDown, { passive: true });
 
             // Trackpad / mouse wheel → custom transform scroll (native overflow scrollers handle this themselves).
             // Keep passive:false so we can preventDefault on horizontal gestures, but coalesce apply work
@@ -9200,6 +9204,13 @@
             );
             const scrollPosition = Math.min(Math.max(position, 0), maxPosition);
             const clamped = scrollPosition > 20 ? scrollPosition : 0;
+            // Clear any desktop slidee transform so it cannot fight native scrollLeft
+            const slidee = getScrollSlidee(scroller);
+            if (slidee) {
+                if (slidee.style.transform) slidee.style.transform = '';
+                if (slidee.style.transition) slidee.style.transition = '';
+            }
+            if (scroller.style.transform) scroller.style.transform = '';
             scroller.scrollTo({ left: clamped, behavior: animate ? 'smooth' : 'auto' });
             setStoredScrollPosition(scroller, clamped);
         } else {
