@@ -1411,7 +1411,7 @@
 }
 
 .emby-scroller-container:not([data-card-title-visibility="hidden"]) .itemsContainer[data-layout="grid"]:not([data-gapless="true"]) {
-	gap: 1rem 0 !important;
+	gap: 1rem !important;
 }
 
 .itemsContainer[data-gapless="true"] .card,
@@ -2014,7 +2014,6 @@
 }
 .spotlight-section[data-layout="Borderless"][data-size="normal"] .spotlight-header-container {
 	left: var(--spotlight-fullscreen-horizontal);
-	top: calc(var(--spotlight-fullscreen-vertical) * 2.5);
 	width: calc(100% - 2 * var(--spotlight-fullscreen-horizontal));
 }
 .spotlight-section[data-layout="Borderless"][data-size="normal"] .spotlight-overlay {
@@ -4260,8 +4259,8 @@ html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"
 	pointer-events: auto;
 }
 
-/* TV: L/R among section control buttons stays in-family */
-.layout-tv .section-controls-inline.focuscontainer-x {
+/* TV: title + controls share focuscontainer-x on .sectionTitleContainer / .sectionTitle-wrapper */
+.layout-tv .section-controls-inline {
 	display: inline-flex;
 	align-items: center;
 }

@@ -1875,7 +1875,6 @@
 
             const inline = document.createElement('div');
             inline.className = 'section-controls-inline';
-            if (isTvLayout()) inline.classList.add('focuscontainer-x');
 
             const moreButton = createPaperIconButton({
                 className: 'section-controls-more',
@@ -1892,7 +1891,13 @@
         }
 
         const inline = controls.querySelector('.section-controls-inline');
-        if (inline && isTvLayout()) inline.classList.add('focuscontainer-x');
+        // Controls-only group must not trap L/R — title + controls share one row (below).
+        inline?.classList.remove('focuscontainer-x');
+
+        // TV: title link + section controls in one focuscontainer-x (spotlight uses headerContainer).
+        if (isTvLayout() && titleContainer.classList.contains('sectionTitleContainer')) {
+            mountParent.classList.add('focuscontainer-x');
+        }
 
         return {
             controls,
@@ -7149,6 +7154,12 @@
         return pad;
     }
 
+    /** Frame content-box width (clientWidth minus horizontal padding) — viewport for slidee math. */
+    function getScrollerViewportWidth(scroller, pad) {
+        const p = pad || readScrollerPadding(scroller);
+        return Math.max(0, (scroller?.clientWidth || 0) - (p.left || 0) - (p.right || 0));
+    }
+
     function readCardPadding(card) {
         if (!card) return { left: 0, right: 0 };
         const cached = cardPaddingByEl.get(card);
@@ -7266,8 +7277,8 @@
         const cardPad = readSampleCardPadding(scroller);
         const contentOffset = getCardContentOffsetX(scroller, card);
         const cardWidth = card.offsetWidth || card.getBoundingClientRect().width || 0;
-        // Center within the padded content box (same gutters as desktop snap)
-        const frameInnerWidth = Math.max(0, scroller.clientWidth - pad.left - Math.max(pad.right, pad.left));
+        // Center within the frame content box (same viewport as max-scroll)
+        const frameInnerWidth = getScrollerViewportWidth(scroller, pad);
         const cardCenterInContent = contentOffset + cardWidth / 2 - pad.left;
         const desired = cardCenterInContent - frameInnerWidth / 2;
         const max = getMaxPositionFromPadding(scroller, pad, cardPad);
@@ -7306,10 +7317,9 @@
         const epsilon = 1;
         const pad = readScrollerPadding(scroller);
         const cardPad = readSampleCardPadding(scroller);
-        const endInset = Math.max(pad.right, pad.left);
         const scrollerRect = scroller.getBoundingClientRect();
-        // Slidee is translated; frame is fixed — visible window is the scroller clip
-        const contentWidth = Math.max(0, scroller.clientWidth - pad.left - endInset);
+        // Slidee is translated; frame is fixed — visible window is the content box
+        const contentWidth = getScrollerViewportWidth(scroller, pad);
         const visibleLeft = scrollerRect.left + pad.left;
         const visibleRight = visibleLeft + contentWidth;
         let count = 0;
@@ -7326,11 +7336,13 @@
     }
 
     /**
-     * Max transform/scroll offset so the trailing content edge matches the leading
-     * gutter when the skin only pads the left (e.g. Fin --sidePadding), plus the
-     * sample card's horizontal padding so the last card's right padding clears the clip.
+     * Max translateX so slidee content flushes to the frame content-box right edge.
+     * Pairs slidee.scrollWidth with viewport = clientWidth - padL - padR (not clientWidth + endInset hacks).
+     * @param {HTMLElement} scroller
+     * @param {{left:number,right:number}} [pad]
+     * @param {{left:number,right:number}} [_cardPad] unused; kept for call-site compatibility
      */
-    function getMaxPositionFromPadding(scroller, pad, cardPad) {
+    function getMaxPositionFromPadding(scroller, pad, _cardPad) {
         if (!scroller) return 0;
 
         const metrics = getScrollerMetrics(scroller);
@@ -7345,13 +7357,11 @@
             return 0;
         }
 
-        const { left, right } = pad || { left: 0, right: 0 };
-        const cp = cardPad || { left: 0, right: 0 };
-        const endInset = Math.max(right, left);
+        const resolvedPad = pad || readScrollerPadding(scroller);
         const slidee = getScrollSlidee(scroller);
         const contentWidth = slidee ? slidee.scrollWidth : scroller.scrollWidth;
-        const base = Math.max(0, contentWidth - scroller.clientWidth + endInset);
-        const maxScroll = base + (cp.left || 0) + (cp.right || 0);
+        const viewport = getScrollerViewportWidth(scroller, resolvedPad);
+        const maxScroll = Math.max(0, contentWidth - viewport);
         setMaxScrollPosition(scroller, maxScroll);
         return maxScroll;
     }
@@ -7486,18 +7496,16 @@
         }
 
         /**
-         * Cards fully inside the padded content clip (not the browser viewport / border box).
-         * Frame is fixed; slidee translate moves cards — use live rects vs scroller clip.
-         * When the skin only pads the left, treat trailing inset as max(left, right).
+         * Cards fully inside the frame content-box clip.
+         * Frame is fixed; slidee translate moves cards — use live rects vs content-box edges.
          */
         function getFullyVisibleCardIndices(cards) {
             const fullyVisible = [];
             const epsilon = 1;
             const pad = readScrollerPadding(scroller);
             const cardPad = readSampleCardPadding(scroller);
-            const endInset = Math.max(pad.right, pad.left);
             const scrollerRect = scroller.getBoundingClientRect();
-            const contentWidth = Math.max(0, scroller.clientWidth - pad.left - endInset);
+            const contentWidth = getScrollerViewportWidth(scroller, pad);
             const visibleLeft = scrollerRect.left + pad.left;
             const visibleRight = visibleLeft + contentWidth;
             cards.forEach((card, index) => {
@@ -7516,7 +7524,7 @@
         function snapScrollToCardIndex(cards, targetIndex) {
             if (!cards.length) return;
             const clampedIndex = Math.max(0, Math.min(targetIndex, cards.length - 1));
-            // Last card: use max (scroller end inset + card L+R padding), not left-align snap
+            // Last card: flush to frame content-box end (getMaxPositionFresh)
             if (clampedIndex === cards.length - 1) {
                 setPosition(getMaxPositionFresh(), { animate: true, freshMax: true });
                 return;
