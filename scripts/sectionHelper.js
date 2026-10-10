@@ -277,6 +277,7 @@
             if (window.cardBuilder.postProcessItems) {
                 postProcessedItems = window.cardBuilder.postProcessItems(sectionConfig, normalizedItems);
             }
+            postProcessedItems = applyExcludeItemIdFilter(sectionConfig, postProcessedItems);
 
             return {
                 config: sectionConfig,
@@ -311,7 +312,7 @@
                         if (window.cardBuilder.postProcessItems) {
                             items = window.cardBuilder.postProcessItems(sectionConfig, items);
                         }
-                        return items;
+                        return applyExcludeItemIdFilter(sectionConfig, items);
                     })();
                 }
                 return mappedDataPromise;
@@ -373,6 +374,7 @@
             if (window.cardBuilder.postProcessItems) {
                 postProcessedItems = window.cardBuilder.postProcessItems(cfg, items);
             }
+            postProcessedItems = applyExcludeItemIdFilter(cfg, postProcessedItems);
             return sortItemsByConfiguredIds(cfg, postProcessedItems);
         };
 
@@ -858,6 +860,23 @@
         return item.Id;
     }
 
+    /** Drop discovery source title(s) from result lists (API ExcludeItemIds fallback). */
+    function applyExcludeItemIdFilter(sectionConfig, items) {
+        const raw = sectionConfig?.excludeItemId;
+        if (raw == null || items == null) return items;
+        const ids = new Set((Array.isArray(raw) ? raw : [raw]).map(String));
+        if (Array.isArray(items)) {
+            return items.filter((item) => item?.Id != null && !ids.has(String(item.Id)));
+        }
+        if (Array.isArray(items.Items)) {
+            return {
+                ...items,
+                Items: items.Items.filter((item) => item?.Id != null && !ids.has(String(item.Id)))
+            };
+        }
+        return items;
+    }
+
     function resolveTitleMetadata(item, itemType) {
         const title = item?.SeriesName || item?.Name || '';
         const meta = { Title: title };
@@ -890,7 +909,8 @@
                 return {
                     id: person.Id,
                     name: person.Name,
-                    excludeItemId: item.Id,
+                    // Episode history sources used for Series results must exclude SeriesId
+                    excludeItemId: resolveSimilarSourceId(item) || item.Id,
                     metadata: buildPersonMetadata(person.Name, personType, item, itemType)
                 };
             }
@@ -1166,16 +1186,25 @@
         }
         if (!queryOptions.Limit) queryOptions.Limit = instanceConfig.itemLimit || 20;
 
+        const applyExcludeItemIdsToQueryOptions = (opts) => {
+            if (!instanceConfig.excludeItemId || !opts) return opts;
+            opts.ExcludeItemIds = Array.isArray(instanceConfig.excludeItemId)
+                ? instanceConfig.excludeItemId
+                : [instanceConfig.excludeItemId];
+            return opts;
+        };
+
         if (discoveryKind === 'Similar' || discoveryKind === 'Watchlist') {
             const similarId = dynamicResult.similarSourceId || resolvedSource;
+            const similarQueryOptions = applyExcludeItemIdsToQueryOptions({
+                Limit: instanceConfig.itemLimit || 20,
+                Fields: queryOptions.Fields || 'PrimaryImageAspectRatio,DateCreated,Overview,Taglines,ProductionYear,RecursiveItemCount,ChildCount,UserData',
+                IncludeItemTypes: queryOptions.IncludeItemTypes || contentTypes
+            });
             instanceConfig.queries = [{
                 ...(hasTemplateQueries ? instanceConfig.queries[0] : {}),
                 path: `/Items/${similarId}/Similar`,
-                queryOptions: {
-                    Limit: instanceConfig.itemLimit || 20,
-                    Fields: queryOptions.Fields || 'PrimaryImageAspectRatio,DateCreated,Overview,Taglines,ProductionYear,RecursiveItemCount,ChildCount,UserData',
-                    IncludeItemTypes: queryOptions.IncludeItemTypes || contentTypes
-                }
+                queryOptions: similarQueryOptions
             }];
         } else {
             switch (discoveryKind) {
@@ -1202,11 +1231,6 @@
                             queryOptions.IncludeItemTypes = ['Episode'];
                         }
                     }
-                    if (instanceConfig.excludeItemId) {
-                        queryOptions.ExcludeItemIds = Array.isArray(instanceConfig.excludeItemId)
-                            ? instanceConfig.excludeItemId
-                            : [instanceConfig.excludeItemId];
-                    }
                     break;
                 case 'Studio':
                     if (resolvedSource && resolvedSource.match(/^[a-f0-9]{32}$/)) {
@@ -1229,6 +1253,8 @@
             } else if (!queryOptions.Fields) {
                 queryOptions.Fields = 'PrimaryImageAspectRatio,DateCreated,Overview,Taglines,ProductionYear,RecursiveItemCount,ChildCount,UserData';
             }
+
+            applyExcludeItemIdsToQueryOptions(queryOptions);
 
             instanceConfig.queries = [{
                 ...(hasTemplateQueries ? instanceConfig.queries[0] : {}),
