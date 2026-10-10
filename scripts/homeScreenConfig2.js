@@ -2750,7 +2750,7 @@
 							Fields: "UserData,People",
 							SortBy: "DatePlayed",
 							SortOrder: "Descending",
-							Limit: 5,
+							Limit: 15,
 						},
 					},
 					name: "Guest starring {Person}",
