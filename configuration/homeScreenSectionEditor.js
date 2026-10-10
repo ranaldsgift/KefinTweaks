@@ -2695,14 +2695,6 @@
                 backdropsCountInput.min = '2';
             }
         }
-        if (sizeSelect) {
-            sizeSelect.addEventListener('change', () => {
-                if (!tileCountSelect) return;
-                const v = sizeSelect.value;
-                tileCountSelect.value = v === 'full' ? '1' : v === 'large' ? '2' : '3';
-                updateFromTileCount(tileCountSelect.value);
-            });
-        }
         if (tileCountSelect) {
             tileCountSelect.addEventListener('change', () => updateFromTileCount(tileCountSelect.value));
             updateFromTileCount(tileCountSelect.value);
