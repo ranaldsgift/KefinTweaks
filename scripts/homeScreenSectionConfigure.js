@@ -996,7 +996,6 @@
         }
 
         if (!isSpotlight && window.cardBuilder?.applyItemsLayoutState) {
-            window.cardBuilder.invalidateLastRowPadding?.(newContent.querySelector('.itemsContainer'));
             window.cardBuilder.applyItemsLayoutState(newContent, preservedLayout || 'row', !!preservedGapless);
         }
 

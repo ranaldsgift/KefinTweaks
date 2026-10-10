@@ -435,7 +435,7 @@
         } else {
             sectionEl.style.removeProperty('--wood-vert-img');
         }
-        const cards = sectionEl.querySelectorAll('.card:not(.card-layout-dummy) .cardScalable');
+        const cards = sectionEl.querySelectorAll('.card .cardScalable');
         cards.forEach((scalable) => {
             let host = scalable.querySelector(':scope > .cardBorder');
             if (!style) {
@@ -479,9 +479,7 @@
     function getCardRadius() {
         if (cachedCardRadius != null) return cachedCardRadius;
 
-        const candidates = document.querySelectorAll(
-            '.card:not(.card-layout-dummy) .cardScalable, .card:not(.card-layout-dummy) .cardContent, .card:not(.card-layout-dummy)',
-        );
+        const candidates = document.querySelectorAll('.card .cardScalable, .card .cardContent, .card');
         let sample = null;
         for (const el of candidates) {
             if (!sectionHasSquareCardBorder(el)) {
@@ -782,6 +780,32 @@
     function getRandomCardFormat() {
         const formats = ['portrait', 'thumb'];
         return formats[Math.floor(Math.random() * formats.length)];
+    }
+
+    /**
+     * Map section cardFormat / data-card-format to JF grid column shape.
+     * Used for CSS grid column tables (no data-grid-shape attribute).
+     * @param {string|null|undefined} cardFormat
+     * @returns {'portrait'|'square'|'backdrop'|'banner'}
+     */
+    function resolveGridShape(cardFormat) {
+        const f = String(cardFormat || '')
+            .trim()
+            .toLowerCase();
+        if (f === 'banner') return 'banner';
+        if (f === 'square' || f === 'sqaure' || f === 'disc') return 'square';
+        if (
+            f === 'backdrop' ||
+            f === 'thumb' ||
+            f === 'series thumb' ||
+            f === 'logo' ||
+            f === 'clear art' ||
+            f === 'button'
+        ) {
+            return 'backdrop';
+        }
+        // Poster, Series Poster, portrait, Random-resolved concrete formats, default
+        return 'portrait';
     }
 
     function sectionHasRandomQuerySort(sectionConfig) {
@@ -2022,7 +2046,6 @@
                 content.setAttribute(attr.name, attr.value);
             });
 
-            invalidateLastRowPadding(content.querySelector('.itemsContainer'));
             invalidateScrollerMetrics(sectionElement.querySelector('.emby-scroller'));
             stripCopiedSkeletonSectionClasses(content);
             unobserveSkeletonShimmer(sectionElement);
@@ -2202,9 +2225,9 @@
         ensureCardBorders: ensureCardBorders,
         applyItemsLayoutState: applyItemsLayoutState,
         resolveItemsLayout: resolveItemsLayout,
+        resolveGridShape: resolveGridShape,
         resolveSpotlightPresentation: resolveSpotlightPresentation,
         resolveUseGaplessCards: resolveUseGaplessCards,
-        invalidateLastRowPadding: invalidateLastRowPadding,
         invalidateCardRadiusCache: invalidateCardRadiusCache,
         ensureCardRadiusCssVar: ensureCardRadiusCssVar,
         getScrollerPosition: getScrollerPosition,
@@ -6457,241 +6480,12 @@
         if (isButtonCardFormat(cardFormat)) {
             return Array.from(itemsContainer.querySelectorAll(':scope > .homeLibraryButton'));
         }
-        return Array.from(itemsContainer.querySelectorAll(':scope > .card:not(.card-layout-dummy)'));
+        return Array.from(itemsContainer.querySelectorAll(':scope > .card'));
     }
 
     function getRealLayoutCards(itemsContainer) {
         if (!itemsContainer) return [];
-        return Array.from(itemsContainer.querySelectorAll(':scope > .card:not(.card-layout-dummy)'));
-    }
-
-    function removeLayoutDummies(itemsContainer) {
-        if (!itemsContainer) return;
-        itemsContainer.querySelectorAll(':scope > .card-layout-dummy').forEach((el) => el.remove());
-    }
-
-    function invalidateLastRowPadding(itemsContainer) {
-        if (!itemsContainer) return;
-        removeLayoutDummies(itemsContainer);
-        itemsContainer.removeAttribute('data-last-row-padding');
-        itemsContainer.removeAttribute('data-last-row-padding-layout');
-        itemsContainer.removeAttribute('data-last-row-padding-width');
-        itemsContainer.removeAttribute('data-measuring');
-    }
-
-    function canMeasureLastRowPadding(itemsContainer) {
-        return !!(itemsContainer?.isConnected && itemsContainer.clientWidth >= 1);
-    }
-
-    function getLastRowPaddingCache(itemsContainer, layout) {
-        if (!itemsContainer || layout !== 'grid') return null;
-        const cachedPad = itemsContainer.getAttribute('data-last-row-padding');
-        const cachedLayout = itemsContainer.getAttribute('data-last-row-padding-layout');
-        const cachedWidth = itemsContainer.getAttribute('data-last-row-padding-width');
-        if (cachedPad == null || cachedPad === '' || cachedLayout !== layout || !/^\d+$/.test(cachedPad)) {
-            return null;
-        }
-        if (cachedWidth == null || !/^\d+$/.test(cachedWidth)) return null;
-        return {
-            padding: parseInt(cachedPad, 10),
-            width: parseInt(cachedWidth, 10),
-        };
-    }
-
-    function setLastRowPaddingCache(itemsContainer, layout, padding, width) {
-        itemsContainer.setAttribute('data-last-row-padding', String(padding));
-        itemsContainer.setAttribute('data-last-row-padding-layout', layout);
-        itemsContainer.setAttribute('data-last-row-padding-width', String(width));
-    }
-
-    function countLayoutDummies(itemsContainer) {
-        if (!itemsContainer) return 0;
-        return itemsContainer.querySelectorAll(':scope > .card-layout-dummy').length;
-    }
-
-    /** True when cache matches current container width and dummy count already equals padding. */
-    function lastRowPaddingIsCurrent(itemsContainer, layout) {
-        const cache = getLastRowPaddingCache(itemsContainer, layout);
-        if (!cache || !canMeasureLastRowPadding(itemsContainer)) return false;
-        if (cache.width !== itemsContainer.clientWidth) return false;
-        return countLayoutDummies(itemsContainer) === cache.padding;
-    }
-
-    function createLayoutDummyCard(templateCard, layout) {
-        const dummy = document.createElement('div');
-        dummy.className = templateCard?.className || 'card';
-        dummy.classList.add('card', 'card-layout-dummy');
-        dummy.classList.remove('card-hoverable');
-        dummy.setAttribute('aria-hidden', 'true');
-        dummy.setAttribute('tabindex', '-1');
-
-        // cardBox
-        const cardBox = document.createElement('div');
-        cardBox.className = 'cardBox';
-        dummy.appendChild(cardBox);
-
-        // cardScalable
-        const cardScalable = document.createElement('div');
-        cardScalable.className = 'cardScalable';
-        cardBox.appendChild(cardScalable);
-
-        if (layout === 'grid') {
-            const templatePadder = templateCard?.querySelector('.cardPadder');
-            const padder = document.createElement('div');
-            padder.className = templatePadder?.className || 'cardPadder cardPadder-portrait lazy-hidden-children';
-            const cardIcon = document.createElement('span');
-            cardIcon.className = 'cardImageIcon material-icons';
-            cardIcon.setAttribute('aria-hidden', 'true');
-            cardIcon.textContent = 'folder';
-            padder.appendChild(cardIcon);
-            cardScalable.appendChild(padder);
-
-            const border = createCardBorderHost();
-            const section = templateCard?.closest('[data-border],[data-border-style]');
-            const raw =
-                section?.dataset?.border ||
-                section?.dataset?.borderStyle ||
-                templateCard?.querySelector('.cardBorder')?.dataset?.style ||
-                '';
-            const style = normalizeCardBorderStyle(raw);
-            if (style) fillCardBorder(border, style);
-            cardScalable.appendChild(border);
-        }
-
-        return dummy;
-    }
-
-    /**
-     * Count how many real cards fit on the first row at natural (non-growing) width.
-     * @param {HTMLElement} itemsContainer
-     * @returns {number}
-     */
-    function countItemsPerRow(itemsContainer) {
-        if (!canMeasureLastRowPadding(itemsContainer)) return 0;
-        const cards = getRealLayoutCards(itemsContainer);
-        if (!cards.length) return 0;
-        itemsContainer.setAttribute('data-measuring', 'true');
-        void itemsContainer.offsetWidth;
-        const firstTop = cards[0].offsetTop;
-        let count = 0;
-        for (const card of cards) {
-            if (card.offsetTop !== firstTop) break;
-            count++;
-        }
-        itemsContainer.removeAttribute('data-measuring');
-        return count;
-    }
-
-    /**
-     * Pad the last flex row with invisible dummy cards so grow distribution matches full rows.
-     * Reuses data-last-row-padding when cached for the same layout.
-     * @param {HTMLElement} itemsContainer
-     * @param {'grid'} layout
-     */
-    function syncLastRowPadding(itemsContainer, layout) {
-        if (!itemsContainer || layout !== 'grid') return;
-
-        // Already correct for this width — skip remove/recreate.
-        if (lastRowPaddingIsCurrent(itemsContainer, layout)) return;
-
-        const cache = getLastRowPaddingCache(itemsContainer, layout);
-        const width = canMeasureLastRowPadding(itemsContainer) ? itemsContainer.clientWidth : 0;
-        const widthMatches = !!(cache && width >= 1 && cache.width === width);
-
-        // Disconnected / zero-width: do not measure or cache (retry when laid out).
-        if (!widthMatches && !canMeasureLastRowPadding(itemsContainer)) return;
-
-        let padding;
-        if (widthMatches) {
-            padding = cache.padding;
-            if (countLayoutDummies(itemsContainer) === padding) return;
-            removeLayoutDummies(itemsContainer);
-        } else {
-            // Dummies must be gone before measuring natural items-per-row.
-            removeLayoutDummies(itemsContainer);
-            const cards = getRealLayoutCards(itemsContainer);
-            if (!cards.length) {
-                invalidateLastRowPadding(itemsContainer);
-                return;
-            }
-            const perRow = countItemsPerRow(itemsContainer);
-            if (perRow <= 0) return;
-            const rem = cards.length % perRow;
-            padding = rem === 0 ? 0 : perRow - rem;
-            setLastRowPaddingCache(itemsContainer, layout, padding, itemsContainer.clientWidth);
-        }
-
-        if (padding <= 0) return;
-        if (!itemsContainer.isConnected) return;
-        const template = getRealLayoutCards(itemsContainer)[0];
-        if (!template) return;
-        const frag = document.createDocumentFragment();
-        for (let i = 0; i < padding; i++) {
-            frag.appendChild(createLayoutDummyCard(template, layout));
-        }
-        itemsContainer.appendChild(frag);
-    }
-
-    let lastRowPaddingResizeTimer = null;
-    function handleLastRowPaddingWindowResize() {
-        clearTimeout(lastRowPaddingResizeTimer);
-        lastRowPaddingResizeTimer = setTimeout(() => {
-            document.querySelectorAll('.itemsContainer[data-layout="grid"]').forEach((container) => {
-                const layout = container.getAttribute('data-layout');
-                if (lastRowPaddingIsCurrent(container, layout)) return;
-                invalidateLastRowPadding(container);
-                syncLastRowPadding(container, layout);
-            });
-        }, 150);
-    }
-    if (!window.__kefinLastRowPaddingResizeBound) {
-        window.__kefinLastRowPaddingResizeBound = true;
-        window.addEventListener('resize', handleLastRowPaddingWindowResize);
-    }
-
-    let lastRowPaddingRo = null;
-    let lastRowPaddingRoTimer = null;
-    const lastRowPaddingRoPending = new Set();
-
-    function ensureLastRowPaddingResizeObserver() {
-        if (lastRowPaddingRo || typeof ResizeObserver === 'undefined') return lastRowPaddingRo;
-        lastRowPaddingRo = new ResizeObserver((entries) => {
-            entries.forEach((entry) => {
-                if (entry?.target) lastRowPaddingRoPending.add(entry.target);
-            });
-            clearTimeout(lastRowPaddingRoTimer);
-            lastRowPaddingRoTimer = setTimeout(() => {
-                const targets = [...lastRowPaddingRoPending];
-                lastRowPaddingRoPending.clear();
-                targets.forEach((el) => {
-                    const layout = el.getAttribute?.('data-layout');
-                    if (layout !== 'grid') return;
-                    if (lastRowPaddingIsCurrent(el, layout)) return;
-                    invalidateLastRowPadding(el);
-                    syncLastRowPadding(el, layout);
-                });
-            }, 80);
-        });
-        return lastRowPaddingRo;
-    }
-
-    function observeLastRowPadding(itemsContainer) {
-        const ro = ensureLastRowPaddingResizeObserver();
-        if (!ro || !itemsContainer) return;
-        try {
-            ro.observe(itemsContainer);
-        } catch (_) {
-            /* ignore */
-        }
-    }
-
-    function unobserveLastRowPadding(itemsContainer) {
-        if (!lastRowPaddingRo || !itemsContainer) return;
-        try {
-            lastRowPaddingRo.unobserve(itemsContainer);
-        } catch (_) {
-            /* ignore */
-        }
+        return Array.from(itemsContainer.querySelectorAll(':scope > .card'));
     }
 
     /**
@@ -6716,8 +6510,6 @@
             itemsContainer.removeAttribute('data-gapless');
         }
         if (resolved === 'row') {
-            unobserveLastRowPadding(itemsContainer);
-            removeLayoutDummies(itemsContainer);
             if (scrollButtons) scrollButtons.style.display = '';
         } else if (scrollButtons) {
             scrollButtons.style.display = 'none';
@@ -6728,33 +6520,6 @@
             showAllButton.setAttribute('aria-label', showAllButton.title);
             setShowAllIcon(showAllButton, nextLayout);
         }
-        if (resolved === 'grid') {
-            observeLastRowPadding(itemsContainer);
-            // Two frames so wrap layout is settled before measuring / padding
-            requestAnimationFrame(() => {
-                requestAnimationFrame(() => {
-                    if (itemsContainer.getAttribute('data-layout') !== resolved) return;
-                    syncLastRowPadding(itemsContainer, resolved);
-                });
-            });
-        }
-    }
-
-    function syncAttachedGridTilesLayouts(root) {
-        if (!root?.querySelectorAll) return;
-        root.querySelectorAll('.itemsContainer[data-layout="grid"]').forEach((itemsContainer) => {
-            const layout = itemsContainer.getAttribute('data-layout');
-            const gapless = itemsContainer.getAttribute('data-gapless') === 'true';
-            const section = itemsContainer.closest('.verticalSection, .emby-scroller-container') || itemsContainer.parentElement;
-            if (section) applyItemsLayoutState(section, layout, gapless);
-            else {
-                observeLastRowPadding(itemsContainer);
-                if (!lastRowPaddingIsCurrent(itemsContainer, layout)) {
-                    invalidateLastRowPadding(itemsContainer);
-                    syncLastRowPadding(itemsContainer, layout);
-                }
-            }
-        });
     }
 
     /** @deprecated Use applyItemsLayoutState */
@@ -7198,7 +6963,7 @@
         const metrics = getScrollerMetrics(scroller);
         if (metrics.cardPad) return metrics.cardPad;
 
-        const sampleCard = scroller.querySelector?.('.itemsContainer > .card:not(.card-layout-dummy):not(.skeleton-card)');
+        const sampleCard = scroller.querySelector?.('.itemsContainer > .card:not(.skeleton-card)');
         const pad = readCardPadding(sampleCard);
         metrics.cardPad = pad;
         return pad;
@@ -7286,7 +7051,7 @@
      */
     function toCenterCard(scroller, card, options = {}) {
         if (!scroller || !card || !scroller.contains(card)) return;
-        if (card.classList.contains('skeleton-card') || card.classList.contains('card-layout-dummy')) return;
+        if (card.classList.contains('skeleton-card')) return;
 
         const animate = options.animate !== false;
         const metrics = getScrollerMetrics(scroller);
@@ -7316,7 +7081,7 @@
             (e) => {
                 const card = e.target?.closest?.('.card');
                 if (!card || !scroller.contains(card)) return;
-                if (card.classList.contains('skeleton-card') || card.classList.contains('card-layout-dummy')) return;
+                if (card.classList.contains('skeleton-card')) return;
                 pendingCard = card;
                 if (rafId) return;
                 rafId = requestAnimationFrame(() => {
@@ -7369,7 +7134,7 @@
             return metrics.maxScroll;
         }
 
-        const cards = scroller.querySelectorAll('.itemsContainer > .card:not(.card-layout-dummy):not(.skeleton-card)');
+        const cards = scroller.querySelectorAll('.itemsContainer > .card:not(.skeleton-card)');
         const fullyVisible = getFullyVisibleCardCount(scroller, cards);
         if (fullyVisible === cards.length) {
             setMaxScrollPosition(scroller, 0);
@@ -7503,7 +7268,7 @@
         function getScrollCards() {
             const itemsContainer = scroller.querySelector('.itemsContainer');
             if (!itemsContainer) return [];
-            return Array.from(itemsContainer.querySelectorAll(':scope > .card:not(.card-layout-dummy):not(.skeleton-card)'));
+            return Array.from(itemsContainer.querySelectorAll(':scope > .card:not(.skeleton-card)'));
         }
 
         function getCardScrollLeft(card) {
@@ -9105,7 +8870,7 @@
     }
 
     function getPaintedCardIds(sectionElement) {
-        const cards = sectionElement.querySelectorAll('.itemsContainer > .card[data-id]:not(.card-layout-dummy):not(.skeleton-card)');
+        const cards = sectionElement.querySelectorAll('.itemsContainer > .card[data-id]:not(.skeleton-card)');
         if (cards.length) {
             return Array.from(cards)
                 .map((card) => card.getAttribute('data-id'))
@@ -9282,7 +9047,7 @@
         const animate = options.animate === true;
         const itemsContainer = scroller.querySelector('.itemsContainer');
         if (!itemsContainer) return;
-        const cards = Array.from(itemsContainer.querySelectorAll(':scope > .card:not(.card-layout-dummy):not(.skeleton-card)'));
+        const cards = Array.from(itemsContainer.querySelectorAll(':scope > .card:not(.skeleton-card)'));
         if (!cards.length) return;
 
         const clampedIndex = Math.max(0, Math.min(index, cards.length - 1));
@@ -9415,7 +9180,7 @@
             if (existing) {
                 seenKept = true;
                 nextNode = existing.nextElementSibling;
-                while (nextNode && (nextNode.classList.contains('card-layout-dummy') || nextNode.classList.contains('skeleton-card'))) {
+                while (nextNode && nextNode.classList.contains('skeleton-card')) {
                     nextNode = nextNode.nextElementSibling;
                 }
                 return;
@@ -9503,7 +9268,6 @@
                         if (slidee) slidee.style.transition = '';
                     }
                     reindexSectionCards(itemsContainer);
-                    invalidateLastRowPadding(itemsContainer);
                     patchCardsUserData(sectionElement, items);
                     ensureCardBorders(sectionElement);
                     if (typeof onComplete === 'function') {
@@ -9529,8 +9293,6 @@
                 ? layoutFromDom
                 : resolveItemsLayout(sectionConfig);
         const gapless = itemsContainer.getAttribute('data-gapless') === 'true' || resolveUseGaplessCards(sectionConfig);
-
-        invalidateLastRowPadding(itemsContainer);
 
         const fragment = document.createDocumentFragment();
         if (normalizedFormat === 'button' || isButtonCardFormat(cardFormat)) {
@@ -9645,7 +9407,6 @@
         const gapless = oldItemsContainer
             ? oldItemsContainer.getAttribute('data-gapless') === 'true'
             : resolveUseGaplessCards(sectionConfig);
-        invalidateLastRowPadding(content.querySelector('.itemsContainer'));
         attachSectionControlButtons(sectionConfig, content, items);
         invalidateScrollerMetrics(sectionElement.querySelector('.emby-scroller'));
         stripCopiedSkeletonSectionClasses(content);

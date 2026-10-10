@@ -496,7 +496,6 @@
                 const card = window.cardBuilder?.buildCard?.(item, true, cardFormat);
                 if (card) {
                     itemsContainer.appendChild(card);
-                    window.cardBuilder?.invalidateLastRowPadding?.(itemsContainer);
                     addUnpinButton(card);
                     addReorderButtons(card);
                     updateAllReorderChevrons(itemsContainer);
@@ -830,7 +829,8 @@
         const pinButton = document.createElement('button');
         pinButton.setAttribute('is', 'emby-button');
         pinButton.type = 'button';
-        pinButton.className = 'listItem listItem-button actionSheetMenuItem emby-button';
+        const isMobile = window.innerWidth < 900;
+        pinButton.className = `listItem listItem-button actionSheetMenuItem emby-button${isMobile ? ' actionsheet-xlargeFont' : ''}`;
         pinButton.setAttribute('data-kefin-pin-action', 'true');
         pinButton.innerHTML = `
             <span class="actionsheetMenuItemIcon listItemIcon listItemIcon-transparent material-icons push_pin" aria-hidden="true"></span>
@@ -886,7 +886,7 @@
 
     function getRealPinnedCards(itemsContainer) {
         if (!itemsContainer) return [];
-        return [...itemsContainer.querySelectorAll(':scope > .card[data-id]:not(.card-layout-dummy)')];
+        return [...itemsContainer.querySelectorAll(':scope > .card[data-id]')];
     }
 
     function updateReorderChevronState(card) {
@@ -937,7 +937,6 @@
         const ok = await saveHomeScreen(hs, { refreshHome: false });
         if (ok) {
             updateRuntimeAfterListPin(sectionId, null, orderedIds);
-            window.cardBuilder?.invalidateLastRowPadding?.(itemsContainer);
         }
         return ok;
     }
@@ -973,7 +972,7 @@
         const card = cardOrOverlay?.classList?.contains('card')
             ? cardOrOverlay
             : cardOrOverlay?.closest?.('.card');
-        if (!card || card.classList.contains('card-layout-dummy')) return;
+        if (!card) return;
         if (card.querySelector(':scope > .pin-reorder-left')) return;
 
         const sectionEl = card.closest('[data-section-id]');
@@ -1016,7 +1015,7 @@
         const card = cardOrOverlay?.classList?.contains('card')
             ? cardOrOverlay
             : cardOrOverlay?.closest?.('.card');
-        if (!card || card.classList.contains('card-layout-dummy')) return;
+        if (!card) return;
         if (card.querySelector(':scope > .unpin-item-button')) return;
 
         const sectionEl = card.closest('[data-section-id]');
@@ -1049,7 +1048,7 @@
                 let hs = await loadHomeScreen();
                 const restoreHomeScreen = cloneHomeScreen(hs);
                 const realCards = sectionEl
-                    ? [...sectionEl.querySelectorAll('.itemsContainer > .card[data-id]:not(.card-layout-dummy)')]
+                    ? [...sectionEl.querySelectorAll('.itemsContainer > .card[data-id]')]
                     : [];
                 const isLastInSection = realCards.length <= 1;
                 let listName = null;
@@ -1151,7 +1150,7 @@
                 padding: 0 !important;
                 pointer-events: auto !important;
             }
-            [data-section-id^="pinned-list-"] .card[data-id]:not(.card-layout-dummy) {
+            [data-section-id^="pinned-list-"] .card[data-id] {
                 position: relative !important;
             }
             .pin-reorder-left {
@@ -1244,7 +1243,7 @@
         };
 
         document.querySelectorAll('.cardOverlayContainer').forEach(processOverlay);
-        document.querySelectorAll('[data-section-id^="pinned-list-"] .card[data-id]:not(.card-layout-dummy)').forEach(processCard);
+        document.querySelectorAll('[data-section-id^="pinned-list-"] .card[data-id]').forEach(processCard);
 
         const observer = new MutationObserver((mutations) => {
             mutations.forEach(mutation => {

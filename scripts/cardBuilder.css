@@ -1358,50 +1358,175 @@
 	max-width: unset !important;
 }
 
-/* Grid (non-scrolling) item layouts */
+/* Grid (non-scrolling) item layouts — CSS Grid with JF card.scss column breakpoints.
+   Shape inferred from data-card-format (see resolveGridShape); default = portrait.
+   Columns use @container against the scroller width (not viewport), so inset /
+   max-width sections (e.g. 67vw series episodes) get fewer, correctly sized cards. */
+.emby-scroller-container > .emby-scroller {
+	container-type: inline-size;
+	container-name: kefin-items;
+}
+
 .itemsContainer[data-layout="grid"] {
-	display: flex !important;
-	flex-wrap: wrap !important;
+	display: grid !important;
+	flex-wrap: unset;
 	white-space: normal !important;
 	transform: none !important;
 	transition: none !important;
+	grid-template-columns: repeat(3, 1fr);
 }
 
-.itemsContainer[data-layout="grid"] > .card {
-	flex: auto;
-	box-sizing: border-box;
+/* Cards fill tracks; override JF portraitCard/backdropCard % widths and Banner 33vw */
+.itemsContainer[data-layout="grid"] > .card,
+.itemsContainer[data-layout="grid"] > .homeLibraryButton,
+.emby-scroller-container[data-card-format="Banner"] .itemsContainer[data-layout="grid"] > .card {
+	width: unset !important;
+	max-width: 100% !important;
 	min-width: 0;
-}
-
-/* Natural widths while counting items-per-row for last-row dummy padding */
-.itemsContainer[data-measuring="true"] > .card {
-	flex: 0 0 auto !important;
-}
-
-/* Grid dummies keep aspect via padder but allow .cardBorder to paint */
-.itemsContainer[data-layout="grid"] > .card.card-layout-dummy {
-	visibility: hidden;
-	position: relative;
-	pointer-events: none;
-}
-
-[data-border-style="wood"] .itemsContainer[data-layout="grid"] > .card.card-layout-dummy,
-[data-border="wood"] .itemsContainer[data-layout="grid"] > .card.card-layout-dummy {
-	visibility: visible;
-}
-
-.itemsContainer[data-layout="grid"] > .card.card-layout-dummy .cardPadder {
-	visibility: hidden;
-}
-
-.itemsContainer[data-layout="grid"] > .card.card-layout-dummy .cardBorder {
-	position: absolute;
-	inset: 0;
-	z-index: 2;
-	pointer-events: none;
 	box-sizing: border-box;
-	--card-border-cream: var(--kefin-card-border-color, #e8dab2);
-	--card-border-fancy: var(--kefin-card-border-color, rgb(231 255 123 / 35%));
+	align-self: start;
+}
+
+.itemsContainer[data-layout="grid"] > .card > .cardBox,
+.itemsContainer[data-layout="grid"] > .card .cardScalable {
+	width: 100% !important;
+	max-width: none !important;
+	height: auto;
+}
+
+/* Portrait / Square column table (JF .portraitCard / .squareCard) — default on grid */
+@container kefin-items (min-width: 31.25em) {
+	.itemsContainer[data-layout="grid"] {
+		grid-template-columns: repeat(3, 1fr);
+	}
+}
+@container kefin-items (min-width: 43.75em) {
+	.itemsContainer[data-layout="grid"] {
+		grid-template-columns: repeat(4, 1fr);
+	}
+}
+@container kefin-items (min-width: 50em) {
+	.itemsContainer[data-layout="grid"] {
+		grid-template-columns: repeat(5, 1fr);
+	}
+}
+@container kefin-items (min-width: 75em) {
+	.itemsContainer[data-layout="grid"] {
+		grid-template-columns: repeat(6, 1fr);
+	}
+}
+@container kefin-items (min-width: 87.5em) {
+	.itemsContainer[data-layout="grid"] {
+		grid-template-columns: repeat(7, 1fr);
+	}
+}
+@container kefin-items (min-width: 100em) {
+	.itemsContainer[data-layout="grid"] {
+		grid-template-columns: repeat(8, 1fr);
+	}
+}
+@container kefin-items (min-width: 120em) {
+	.itemsContainer[data-layout="grid"] {
+		grid-template-columns: repeat(9, 1fr);
+	}
+}
+@container kefin-items (min-width: 131.25em) {
+	.itemsContainer[data-layout="grid"] {
+		grid-template-columns: repeat(10, 1fr);
+	}
+}
+
+/* Backdrop shape: Backdrop, Thumb, Series Thumb, Logo, Clear Art, Button */
+.emby-scroller-container[data-card-format="Backdrop"] .itemsContainer[data-layout="grid"],
+.emby-scroller-container[data-card-format="Thumb"] .itemsContainer[data-layout="grid"],
+.emby-scroller-container[data-card-format="Series Thumb"] .itemsContainer[data-layout="grid"],
+.emby-scroller-container[data-card-format="Logo"] .itemsContainer[data-layout="grid"],
+.emby-scroller-container[data-card-format="Clear Art"] .itemsContainer[data-layout="grid"],
+.emby-scroller-container[data-card-format="Button"] .itemsContainer[data-layout="grid"] {
+	grid-template-columns: repeat(1, 1fr);
+}
+@container kefin-items (min-width: 25em) {
+	.emby-scroller-container[data-card-format="Backdrop"] .itemsContainer[data-layout="grid"],
+	.emby-scroller-container[data-card-format="Thumb"] .itemsContainer[data-layout="grid"],
+	.emby-scroller-container[data-card-format="Series Thumb"] .itemsContainer[data-layout="grid"],
+	.emby-scroller-container[data-card-format="Logo"] .itemsContainer[data-layout="grid"],
+	.emby-scroller-container[data-card-format="Clear Art"] .itemsContainer[data-layout="grid"],
+	.emby-scroller-container[data-card-format="Button"] .itemsContainer[data-layout="grid"] {
+		grid-template-columns: repeat(2, 1fr);
+	}
+}
+@container kefin-items (min-width: 48.125em) {
+	.emby-scroller-container[data-card-format="Backdrop"] .itemsContainer[data-layout="grid"],
+	.emby-scroller-container[data-card-format="Thumb"] .itemsContainer[data-layout="grid"],
+	.emby-scroller-container[data-card-format="Series Thumb"] .itemsContainer[data-layout="grid"],
+	.emby-scroller-container[data-card-format="Logo"] .itemsContainer[data-layout="grid"],
+	.emby-scroller-container[data-card-format="Clear Art"] .itemsContainer[data-layout="grid"],
+	.emby-scroller-container[data-card-format="Button"] .itemsContainer[data-layout="grid"] {
+		grid-template-columns: repeat(3, 1fr);
+	}
+}
+@container kefin-items (min-width: 75em) {
+	.emby-scroller-container[data-card-format="Backdrop"] .itemsContainer[data-layout="grid"],
+	.emby-scroller-container[data-card-format="Thumb"] .itemsContainer[data-layout="grid"],
+	.emby-scroller-container[data-card-format="Series Thumb"] .itemsContainer[data-layout="grid"],
+	.emby-scroller-container[data-card-format="Logo"] .itemsContainer[data-layout="grid"],
+	.emby-scroller-container[data-card-format="Clear Art"] .itemsContainer[data-layout="grid"],
+	.emby-scroller-container[data-card-format="Button"] .itemsContainer[data-layout="grid"] {
+		grid-template-columns: repeat(4, 1fr);
+	}
+}
+@container kefin-items (min-width: 100em) {
+	.emby-scroller-container[data-card-format="Backdrop"] .itemsContainer[data-layout="grid"],
+	.emby-scroller-container[data-card-format="Thumb"] .itemsContainer[data-layout="grid"],
+	.emby-scroller-container[data-card-format="Series Thumb"] .itemsContainer[data-layout="grid"],
+	.emby-scroller-container[data-card-format="Logo"] .itemsContainer[data-layout="grid"],
+	.emby-scroller-container[data-card-format="Clear Art"] .itemsContainer[data-layout="grid"],
+	.emby-scroller-container[data-card-format="Button"] .itemsContainer[data-layout="grid"] {
+		grid-template-columns: repeat(5, 1fr);
+	}
+}
+@container kefin-items (min-width: 156.25em) {
+	.emby-scroller-container[data-card-format="Backdrop"] .itemsContainer[data-layout="grid"],
+	.emby-scroller-container[data-card-format="Thumb"] .itemsContainer[data-layout="grid"],
+	.emby-scroller-container[data-card-format="Series Thumb"] .itemsContainer[data-layout="grid"],
+	.emby-scroller-container[data-card-format="Logo"] .itemsContainer[data-layout="grid"],
+	.emby-scroller-container[data-card-format="Clear Art"] .itemsContainer[data-layout="grid"],
+	.emby-scroller-container[data-card-format="Button"] .itemsContainer[data-layout="grid"] {
+		grid-template-columns: repeat(6, 1fr);
+	}
+}
+
+/* Banner shape */
+.emby-scroller-container[data-card-format="Banner"] .itemsContainer[data-layout="grid"] {
+	grid-template-columns: repeat(1, 1fr);
+}
+@container kefin-items (min-width: 50em) {
+	.emby-scroller-container[data-card-format="Banner"] .itemsContainer[data-layout="grid"] {
+		grid-template-columns: repeat(2, 1fr);
+	}
+}
+@container kefin-items (min-width: 75em) {
+	.emby-scroller-container[data-card-format="Banner"] .itemsContainer[data-layout="grid"] {
+		grid-template-columns: repeat(3, 1fr);
+	}
+}
+@container kefin-items (min-width: 131.25em) {
+	.emby-scroller-container[data-card-format="Banner"] .itemsContainer[data-layout="grid"] {
+		grid-template-columns: repeat(4, 1fr);
+	}
+}
+
+/* TV: portrait/square → 6, backdrop → 4 (fixed, not container-width) */
+html.layout-tv .itemsContainer[data-layout="grid"] {
+	grid-template-columns: repeat(6, 1fr);
+}
+html.layout-tv .emby-scroller-container[data-card-format="Backdrop"] .itemsContainer[data-layout="grid"],
+html.layout-tv .emby-scroller-container[data-card-format="Thumb"] .itemsContainer[data-layout="grid"],
+html.layout-tv .emby-scroller-container[data-card-format="Series Thumb"] .itemsContainer[data-layout="grid"],
+html.layout-tv .emby-scroller-container[data-card-format="Logo"] .itemsContainer[data-layout="grid"],
+html.layout-tv .emby-scroller-container[data-card-format="Clear Art"] .itemsContainer[data-layout="grid"],
+html.layout-tv .emby-scroller-container[data-card-format="Button"] .itemsContainer[data-layout="grid"] {
+	grid-template-columns: repeat(4, 1fr);
 }
 
 .itemsContainer[data-gapless="true"],

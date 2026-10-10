@@ -575,7 +575,7 @@
     function performEpisodeScroll(scrollerContainer, targetCard, targetEpisodeNumber) {
         const itemsContainer = scrollerContainer.querySelector('.itemsContainer') || scrollerContainer;
         const cards = Array.from(itemsContainer.querySelectorAll(
-            ':scope > .card:not(.card-layout-dummy):not(.skeleton-card)'
+            ':scope > .card:not(.skeleton-card)'
         ));
         const index = cards.indexOf(targetCard);
         if (index < 0) {
