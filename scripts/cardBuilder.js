@@ -2413,6 +2413,7 @@
                 enhanceOnVisible = false,
                 enhanceRootMargin = '30% 0px 30% 0px',
                 showStaleDataBeforeRefresh = true,
+                insertBefore = null,
             } = options;
 
             const renderProgressiveSectionsStartTime = performance.now();
@@ -2587,7 +2588,11 @@
                 const batch = sectionNodes.slice(i, i + BATCH_SIZE);
                 const batchFragment = document.createDocumentFragment();
                 batch.forEach((node) => batchFragment.appendChild(node));
-                container.appendChild(batchFragment);
+                if (insertBefore && insertBefore.parentNode === container) {
+                    container.insertBefore(batchFragment, insertBefore);
+                } else {
+                    container.appendChild(batchFragment);
+                }
                 batch.forEach((sectionEl) => {
                     if (sectionEl?.nodeType === 1) registerLazyImagesInSection(sectionEl);
                 });
@@ -6435,8 +6440,12 @@
 
     function setShowAllIcon(button, layout) {
         if (!button) return;
+        const iconName = ITEMS_LAYOUT_ICONS[layout] || 'view_array';
+        const icon = button.querySelector('.material-icons') || button;
+        icon.classList.remove('view_array', 'grid_view', 'grid_on');
+        icon.classList.add(iconName);
+        // Keep glyph classes off the paper-icon button itself
         button.classList.remove('view_array', 'grid_view', 'grid_on');
-        button.classList.add(ITEMS_LAYOUT_ICONS[layout] || 'view_array');
     }
 
     function isButtonCardFormat(cardFormat) {
@@ -6791,6 +6800,13 @@
         return ITEMS_LAYOUT_NEXT_TITLE[resolved] || ITEMS_LAYOUT_NEXT_TITLE.row;
     }
 
+    function getShowAllControlIcon(sectionElement) {
+        const itemsContainer = sectionElement?.querySelector('.itemsContainer');
+        const currentLayout = itemsContainer?.getAttribute('data-layout') || 'row';
+        const resolved = currentLayout === 'grid' ? currentLayout : 'row';
+        return ITEMS_LAYOUT_ICONS[nextItemsLayout(resolved)] || 'grid_view';
+    }
+
     function handleShowAllLayoutToggle(sectionElement) {
         const verticalSection = sectionElement.closest('.emby-scroller-container') || sectionElement;
         const itemsContainer = verticalSection.querySelector('.itemsContainer');
@@ -6841,6 +6857,7 @@
             definitions.push({
                 id: 'showAll',
                 icon: 'grid_view',
+                getIcon: () => getShowAllControlIcon(sectionElement),
                 getLabel: () => getShowAllControlLabel(sectionElement),
                 label: 'Grid layout',
                 className: 'show-all-button',
@@ -6874,9 +6891,10 @@
 
         visibleDefinitions.forEach((def) => {
             const label = typeof def.getLabel === 'function' ? def.getLabel() : def.label;
+            const icon = typeof def.getIcon === 'function' ? def.getIcon() : def.icon;
             const button = createPaperIconButton({
                 className: def.className || '',
-                icon: def.icon || '',
+                icon: icon || '',
                 title: label,
                 showFocus: isTvLayout(),
             });
@@ -6922,13 +6940,14 @@
                 : 'kefinTweaks-popover section-controls-more-popover';
             visibleDefinitions.forEach((def) => {
                 const label = typeof def.getLabel === 'function' ? def.getLabel() : def.label;
+                const icon = typeof def.getIcon === 'function' ? def.getIcon() : def.icon;
                 const item = document.createElement('div');
                 item.className = 'kefinTweaks-popover-item detailsGroupItem section-controls-more-item';
                 item.setAttribute('role', 'button');
                 item.setAttribute('tabindex', '0');
 
                 const iconSpan = document.createElement('span');
-                iconSpan.className = `material-icons section-controls-more-item-icon ${def.icon}`;
+                iconSpan.className = `material-icons section-controls-more-item-icon ${icon || ''}`.trim();
                 iconSpan.setAttribute('aria-hidden', 'true');
 
                 const labelSpan = document.createElement('span');

@@ -134,7 +134,7 @@
         pendingJellyfinSectionObservers: []
     };
 
-    // Create loading indicator as next sibling of the sections container (outside flex column)
+    // Create loading indicator as last child of the sections container (keeps height during load; TV Down focus)
     function createDiscoveryLoadingIndicator(container) {
         // Prefer the provided container, but fall back to the standard sections container
         if (!container) {
@@ -142,44 +142,47 @@
                 || document.querySelector('.libraryPage:not(.hide) .homeSectionsContainer');
         }
 
-        let loadingDiv = document.querySelector('.homePage:not(.hide) #discovery-loading-indicator')
+        let loadingEl = document.querySelector('.homePage:not(.hide) #discovery-loading-indicator')
             || document.querySelector('.libraryPage:not(.hide) #discovery-loading-indicator');
 
-        if (loadingDiv) {
-            if (container && loadingDiv.previousElementSibling !== container) {
-                // Place as next sibling of the sections container
-                if (container.nextSibling) {
-                    container.parentNode.insertBefore(loadingDiv, container.nextSibling);
-                } else if (container.parentNode) {
-                    container.parentNode.appendChild(loadingDiv);
-                }
-            }
-            bindDiscoveryLoadMoreControl(loadingDiv);
-            syncDiscoveryLoadMoreFocus(loadingDiv);
-            return loadingDiv;
+        // Migrate legacy div indicator to a real button (Jellyfin TV spatial nav targets buttons)
+        if (loadingEl && loadingEl.tagName !== 'BUTTON') {
+            const replacement = document.createElement('button');
+            replacement.type = 'button';
+            replacement.id = loadingEl.id;
+            replacement.className = loadingEl.className;
+            replacement.innerHTML = loadingEl.innerHTML || '<div class="spinner"></div>';
+            loadingEl.replaceWith(replacement);
+            loadingEl = replacement;
         }
 
-        if (!container || !container.parentNode) {
+        if (loadingEl) {
+            if (container) {
+                container.appendChild(loadingEl);
+            }
+            bindDiscoveryLoadMoreControl(loadingEl);
+            syncDiscoveryLoadMoreFocus(loadingEl);
+            return loadingEl;
+        }
+
+        if (!container) {
             WARN('Discovery loading indicator: sections container not found');
             return null;
         }
 
-        loadingDiv = document.createElement('div');
-        loadingDiv.className = 'discovery-loading-indicator';
-        loadingDiv.id = 'discovery-loading-indicator';
-        loadingDiv.innerHTML = `
+        loadingEl = document.createElement('button');
+        loadingEl.type = 'button';
+        loadingEl.className = 'discovery-loading-indicator';
+        loadingEl.id = 'discovery-loading-indicator';
+        loadingEl.innerHTML = `
             <div class="spinner"></div>
         `;
 
-        if (container.nextSibling) {
-            container.parentNode.insertBefore(loadingDiv, container.nextSibling);
-        } else {
-            container.parentNode.appendChild(loadingDiv);
-        }
-        LOG('Created discovery loading indicator as sibling of sections container');
-        bindDiscoveryLoadMoreControl(loadingDiv);
-        syncDiscoveryLoadMoreFocus(loadingDiv);
-        return loadingDiv;
+        container.appendChild(loadingEl);
+        LOG('Created discovery loading indicator as last child of sections container');
+        bindDiscoveryLoadMoreControl(loadingEl);
+        syncDiscoveryLoadMoreFocus(loadingEl);
+        return loadingEl;
     }
 
     function removeDiscoveryLoadingIndicator() {
@@ -208,14 +211,17 @@
         const interactive = isDiscoveryLoadMoreInteractive();
 
         if (tv && interactive) {
-            el.setAttribute('role', 'button');
+            el.disabled = false;
+            el.removeAttribute('disabled');
             el.setAttribute('tabindex', '0');
             el.setAttribute('aria-label', 'Discover More');
+            // emby-button: Jellyfin TV spatial nav treats plain controls as Tab-only otherwise
+            el.classList.add('emby-button');
             el.classList.add('show-focus');
             el.classList.add('discovery-load-more-focusable');
         } else {
             el.setAttribute('tabindex', '-1');
-            el.removeAttribute('role');
+            el.classList.remove('emby-button');
             el.classList.remove('show-focus');
             el.classList.remove('discovery-load-more-focusable');
             if (state.discoverySectionsRemain === false || getDiscoveryHomePageEl()?.dataset?.discoveryExhausted === 'true') {
@@ -1570,7 +1576,7 @@
 
         // Chevron mode: nudge scroll so newly appended sections start entering the viewport
         if (state.discoveryMode === 'chevron') {
-            window.scrollBy({ top: 100, behavior: 'smooth' });
+            window.scrollBy({ top: 200, behavior: 'smooth' });
         }
 
         try {
@@ -1599,14 +1605,15 @@
             const config = await window.KefinHomeScreen.getConfig();
             const revealSectionsSequentially = config.DISCOVERY_SETTINGS?.fadeInSections === true;
 
-            // Sibling spinner stays outside the flex column — no insertBefore parking
-            createDiscoveryLoadingIndicator(container);
+            // Spinner stays mounted as last child; sections insert before it (cardBuilder)
+            const indicator = createDiscoveryLoadingIndicator(container);
 
             await window.cardBuilder.renderProgressiveSections(container, bufferedSections, {
                 revealSectionsSequentially,
                 enhanceOnVisible: true,
                 enhanceRootMargin: DISCOVERY_ENHANCE_ROOT_MARGIN,
-                showStaleDataBeforeRefresh: config.HOME_SETTINGS?.showStaleDataBeforeRefresh === true
+                showStaleDataBeforeRefresh: config.HOME_SETTINGS?.showStaleDataBeforeRefresh === true,
+                insertBefore: indicator || undefined,
             });
 
             createDiscoveryLoadingIndicator(container);
@@ -1622,6 +1629,22 @@
             state.discoveryBuffer = null;
             if (PRE_FETCH_DISCOVERY_DATA) {
                 ensureDiscoveryBuffer();
+            }
+
+            // TV chevron: hand focus to first card of the first newly added section
+            if (
+                document.documentElement.classList.contains('layout-tv')
+                && state.discoveryMode === 'chevron'
+            ) {
+                const firstId = bufferedSections[0]?.config?.id;
+                if (firstId != null) {
+                    const sectionIdAttr =
+                        typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+                            ? CSS.escape(String(firstId))
+                            : String(firstId).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+                    const sectionEl = container.querySelector(`[data-section-id="${sectionIdAttr}"]`);
+                    focusFirstCardInDiscoverySection(sectionEl);
+                }
             }
 
         } catch (e) {
@@ -2538,6 +2561,47 @@
         }
         const rect = el.getBoundingClientRect();
         return rect.width > 0 && rect.height > 0;
+    }
+
+    function getFirstFocusableInDiscoverySection(sectionEl) {
+        if (!sectionEl) return null;
+        const card = Array.from(
+            sectionEl.querySelectorAll(
+                '.card.itemAction:not([tabindex="-1"]), button.card:not([tabindex="-1"]), a.card:not([tabindex="-1"])',
+            ),
+        ).find((node) => isVisibleFocusTarget(node));
+        if (card) return card;
+
+        // Spotlight / non-card sections: first visible focusable
+        return Array.from(
+            sectionEl.querySelectorAll(
+                'button:not([disabled]):not([tabindex="-1"]), a[href]:not([tabindex="-1"]), [tabindex]:not([tabindex="-1"])',
+            ),
+        ).find((node) => isVisibleFocusTarget(node)) || null;
+    }
+
+    function focusFirstCardInDiscoverySection(sectionEl) {
+        const tryFocus = () => {
+            const target = getFirstFocusableInDiscoverySection(sectionEl);
+            if (!target || typeof target.focus !== 'function') return false;
+            try {
+                target.focus({ preventScroll: true });
+            } catch (_) {
+                target.focus();
+            }
+            try {
+                target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            } catch (_) {
+                /* ignore */
+            }
+            return true;
+        };
+
+        if (tryFocus()) return;
+        // Skeleton may not have cards yet — one frame retry
+        requestAnimationFrame(() => {
+            tryFocus();
+        });
     }
 
     /** Live spotlight target after slide change (inactive/drilled nodes go stale). */
