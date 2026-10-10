@@ -97,7 +97,7 @@
 					name: "Next Up",
 					jellyfinId: "nextup",
 					enabled: false,
-					order: 11,
+					order: 16,
 					cardFormat: "Thumb",
 					ttl: CACHE_CONFIG.FORCE_REFRESH_TTL,
 					userConfigurable: true,
@@ -120,7 +120,7 @@
 					jellyfinId: "resume",
 					jellyfinId2: "nextup",
 					enabled: false,
-					order: 10,
+					order: 11,
 					cardFormat: "Thumb",
 					ttl: CACHE_CONFIG.FORCE_REFRESH_TTL,
 					sortBy: "DatePlayed", // Used to sort merged results from both queries
@@ -155,7 +155,7 @@
 					name: "Continue Listening",
 					jellyfinId: "resumeaudio",
 					enabled: false,
-					order: 10,
+					order: 12,
 					cardFormat: "Square",
 					ttl: CACHE_CONFIG.FORCE_REFRESH_TTL,
 					userConfigurable: true,
@@ -177,7 +177,7 @@
 					name: "Continue Reading",
 					jellyfinId: "resumebook",
 					enabled: false,
-					order: 10,
+					order: 13,
 					cardFormat: "Poster",
 					ttl: CACHE_CONFIG.FORCE_REFRESH_TTL,
 					userConfigurable: true,
@@ -231,7 +231,7 @@
 					id: "recentlyReleased.movies",
 					name: "Recently Released Movies",
 					enabled: true,
-					order: 20,
+					order: 40,
 					cardFormat: "Poster",
 					ttl: CACHE_CONFIG.DEFAULT_TTL,
 					userConfigurable: true,
@@ -253,7 +253,7 @@
 					id: "recentlyReleased.episodes",
 					name: "Recently Aired Episodes",
 					enabled: true,
-					order: 21,
+					order: 41,
 					cardFormat: "Thumb",
 					flattenSeries: true,
 					ttl: CACHE_CONFIG.DEFAULT_TTL,
@@ -290,7 +290,7 @@
 					name: "Recordings",
 					jellyfinId: "activerecordings",
 					enabled: false,
-					order: 90,
+					order: 17,
 					cardFormat: "Thumb",
 					ttl: CACHE_CONFIG.SHORT_TTL,
 					userConfigurable: true,
@@ -311,7 +311,7 @@
 					id: "liveTv-timers",
 					name: "Scheduled Recordings",
 					enabled: false,
-					order: 91,
+					order: 17,
 					cardFormat: "Thumb",
 					ttl: CACHE_CONFIG.SHORT_TTL,
 					userConfigurable: true,
@@ -331,7 +331,7 @@
 					name: "Live TV",
 					jellyfinId: "livetv",
 					enabled: false,
-					order: 91,
+					order: 14,
 					cardFormat: "Button",
 					userConfigurable: true,
 					items: [
@@ -366,7 +366,7 @@
 					name: "On Now",
 					jellyfinId: "livetv",
 					enabled: false,
-					order: 92,
+					order: 15,
 					cardFormat: "Thumb",
 					ttl: CACHE_CONFIG.VERY_SHORT_TTL,
 					userConfigurable: true,
@@ -387,7 +387,7 @@
 					id: "liveTv-programs",
 					name: "Programs",
 					enabled: false,
-					order: 92,
+					order: 18,
 					cardFormat: "Thumb",
 					ttl: CACHE_CONFIG.VERY_SHORT_TTL,
 					userConfigurable: true,
@@ -406,7 +406,7 @@
 					id: "liveTv-channels",
 					name: "Channels",
 					enabled: false,
-					order: 92,
+					order: 19,
 					cardFormat: "Square",
 					hideCardFooter: true,
 					ttl: CACHE_CONFIG.LONG_TTL,
@@ -425,7 +425,7 @@
 					id: "liveTv-series-on-now",
 					name: "Shows From Live TV",
 					enabled: false,
-					order: 92,
+					order: 20,
 					cardFormat: "Thumb",
 					ttl: CACHE_CONFIG.VERY_SHORT_TTL,
 					userConfigurable: true,
@@ -449,7 +449,7 @@
 					id: "liveTv-movies-on-now",
 					name: "Movies From Live TV",
 					enabled: false,
-					order: 92,
+					order: 20,
 					cardFormat: "Thumb",
 					ttl: CACHE_CONFIG.VERY_SHORT_TTL,
 					userConfigurable: true,
@@ -469,7 +469,7 @@
 					id: "liveTv-sports-on-now",
 					name: "Sports From Live TV",
 					enabled: false,
-					order: 92,
+					order: 20,
 					cardFormat: "Thumb",
 					ttl: CACHE_CONFIG.VERY_SHORT_TTL,
 					userConfigurable: true,
@@ -489,7 +489,7 @@
 					id: "liveTv-news-on-now",
 					name: "News From Live TV",
 					enabled: false,
-					order: 92,
+					order: 20,
 					cardFormat: "Thumb",
 					ttl: CACHE_CONFIG.VERY_SHORT_TTL,
 					userConfigurable: true,
@@ -509,7 +509,7 @@
 					id: "liveTv-kids-on-now",
 					name: "Kids From Live TV",
 					enabled: false,
-					order: 92,
+					order: 20,
 					cardFormat: "Thumb",
 					ttl: CACHE_CONFIG.VERY_SHORT_TTL,
 					userConfigurable: true,
@@ -1446,6 +1446,102 @@
 						},
 					],
 				},
+				{
+					id: "seasonal.halloween.halloween-pick-your-poison",
+					name: "Pick Your Poison",
+					enabled: true,
+					order: 54,
+					category: "none",
+					cardFormat: "Poster",
+					ttl: 604800000,
+					queries: [
+						{
+							name: "Psychological Horror",
+							queryOptions: {
+								IncludeItemTypes: ["Movie"],
+								Tags: ["psychological horror"],
+								SortBy: "Random",
+								SortOrder: "Ascending",
+								Limit: 50
+							}
+						},
+						{
+							name: "Slasher",
+							queryOptions: {
+								IncludeItemTypes: ["Movie"],
+								Tags: ["slasher"],
+								SortBy: "Random",
+								SortOrder: "Ascending",
+								Limit: 50
+							}
+						},
+						{
+							name: "Paranormal",
+							queryOptions: {
+								IncludeItemTypes: ["Movie"],
+								Tags: ["paranormal"],
+								SortBy: "Random",
+								SortOrder: "Ascending",
+								Limit: 50
+							}
+						},
+						{
+							name: "Supernatural",
+							queryOptions: {
+								IncludeItemTypes: ["Movie"],
+								Tags: ["supernatural"],
+								SortBy: "Random",
+								SortOrder: "Ascending",
+								Limit: 50
+							}
+						},
+						{
+							name: "Body Horror",
+							queryOptions: {
+								IncludeItemTypes: ["Movie"],
+								Tags: ["body horror"],
+								SortBy: "Random",
+								SortOrder: "Ascending",
+								Limit: 50
+							}
+						},
+						{
+							name: "Cosmic Horror",
+							queryOptions: {
+								IncludeItemTypes: ["Movie"],
+								Tags: ["cosmic horror"],
+								SortBy: "Random",
+								SortOrder: "Ascending",
+								Limit: 50
+							}
+						},
+						{
+							name: "Horror-Comedy",
+							queryOptions: {
+								IncludeItemTypes: ["Movie"],
+								Tags: ["horror comedy"],
+								SortBy: "Random",
+								SortOrder: "Ascending",
+								Limit: 50
+							}
+						},
+					],
+					userConfigurable: true,
+					renderMode: "Normal",
+					discoveryEnabled: false,
+					type: "seasonal",
+					startDate: "10-01",
+					endDate: "10-31",
+					useRandomQuery: true,
+					useMultiQueryPicker: true,
+					multiQueryPickerLabel: "Pick Your Poison",
+					useQueryNamesForSection: true,
+					itemLimit: 16,
+					useGaplessCards: false,
+					useParentCard: false,
+					isCustom: true,
+					caption: "Suggested for the Halloween season"
+				}
 			],
 		},
 		// Seasonal Sections - Christmas
