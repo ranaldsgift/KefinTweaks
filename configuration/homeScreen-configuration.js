@@ -68,8 +68,8 @@
             off: 'Studios without any image may be rendered in Popular Studios sections. You can enable the Optional CSS Module "Studio Thumbnails" to overlay a background with the Studio Name on items without an image.'
         },
         'home-loadPeopleEpisodeData': {
-            on: 'Not Recommended for larger libraries. Loads all Person appearances from all episodes in your library. This data takes much longer to cache than just the Movies/Series level data.',
-            off: 'This is recommended. Person appearance data is limited to only Movies and Series.'
+            on: 'This is NOT recommended for larger libraries. Loads all Person appearances from all episodes in your library. This data takes much longer to cache.',
+            off: 'This is recommended to remain disabled. Person appearance data is limited to only Movies and Series.'
         },
         'home-showCreateSectionButtonOnHome': {
             on: 'Adds a button to the bottom left corner of the home screen so that you can quickly create a new section directly from the Home Screen. Only admins will see this button. The button is hidden on mobile.',
