@@ -2229,9 +2229,15 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	// Hash change listener for browser navigation / in-page tab URL sync
 	function setupHashChangeListener() {
 		window.addEventListener('hashchange', async () => {
-			const path = String(window.location.hash || '').split('?')[0];
-			const watchlistUrl = window.KefinTweaksUtils._watchlistUrl;
-			if (path !== watchlistUrl) {
+			const [path, search = ''] = String(window.location.hash || '').split('?');
+			const [watchlistPath, watchlistSearch = ''] = String(window.KefinTweaksUtils._watchlistUrl || '').split('?');
+			const currentParams = new URLSearchParams(search);
+			const requiredParams = new URLSearchParams(watchlistSearch);
+			if (
+				!watchlistPath ||
+				path !== watchlistPath ||
+				Array.from(requiredParams).some(([key, value]) => currentParams.get(key) !== value)
+			) {
 				return;
 			}
 
