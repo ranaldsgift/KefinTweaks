@@ -1029,7 +1029,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
 
             if (sha) {
                 const short = sha.length > 12 ? sha.slice(0, 12) : sha;
-                resolvedHashEl.textContent = `Resolved commit: ${short}${sha.length > 12 ? ` (${sha})` : ''}`;
+                resolvedHashEl.textContent = `Resolved commit: ${short}`;
             } else {
                 resolvedHashEl.textContent = 'Resolved commit: unavailable';
             }
