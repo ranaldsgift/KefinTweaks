@@ -495,6 +495,7 @@
 	overflow: hidden;
 	align-content: end;
 	flex-wrap: wrap;
+	max-width: 700px;
 }
 .spotlight-overlay .spotlight-metadata-section {
 	grid-area: metadata;
@@ -1732,7 +1733,7 @@ html.layout-tv .emby-scroller-container[data-card-format="Button"] .itemsContain
 .layout-mobile .spotlight-background-single::before,
 .layout-mobile .spotlight-background-dual::before {
 	width: 100%;
-	background: linear-gradient(to bottom, transparent 0%, transparent 40%, rgba(0, 0, 0, 0.45) 60%, rgba(0, 0, 0, 0.85) 100%) !important;
+	background: linear-gradient(to bottom, transparent 0%, transparent 40%, rgba(0, 0, 0, 0.65) 50%, rgba(0, 0, 0, 0.85) 100%) !important;
 }
 
 .spotlight-background-single::after,
@@ -4584,6 +4585,14 @@ html.layout-tv .spotlight-section .spotlight-overlay .spotlight-metadata-row {
     font-size: revert;
 }
 
+html.layout-tv .spotlight-section .spotlight-overview {
+	display: block !important;
+}
+
+html.layout-tv .spotlight-section .spotlight-metadata-section {
+	display: none !important;
+}
+
 html.layout-tv .spotlight-section .spotlight-overlay .spotlight-overview {
     max-width: unset;
 }
@@ -4593,9 +4602,25 @@ html.layout-tv .spotlight-section:not([data-size="full"]) .spotlight-overlay .sp
 }
 
 html.layout-tv .spotlight-section .spotlight-overlay {
-    grid-template-rows: 1fr auto auto auto;
+    grid-template-rows: 1fr auto auto;
+	grid-template-areas:
+        "logo"
+        "overview"
+        "buttons";
 }
 
 html.layout-tv .spotlight-section .spotlight-header-container {
     top: 45px !important;
+}
+
+html.layout-tv .spotlight-section .spotlight-overview {
+	display: block !important;
+}
+
+html.layout-tv .spotlight-section .spotlight-metadata-section {
+	display: none !important;
+}
+
+html.layout-tv .spotlight-section .spotlight-tagline {
+	display: none !important;
 }
