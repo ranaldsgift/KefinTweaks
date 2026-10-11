@@ -1201,6 +1201,9 @@
     }
 
     function isModernUI() {
+        if (document.documentElement.classList.contains('layout-tv')) {
+            return false;
+        }
         return !!document.querySelector('main.MuiBox-root') || (localStorage.getItem('layout')?.length === 0 && isJellyfinWebAtLeast12());
     }
 
