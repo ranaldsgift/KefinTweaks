@@ -579,7 +579,6 @@
 :is([data-modal-id="kefin-homescreen-section-editor"], [data-modal-id="kefin-homescreen-section-create-flow"]) .hsse-custom-item-tile-image,
 :is([data-modal-id="kefin-homescreen-section-editor"], [data-modal-id="kefin-homescreen-section-create-flow"]) .hsse-custom-item-add-tile {
 	width: auto;
-	height: 9.75rem;
 	border-radius: 8px;
 	border: 1px solid rgba(255, 255, 255, 0.12);
 	background: rgba(255, 255, 255, 0.04);
@@ -1658,4 +1657,9 @@
 
 .layout-mobile .hsae-appearance-preview-col {
 	display: none !important;
+}
+
+.hsse-image-preview img {
+	height: 200px;
+	width: auto !important;
 }
