@@ -1434,7 +1434,7 @@
 					startDate: "10-01",
 					endDate: "10-31",
 					order: 53,
-					cardFormat: "Series Thumb",
+					cardFormat: "Thumb",
 					queries: [
 						{
 							queryOptions: {
