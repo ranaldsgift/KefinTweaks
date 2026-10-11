@@ -3347,7 +3347,9 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 					Recursive: true,
 					ImageTypeLimit: 1,
 					EnableImageTypes: 'Primary,Backdrop,Thumb',
-					...queryOptions
+					...queryOptions,
+					SortBy: 'PremiereDate',
+					SortOrder: 'Descending'
 				}
 			}]
 		};
