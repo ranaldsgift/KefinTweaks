@@ -537,50 +537,64 @@
 
             const libraries = await window.dataHelper.getLibraries();
 
-            const hasVideoLibraries = libraries.some(library => library.CollectionType === 'movies' || library.CollectionType === 'tvshows' || library.CollectionType === 'homevideos');
-            const hasMusicLibraries = libraries.some(library => library.CollectionType === 'music' || library.CollectionType === 'musicvideos');
-            const hasBookLibraries = libraries.some(library => library.CollectionType === 'books');
+            // React may have remounted search during the await — use a live node
+            const existingWrapper = document.getElementById('smart-search-wrapper');
+            if (existingWrapper) {
+                LOG('Smart search wrapper already present after getLibraries; skipping insert');
+                wrapper = existingWrapper;
+            } else {
+                const liveInput = document.getElementById('searchTextInput');
+                if (!liveInput?.parentElement) {
+                    WARN('Search input detached after getLibraries; retrying init');
+                    setTimeout(initSmartSearch, 500);
+                    return;
+                }
 
-            btnRow.appendChild(btnAll);
-            
-            if (hasVideoLibraries) {
-                btnRow.appendChild(btnCore);
+                const hasVideoLibraries = libraries.some(library => library.CollectionType === 'movies' || library.CollectionType === 'tvshows' || library.CollectionType === 'homevideos');
+                const hasMusicLibraries = libraries.some(library => library.CollectionType === 'music' || library.CollectionType === 'musicvideos');
+                const hasBookLibraries = libraries.some(library => library.CollectionType === 'books');
+
+                btnRow.appendChild(btnAll);
+
+                if (hasVideoLibraries) {
+                    btnRow.appendChild(btnCore);
+                }
+                if (hasMusicLibraries) {
+                    btnRow.appendChild(btnMusic);
+                }
+                if (hasBookLibraries) {
+                    btnRow.appendChild(btnBooks);
+                }
+
+                if (CONFIG.enableJellyseerr) {
+                    const btnRequest = document.createElement('button');
+                    btnRequest.id = 'smart-search-request';
+                    btnRequest.className = smartSearchButtonClass;
+                    btnRequest.textContent = 'Request';
+
+                    btnRow.appendChild(btnRequest);
+                }
+
+                const stats = document.createElement('div');
+                stats.id = 'smart-search-stats';
+                stats.className = 'smart-search-stats';
+
+                // Create input wrapper
+                const inputWrapper = document.createElement('div');
+                inputWrapper.className = 'input-wrapper';
+
+                inputWrapper.appendChild(searchIcon);
+                inputWrapper.appendChild(input);
+
+                wrapper.appendChild(inputWrapper);
+                wrapper.appendChild(btnRow);
+                wrapper.appendChild(stats);
+
+                // Insert the wrapper before the live search input
+                liveInput.parentElement.insertBefore(wrapper, liveInput);
+                liveInput.remove();
+                input.focus();
             }
-            if (hasMusicLibraries) {
-                btnRow.appendChild(btnMusic);
-            }
-            if (hasBookLibraries) {
-                btnRow.appendChild(btnBooks);
-            }
-            
-            if (CONFIG.enableJellyseerr) {
-                const btnRequest = document.createElement('button');
-                btnRequest.id = 'smart-search-request';
-                btnRequest.className = smartSearchButtonClass;
-                btnRequest.textContent = 'Request';
-    
-                btnRow.appendChild(btnRequest);
-            }
-
-            const stats = document.createElement('div');
-            stats.id = 'smart-search-stats';
-            stats.className = 'smart-search-stats';
-
-            // Create input wrapper
-            const inputWrapper = document.createElement('div');
-            inputWrapper.className = 'input-wrapper';
-
-            inputWrapper.appendChild(searchIcon);
-            inputWrapper.appendChild(input);
-
-            wrapper.appendChild(inputWrapper);
-            wrapper.appendChild(btnRow);
-            wrapper.appendChild(stats);
-
-            // Insert the wrapper before the original input
-            originalInput.parentElement.insertBefore(wrapper, originalInput);
-            originalInput.remove();
-            input.focus();
         }
 
         // Smart results container will be created lazily when needed
