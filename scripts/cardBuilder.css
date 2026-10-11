@@ -1389,10 +1389,14 @@
 
 .itemsContainer[data-layout="grid"] > .card > .cardBox,
 .itemsContainer[data-layout="grid"] > .card .cardScalable {
-	width: 100% !important;
-	max-width: none !important;
+	width: unset !important;
+	max-width: 100% !important;
 	height: auto;
 }
+
+.itemsContainer[data-layout="grid"] > .card > .cardBox {
+	margin-right: 0 !important;
+  }
 
 /* Portrait / Square column table (JF .portraitCard / .squareCard) — default on grid */
 @container kefin-items (min-width: 31.25em) {
@@ -1536,7 +1540,7 @@ html.layout-tv .emby-scroller-container[data-card-format="Button"] .itemsContain
 }
 
 .emby-scroller-container:not([data-card-title-visibility="hidden"]) .itemsContainer[data-layout="grid"]:not([data-gapless="true"]) {
-	gap: 1rem !important;
+	gap: 1.5rem !important;
 }
 
 .itemsContainer[data-gapless="true"] .card,
@@ -2022,6 +2026,7 @@ html.layout-tv .emby-scroller-container[data-card-format="Button"] .itemsContain
 	padding: 0.25em 1em !important;
 	display: flex;
 	flex-direction: row;
+	height: auto;
 }
 .spotlight-section .mainDetailButtons > .btnPlay:is(.emby-button)::after {
 	content: attr(title);
@@ -4559,4 +4564,38 @@ html.no-flex-gap .emby-scroller-container[data-card-format="Logo"]:not([data-bor
 html.no-flex-gap .emby-scroller-container[data-card-format="Clear Art"]:not([data-border-style]) .itemsContainer:not([data-gapless="true"]) > * + *,
 html.no-flex-gap .emby-scroller-container[data-card-format="Disc"]:not([data-border-style]) .itemsContainer:not([data-gapless="true"]) > * + * {
 	margin-left: 4em !important;
+}
+
+html.layout-tv .spotlight-section:not([data-layout="Borderless"]) .spotlight-overlay {
+    gap: 20px;
+    padding: 130px 40px 45px 40px !important;
+}
+html.layout-tv .spotlight-section[data-layout="Borderless"] .spotlight-overlay {
+    padding-top: 130px !important;
+}
+
+html.layout-tv .spotlight-section .spotlight-overlay span,
+html.layout-tv .spotlight-section .spotlight-overlay p {
+    font-size: 1em;
+}
+
+html.layout-tv .spotlight-section .spotlight-overlay .spotlight-truncated-list,
+html.layout-tv .spotlight-section .spotlight-overlay .spotlight-metadata-row {
+    font-size: revert;
+}
+
+html.layout-tv .spotlight-section .spotlight-overlay .spotlight-overview {
+    max-width: unset;
+}
+
+html.layout-tv .spotlight-section:not([data-size="full"]) .spotlight-overlay .spotlight-overview {
+    -webkit-line-clamp: 2;
+}
+
+html.layout-tv .spotlight-section .spotlight-overlay {
+    grid-template-rows: 1fr auto auto auto;
+}
+
+html.layout-tv .spotlight-section .spotlight-header-container {
+    top: 45px !important;
 }
