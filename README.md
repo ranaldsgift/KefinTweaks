@@ -1,18 +1,23 @@
 <div align="center" style="display: flex; align-items: center; flex-wrap: wrap; justify-content: center;">
   <picture style="width: 80%;">
     <source srcset="logo_text_dark2.png" media="(prefers-color-scheme: dark)">
-    <img src="logo_text_light2.png" alt="Your project logo">
+    <img src="logo_text_light2.png" alt="KefinTweaks">
   </picture>
 </div>
 
-<hr style="background: #b4c5fb !important; margin-bottom: 10px;">
-
+<p align="center">
+<a href="https://github.com/jellyfin/jellyfin/releases/latest"><img alt="Jellyfin Latest Version" src="https://img.shields.io/badge/Jellyfin-12.0-blue.svg?style=for-the-badge&logo=jellyfin&logoColor=b4c5fb&labelColor=08396c&color=0e0922"/></a>
+<a href="https://github.com/jellyfin/jellyfin/releases/tags/v10.11.11"><img alt="Jellyfin Latest Version" src="https://img.shields.io/badge/Jellyfin-10.11-blue.svg?style=for-the-badge&logo=jellyfin&logoColor=b4c5fb&labelColor=08396c&color=0e0922"/></a>
+<a href="https://github.com/jellyfin/jellyfin/releases/tag/v10.10.7"><img alt="Jellyfin Version 10.10.7" src="https://img.shields.io/badge/Jellyfin-10.10-blue.svg?style=for-the-badge&logo=jellyfin&logoColor=b4c5fb&labelColor=08396c&color=0e0922"/></a>
+</p>
 <p align="center">
 <img alt="JS Delivr hits" src="https://img.shields.io/jsdelivr/gh/hm/ranaldsgift/kefintweaks?style=for-the-badge&logo=javascript&logoColor=b4c5fb&labelColor=08396c&color=0e0922&cacheSeconds=3600"/>
-<a href="https://github.com/jellyfin/jellyfin/releases/latest"><img alt="Jellyfin Latest Version" src="https://img.shields.io/badge/Jellyfin-10.11-blue.svg?style=for-the-badge&logo=github&logoColor=b4c5fb&labelColor=08396c&color=0e0922"/></a>
-<a href="https://github.com/jellyfin/jellyfin/releases/tag/v10.10.7"><img alt="Jellyfin Version 10.10.7" src="https://img.shields.io/badge/Jellyfin-10.10-blue.svg?style=for-the-badge&logo=github&logoColor=b4c5fb&labelColor=08396c&color=0e0922"/></a></p>
-<p align="center">
 <a href="https://discord.gg/ussYu37xKG"><img alt="Jellyfin Community Discord KefinTweaks Channel" src="https://img.shields.io/badge/%23kefintweaks%20-%20Jellyfin%20Community?style=for-the-badge&logo=discord&logoColor=b4c5fb&labelColor=08396c&color=0e0922&label=Jellyfin%20Community"/></a>
+</p>
+
+<img src="/pages/images/devices-transparent.png" alt="KefinTweaks Devices Mockup">
+<p align="center">
+<img alt="Windows Icon" src="https://img.shields.io/badge/-08396c?style=for-the-badge&logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iI2I0YzVmYiIgZD0iTTMsMTJWNi43NUw5LDUuNDNWMTEuOTFMMywxMk0yMCwzVjExLjc1TDEwLDExLjlWNS4yMU0yMCwzTTMsMTNMOSwxMy40OVYxOS45TDMsMTguNzVWMTNNMjAsMTMuMjVWMjJMMTAsMjAuMDlWMTMuMUwyMCwxM2I2NVoiIC8+PC9zdmc+" /><img alt="macOS Icon" src="https://img.shields.io/badge/-08396c?style=for-the-badge&logo=apple&logoColor=b4c5fb" /><img alt="iOS Icon" src="https://img.shields.io/badge/-08396c?style=for-the-badge&logo=ios&logoColor=b4c5fb" /><img alt="Android Icon" src="https://img.shields.io/badge/-08396c?style=for-the-badge&logo=android&logoColor=b4c5fb" /><img alt="Browser Icon" src="https://img.shields.io/badge/-08396c?style=for-the-badge&logo=firefox&logoColor=b4c5fb" /><img alt="LG WebOS Icon" src="https://img.shields.io/badge/-08396c?style=for-the-badge&logo=lg&logoColor=b4c5fb" /><img alt="Xbox Icon" src="https://img.shields.io/badge/-08396c?style=for-the-badge&logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGhlaWdodD0iMjQiIHdpZHRoPSIyNCIgdmlld0JveD0iMCAwIDUxMiA1MTIiPjxwYXRoIGQ9Ik0zNjkuOSAzMTguMmM0NC4zIDU0LjMgNjQuNyA5OC44IDU0LjQgMTE4LjctNy45IDE1LjEtNTYuNyA0NC42LTkyLjYgNTUuOS0yOS42IDkuMy02OC40IDEzLjMtMTAwLjQgMTAuMi0zOC4yLTMuNy03Ni45LTE3LjQtMTEwLjEtMzktMjcuOS0xOC4yLTM4LjItMjUuNy0zNC4yLTQwLjYgMC0yOS45IDMyLjktODIuMyA4OS4yLTE0Mi4xIDMyLTMzLjkgNzYuNS03My43IDgxLjQtNzIuNiA5LjQgMi4xIDg0LjMgNzUuMSAxMTIuMyAxMDkuNXpNMTg4LjYgMTQzLjhjLTI5LjctMjYuOS01OC4xLTUzLjktODYuNC02My40LTE1LjItNS4xLTE2LjMtNC44LTI4LjcgOC4xLTI5LjIgMzAuNC01My41IDc5LjctNjAuMyAxMjIuNC01LjQgMzQuMi02LjEgNDMuOC00LjIgNjAuNSA1LjYgNTAuNSAxNy4zIDg1LjQgNDAuNSAxMjAuOSA5LjUgMTQuNiAxMi4xIDE3LjMgOS4zIDkuOS00LjItMTEtLjMtMzcuNSA5LjUtNjQgMTQuMy0zOSA1My45LTExMi45IDEyMC4zLTE5NC40em0zMTEuNiA2My41Yy0xNi45LTgwLTY3LjUtMTMwLjMtNzQuNi0xMzAuMy03LjMgMC0yNC4yIDYuNS0zNiAxMy45LTI3LjMgMTQuNS00MSAzMS40LTY0LjMgNTIuOCA0Mi44IDUzLjMgMTAyLjIgMTM5LjQgMTIyLjkgMjAyLjMgNi44IDIwLjcgOS43IDQxLjEgNy40IDUyLjMtMS43IDguNS0xLjcgOC41IDEuNCA0LjYgNi4xLTcuNyAxOS45LTMxLjMgMjUuNC00My41IDcuNC0xNi4yIDE1LTQwLjIgMTguNi01OC43IDQuMy0yMi41IDMuOS03MC44LS44LTkzLjR6TTE0MS43IDQzYzQ3LjctMi41IDEwOS43IDM0LjUgMTE0LjMgMzUuNCAuNyAuMSAxMC40LTQuMiAyMS42LTkuNyA2My45LTMxLjEgOTQtMjUuOCAxMDcuNC0yNS4yLTYzLjktMzkuMy0xNTIuNy01MC0yMzMuOS0xMS43LTIzLjQgMTEuMS0yNCAxMS45LTkuNCAxMS4yeiIgZmlsbD0iI2I0YzVmYiIvPjwvc3ZnPg==" />
 </p>
 
 <hr style="background: #b4c5fb !important; margin-top: -10px;">
@@ -89,10 +94,9 @@ Note: The Slideshow at the top of the Home Screen in the video below is from the
 
 ### Prerequisites
 
-- Jellyfin 10.10.7 or earlier (10.11.X is untested and "unsupported" but may be mostly functional)
+- Jellyfin 12, 11 or 10
 - [JS Injector](https://github.com/n00bcodr/Jellyfin-JavaScript-Injector) plugin installed and configured
 - [File Transformation Plugin](https://github.com/IAmParadox27/jellyfin-plugin-file-transformation) plugin is recommended to avoid file permission issues when injecting scripts with JS Injector
-- Only required for Watchlist: [Custom Tabs](https://github.com/IAmParadox27/jellyfin-plugin-custom-tabs) plugin
 
 ### Setup Instructions
 
@@ -107,7 +111,7 @@ script.async = true;
 document.head.appendChild(script);
 ```
 
-If you are hosting the script yourself, replace the `https://cdn.jsdelivr.net/gh/ranaldsgift/KefinTweaks@latest/` with your hosted location + `/KefinTweaks/`. You should be able to include the scripts in your jelly-web folder and access it from `/web/KefinTweaks` if you like.
+If you are hosting the script yourself, replace the `https://cdn.jsdelivr.net/gh/ranaldsgift/KefinTweaks@latest/` with your hosted location + `/KefinTweaks/`. You should be able to include the scripts in your jellyfin-web folder and access it from `/web/KefinTweaks` if you like.
 
 3. **Navigate to the Plugins page and click on KefinTweaks**
 4. **Choose your preferred plugin version, or specify a custom source if you are self hosting the scripts**
@@ -478,56 +482,8 @@ This shows an "Included In" section on the Item Details page which displays any 
 
 - **Ratings and Comments**:  
 Coming soon...requires the [Updoot](https://github.com/BobHasNoSoul/jellyfin-updoot) backend script
-  <hr style="background: #b4c5fb !important;">
 
-## Script Details
-
-### Dependency Scripts
-
-| Script                 | Description                                                             |
-| ---------------------- | ----------------------------------------------------------------------- |
-| `utils.js`             | Page view management and common utilities                               |
-| `skinConfig.js`        | Default skin configuration for KefinTweaks                              |
-| `apiHelper.js`         | API helper functions for common Jellyfin operations                     |
-| `cardBuilder.js`       | Core card building functionality (required by other scripts)            |
-| `localStorageCache.js` | localStorage-based caching layer with 24-hour TTL and manual refresh    |
-| `indexedDBCache.js`    | IndexedDB-based caching layer for large datasets with TTL support       |
-| `modal.js`             | Generic modal system for Jellyfin-style dialogs                         |
-| `toaster.js`           | Toast notification system using Jellyfin's existing toast functionality |
-
-### Feature Scripts
-
-| Script                      | Description                                                                                                                                             | Dependencies                                               |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| `skinManager.js`            | Skin selection and management (loads with priority)                                                                                                     | `utils`, `skinConfigLegacyDefaults`, `skinConfig`, `modal` |
-| `watchlist.js`              | Adds watchlist functionality throughout Jellyfin interface                                                                                              | `cardBuilder`, `localStorageCache`, `modal`, `utils`       |
-| `homeScreen.js`             | Adds custom home screen sections                                                                                                                        | `cardBuilder`, `localStorageCache`, `utils`                |
-| `search.js`                 | Enhanced search functionality                                                                                                                           | `cardBuilder`, `utils`                                     |
-| `headerTabs.js`             | Header tab improvements                                                                                                                                 | None                                                       |
-| `customMenuLinks.js`        | Load and add custom menu links from configuration                                                                                                       | `utils`                                                    |
-| `exclusiveElsewhere.js`     | Modifies the behavior of the Jellyfin Enhanced Elsewhere functionality to add custom branding when items are not available on streaming services        | None                                                       |
-| `updoot.js`                 | Upvote functionality provided by https://github.com/BobHasNoSoul/jellyfin-updoot                                                                        | None                                                       |
-| `backdropLeakFix.js`        | Fixes issue that causes backdrop images to be continuously added to the page if the tab isn't focused                                                   | None                                                       |
-| `dashboardButtonFix.js`     | Fixes the dashboard button to redirect to the home page when the back button is clicked and there is no history to go back to                           | None                                                       |
-| `infiniteScroll.js`         | Adds infinite scroll functionality to media library pages                                                                                               | `cardBuilder`                                              |
-| `removeContinue.js`         | Adds remove from continue watching functionality to cards with data-position-ticks                                                                      | None                                                       |
-| `subtitleSearch.js`         | Adds subtitle search functionality to the video OSD, allowing users to search and download subtitles from remote sources                                | `toaster`                                                  |
-| `breadcrumbs.js`            | Adds breadcrumb navigation to item detail pages for Movies, Series, Seasons, Episodes, Music Artists, and Music Albums                                  | `utils`                                                    |
-| `playlist.js`               | Modifies playlist view page behavior to navigate to item details instead of playing, adds play button to playlist items, and adds sorting functionality | `cardBuilder`, `utils`, `modal`                            |
-| `itemDetailsCollections.js` | Adds related collections to item details pages showing which collections contain the current item                                                       | `indexedDBCache`, `utils`, `cardBuilder`                   |
-| `seriesEpisodes.js`         | Displays episodes directly on series page with season selection. Works for both single and multi-season shows when enabled.                             | `cardBuilder`, `utils`                                     |
-| `seriesInfo.js`             | Adds series and season information (seasons count, episodes count, end time) to details pages                                                           | `utils`                                                    |
-| `collections.js`            | Adds sorting functionality to collection pages                                                                                                          | `utils`, `modal`                                           |
-
-<br>
-
-### Auto-Inject Dependencies
-
-KefinTweaks automatically enables required dependencies when you enable a script that needs them. For example:
-
-- Enabling `watchlist` automatically enables `cardBuilder`, `localStorageCache`, `modal`, and `utils`
-
-This ensures all scripts have their required dependencies without manual configuration.
+<hr style="background: #b4c5fb !important;">
 
 ### Info for Developers
 
@@ -556,7 +512,7 @@ Here is a list of known supported clients:
 - [Jellyfin for Android](https://github.com/jellyfin/jellyfin-android)
 - [Jellyfin for iOS](https://github.com/jellyfin/jellyfin-ios)
 - [Jellyfin for WebOS](https://github.com/jellyfin/jellyfin-webos)
-- [Jellyfin for Tizen](https://github.com/jellyfin/jellyfin-tizen)
+- [Jellyfin for Tizen](https://github.com/jellyfin/jellyfin-tizen)* (maybe)
 
 These third party clients support the same Watchlist as KefinTweaks:
 
