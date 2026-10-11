@@ -1008,20 +1008,7 @@
                 }
 
                 const browseSection = studiosGroup.sections.find((s) => s?.id === BROWSE_BY_STUDIO_SECTION_ID);
-                const catalogNames = new Set(BROWSE_BY_STUDIO_CATALOG.map((entry) => entry.name));
-
-                // Prune items no longer in Kefin catalog (even when catalog is otherwise fully resolved)
-                if (browseSection && Array.isArray(browseSection.items)) {
-                    const beforeLen = browseSection.items.length;
-                    browseSection.items = browseSection.items.filter(
-                        (item) => item?.Name && catalogNames.has(item.Name)
-                    );
-                    if (browseSection.items.length !== beforeLen) {
-                        hasChanges = true;
-                        LOG(`Pruned ${beforeLen - browseSection.items.length} browse-by-studio studios not in catalog`);
-                    }
-                }
-
+                // Append-only: do not prune user-kept studios that leave the Kefin catalog
                 const existingItems = Array.isArray(browseSection?.items) ? browseSection.items : [];
 
                 if (browseSection && isBrowseByStudioCatalogFullyResolved(existingItems)) {

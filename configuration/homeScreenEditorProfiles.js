@@ -17,7 +17,7 @@
             lockVisibility: true,
             allowGroupChange: false,
             allowItemSourceChange: false,
-            hideCustomItems: true
+            hideCustomItems: false
         },
         postProcessing: {
             queryFields: ['limit'],
@@ -25,7 +25,7 @@
             lockVisibility: true,
             allowGroupChange: false,
             allowItemSourceChange: false,
-            hideCustomItems: true
+            hideCustomItems: false
         },
         normal: {
             queryFields: ['limit', 'sortBy', 'sortOrder'],

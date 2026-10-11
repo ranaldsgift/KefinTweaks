@@ -563,8 +563,9 @@
 	display: flex;
 	flex-wrap: wrap;
 	gap: 1em;
-	justify-content: center;
+	justify-content: start;
 	padding: 0.5em 0 1em;
+	align-items: center;
 }
 
 :is([data-modal-id="kefin-homescreen-section-editor"], [data-modal-id="kefin-homescreen-section-create-flow"]) .hsse-custom-item-tile,
@@ -574,6 +575,68 @@
 	flex-direction: column;
 	align-items: center;
 	gap: 0.35em;
+}
+
+.hsse-custom-items-grid > * {
+	max-width: 120px;
+}
+.listItemBodyText.hsse-custom-item-tile-label {
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 1;
+}
+.hsse-custom-item-edit-badge {
+	position: absolute;
+	bottom: 0.2em;
+	right: 0.2em;
+}
+.hsse-custom-item-actions > * {
+	height: 25px;
+	width: 25px;
+	display: flex;
+	justify-content: center;
+}
+
+:is([data-modal-id="kefin-homescreen-section-editor"], [data-modal-id="kefin-homescreen-section-create-flow"])
+	.hsse-custom-item-tile.is-hidden
+	.hsse-custom-item-tile-image,
+:is([data-modal-id="kefin-homescreen-section-editor"], [data-modal-id="kefin-homescreen-section-create-flow"])
+	.hsse-custom-item-tile.is-hidden
+	.hsse-custom-item-tile-label {
+	opacity: 0.4;
+	filter: grayscale(0.35);
+}
+
+:is([data-modal-id="kefin-homescreen-section-editor"], [data-modal-id="kefin-homescreen-section-create-flow"])
+	.hsse-custom-item-actions {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.2em;
+}
+
+:is([data-modal-id="kefin-homescreen-section-editor"], [data-modal-id="kefin-homescreen-section-create-flow"])
+	.hsse-custom-item-action,
+:is([data-modal-id="kefin-homescreen-section-editor"], [data-modal-id="kefin-homescreen-section-create-flow"])
+	.hsse-custom-item-trash {
+	font-size: 0;
+	padding: 0.3em;
+	min-height: 0;
+	min-width: 0;
+	line-height: 1;
+}
+
+:is([data-modal-id="kefin-homescreen-section-editor"], [data-modal-id="kefin-homescreen-section-create-flow"])
+	.hsse-custom-item-action:disabled {
+	opacity: 0.35;
+	cursor: default;
+}
+
+:is([data-modal-id="kefin-homescreen-section-editor"], [data-modal-id="kefin-homescreen-section-create-flow"])
+	.hsse-custom-item-action-icon,
+:is([data-modal-id="kefin-homescreen-section-editor"], [data-modal-id="kefin-homescreen-section-create-flow"])
+	.hsse-custom-item-trash-icon {
+	font-size: 1.1rem;
 }
 
 :is([data-modal-id="kefin-homescreen-section-editor"], [data-modal-id="kefin-homescreen-section-create-flow"]) .hsse-custom-item-tile-image,
@@ -1598,7 +1661,7 @@
 	display: grid !important;
 }
 
-/* Item source — show only the panel matching the active source (profile rules still gate custom items on non-full profiles) */
+/* Item source — show only the panel matching the active source */
 .hsae-root[data-item-source="jellyfin"] .hsae-custom-items-group,
 .hsae-root[data-item-source="jellyfin"] .hsae-external-list-group {
 	display: none !important;
@@ -1660,6 +1723,7 @@
 }
 
 .hsse-image-preview img {
-	height: 200px;
+	height: 120px;
+	max-width: 120px;
 	width: auto !important;
 }

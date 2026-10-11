@@ -656,6 +656,23 @@
         return window.KefinHomeScreenCustomItemsEditor;
     }
 
+    /** User-created / custom-group sections may delete items; default Kefin sections may only hide. */
+    function shouldAllowCustomItemRemove(state) {
+        const id = state?.section?.id || '';
+        if (state?.context?.isCustomSection === true) return true;
+        if (state?.section?.isCustom === true) return true;
+        if (id.startsWith('custom-')) return true;
+        return false;
+    }
+
+    function getAdvancedCustomItemsOptions(state) {
+        const customEditor = getCustomItemsEditor();
+        if (!customEditor?.getCustomItemsOptions) return {};
+        return customEditor.getCustomItemsOptions({
+            allowRemove: shouldAllowCustomItemRemove(state)
+        });
+    }
+
     function getCachePresets() {
         const cache = window.KefinHomeConfig2?.CACHE || window.KefinHomeConfig2?.CACHE_CONFIG || {};
         return [
@@ -1110,7 +1127,7 @@
 
         const customEditor = getCustomItemsEditor();
         if (customEditor && state.itemSource === 'custom') {
-            customEditor.collectCustomItemsFromForm(root, state, customEditor.getCustomItemsOptions());
+            customEditor.collectCustomItemsFromForm(root, state, getAdvancedCustomItemsOptions(state));
         }
 
         if (state.itemSource === 'external') {
@@ -1863,15 +1880,19 @@
 
     function buildCustomItemsHTML(state) {
         const customEditor = getCustomItemsEditor();
+        const allowRemove = shouldAllowCustomItemRemove(state);
         const html = customEditor
-            ? customEditor.renderCustomItemsHTML(state, customEditor.getCustomItemsOptions())
+            ? customEditor.renderCustomItemsHTML(state, getAdvancedCustomItemsOptions(state))
             : '<div class="listItemBodyText secondary">Custom items editor not available.</div>';
+        const groupDesc = allowRemove
+            ? 'Create cards with custom images and links'
+            : 'Reorder or hide cards. Default section items cannot be deleted.';
 
         return `
-            <section class="hsae-group hsae-custom-items-group" data-hsae-profiles="full">
+            <section class="hsae-group hsae-custom-items-group" data-hsae-profiles="full minimal postProcessing normal dateCutoffs">
                 <div class="hsae-group-header">
                     <div class="listItemBodyText hsae-group-title">Custom Items</div>
-                    <div class="listItemBodyText secondary hsae-group-desc">Create cards with custom images and links</div>
+                    <div class="listItemBodyText secondary hsae-group-desc">${escapeHtml(groupDesc)}</div>
                 </div>
                 <div class="hsae-custom-items-stage">${html}</div>
             </section>
@@ -2636,7 +2657,7 @@
             const liveState = getLiveEditorState(dialog);
             const customItemsGroup = dialog.querySelector('.hsae-custom-items-group');
             if (isProfileFieldActive(root, customItemsGroup) && customEditor && liveState?.customItems) {
-                customEditor.collectCustomItemsFromForm(dialog, liveState, customEditor.getCustomItemsOptions());
+                customEditor.collectCustomItemsFromForm(dialog, liveState, getAdvancedCustomItemsOptions(liveState));
                 section.items = liveState.customItems.map(customEditor.buildStaticItemFromDraft).filter(Boolean);
             } else if (!Array.isArray(section.items)) {
                 section.items = [];
@@ -3373,7 +3394,7 @@
         if (action?.startsWith('hsae-')) {
             const customEditor = getCustomItemsEditor();
             if (customEditor && state.itemSource === 'custom') {
-                customEditor.handleAction(action, actionEl, root, state, customEditor.getCustomItemsOptions(), () => refreshEditorBody(modalInstance));
+                customEditor.handleAction(action, actionEl, root, state, getAdvancedCustomItemsOptions(state), () => refreshEditorBody(modalInstance));
             }
             return;
         }

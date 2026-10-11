@@ -1936,7 +1936,8 @@
         const normalizeTemplate = (value) =>
             (value || '').replace(/\$\{kefinTweaksRoot\}/g, kefinTweaksRoot).replace(/\$\{serverId\}/g, serverId);
 
-        return sectionConfig.items.map((item, index) => ({
+        const visibleItems = (sectionConfig.items || []).filter((item) => item && item.hidden !== true);
+        return visibleItems.map((item, index) => ({
             Name: item.Name,
             Id: item.Id || 'static-' + sectionConfig.id + '-' + index,
             Type: item.Type || 'Folder',

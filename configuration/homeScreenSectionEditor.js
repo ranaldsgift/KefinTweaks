@@ -164,6 +164,9 @@
     }
 
     function createBlankCustomItem() {
+        if (window.KefinHomeScreenCustomItemsEditor?.createBlankCustomItem) {
+            return window.KefinHomeScreenCustomItemsEditor.createBlankCustomItem();
+        }
         return {
             name: '',
             cardFooter: '',
@@ -173,7 +176,8 @@
             backdropUrl: '',
             squareUrl: '',
             bannerUrl: '',
-            logoUrl: ''
+            logoUrl: '',
+            hidden: false
         };
     }
 
@@ -186,7 +190,10 @@
                 closeEditor: 'wizard-close-custom-item-editor',
                 addItem: 'wizard-add-custom-item',
                 removeItem: 'wizard-remove-custom-item',
-                toggleImages: 'wizard-toggle-custom-images'
+                toggleImages: 'wizard-toggle-custom-images',
+                toggleHide: 'wizard-toggle-custom-item-hide',
+                moveLeft: 'wizard-move-custom-item-left',
+                moveRight: 'wizard-move-custom-item-right'
             }
         });
     }
@@ -240,6 +247,9 @@
     }
 
     function buildStaticItemFromDraft(draft) {
+        if (window.KefinHomeScreenCustomItemsEditor?.buildStaticItemFromDraft) {
+            return window.KefinHomeScreenCustomItemsEditor.buildStaticItemFromDraft(draft);
+        }
         const name = draft.name?.trim();
         const posterUrl = draft.posterUrl?.trim();
         if (!name || !posterUrl) return null;
@@ -251,11 +261,13 @@
             if (value) provided[key] = value;
         });
 
-        const item = { Name: name, Type: 'Folder' };
+        const item = { Name: name, Type: draft.type || 'Folder' };
+        if (draft.id) item.Id = draft.id;
         const cardUrl = draft.cardUrl?.trim();
         if (cardUrl) item.cardUrl = cardUrl;
         const cardFooter = draft.cardFooter?.trim();
         if (cardFooter) item.cardFooter = cardFooter;
+        if (draft.hidden === true) item.hidden = true;
 
         const keys = Object.keys(provided);
         if (keys.length === 1 && provided.posterUrl) {
@@ -4277,7 +4289,10 @@
                 'wizard-close-custom-item-editor',
                 'wizard-add-custom-item',
                 'wizard-remove-custom-item',
-                'wizard-toggle-custom-images'
+                'wizard-toggle-custom-images',
+                'wizard-toggle-custom-item-hide',
+                'wizard-move-custom-item-left',
+                'wizard-move-custom-item-right'
             ]);
             if (wizardCustomActions.has(action) && window.KefinHomeScreenCustomItemsEditor) {
                 window.KefinHomeScreenCustomItemsEditor.handleAction(

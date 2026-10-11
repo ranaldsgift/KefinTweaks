@@ -245,7 +245,8 @@
                 .replace(/\$\{kefinTweaksRoot\}/g, kefinTweaksRoot)
                 .replace(/\$\{serverId\}/g, serverId);
 
-            const normalizedItems = sectionConfig.items.map((item, index) => {
+            const visibleItems = sectionConfig.items.filter((item) => item && item.hidden !== true);
+            const normalizedItems = visibleItems.map((item, index) => {
                 const posterUrl = normalizeTemplate(item.posterUrl);
                 const thumbUrl = normalizeTemplate(item.thumbUrl);
                 const squareUrl = normalizeTemplate(item.squareUrl);
