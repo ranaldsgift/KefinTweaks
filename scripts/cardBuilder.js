@@ -4743,7 +4743,7 @@
             // Set backdrop width based on layout-mobile presence
             let backdropWidth = 2560;
             if (document.querySelector('.layout-mobile')) {
-                backdropWidth = 640;
+                backdropWidth = 1920;
             }
 
             const buildBackdropUrl = (src, idx) => src.url ? src.url :
