@@ -52,3 +52,6 @@ div#kefinTweaks-breadcrumbs-wrapper {
 .detailSection .selectContainer {
 	display: flex;
 }
+.homeSectionsContainer .spotlight-section[data-layout="Border"] {
+	margin: 0 auto;
+}
