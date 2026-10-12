@@ -290,7 +290,7 @@
             .smart-search-results { margin-top:12px; }
             .smart-search-stats { color:#999; font-size:12px; margin-top:6px; display: none; }
             #persistent-toggle-btn { display:none; position:relative; padding:8px 12px; background:#00a4dc; color:#fff; border:none; border-radius:4px; cursor:pointer; }
-            .smart-search-mode .searchfields-icon {
+            #searchPage .searchfields-icon {
                 top: 50%;
                 transform: translateY(-50%);
                 position: absolute;
@@ -753,8 +753,6 @@
                 const resultsContainer = ensureSmartResultsContainer();
                 resultsContainer.style.display = '';
                 toggleBtn.textContent='Switch to Default Search';
-                // Add smart-search-mode class to body for CSS targeting
-                document.body.classList.add('smart-search-mode');
             } else {
                 wrapper.style.display = 'none';
                 // Show search results containers (be more specific to avoid affecting other pages)
@@ -763,10 +761,6 @@
                 const resultsContainer = ensureSmartResultsContainer();
                 resultsContainer.style.display = 'none';
                 toggleBtn.textContent='Switch to Smart Search';
-                // Remove smart-search-mode class from body
-                document.body.classList.remove('smart-search-mode');
-                
-                // Note: We don't restore the original input since we replaced it entirely
             }
         };
 
