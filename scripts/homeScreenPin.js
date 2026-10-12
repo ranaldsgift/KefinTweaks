@@ -862,8 +862,9 @@
 
         document.addEventListener('contextmenu', captureFromEvent, true);
 
-        const observer = new MutationObserver((mutations) => {
-            mutations.forEach(mutation => {
+        const onMutations = (mutations) => {
+            for (const mutation of mutations) {
+                if (mutation.type !== 'childList') continue;
                 mutation.addedNodes.forEach(node => {
                     if (node.nodeType !== Node.ELEMENT_NODE) return;
                     const sheets = node.matches?.('.actionSheetContent')
@@ -871,9 +872,16 @@
                         : [...(node.querySelectorAll?.('.actionSheetContent') || [])];
                     sheets.forEach(injectPinActionSheetItem);
                 });
-            });
-        });
-        observer.observe(document.body, { childList: true, subtree: true });
+            }
+        };
+
+        const utils = window.KefinTweaksUtils;
+        if (utils?.onBodyMutation) {
+            utils.onBodyMutation('homeScreenPin-actionSheet', onMutations);
+        } else if (typeof MutationObserver !== 'undefined' && document.body) {
+            const observer = new MutationObserver(onMutations);
+            observer.observe(document.body, { childList: true, subtree: true });
+        }
     }
 
     function isPinnedSectionId(sectionId) {
@@ -1245,8 +1253,9 @@
         document.querySelectorAll('.cardOverlayContainer').forEach(processOverlay);
         document.querySelectorAll('[data-section-id^="pinned-list-"] .card[data-id]').forEach(processCard);
 
-        const observer = new MutationObserver((mutations) => {
-            mutations.forEach(mutation => {
+        const onMutations = (mutations) => {
+            for (const mutation of mutations) {
+                if (mutation.type !== 'childList') continue;
                 mutation.addedNodes.forEach(node => {
                     if (node.nodeType !== Node.ELEMENT_NODE) return;
                     if (node.classList?.contains('cardOverlayContainer')) processOverlay(node);
@@ -1254,9 +1263,16 @@
                     if (node.classList?.contains('card')) processCard(node);
                     node.querySelectorAll?.('.card[data-id]').forEach(processCard);
                 });
-            });
-        });
-        observer.observe(document.body, { childList: true, subtree: true });
+            }
+        };
+
+        const utils = window.KefinTweaksUtils;
+        if (utils?.onBodyMutation) {
+            utils.onBodyMutation('homeScreenPin-pinnedCards', onMutations);
+        } else if (typeof MutationObserver !== 'undefined' && document.body) {
+            const observer = new MutationObserver(onMutations);
+            observer.observe(document.body, { childList: true, subtree: true });
+        }
     }
 
     function isPinnedParentSection(sectionId) {

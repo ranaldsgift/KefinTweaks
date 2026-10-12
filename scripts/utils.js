@@ -1711,12 +1711,15 @@
 
     function disconnectCustomMenuLinkObserver() {
         if (!customMenuLinkObserver) return;
-        customMenuLinkObserver.disconnect();
+        if (typeof customMenuLinkObserver.disconnect === 'function') {
+            customMenuLinkObserver.disconnect();
+        }
+        offBodyMutation('customMenuLinks');
         customMenuLinkObserver = null;
     }
 
     /**
-     * Persistent MO: any custom-menu host remount → idempotent reapplyAll.
+     * Shared body subscriber: any custom-menu host remount → idempotent reapplyAll.
      * No host is assumed stable (drawer, prefs, #app-user-menu, top-nav).
      */
     function ensureCustomMenuLinkObserver() {
@@ -1724,7 +1727,7 @@
             disconnectCustomMenuLinkObserver();
             return;
         }
-        if (customMenuLinkObserver || typeof MutationObserver === 'undefined' || !document.body) {
+        if (customMenuLinkObserver) {
             return;
         }
 
@@ -1737,7 +1740,7 @@
                 reapplyAllCustomMenuLinks();
             });
         };
-        customMenuLinkObserver = new MutationObserver((mutations) => {
+        const onMutations = (mutations) => {
             if (customMenuLinkReapplyDepth > 0) return;
             if (!customMenuLinkRegistry.length) {
                 disconnectCustomMenuLinkObserver();
@@ -1750,12 +1753,9 @@
             }
             if (!mutations.some(mutationShouldTriggerCustomMenuReapply)) return;
             scheduleCustomMenuReapply();
-        });
+        };
 
-        customMenuLinkObserver.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
+        customMenuLinkObserver = onBodyMutation('customMenuLinks', onMutations);
     }
 
     /**
@@ -3051,6 +3051,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             customPageTitleGuardObserver.disconnect();
             customPageTitleGuardObserver = null;
         }
+        offBodyMutation('customPageTitle-discover');
         activeCustomPageTitle = null;
     }
 
@@ -3087,21 +3088,29 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             subtree: true
         });
 
-        // childList only: Jellyfin typically replaces pageTitle text via textContent (childList)
-        const root = document.getElementById('reactRoot') || document.body || document.documentElement;
-        if (root) {
-            customPageTitleGuardObserver.observe(root, {
-                childList: true,
-                subtree: true
-            });
-        }
-
-        document.querySelectorAll('h3.pageTitle').forEach((el) => {
+        // Narrow watch: page title nodes only (no body/reactRoot subtree)
+        const observePageTitleEl = (el) => {
+            if (!el || el.dataset?.kefinTitleGuardObserved === 'true') return;
+            if (el.dataset) el.dataset.kefinTitleGuardObserved = 'true';
             customPageTitleGuardObserver.observe(el, {
                 childList: true,
                 characterData: true,
                 subtree: true
             });
+        };
+
+        document.querySelectorAll('h3.pageTitle').forEach(observePageTitleEl);
+
+        // When new h3.pageTitle nodes mount, attach narrow observers via shared body MO
+        onBodyMutation('customPageTitle-discover', (mutations) => {
+            for (const mutation of mutations) {
+                for (const node of mutation.addedNodes) {
+                    if (node.nodeType !== Node.ELEMENT_NODE) continue;
+                    if (node.matches?.('h3.pageTitle')) observePageTitleEl(node);
+                    node.querySelectorAll?.('h3.pageTitle').forEach(observePageTitleEl);
+                }
+            }
+            syncIfNeeded();
         });
     }
 
@@ -3313,6 +3322,384 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         };
 	}
 
+    // ── Shared DOM observation (body MO multiplexer) ─────────────────────────
+    // Inventory / migration waves (body + childList + subtree unless noted):
+    //   Wave A (oneshot / onViewPage+TTL): infiniteScroll, dashboardButtonFix,
+    //     backdropLeakFix wait, homeSectionsReadyObserver, exclusiveElsewhere
+    //   Wave B (shared body — overlays): removeContinue, homeScreenPin×2, playlist card play
+    //   Wave C (shared body — chrome): customMenuLinkObserver, hamburger toolbar, config user-menu
+    //   Wave D (scoped / attributes): watchlist empty (page-scoped attrs), discovery→shared,
+    //     slides wait→waitForElement, homeChromeVisibility (home-rooted + off-home disconnect),
+    //     pageTitleGuard (title + h3.pageTitle only; discover via shared)
+    //   Extra: updoot SPA reinit → onViewPage (was body childList+subtree)
+    // Prefer onViewPage + waitForElement/poll for one-shots; shared body only for ongoing inject.
+    // Measure: KefinTweaksUtils.debugBodyObservers() — expect one shared body MO + listed subscribers.
+
+    const bodySubscribers = new Map();
+    /** @type {MutationObserver|null} */
+    let bodyObserver = null;
+    /** @type {Map<string, { disconnect: Function }>} */
+    const managedObservers = new Map();
+    /** @type {MutationRecord[]} */
+    let pendingBodyMutations = [];
+    let bodyFlushScheduled = false;
+    let bodyFlushGeneration = 0;
+    /** @type {Function[]} */
+    let paintQueue = [];
+    let paintScheduled = false;
+    let waitForElementSeq = 0;
+
+    const PLAYER_NOISE_SELECTOR =
+        '.osdPositionText, .osdDurationText, .startTimeText, .endTimeText, .endsAtText, .videoSubtitlesInner, .videoSecondarySubtitlesInner';
+
+    function runPaintQueue() {
+        paintScheduled = false;
+        const batch = paintQueue;
+        paintQueue = [];
+        for (const fn of batch) {
+            try {
+                fn();
+            } catch (err) {
+                ERR('Error in afterNextPaint callback:', err);
+            }
+        }
+    }
+
+    /**
+     * Run fn after the next paint (shared rAF + timeout fallback for hidden tabs).
+     * @param {Function} fn
+     */
+    function afterNextPaint(fn) {
+        paintQueue.push(fn);
+        if (paintScheduled) return;
+        paintScheduled = true;
+        let done = false;
+        const run = () => {
+            if (done) return;
+            done = true;
+            clearTimeout(fallback);
+            runPaintQueue();
+        };
+        const fallback = setTimeout(run, 250);
+        requestAnimationFrame(() => setTimeout(run, 0));
+    }
+
+    function isStructuralChange(record) {
+        if (record.addedNodes.length === 0 && record.removedNodes.length === 0) return false;
+        const target = record.target;
+        return !(target.nodeType === 1 && /** @type {Element} */ (target).closest(PLAYER_NOISE_SELECTOR));
+    }
+
+    function flushPendingBodyMutations() {
+        bodyFlushScheduled = false;
+        const batch = pendingBodyMutations;
+        pendingBodyMutations = [];
+        if (batch.length === 0) return;
+        for (const [id, sub] of Array.from(bodySubscribers)) {
+            if (bodySubscribers.get(id) !== sub) continue;
+            if (sub.priority > 0) continue;
+            try {
+                sub.callback(batch);
+            } catch (err) {
+                ERR(`Error in body observer subscriber "${id}":`, err);
+            }
+        }
+    }
+
+    function resortBodySubscribers() {
+        const sorted = [...bodySubscribers.entries()].sort((a, b) => b[1].priority - a[1].priority);
+        bodySubscribers.clear();
+        for (const [id, sub] of sorted) {
+            bodySubscribers.set(id, sub);
+        }
+    }
+
+    function ensureBodyObserver() {
+        if (bodyObserver || typeof MutationObserver === 'undefined' || !document.body) return;
+        bodyObserver = new MutationObserver((mutations) => {
+            let hasStructuralChange = false;
+            for (let i = 0; i < mutations.length; i++) {
+                if (isStructuralChange(mutations[i])) {
+                    hasStructuralChange = true;
+                    break;
+                }
+            }
+            if (!hasStructuralChange) return;
+
+            for (const [id, sub] of Array.from(bodySubscribers)) {
+                if (bodySubscribers.get(id) !== sub) continue;
+                if (sub.priority <= 0) break;
+                try {
+                    sub.callback(mutations);
+                } catch (err) {
+                    ERR(`Error in body observer subscriber "${id}":`, err);
+                }
+            }
+
+            for (let i = 0; i < mutations.length; i++) pendingBodyMutations.push(mutations[i]);
+            if (!bodyFlushScheduled) {
+                bodyFlushScheduled = true;
+                const generation = bodyFlushGeneration;
+                afterNextPaint(() => {
+                    if (generation === bodyFlushGeneration) flushPendingBodyMutations();
+                });
+            }
+        });
+        bodyObserver.observe(document.body, { childList: true, subtree: true });
+        LOG('Shared body observer started');
+    }
+
+    function stopBodyObserverIfEmpty() {
+        if (bodyObserver && bodySubscribers.size === 0) {
+            bodyObserver.disconnect();
+            bodyObserver = null;
+            bodyFlushGeneration++;
+            bodyFlushScheduled = false;
+            pendingBodyMutations = [];
+            LOG('Shared body observer stopped (no subscribers)');
+        }
+    }
+
+    /**
+     * Register a callback on the shared document.body MutationObserver.
+     * @param {string} id
+     * @param {Function} callback - (mutations: MutationRecord[]) => void
+     * @param {{ priority?: number }} [options]
+     * @returns {{ unsubscribe: Function, disconnect: Function }}
+     */
+    function onBodyMutation(id, callback, options = {}) {
+        if (typeof callback !== 'function') {
+            ERR('onBodyMutation callback must be a function');
+            return { unsubscribe() {}, disconnect() {} };
+        }
+        const priority = typeof options.priority === 'number' ? options.priority : 0;
+        if (bodySubscribers.has(id)) {
+            WARN(`Replacing body observer subscriber: ${id}`);
+        }
+        const subscription = { callback, priority };
+        bodySubscribers.set(id, subscription);
+        resortBodySubscribers();
+        ensureBodyObserver();
+        const cleanup = () => {
+            if (bodySubscribers.get(id) !== subscription) return;
+            bodySubscribers.delete(id);
+            stopBodyObserverIfEmpty();
+        };
+        return { unsubscribe: cleanup, disconnect: cleanup };
+    }
+
+    function offBodyMutation(id) {
+        const removed = bodySubscribers.delete(id);
+        if (removed) stopBodyObserverIfEmpty();
+        return removed;
+    }
+
+    /**
+     * Create a managed observer. Body + childList+subtree (no attributes/characterData)
+     * is routed to the shared multiplexer.
+     * @param {string} id
+     * @param {MutationCallback} callback
+     * @param {Node} target
+     * @param {MutationObserverInit} config
+     * @returns {{ disconnect: Function, unsubscribe: Function, observe: Function, takeRecords: Function }}
+     */
+    function createManagedObserver(id, callback, target, config) {
+        if (managedObservers.has(id)) {
+            managedObservers.get(id).disconnect();
+            managedObservers.delete(id);
+        }
+
+        const isBodyTarget =
+            target === document.body || target === document.documentElement || target === document;
+        const isSubtreeWatch = !!(config && config.childList && config.subtree);
+        const isSimpleChildList =
+            isSubtreeWatch && !config.attributes && !config.attributeFilter && !config.characterData;
+
+        if (isBodyTarget && isSimpleChildList) {
+            const handle = onBodyMutation(id, callback);
+            const cleanup = () => {
+                handle.disconnect();
+                managedObservers.delete(id);
+            };
+            const proxy = {
+                disconnect: cleanup,
+                unsubscribe: cleanup,
+                observe() {},
+                takeRecords() {
+                    return [];
+                }
+            };
+            managedObservers.set(id, proxy);
+            return proxy;
+        }
+
+        if (typeof MutationObserver === 'undefined' || !target) {
+            const noop = { disconnect() {}, unsubscribe() {}, observe() {}, takeRecords() { return []; } };
+            managedObservers.set(id, noop);
+            return noop;
+        }
+
+        const observer = new MutationObserver(callback);
+        observer.observe(target, config);
+        const wrap = {
+            disconnect() {
+                observer.disconnect();
+                managedObservers.delete(id);
+            },
+            unsubscribe() {
+                wrap.disconnect();
+            },
+            observe(t, c) {
+                observer.observe(t, c);
+            },
+            takeRecords() {
+                return observer.takeRecords();
+            }
+        };
+        managedObservers.set(id, wrap);
+        return wrap;
+    }
+
+    function disconnectManagedObserver(id) {
+        if (bodySubscribers.has(id)) {
+            offBodyMutation(id);
+            managedObservers.delete(id);
+            return true;
+        }
+        if (managedObservers.has(id)) {
+            managedObservers.get(id).disconnect();
+            managedObservers.delete(id);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Wait for an element (uses shared body observer for re-checks).
+     * @param {string} selector
+     * @param {number|{ timeout?: number, root?: ParentNode, predicate?: (el: Element) => boolean, quiet?: boolean }} [options]
+     * @returns {Promise<Element|null>}
+     */
+    function waitForElement(selector, options = {}) {
+        const opts = typeof options === 'number' ? { timeout: options } : options || {};
+        const timeout = opts.timeout ?? 10000;
+        const root = opts.root || document;
+        const predicate = typeof opts.predicate === 'function' ? opts.predicate : null;
+
+        const find = () => {
+            if (!predicate) return root.querySelector(selector);
+            for (const el of Array.from(root.querySelectorAll(selector))) {
+                try {
+                    if (predicate(el)) return el;
+                } catch (_) {
+                    /* treat throw as non-match */
+                }
+            }
+            return null;
+        };
+
+        return new Promise((resolve) => {
+            const existing = find();
+            if (existing) {
+                resolve(existing);
+                return;
+            }
+
+            const observerId = `wait-${selector}-${++waitForElementSeq}`;
+            let timeoutId = null;
+            const handle = onBodyMutation(observerId, () => {
+                const element = find();
+                if (element) {
+                    if (timeoutId) clearTimeout(timeoutId);
+                    handle.unsubscribe();
+                    resolve(element);
+                }
+            });
+
+            timeoutId = setTimeout(() => {
+                handle.unsubscribe();
+                if (!opts.quiet) {
+                    WARN(`Timeout waiting for element: ${selector}`);
+                }
+                resolve(null);
+            }, timeout);
+        });
+    }
+
+    /**
+     * Poll until fn returns truthy or timeout. Useful when onViewPage fires before DOM settles.
+     * @param {() => *} fn
+     * @param {{ intervalMs?: number, timeoutMs?: number }} [options]
+     * @returns {Promise<*>}
+     */
+    function pollUntil(fn, options = {}) {
+        const intervalMs = options.intervalMs ?? 100;
+        const timeoutMs = options.timeoutMs ?? 10000;
+        return new Promise((resolve) => {
+            const start = Date.now();
+            const tick = () => {
+                try {
+                    const value = fn();
+                    if (value) {
+                        resolve(value);
+                        return;
+                    }
+                } catch (err) {
+                    ERR('pollUntil callback error:', err);
+                }
+                if (Date.now() - start >= timeoutMs) {
+                    resolve(null);
+                    return;
+                }
+                setTimeout(tick, intervalMs);
+            };
+            tick();
+        });
+    }
+
+    function getBodySubscriberCount() {
+        return bodySubscribers.size;
+    }
+
+    function listBodySubscriberIds() {
+        return Array.from(bodySubscribers.keys());
+    }
+
+    function getManagedObserverCount() {
+        return managedObservers.size;
+    }
+
+    /**
+     * Debug: log shared-body subscriber ids + managed dedicated observer count.
+     * Steady-state (utils loaded, overlays/chrome subscribed) should show one live
+     * body childList+subtree MutationObserver with these typical ids:
+     *   customMenuLinks, removeContinue-overlays, homeScreenPin-actionSheet,
+     *   homeScreenPin-pinnedCards, playlist-cardPlay, config-appUserMenu,
+     *   watchlist-overlay-discovery, (+ customPageTitle-discover when a custom page is active)
+     */
+    function debugBodyObservers() {
+        const ids = listBodySubscriberIds();
+        LOG('Shared body MO active:', !!bodyObserver, '| subscribers:', ids.length, ids);
+        LOG('Managed dedicated observers:', getManagedObserverCount());
+        return { bodyObserverActive: !!bodyObserver, subscribers: ids, managed: getManagedObserverCount() };
+    }
+
+    window.addEventListener('beforeunload', () => {
+        managedObservers.forEach((obs) => {
+            try {
+                obs.disconnect();
+            } catch (_) {}
+        });
+        managedObservers.clear();
+        bodySubscribers.clear();
+        if (bodyObserver) {
+            bodyObserver.disconnect();
+            bodyObserver = null;
+        }
+        bodyFlushGeneration++;
+        pendingBodyMutations = [];
+    });
+
     // Expose utilities to global scope
     window.KefinTweaksUtils = {
         onViewPage,
@@ -3342,7 +3729,18 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         waitForApiClient,
         waitForLogin,
         isModernUI,
-        getWatchlistUrl
+        getWatchlistUrl,
+        onBodyMutation,
+        offBodyMutation,
+        createManagedObserver,
+        disconnectManagedObserver,
+        waitForElement,
+        pollUntil,
+        afterNextPaint,
+        getBodySubscriberCount,
+        listBodySubscriberIds,
+        getManagedObserverCount,
+        debugBodyObservers
     };
     
     ensureNavigationChromeHandler();

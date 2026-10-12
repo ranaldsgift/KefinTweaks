@@ -6199,13 +6199,9 @@
             return;
         }
 
-        if (typeof MutationObserver === 'undefined' || !document.body) {
-            console.log('[KefinTweaks Configuration] Cannot observe #app-user-menu (MutationObserver/body unavailable)');
-            return;
-        }
-
+        const utils = window.KefinTweaksUtils;
         let scheduled = false;
-        appUserMenuConfigObserver = new MutationObserver(() => {
+        const onMutations = () => {
             if (document.querySelector('[data-kefintweaks-user-menu-config-button]')) {
                 return;
             }
@@ -6215,8 +6211,19 @@
                 scheduled = false;
                 addConfigButtonToAppUserMenu();
             });
-        });
+        };
 
+        if (utils?.onBodyMutation) {
+            appUserMenuConfigObserver = utils.onBodyMutation('config-appUserMenu', onMutations);
+            return;
+        }
+
+        if (typeof MutationObserver === 'undefined' || !document.body) {
+            console.log('[KefinTweaks Configuration] Cannot observe #app-user-menu (MutationObserver/body unavailable)');
+            return;
+        }
+
+        appUserMenuConfigObserver = new MutationObserver(onMutations);
         appUserMenuConfigObserver.observe(document.body, {
             childList: true,
             subtree: true

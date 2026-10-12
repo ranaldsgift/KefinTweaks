@@ -30,29 +30,70 @@
     const config = window.KefinTweaksConfig?.exclusiveElsewhere || {
         hideServerName: false // Default fallback
     };
-    
-    const observer = new MutationObserver(() => {
+
+    let pollTimer = null;
+
+    function stopPoll() {
+        if (pollTimer) {
+            clearInterval(pollTimer);
+            pollTimer = null;
+        }
+    }
+
+    function tryApplyExclusive() {
         const elsewhereContainer = document.querySelector('.itemDetailPage:not(.hide) .streaming-lookup-container>div');
         if (elsewhereContainer && elsewhereContainer.children && elsewhereContainer.children.length > 2) {
-            return;
+            return true;
         }
 
-        const serverName = config.hideServerName ? '' : ApiClient.serverName();
-
+        const serverName = config.hideServerName ? '' : (typeof ApiClient !== 'undefined' ? ApiClient.serverName() : '');
         const link = document.querySelector('.itemDetailPage:not(.hide) .streaming-lookup-container>div>div:first-child a');
         if (link && !link.classList.contains('exclusive')) {
             LOG('Modifying elsewhere link to show exclusive branding');
             link.innerHTML = `Only available on ${serverName}`;
-            link.classList.add("exclusive");
-            link.title = "Exclusive";
+            link.classList.add('exclusive');
+            link.title = 'Exclusive';
             link.disable = true;
+            return true;
         }
-    });
+        return false;
+    }
 
-    observer.observe(document.body, {
-        childList: true,
-        subtree: true
-    });
-    
-    LOG('Exclusive elsewhere functionality initialized');
+    function armItemDetailPoll() {
+        stopPoll();
+        if (tryApplyExclusive()) return;
+
+        const started = Date.now();
+        const TTL_MS = 15000;
+        pollTimer = setInterval(() => {
+            if (tryApplyExclusive() || Date.now() - started >= TTL_MS) {
+                stopPoll();
+            }
+        }, 300);
+    }
+
+    function start() {
+        const utils = window.KefinTweaksUtils;
+        if (!utils?.onViewPage) {
+            setTimeout(start, 500);
+            return;
+        }
+
+        utils.onViewPage((view) => {
+            stopPoll();
+            // item / details views
+            if (view === 'item' || view === 'details' || /item\.html|details/i.test(window.location.hash || '')) {
+                armItemDetailPoll();
+            }
+        });
+
+        // Direct load on item page
+        if (document.querySelector('.itemDetailPage:not(.hide)')) {
+            armItemDetailPoll();
+        }
+
+        LOG('Exclusive elsewhere functionality initialized (onViewPage + TTL poll)');
+    }
+
+    start();
 })();

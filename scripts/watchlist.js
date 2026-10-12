@@ -7153,7 +7153,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		}
 	}
 
-	// Set up observer to watch for watchlist section mount (custom page / library page)
+	// Page-scoped observer for watchlist section remount (attributes+class required)
 	function setupWatchlistSectionObserver() {
 		function isVisibleLibraryOrCustomPage(el) {
 			return el &&
@@ -7170,34 +7170,17 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			return isVisibleLibraryOrCustomPage(node);
 		}
 
-		const observer = new MutationObserver((mutations) => {
-			let shouldCheck = false;
-			mutations.forEach((mutation) => {
-				if (mutation.type === 'childList') {
-					mutation.addedNodes.forEach((node) => {
-						if (nodeMayContainWatchlist(node)) shouldCheck = true;
-					});
-				}
-				if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
-					const target = mutation.target;
-					if (isVisibleLibraryOrCustomPage(target)) shouldCheck = true;
-				}
-			});
-			if (shouldCheck) {
-				checkForEmptyWatchlist();
-			}
-		});
+		let emptyWatchlistObserver = null;
 
-		observer.observe(document.body, {
-			childList: true,
-			subtree: true,
-			attributes: true,
-			attributeFilter: ['class']
-		});
+		function disconnectEmptyWatchlistObserver() {
+			if (!emptyWatchlistObserver) return;
+			emptyWatchlistObserver.disconnect();
+			emptyWatchlistObserver = null;
+		}
 
 		function checkForEmptyWatchlist() {
 			const onWatchlistPage = window.location.pathname.includes(window.KefinTweaksUtils._watchlistUrl) || window.location.hash.includes(window.KefinTweaksUtils._watchlistUrl);
-			
+
 			if (!onWatchlistPage) {
 				return;
 			}
@@ -7216,10 +7199,60 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			});
 		}
 
-		// In case #/watchlist is already visible
-		checkForEmptyWatchlist();
-	}
+		function armEmptyWatchlistObserver() {
+			const onWatchlistPage = window.location.pathname.includes(window.KefinTweaksUtils._watchlistUrl) || window.location.hash.includes(window.KefinTweaksUtils._watchlistUrl);
+			if (!onWatchlistPage) {
+				disconnectEmptyWatchlistObserver();
+				return;
+			}
 
+			checkForEmptyWatchlist();
+
+			const pageRoot =
+				document.querySelector('.libraryPage:not(.hide)') ||
+				document.querySelector('.customPage:not(.hide)') ||
+				document.querySelector('.homePage:not(.hide)');
+			const target = pageRoot || document.body;
+
+			if (emptyWatchlistObserver && emptyWatchlistObserver.__kefinTarget === target) {
+				return;
+			}
+			disconnectEmptyWatchlistObserver();
+
+			emptyWatchlistObserver = new MutationObserver((mutations) => {
+				let shouldCheck = false;
+				for (const mutation of mutations) {
+					if (mutation.type === 'childList') {
+						for (const node of mutation.addedNodes) {
+							if (nodeMayContainWatchlist(node)) {
+								shouldCheck = true;
+								break;
+							}
+						}
+					} else if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+						if (isVisibleLibraryOrCustomPage(mutation.target)) shouldCheck = true;
+					}
+					if (shouldCheck) break;
+				}
+				if (shouldCheck) checkForEmptyWatchlist();
+			});
+			emptyWatchlistObserver.__kefinTarget = target;
+			emptyWatchlistObserver.observe(target, {
+				childList: true,
+				subtree: true,
+				attributes: true,
+				attributeFilter: ['class']
+			});
+		}
+
+		const utils = window.KefinTweaksUtils;
+		if (utils?.onViewPage) {
+			utils.onViewPage(() => {
+				armEmptyWatchlistObserver();
+			});
+		}
+		armEmptyWatchlistObserver();
+	}
 
 	// Initialize the watchlist section observer
 	setupWatchlistSectionObserver();
@@ -7808,7 +7841,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			root.querySelectorAll?.('.itemsContainer').forEach(attachItemsContainerObserver);
 		}
 
-		const discoveryObserver = new MutationObserver((mutations) => {
+		function onDiscoveryMutations(mutations) {
 			for (const mutation of mutations) {
 				for (const node of mutation.addedNodes) {
 					if (node.nodeType !== Node.ELEMENT_NODE) continue;
@@ -7820,12 +7853,15 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 					discoverItemsContainers(node);
 				}
 			}
-		});
+		}
 
-		discoveryObserver.observe(document.body, {
-			childList: true,
-			subtree: true
-		});
+		const utils = window.KefinTweaksUtils;
+		if (utils?.onBodyMutation) {
+			utils.onBodyMutation('watchlist-overlay-discovery', onDiscoveryMutations);
+		} else if (typeof MutationObserver !== 'undefined' && document.body) {
+			const discoveryObserver = new MutationObserver(onDiscoveryMutations);
+			discoveryObserver.observe(document.body, { childList: true, subtree: true });
+		}
 
 		discoverItemsContainers(document.body);
 		processExistingOverlayContainers();
@@ -8065,72 +8101,57 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 
 	// Function to monitor slides container for MediaBar Plugin
 	function monitorSlidesContainer() {
-		const observer = new MutationObserver((mutations) => {
-			mutations.forEach((mutation) => {
-				if (mutation.type === 'childList') {
-					// Check for added nodes
-					mutation.addedNodes.forEach((node) => {
-						if (node.nodeType === Node.ELEMENT_NODE) {
-							// Check if the added node is a slide
-							if (node.classList && node.classList.contains('slide')) {
-								addSlideWatchlistButton(node);
-							}
-
-							// Check for slides within the added node
-							const slides = node.querySelectorAll && node.querySelectorAll('.slide');
-							if (slides && slides.length > 0) {
-								slides.forEach((slide) => {
-									addSlideWatchlistButton(slide);
-								});
-							}
-						}
+		const slidesObserver = new MutationObserver((mutations) => {
+			for (const mutation of mutations) {
+				if (mutation.type !== 'childList') continue;
+				for (const node of mutation.addedNodes) {
+					if (node.nodeType !== Node.ELEMENT_NODE) continue;
+					if (node.classList?.contains('slide')) {
+						addSlideWatchlistButton(node);
+					}
+					node.querySelectorAll?.('.slide')?.forEach((slide) => {
+						addSlideWatchlistButton(slide);
 					});
 				}
-			});
+			}
 		});
 
-		// Check if slides container already exists
-		const slidesContainer = document.querySelector('#slides-container');
-		if (slidesContainer) {
-			// Process existing slides
-			const existingSlides = slidesContainer.querySelectorAll('.slide');
-			existingSlides.forEach((slide) => {
+		function bindSlidesContainer(slidesContainer) {
+			if (!slidesContainer) return;
+			slidesContainer.querySelectorAll('.slide').forEach((slide) => {
 				addSlideWatchlistButton(slide);
 			});
-
-			// Start observing the slides container
-			observer.observe(slidesContainer, {
+			slidesObserver.observe(slidesContainer, {
 				childList: true,
 				subtree: true
 			});
 		}
 
-		// Also watch for slides container to be added
-		const containerObserver = new MutationObserver(() => {
-			const slidesContainer = document.querySelector('#slides-container');
-			if (slidesContainer) {
-				// Process existing slides
-				const existingSlides = slidesContainer.querySelectorAll('.slide');
-				existingSlides.forEach((slide) => {
-					addSlideWatchlistButton(slide);
-				});
+		const existing = document.querySelector('#slides-container');
+		if (existing) {
+			bindSlidesContainer(existing);
+			return;
+		}
 
-				// Start observing the slides container
-				observer.observe(slidesContainer, {
-					childList: true,
-					subtree: true
-				});
+		const utils = window.KefinTweaksUtils;
+		if (utils?.waitForElement) {
+			utils.waitForElement('#slides-container', { timeout: 60000, quiet: true }).then((el) => {
+				bindSlidesContainer(el);
+			});
+			return;
+		}
 
-				// Disconnect the container observer since we've found it
-				containerObserver.disconnect();
+		// Fallback: short TTL poll if shared wait helper unavailable
+		const start = Date.now();
+		const pollId = setInterval(() => {
+			const el = document.querySelector('#slides-container');
+			if (el) {
+				clearInterval(pollId);
+				bindSlidesContainer(el);
+			} else if (Date.now() - start > 60000) {
+				clearInterval(pollId);
 			}
-		});
-
-		// Start observing the entire document body for the slides container
-		containerObserver.observe(document.body, {
-			childList: true,
-			subtree: true
-		});
+		}, 250);
 	}
 
 	// Initialize the slides container observer

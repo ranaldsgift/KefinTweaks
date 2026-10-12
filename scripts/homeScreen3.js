@@ -380,20 +380,16 @@
     }
 
     const HOME_SECTIONS_SELECTOR = '.homePage:not(.hide) #homeTab.is-active .sections';
-    let homeSectionsReadyObserver = null;
+    let homeSectionsReadyWaitGeneration = 0;
 
     function disconnectHomeSectionsReadyObserver() {
-        if (!homeSectionsReadyObserver) return;
-        homeSectionsReadyObserver.disconnect();
-        homeSectionsReadyObserver = null;
-        LOG('Disconnected home sections ready observer');
+        // Cancels in-flight waitForElement/poll by bumping generation
+        homeSectionsReadyWaitGeneration += 1;
+        LOG('Cancelled home sections ready wait');
     }
 
     function connectHomeSectionsReadyObserver() {
-        if (homeSectionsReadyObserver) {
-            LOG('Home sections ready observer already connected');
-            return;
-        }
+        const generation = ++homeSectionsReadyWaitGeneration;
 
         const existing = document.querySelector(HOME_SECTIONS_SELECTOR);
         if (existing) {
@@ -402,68 +398,34 @@
             return;
         }
 
-        if (typeof MutationObserver === 'undefined') {
-            WARN('MutationObserver unavailable; cannot wait for home sections container');
-            return;
-        }
-
-        homeSectionsReadyObserver = new MutationObserver(() => {
+        const onFound = () => {
+            if (generation !== homeSectionsReadyWaitGeneration) return;
             if (!document.querySelector(HOME_SECTIONS_SELECTOR)) return;
             LOG('Home sections container appeared; enhancing');
             enqueueHomeViewJob({ type: 'home', hash: window.location.hash || '' });
-        });
-        homeSectionsReadyObserver.observe(document.documentElement, {
-            childList: true,
-            subtree: true
-        });
-        LOG('Connected home sections ready observer');
-    }
+        };
 
-    /**
-     * Get section index N from a .sectionN element (e.g. section0 -> 0).
-     * Returns -1 if no matching class.
-     */
-    function getSectionIndexFromElement(sectionEl) {
-        const sectionClass = Array.from(sectionEl.classList || []).find(c => /^section\d+$/.test(c));
-        if (!sectionClass) return -1;
-        const match = sectionClass.match(/^section(\d+)$/);
-        return match ? parseInt(match[1], 10) : -1;
-    }
-
-    /**
-     * True when the section is ready to clone: either there are no .itemsContainer descendants,
-     * or every .itemsContainer in the section has at least one child (items have been rendered).
-     */
-    function sectionHasAllItemsContainersPopulated(sectionEl) {
-        const itemsContainers = sectionEl.querySelectorAll ? sectionEl.querySelectorAll('.itemsContainer') : [];
-        if (itemsContainers.length === 0) return false;
-        return Array.from(itemsContainers).every(container => container.children.length > 0);
-    }
-
-    /**
-     * Observe a Jellyfin section node until every .itemsContainer in it has children, then clone and append to kefinHome once.
-     * Observer is stored in sectionCache.pendingJellyfinSectionObservers so handleJellyfinRender can disconnect it on re-run.
-     */
-    function observeSectionUntilChildrenThenClone(sectionEl, kefinHome) {
-        if (!sectionEl || typeof MutationObserver === 'undefined') return;
-        const observer = new MutationObserver(() => {
-            if (!sectionHasAllItemsContainersPopulated(sectionEl)) return;
-            const target = document.querySelector('.homePage:not(.hide) #homeTab .kefinHomeSectionsContainer');
-            if (!target) {
-                observer.disconnect();
-                const idx = sectionCache.pendingJellyfinSectionObservers.indexOf(observer);
-                if (idx !== -1) sectionCache.pendingJellyfinSectionObservers.splice(idx, 1);
-                return;
-            }
-            const clone = sectionEl.cloneNode(true);
-            clone.dataset.jellyfinSectionClone = 'true';
-            target.appendChild(clone);
-            observer.disconnect();
-            const idx = sectionCache.pendingJellyfinSectionObservers.indexOf(observer);
-            if (idx !== -1) sectionCache.pendingJellyfinSectionObservers.splice(idx, 1);
-        });
-        sectionCache.pendingJellyfinSectionObservers.push(observer);
-        observer.observe(sectionEl, { childList: true, subtree: true });
+        const utils = window.KefinTweaksUtils;
+        if (utils?.waitForElement) {
+            LOG('Waiting for home sections via waitForElement');
+            utils.waitForElement(HOME_SECTIONS_SELECTOR, { timeout: 20000, quiet: true }).then((el) => {
+                if (el) onFound();
+            });
+            return;
+        }
+        if (utils?.pollUntil) {
+            LOG('Waiting for home sections via pollUntil');
+            utils.pollUntil(
+                () => (generation === homeSectionsReadyWaitGeneration
+                    ? document.querySelector(HOME_SECTIONS_SELECTOR)
+                    : true),
+                { intervalMs: 200, timeoutMs: 20000 }
+            ).then((el) => {
+                if (el && el !== true) onFound();
+            });
+            return;
+        }
+        WARN('KefinTweaksUtils wait helpers unavailable; cannot wait for home sections container');
     }
 
     function mulberry32(seed) {
@@ -2177,15 +2139,36 @@
         syncCategoryRailTvFocus();
     }
 
+    function disconnectHomeChromeVisibilityObserver() {
+        if (!homeChromeVisibilityObserver) return;
+        homeChromeVisibilityObserver.disconnect();
+        homeChromeVisibilityObserver = null;
+    }
+
     function ensureHomeChromeVisibilityObserver() {
-        if (homeChromeVisibilityObserver) return;
+        // Attributes+class needed for tab hide/show — dedicated MO, page-scoped when possible.
+        // Disconnect off home so we do not keep a body-wide attributes+subtree watcher alive.
+        if (!isHomePageVisible()) {
+            disconnectHomeChromeVisibilityObserver();
+            return;
+        }
+
+        const homePage = document.querySelector('.homePage:not(.hide)') || document.querySelector('.homePage');
+        const target = homePage || document.documentElement;
+        const config = homePage
+            ? { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] }
+            : { attributes: true, attributeFilter: ['data-active-page', 'class'] };
+
+        if (homeChromeVisibilityObserver) {
+            const sameTarget = homeChromeVisibilityObserver.__kefinTarget === target;
+            const sameMode = homeChromeVisibilityObserver.__kefinNarrow === !homePage;
+            if (sameTarget && sameMode) return;
+            disconnectHomeChromeVisibilityObserver();
+        }
         homeChromeVisibilityObserver = new MutationObserver(() => syncHomeScreenChromeVisibility());
-        homeChromeVisibilityObserver.observe(document.body, {
-            childList: true,
-            subtree: true,
-            attributes: true,
-            attributeFilter: ['class']
-        });
+        homeChromeVisibilityObserver.__kefinTarget = target;
+        homeChromeVisibilityObserver.__kefinNarrow = !homePage;
+        homeChromeVisibilityObserver.observe(target, config);
     }
 
     async function mountCreateSectionButton() {
@@ -2810,6 +2793,7 @@
 
                 if (next.type === 'chrome') {
                     syncHomeScreenChromeVisibility();
+                    ensureHomeChromeVisibilityObserver();
                     return;
                 }
 
@@ -2822,6 +2806,7 @@
 
                     if (currentTabIndex !== 0) {
                         syncHomeScreenChromeVisibility();
+                        ensureHomeChromeVisibilityObserver();
                         return;
                     }
 
@@ -2830,6 +2815,7 @@
                     });
                     await enhanceHomeScreen();
                     syncHomeScreenChromeVisibility();
+                    ensureHomeChromeVisibilityObserver();
                 }
             })
             .catch((err) => {

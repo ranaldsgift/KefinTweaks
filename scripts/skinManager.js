@@ -1341,7 +1341,11 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         dialog.style.position = 'absolute';
         dialog.style.minWidth = '280px';
         dialog.style.pointerEvents = 'auto';
-        dialog.style.animation = '160ms ease-out 0s 1 normal both running scaleup';
+        if (typeof window.ModalSystem?.applyOpenAnimation === 'function') {
+            window.ModalSystem.applyOpenAnimation(dialog);
+        } else {
+            dialog.style.animation = '160ms ease-out 0s 1 normal both running scaleup';
+        }
         
         // Create dialog content
         const dialogContent = document.createElement('div');

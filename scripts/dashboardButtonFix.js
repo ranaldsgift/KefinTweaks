@@ -4,34 +4,64 @@
 // This script sends you to home.html in these scenarios instead of leaving the app
 
 (function () {
-    function attachHandler() {
-        const btn = document.querySelector('button.MuiButtonBase-root');
-        if (!btn) return;
+    'use strict';
 
-        if (btn._backCheckAttached) return;
+    function attachHandler(btn) {
+        if (!btn || btn._backCheckAttached) return true;
         btn._backCheckAttached = true;
 
         btn.addEventListener('click', function (e) {
             if (window.history.state?.idx === 0) {
-                // Stop normal handlers
                 e.stopImmediatePropagation();
                 e.preventDefault();
 
-                console.log("[KefinTweaks DashboardButtonFix]: No history to go back. Redirecting to home page.");
+                console.log('[KefinTweaks DashboardButtonFix]: No history to go back. Redirecting to home page.');
 
-                // Changes this to the page you'd like to return to by default
                 const homeUrl = ApiClient.serverVersion().split('.')[1] > 10 ? 'home' : 'home.html';
                 Dashboard.navigate(`/${homeUrl}`);
             }
         }, true);
-
-        observer.disconnect();
+        return true;
     }
 
-    // Observe DOM in case button is recreated
-    const observer = new MutationObserver(attachHandler);
-    observer.observe(document.body, { childList: true, subtree: true });
+    function tryAttach() {
+        const btn = document.querySelector('button.MuiButtonBase-root');
+        return attachHandler(btn);
+    }
 
-    // Initial run
-    attachHandler();
+    function armForDashboard() {
+        if (tryAttach()) return;
+
+        const utils = window.KefinTweaksUtils;
+        if (utils?.waitForElement) {
+            utils.waitForElement('button.MuiButtonBase-root', {
+                timeout: 15000,
+                quiet: true,
+                predicate: (el) => !el._backCheckAttached
+            }).then((btn) => {
+                if (btn) attachHandler(btn);
+            });
+            return;
+        }
+        if (utils?.pollUntil) {
+            utils.pollUntil(() => (tryAttach() ? true : null), { intervalMs: 200, timeoutMs: 15000 });
+            return;
+        }
+        setTimeout(armForDashboard, 500);
+    }
+
+    function start() {
+        const utils = window.KefinTweaksUtils;
+        if (!utils?.onViewPage) {
+            setTimeout(start, 500);
+            return;
+        }
+        utils.onViewPage(() => {
+            armForDashboard();
+        }, { pages: ['dashboard', 'configurationpage'] });
+        // Also try immediately (direct load)
+        armForDashboard();
+    }
+
+    start();
 })();

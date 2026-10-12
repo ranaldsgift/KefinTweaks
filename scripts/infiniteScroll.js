@@ -787,21 +787,46 @@
     }
     
     // Scroll state loading removed - not needed
-    
-    // Wait for page to mount
-    const observer = new MutationObserver(() => {
+
+    function tryInitializeFromView() {
         if (shouldInitialize()) {
             initialize().catch(err => ERR('Initialization failed:', err));
+            return true;
         }
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
-    
-    // Also try to initialize immediately if page is already loaded
-    if (document.readyState === 'complete') {
-        setTimeout(() => {
-            initialize().catch(err => ERR('Initial initialization failed:', err));
-        }, 100);
+        return false;
     }
+
+    function armLibraryPageInit() {
+        if (tryInitializeFromView()) return;
+        const utils = window.KefinTweaksUtils;
+        if (utils?.pollUntil) {
+            utils.pollUntil(() => (tryInitializeFromView() ? true : null), {
+                intervalMs: 200,
+                timeoutMs: 15000
+            });
+            return;
+        }
+        // Fallback brief poll
+        let tries = 0;
+        const timer = setInterval(() => {
+            tries += 1;
+            if (tryInitializeFromView() || tries >= 75) clearInterval(timer);
+        }, 200);
+    }
+
+    function startInfiniteScrollHook() {
+        const utils = window.KefinTweaksUtils;
+        if (!utils?.onViewPage) {
+            setTimeout(startInfiniteScrollHook, 500);
+            return;
+        }
+        utils.onViewPage(() => {
+            armLibraryPageInit();
+        }, { pages: SUPPORTED_PAGES });
+        armLibraryPageInit();
+    }
+
+    startInfiniteScrollHook();
     
     // Cleanup function
     function cleanup() {
