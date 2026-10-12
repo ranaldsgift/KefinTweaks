@@ -2190,7 +2190,7 @@ html.layout-tv .emby-scroller-container[data-card-format="Button"] .itemsContain
 	padding: 85px 40px 45px 40px;
 }
 .spotlight-section[data-layout="Borderless"][data-size="normal"] .spotlight-overlay {
-	padding: 85px 40px 45px 40px;
+	padding: 85px var(--spotlight-fullscreen-horizontal) 45px;
 }
 .spotlight-section[data-layout="Border"][data-size="large"] .spotlight-overlay {
 	padding: 100px 40px 45px 40px;
