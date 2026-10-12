@@ -5419,11 +5419,6 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             // Load config
             const config = loadConfig();
 
-            const { hasChanges } = await verifyLibrarySectionsConfig(config);
-            if (hasChanges) {
-                await saveConfig(config);
-            }
-
             // Build content
             const content = document.createElement('div');
             content.innerHTML = buildMainConfigHTML();
