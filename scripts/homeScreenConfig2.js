@@ -1519,7 +1519,7 @@
 							name: "Horror-Comedy",
 							queryOptions: {
 								IncludeItemTypes: ["Movie"],
-								Tags: ["horror comedy"],
+								Tags: ["comedy horror", "horror comedy"],
 								SortBy: "Random",
 								SortOrder: "Ascending",
 								Limit: 50
