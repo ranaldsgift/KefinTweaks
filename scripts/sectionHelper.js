@@ -292,14 +292,14 @@
             return null;
         }
 
-        scheduleViewMoreUrl(sectionConfig);
-
         // External list (MDBList) — progressive for network fetch when caches are already ready
         if (Array.isArray(sectionConfig.externalListUrls) && sectionConfig.externalListUrls.length > 0) {
             if (!window.KefinExternalList?.resolveExternalListItems) {
                 WARN(`Section ${sectionConfig.id}: externalListUrls set but KefinExternalList unavailable`);
                 return null;
             }
+
+            scheduleViewMoreUrl(sectionConfig);
 
             let mappedDataPromise = null;
             const ensureData = () => {
@@ -350,6 +350,7 @@
         const userId = ApiClient.getCurrentUserId();
         const serverUrl = ApiClient.serverAddress();
 
+        // Initialize active query index before view-more resolution (multi-picker / random)
         const resolveQueries = window.cardBuilder?.resolveQueriesToLoad;
         const queriesToLoad = typeof resolveQueries === 'function'
             ? resolveQueries(sectionConfig, { initialize: true })
@@ -369,6 +370,8 @@
             const index = sectionConfig.queries.indexOf(queriesToLoad[0]);
             LOG(`Section ${sectionConfig.id}: useRandomQuery — selected query index ${index}`);
         }
+
+        scheduleViewMoreUrl(sectionConfig);
 
         const postProcess = (cfg, items) => {
             let postProcessedItems = items;
@@ -528,10 +531,32 @@
     }
 
     /**
-     * Resolve view more URL from queryOptions / known section ids
+     * Active query index for multi-query picker sections (falls back to 0).
+     */
+    function getActiveQueryIndexForViewMore(sectionConfig) {
+        const queries = sectionConfig?.queries || [];
+        if (queries.length <= 1) return 0;
+        if (sectionConfig.useMultiQueryPicker !== true) return 0;
+        const stored = sectionConfig._selectedQueryIndex;
+        if (Number.isInteger(stored) && stored >= 0 && stored < queries.length) {
+            return stored;
+        }
+        return 0;
+    }
+
+    /**
+     * Resolve view more URL from queryOptions / known section ids.
+     * Multi-query picker sections resolve from the active query (not always queries[0]).
      */
     async function resolveViewMoreUrl(sectionConfig) {
-        if (sectionConfig.viewMoreUrl) return sectionConfig.viewMoreUrl;
+        const queries = sectionConfig?.queries || [];
+        const isMultiPicker = sectionConfig?.useMultiQueryPicker === true && queries.length > 1;
+
+        // Section-level URL is authoritative for single-query sections only.
+        // Multi-picker keeps a cached sectionConfig.viewMoreUrl that goes stale on switch.
+        if (sectionConfig.viewMoreUrl && !isMultiPicker) {
+            return sectionConfig.viewMoreUrl;
+        }
 
         const { id } = sectionConfig;
 
@@ -565,10 +590,14 @@
             return null;
         }
 
-        // Infer from queries array
-        if (sectionConfig.queries && sectionConfig.queries.length > 0) {
-            const firstQuery = sectionConfig.queries[0];
-            const queryOptions = firstQuery.queryOptions || {};
+        // Infer from active query (multi-picker) or first query
+        if (queries.length > 0) {
+            const activeQuery = queries[getActiveQueryIndexForViewMore(sectionConfig)] || queries[0];
+            if (activeQuery?.viewMoreUrl) {
+                return activeQuery.viewMoreUrl;
+            }
+
+            const queryOptions = activeQuery.queryOptions || {};
             const serverId = window.ApiClient ? window.ApiClient.serverId() : '';
 
             // Check for Tags
@@ -612,17 +641,17 @@
             }
 
             // Check for custom path
-            if (firstQuery.path) {
+            if (activeQuery.path) {
                 // Derive URL from path if possible
-                if (firstQuery.path.includes('NextUp')) {
+                if (activeQuery.path.includes('NextUp')) {
                     return `#/tv.html?collectionType=tvshows&tab=1`;
                 }
-                if (firstQuery.path.includes('Upcoming')) {
+                if (activeQuery.path.includes('Upcoming')) {
                     return `#/tv.html?collectionType=tvshows&tab=2`;
                 }
                 // If query path is Items/itemid/Similar then return the details page for the item
-                if (firstQuery.path.includes('Similar')) {
-                    const itemId = firstQuery.path.split('/')[2];
+                if (activeQuery.path.includes('Similar')) {
+                    const itemId = activeQuery.path.split('/')[2];
                     return `#/details?id=${itemId}&serverId=${serverId}`;
                 }
             }

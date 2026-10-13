@@ -1792,6 +1792,8 @@
                 }
 
                 sectionConfig._selectedQueryIndex = index;
+                // Clear cached section URL so resolve uses the newly selected query
+                sectionConfig.viewMoreUrl = null;
 
                 const sectionIdAttr =
                     typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
@@ -1808,9 +1810,17 @@
                     livePicker.textContent = getMultiQueryPickerButtonLabel(sectionConfig);
                 }
                 updateSectionTitleText(activeSectionEl, getSectionTitleForMultiQuery(sectionConfig), getSectionCaption(sectionConfig));
-                updateSectionViewMoreLink(activeSectionEl, getActiveViewMoreUrl(sectionConfig));
 
                 try {
+                    let viewMoreUrl = getActiveViewMoreUrl(sectionConfig);
+                    if (!viewMoreUrl && typeof window.sectionHelper?.resolveViewMoreUrl === 'function') {
+                        viewMoreUrl = await window.sectionHelper.resolveViewMoreUrl(sectionConfig);
+                    }
+                    if (viewMoreUrl) {
+                        sectionConfig.viewMoreUrl = viewMoreUrl;
+                    }
+                    updateSectionViewMoreLink(activeSectionEl, viewMoreUrl || null);
+
                     const loaded = await loadActiveSectionQueryItems(sectionConfig);
                     let newContent = null;
 
