@@ -20,7 +20,7 @@ div#smart-search-wrapper:not([style*="display: none"]) ~ #jellyseerr-search-icon
 	height: 30px;
 }
 
-.smart-search-mode .searchFieldsInner {
+#searchPage .searchFieldsInner {
 	position: relative;
 }
 
