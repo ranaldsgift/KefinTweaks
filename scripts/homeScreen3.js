@@ -635,6 +635,66 @@
     }
     
 
+    // In-session home config snapshot (started early from home jobs; invalidated on pin/config mutations)
+    let homeScreenConfigGeneration = 0;
+    let homeScreenConfigPromise = null;
+    let homeScreenConfigResult = null;
+    let homeScreenConfigResultGeneration = -1;
+
+    function invalidateHomeScreenConfig(reason) {
+        homeScreenConfigGeneration += 1;
+        homeScreenConfigPromise = null;
+        LOG('Invalidated home screen config', reason || '');
+        // keep homeScreenConfigResult until a newer resolve replaces it (stale-ok for chrome/paint)
+    }
+
+    function ensureHomeScreenConfig() {
+        if (homeScreenConfigPromise) return homeScreenConfigPromise;
+        if (homeScreenConfigResult && homeScreenConfigResultGeneration === homeScreenConfigGeneration) {
+            return Promise.resolve(homeScreenConfigResult);
+        }
+
+        const gen = homeScreenConfigGeneration;
+        homeScreenConfigPromise = (async () => {
+            const userHomeConfig = window.KefinUserHomeScreenConfig;
+            let filteredHomeSections;
+            let homeScreen;
+            let userDisplayPreferences = null;
+
+            if (typeof userHomeConfig?.getConfig === 'function') {
+                const userConfig = await userHomeConfig.getConfig();
+                filteredHomeSections = userConfig.sections || [];
+                homeScreen = userConfig.homeScreen;
+                userDisplayPreferences = await state.getDisplayPrefernces();
+            } else {
+                const mergedHomeSections = await mergeHomeSectionConfigs();
+                userDisplayPreferences = await state.getDisplayPrefernces();
+                const customPrefs = userDisplayPreferences?.CustomPrefs || {};
+                homeScreen = userHomeConfig.parseKefinTweaksHomeScreen(customPrefs);
+                const pinnedSections = userHomeConfig.buildPinnedSectionConfigs(homeScreen);
+
+                const serverSectionsById = new Map();
+                mergedHomeSections.forEach(section => {
+                    if (section?.id) serverSectionsById.set(section.id, section);
+                });
+
+                filteredHomeSections = [...mergedHomeSections, ...pinnedSections];
+                filteredHomeSections = userHomeConfig.applyUserSectionOverrides(filteredHomeSections, homeScreen, { serverSectionsById });
+                filteredHomeSections = filteredHomeSections.filter(section => section.enabled !== false);
+            }
+
+            const result = { filteredHomeSections, homeScreen, userDisplayPreferences };
+            if (gen !== homeScreenConfigGeneration) return homeScreenConfigResult;
+            homeScreenConfigResult = result;
+            homeScreenConfigResultGeneration = gen;
+            return result;
+        })().finally(() => {
+            if (gen === homeScreenConfigGeneration) homeScreenConfigPromise = null;
+        });
+
+        return homeScreenConfigPromise;
+    }
+
     /**
      * Main Entry Point
      */
@@ -645,12 +705,9 @@
         // Defer mountCategoryRail until pinned availability is known (avoids first-load tab jump)
         syncHomeScreenChromeVisibility();
 
-        // Reset cache for a new initialization cycle
-        sectionCache.renderedSections = [];
-        sectionCache.fragmentCache = null;
-        sectionCache.isInitialRender = true;
-        sectionCache.jellyfinHasRendered = false;
-        
+        // Kick config prep early so it overlaps any DOM wait (job may have already started this)
+        ensureHomeScreenConfig();
+
         const container = document.querySelector(HOME_SECTIONS_SELECTOR);
         if (!container) {
             LOG('Home sections container not found');
@@ -659,19 +716,6 @@
         }
 
         disconnectHomeSectionsReadyObserver();
-
-        // Create Kefin home sections container as a sibling of the Jellyfin sections container
-/*         let kefinHomeSectionsContainer = document.querySelector('.homePage:not(.hide) #homeTab .kefinHomeSectionsContainer');
-        if (!kefinHomeSectionsContainer) {
-            kefinHomeSectionsContainer = document.createElement('div');
-            kefinHomeSectionsContainer.className = 'sections homeSectionsContainer kefinHomeSectionsContainer';
-            if (container.parentNode) {
-                container.parentNode.insertBefore(kefinHomeSectionsContainer, container.nextSibling);
-            } else {
-                LOG('Sections container has no parent node; appending Kefin container to body as fallback');
-                document.body.appendChild(kefinHomeSectionsContainer);
-            }
-        } */
 
         // If Home-category sections already exist, avoid re-running full init.
         // Discovery-only remounts (e.g. back to Discover) must not skip home render.
@@ -693,35 +737,10 @@
             return;
         }
 
-        // Fetch display preferences
-        //state.userDisplayPreferences = await fetchDisplayPreferences();
-
-        // Load user preferences and apply filtering/ordering
-        const userHomeConfig = window.KefinUserHomeScreenConfig;
-        let filteredHomeSections;
-        let homeScreen;
-        let userDisplayPreferences = null;
-
-        if (typeof userHomeConfig?.getConfig === 'function') {
-            const userConfig = await userHomeConfig.getConfig();
-            filteredHomeSections = userConfig.sections || [];
-            homeScreen = userConfig.homeScreen;
-            userDisplayPreferences = await state.getDisplayPrefernces();
-        } else {
-            const mergedHomeSections = await mergeHomeSectionConfigs();
-            userDisplayPreferences = await state.getDisplayPrefernces();
-            const customPrefs = userDisplayPreferences?.CustomPrefs || {};
-            homeScreen = userHomeConfig.parseKefinTweaksHomeScreen(customPrefs);
-            const pinnedSections = userHomeConfig.buildPinnedSectionConfigs(homeScreen);
-
-            const serverSectionsById = new Map();
-            mergedHomeSections.forEach(section => {
-                if (section?.id) serverSectionsById.set(section.id, section);
-            });
-
-            filteredHomeSections = [...mergedHomeSections, ...pinnedSections];
-            filteredHomeSections = userHomeConfig.applyUserSectionOverrides(filteredHomeSections, homeScreen, { serverSectionsById });
-            filteredHomeSections = filteredHomeSections.filter(section => section.enabled !== false);
+        const { filteredHomeSections, homeScreen } = await ensureHomeScreenConfig();
+        if (!filteredHomeSections) {
+            WARN('Home screen config unavailable');
+            return;
         }
 
         updatePinnedCategoryAvailability(filteredHomeSections, homeScreen);
@@ -736,50 +755,6 @@
         state.kefinContinueWatching = continueWatchingSectionConfig?.enabled === true || continueWatchingAndNextUpSectionConfig?.enabled === true;
         state.kefinLatestMedia = recentlyAddedSectionConfig?.enabled === true;
 
-        // Set up mutation observer BEFORE rendering, so we can react when Jellyfin renders home sections
-/*         const handleJellyfinRender = async () => {
-            const jellyHome = document.querySelector('.homePage:not(.hide) #homeTab .homeSectionsContainer');
-            const kefinHome = document.querySelector('.homePage:not(.hide) #homeTab .kefinHomeSectionsContainer');
-
-            if (!jellyHome || !kefinHome) {
-                LOG('Jellyfin render detected but required containers not found; skipping Jellyfin section mirroring');
-                return;
-            }
-
-            // Disconnect any pending "wait for children" observers from a previous run
-            sectionCache.pendingJellyfinSectionObservers.forEach(obs => { try { obs.disconnect(); } catch (_) {} });
-            sectionCache.pendingJellyfinSectionObservers = [];
-
-            // Remove any previously cloned Jellyfin sections from our container
-            kefinHome.querySelectorAll('[data-jellyfin-section-clone="true"]').forEach(el => el.remove());
-
-            // Copy Jellyfin .sectionN containers into the Kefin container (clone now if has children; else observe until children appear if in jellyfinOrders)
-            const jellySections = jellyHome.querySelectorAll('.section0, .section1, .section2, .section3, .section4, .section5, .section6, .section7, .section8');
-
-            jellySections.forEach(sectionEl => {
-                const sectionIndex = getSectionIndexFromElement(sectionEl);
-                const homesectionKey = sectionIndex >= 0 ? `homesection${sectionIndex}` : null;
-                if (sectionHasAllItemsContainersPopulated(sectionEl)) {
-                    const clone = sectionEl.cloneNode(true);
-                    clone.dataset.jellyfinSectionClone = 'true';
-                    kefinHome.appendChild(clone);
-                } else if (homesectionKey && state.jellyfinOrders[homesectionKey] !== undefined) {
-                    observeSectionUntilChildrenThenClone(sectionEl, kefinHome);
-                }
-            });
-        }; */
-
-        //let containerForRender = container;
-
-/*         if (!container.classList.contains('homeSectionsContainer')) {
-            const observer = observeContainerMutations(container, handleJellyfinRender);
-            containerForRender = kefinHomeSectionsContainer;
-        } */
-
-        // Set flag to indicate we've started initializing this container
-        //containerForRender.dataset.kefinHomeScreen = 'true';
-
-        // Initial render directly into Kefin container (no waiting for Jellyfin)
         LOG('Rendering Standard/Seasonal Sections (initial render)...');
         await renderHomeSections(filteredHomeSections, container, false);
 
@@ -791,15 +766,6 @@
         } catch (err) {
             ERR('Failed to refresh home category chrome after home render:', err);
         }
-
-        /* // If Jellyfin hasn't rendered after 5 seconds, assume it won't and clean up the observer
-        setTimeout(() => {
-            if (!sectionCache.jellyfinHasRendered && observer) {
-                LOG('Jellyfin render timeout - assuming native sections disabled');
-                sectionCache.jellyfinHasRendered = true;
-                observer.disconnect();
-            }
-        }, 5000); */
     }
 
     function getHomeScreenConfig() {
@@ -1269,11 +1235,14 @@
             applyActiveHomeCategory(homeChromeActiveCategory || 'none');
             syncHomeScreenChromeVisibility();
 
-            const sectionsToRender = [];
+            let sectionPromises;
 
             if (useCache && sectionCache.renderedSections.length > 0) {
                 LOG('Re-rendering home sections from cache');
-                sectionsToRender.push(...sectionCache.renderedSections);
+                // Cache holds configs; restart load promises for progressive paint
+                sectionPromises = sectionCache.renderedSections.map((sectionConfig) =>
+                    loadSectionForRendering(sectionConfig).then((s) => s || null)
+                );
             } else {
                 const sortedSections = [...sections].sort((a, b) => {
                     const orderA = (a.order !== undefined && a.order !== null) ? a.order : 99;
@@ -1281,7 +1250,8 @@
                     return orderA - orderB;
                 });
 
-                const sectionPromises = [];
+                sectionPromises = [];
+                const configsForCache = [];
 
                 for (const sectionConfig of sortedSections) {
                     if (sectionConfig.enabled === false) {
@@ -1306,16 +1276,13 @@
                         continue;
                     }
 
-                    sectionPromises.push(loadSectionForRendering(sectionConfig));
+                    configsForCache.push(sectionConfig);
+                    // Start all stubs now; renderProgressiveSections awaits each in order for streamed paint
+                    sectionPromises.push(loadSectionForRendering(sectionConfig).then((s) => s || null));
                 }
 
-                // Resolve all section promises
-                let sectionResults = await Promise.all(sectionPromises);
-                sectionResults = sectionResults.filter(result => result !== null);
-                sectionsToRender.push(...sectionResults);
-
-                // Cache the rendered sections for potential re-render after Jellyfin overwrites the container
-                sectionCache.renderedSections = [...sectionsToRender];
+                // Configs only — re-entry helpers / useCache restart loadSectionForRendering
+                sectionCache.renderedSections = configsForCache;
             }
 
             const homeConfig = await window.KefinHomeScreen.getConfig();
@@ -1328,7 +1295,7 @@
                 return;
             }
 
-            await window.cardBuilder.renderProgressiveSections(targetContainer, sectionsToRender, {
+            await window.cardBuilder.renderProgressiveSections(targetContainer, sectionPromises, {
                 waitForContainerClass: 'homeSectionsContainer',
                 showStaleDataBeforeRefresh,
                 enhanceOnVisible: true,
@@ -1985,6 +1952,7 @@
         sectionCache.renderedSections = [];
         sectionCache.fragmentCache = null;
         sectionCache.isInitialRender = true;
+        invalidateHomeScreenConfig('refreshHomeSections');
 
         return enqueueHomeViewJob({ type: 'home', hash: window.location.hash || '' });
     }
@@ -2810,6 +2778,8 @@
                         return;
                     }
 
+                    // Start config prep before enhance waits on the sections container
+                    ensureHomeScreenConfig();
                     void manageBodyClasses().catch((err) => {
                         ERR('manageBodyClasses failed:', err);
                     });

@@ -2461,6 +2461,8 @@
                 const sectionPromiseDuration = sectionPromiseEndTime - sectionPromiseStartTime;
                 console.log(`Section promise initialization time: ${sectionPromiseDuration.toFixed(2)}ms`);
 
+                if (!section) continue;
+
                 const sectionStartTime = performance.now();
 
                 const sectionConfig = section.config;
