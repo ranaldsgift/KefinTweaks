@@ -2113,17 +2113,22 @@
     }
 
     let cardUserDataListenerStarted = false;
+    let cardLibraryChangedListenerStarted = false;
+    let pendingLibraryUpdatedIds = new Set();
+    let libraryUpdatedFlushTimer = null;
+    const LIBRARY_UPDATED_DEBOUNCE_MS = 400;
+    // Match apiHelper DEFAULT_ITEM_FIELDS so rebuilt cards keep aspect/overlays/indicators.
+    const LIVE_SYNC_ITEM_FIELDS =
+        'PrimaryImageAspectRatio,DateCreated,Overview,Taglines,ProductionYear,RecursiveItemCount,ChildCount,UserData,ProviderIds,MediaSourceCount';
+
+    function escapeCssIdentForCardSync(value) {
+        return typeof CSS !== 'undefined' && CSS.escape
+            ? CSS.escape(String(value))
+            : String(value).replace(/["\\]/g, '\\$&');
+    }
 
     function getPrimaryUserIdForCardSync() {
         return typeof ApiClient !== 'undefined' && typeof ApiClient.getCurrentUserId === 'function' ? ApiClient.getCurrentUserId() : null;
-    }
-
-    function extractUserDataChangePayload(event) {
-        const data = event?.detail ?? event;
-        const userId = data?.Data?.UserId ?? data?.UserId ?? null;
-        const list = data?.Data?.UserDataList ?? data?.UserDataList;
-        if (!Array.isArray(list)) return { userId, entries: [] };
-        return { userId, entries: list };
     }
 
     function isPrimaryUserDataChange(userId) {
@@ -2140,8 +2145,7 @@
     function updateCardResumeAttributes(itemId, userData) {
         if (!itemId || !userData) return;
 
-        const escapedId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(itemId) : itemId.replace(/["\\]/g, '\\$&');
-        const cards = document.querySelectorAll(`.card[data-id="${escapedId}"]`);
+        const cards = findVisibleCardsForItemId(itemId);
         if (!cards.length) return;
 
         const ticks = userData.PlaybackPositionTicks;
@@ -2169,10 +2173,12 @@
             likedHelper.set(itemId, isLiked);
         }
 
-        const escapedId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(itemId) : itemId.replace(/["\\]/g, '\\$&');
-        document.querySelectorAll(`.watchlist-button[data-id="${escapedId}"]`).forEach((button) => {
-            button.dataset.active = isLiked ? 'true' : 'false';
-            button.title = isLiked ? 'Remove from Watchlist' : 'Add to Watchlist';
+        itemIdDomVariants(itemId).forEach((variant) => {
+            const escapedId = escapeCssIdentForCardSync(variant);
+            document.querySelectorAll(`.watchlist-button[data-id="${escapedId}"]`).forEach((button) => {
+                button.dataset.active = isLiked ? 'true' : 'false';
+                button.title = isLiked ? 'Remove from Watchlist' : 'Add to Watchlist';
+            });
         });
     }
 
@@ -2186,39 +2192,516 @@
         });
     }
 
-    function handleCardUserDataChangedEvent(event) {
-        const { userId, entries } = extractUserDataChangePayload(event);
-        if (!entries.length) return;
-        applyUserDataEntriesToCards(entries, userId);
-    }
-
     function startCardUserDataListener() {
         if (cardUserDataListenerStarted) return;
 
-        let registered = false;
-
-        if (window.ApiClient?.addEventListener) {
-            window.ApiClient.addEventListener('userdatachanged', handleCardUserDataChangedEvent);
-            registered = true;
-        }
-
-        if (window.websocketHelper?.listen) {
-            window.websocketHelper.listen('UserDataChanged', (msg) => {
-                const userId = msg?.Data?.UserId;
-                const entries = msg?.Data?.UserDataList;
-                if (!Array.isArray(entries) || !entries.length) return;
-                applyUserDataEntriesToCards(entries, userId);
-            });
-            registered = true;
-        }
-
-        if (registered) {
-            cardUserDataListenerStarted = true;
-            console.log('[KefinTweaks CardBuilder] Listening for UserDataChanged to sync card resume attributes');
+        if (!window.websocketHelper?.listen) {
+            setTimeout(startCardUserDataListener, 1000);
             return;
         }
 
-        setTimeout(startCardUserDataListener, 1000);
+        window.websocketHelper.listen('UserDataChanged', (msg) => {
+            const userId = msg?.Data?.UserId;
+            const entries = msg?.Data?.UserDataList;
+            if (!Array.isArray(entries) || !entries.length) return;
+            applyUserDataEntriesToCards(entries, userId);
+        });
+        cardUserDataListenerStarted = true;
+        console.log('[KefinTweaks CardBuilder] Listening for UserDataChanged to sync card resume attributes');
+    }
+
+    function liveSyncLog(...args) {
+        console.log('[KefinTweaks CardBuilder][LiveSync]', ...args);
+    }
+
+    function liveSyncWarn(...args) {
+        console.warn('[KefinTweaks CardBuilder][LiveSync]', ...args);
+    }
+
+    /** Strip GUID dashes for comparison (server LibraryChanged often uses "N" format). */
+    function normalizeItemIdKey(id) {
+        return String(id || '')
+            .replace(/-/g, '')
+            .toLowerCase();
+    }
+
+    /** Candidate data-id strings for DOM queries (dashed + undashed). */
+    function itemIdDomVariants(id) {
+        const raw = String(id || '').trim();
+        if (!raw) return [];
+        const variants = new Set([raw]);
+        const naked = normalizeItemIdKey(raw);
+        if (/^[0-9a-f]{32}$/.test(naked)) {
+            variants.add(naked);
+            variants.add(
+                `${naked.slice(0, 8)}-${naked.slice(8, 12)}-${naked.slice(12, 16)}-${naked.slice(16, 20)}-${naked.slice(20)}`,
+            );
+        }
+        return Array.from(variants);
+    }
+
+    function findVisibleCardsForItemId(itemId) {
+        if (!itemId) return [];
+        const found = new Set();
+        itemIdDomVariants(itemId).forEach((variant) => {
+            const escapedId = escapeCssIdentForCardSync(variant);
+            document.querySelectorAll(`.card[data-id="${escapedId}"]:not(.skeleton-card)`).forEach((card) => {
+                found.add(card);
+            });
+        });
+        return Array.from(found);
+    }
+
+    function resolveCardRebuildArgs(card) {
+        const sectionEl = card?.closest?.('[data-section-id]');
+        const sectionId = sectionEl?.getAttribute('data-section-id') || sectionEl?.dataset?.sectionId || null;
+        const runtimeCfg = sectionId ? window.KefinHomeScreenSectionRuntime?.get?.(sectionId)?.effectiveConfig : null;
+
+        const cardFormat = sectionEl?.getAttribute('data-card-format') || runtimeCfg?.cardFormat || null;
+
+        let overflowCard;
+        if (runtimeCfg && typeof runtimeCfg.overflowCard === 'boolean') {
+            overflowCard = runtimeCfg.overflowCard;
+        } else if (/\boverflow(?:Portrait|Backdrop|Square|Banner)Card\b/.test(card?.className || '')) {
+            overflowCard = true;
+        } else if (/\b(?:portrait|backdrop|square|banner)Card\b/.test(card?.className || '')) {
+            overflowCard = false;
+        } else {
+            // Home rows default to overflow sizing.
+            overflowCard = true;
+        }
+
+        const useParentCard = !!runtimeCfg?.useParentCard;
+        const borderStyle =
+            runtimeCfg?.borderStyle || sectionEl?.dataset?.borderStyle || sectionEl?.dataset?.border || null;
+
+        return { cardFormat, overflowCard, useParentCard, borderStyle, sectionId };
+    }
+
+    /** Image tags the card builder may put in data-src (any format / fallback path). */
+    function collectItemImageTagsForLiveSync(item) {
+        const tags = new Set();
+        const add = (t) => {
+            if (t != null && t !== '') tags.add(String(t));
+        };
+        const it = item?.ImageTags;
+        if (it) {
+            add(it.Primary);
+            add(it.Thumb);
+            add(it.Logo);
+            add(it.Banner);
+            add(it.Art);
+            add(it.Disc);
+        }
+        add(item?.BackdropImageTags?.[0]);
+        add(item?.PrimaryImageTag);
+        add(item?.SeriesPrimaryImageTag);
+        add(item?.SeriesThumbImageTag);
+        add(item?.ParentThumbImageTag);
+        add(item?.ParentBackdropImageTags?.[0]);
+        add(item?.ParentPrimaryImageTag);
+        add(item?.ParentLogoImageTag);
+        return tags;
+    }
+
+    function extractTagFromImageUrl(url) {
+        if (!url) return '';
+        try {
+            const m = String(url).match(/[?&]tag=([^&]*)/i);
+            return m?.[1] ? decodeURIComponent(m[1]) : '';
+        } catch (e) {
+            return '';
+        }
+    }
+
+    /**
+     * Skip DOM replace when painted card signals already match the fresh item.
+     * Compares name, image tag in data-src, resume ticks, played / unplayed indicators.
+     */
+    function cardNeedsLiveSyncRebuild(oldCard, freshItem) {
+        if (!oldCard || !freshItem) return false;
+
+        const img =
+            oldCard.querySelector?.('.cardImageContainer[data-src]') ||
+            oldCard.querySelector?.('.cardImageContainer') ||
+            null;
+        const dataSrc = img?.getAttribute('data-src') || '';
+        const paintedTag = extractTagFromImageUrl(dataSrc);
+        const paintedName = (img?.getAttribute('aria-label') || '').trim();
+        const paintedTicks = oldCard.getAttribute('data-positionticks') || '';
+        const paintedPlayed = !!oldCard.querySelector?.('.playedIndicator');
+        const paintedUnplayed = (oldCard.querySelector?.('.countIndicator.indicator')?.textContent || '').trim();
+        const paintedMediaSources = (oldCard.querySelector?.('.mediaSourceIndicator')?.textContent || '').trim();
+
+        const expectedName = String(freshItem.Name || 'Unknown').trim();
+        const nameChanged = paintedName !== expectedName && paintedName !== String(freshItem.Name || '').trim();
+
+        const freshTags = collectItemImageTagsForLiveSync(freshItem);
+        const hadImage = !!dataSrc;
+        const hasImageTags = freshTags.size > 0;
+        let imageChanged = false;
+        if (paintedTag) {
+            // Painted tag no longer on the item → artwork changed for this card.
+            imageChanged = !freshTags.has(paintedTag);
+        } else if (!hadImage && hasImageTags) {
+            imageChanged = true;
+        } else if (hadImage && !hasImageTags) {
+            imageChanged = true;
+        }
+
+        const freshPlayed = freshItem.UserData?.Played === true;
+        const freshTicks =
+            !freshPlayed && typeof freshItem.UserData?.PlaybackPositionTicks === 'number' && freshItem.UserData.PlaybackPositionTicks > 0
+                ? String(freshItem.UserData.PlaybackPositionTicks)
+                : '';
+        const ticksChanged = paintedTicks !== freshTicks;
+        const playedChanged = paintedPlayed !== freshPlayed;
+
+        const freshUnplayed =
+            freshItem.UserData?.UnplayedItemCount && freshItem.UserData.UnplayedItemCount > 0
+                ? String(freshItem.UserData.UnplayedItemCount)
+                : '';
+        const unplayedChanged = paintedUnplayed !== freshUnplayed;
+
+        const freshMediaSources =
+            typeof freshItem.MediaSourceCount === 'number' && freshItem.MediaSourceCount > 1
+                ? String(freshItem.MediaSourceCount)
+                : '';
+        const mediaSourcesChanged = paintedMediaSources !== freshMediaSources;
+
+        const needs = nameChanged || imageChanged || ticksChanged || playedChanged || unplayedChanged || mediaSourcesChanged;
+        if (!needs) {
+            liveSyncLog('Skipping rebuild — no significant painted changes', {
+                itemId: freshItem.Id,
+                name: expectedName,
+                paintedTag,
+            });
+        }
+        return needs;
+    }
+
+    function replaceVisibleCardWithFreshItem(oldCard, freshItem) {
+        if (!oldCard || !freshItem) return false;
+        if (!cardNeedsLiveSyncRebuild(oldCard, freshItem)) return false;
+
+        const { cardFormat, overflowCard, useParentCard, borderStyle, sectionId } = resolveCardRebuildArgs(oldCard);
+        liveSyncLog('Rebuilding card', {
+            itemId: freshItem.Id,
+            name: freshItem.Name,
+            sectionId,
+            cardFormat,
+            overflowCard,
+            useParentCard,
+            borderStyle,
+            imagePrimaryTag: freshItem.ImageTags?.Primary || null,
+        });
+        const next = createCardElement(
+            freshItem,
+            overflowCard,
+            cardFormat,
+            freshItem.cardFooter || freshItem.CustomFooterText || null,
+            useParentCard,
+            borderStyle,
+        );
+        const index = oldCard.getAttribute('data-index');
+        if (index != null) next.setAttribute('data-index', index);
+
+        const hadFocus = document.activeElement === oldCard;
+        oldCard.replaceWith(next);
+        // New card has data-src + .lazy but is not in any IntersectionObserver yet.
+        registerLazyImagesIn(next);
+        if (hadFocus && typeof next.focus === 'function') {
+            try {
+                next.focus({ preventScroll: true });
+            } catch (e) {
+                next.focus();
+            }
+        }
+        return true;
+    }
+
+    async function flushVisibleCardLibraryUpdates() {
+        libraryUpdatedFlushTimer = null;
+        const ids = Array.from(pendingLibraryUpdatedIds);
+        pendingLibraryUpdatedIds.clear();
+        liveSyncLog('Flush start', { pendingIds: ids });
+        if (!ids.length) return;
+
+        const matchCounts = {};
+        const idsToFetch = ids.filter((id) => {
+            const count = findVisibleCardsForItemId(id).length;
+            matchCounts[id] = count;
+            return count > 0;
+        });
+        liveSyncLog('Visible card matches', matchCounts);
+
+        if (!idsToFetch.length) {
+            liveSyncLog('No on-page cards for updated ids — skipping fetch');
+            return;
+        }
+
+        if (typeof ApiClient === 'undefined' || typeof ApiClient.getItems !== 'function') {
+            liveSyncWarn('ApiClient.getItems unavailable — cannot refresh cards');
+            return;
+        }
+
+        const userId = ApiClient.getCurrentUserId?.();
+        liveSyncLog('Fetching items', { userId, idsToFetch, fields: LIVE_SYNC_ITEM_FIELDS });
+
+        try {
+            const response = await ApiClient.getItems(userId, {
+                Ids: idsToFetch.join(','),
+                Recursive: false,
+                Fields: LIVE_SYNC_ITEM_FIELDS,
+            });
+            const itemsById = new Map();
+            (response?.Items || []).forEach((item) => {
+                if (!item?.Id) return;
+                itemsById.set(normalizeItemIdKey(item.Id), item);
+            });
+            liveSyncLog('Fetch result', {
+                requested: idsToFetch.length,
+                returned: itemsById.size,
+                itemSummaries: Array.from(itemsById.values()).map((item) => ({
+                    id: item.Id,
+                    name: item.Name,
+                    primaryTag: item.ImageTags?.Primary || null,
+                })),
+            });
+
+            let rebuilt = 0;
+            let skipped = 0;
+            idsToFetch.forEach((id) => {
+                const freshItem = itemsById.get(normalizeItemIdKey(id));
+                if (!freshItem) {
+                    liveSyncWarn('Item missing from getItems response', id);
+                    return;
+                }
+                const cards = findVisibleCardsForItemId(id);
+                liveSyncLog('Replacing cards for item', { id, cardCount: cards.length });
+                cards.forEach((card) => {
+                    if (replaceVisibleCardWithFreshItem(card, freshItem)) rebuilt += 1;
+                    else skipped += 1;
+                });
+            });
+            liveSyncLog('Flush complete', { rebuilt, skipped });
+        } catch (err) {
+            console.error('[KefinTweaks CardBuilder][LiveSync] Visible card live sync failed:', err);
+        }
+    }
+
+    function queueLibraryUpdatedItemIds(ids, source = 'unknown') {
+        if (!Array.isArray(ids) || !ids.length) return;
+        const before = pendingLibraryUpdatedIds.size;
+        ids.forEach((id) => {
+            if (id == null || id === '') return;
+            pendingLibraryUpdatedIds.add(String(id));
+        });
+        liveSyncLog('Queued item ids', {
+            source,
+            incoming: ids.map(String),
+            pendingSizeBefore: before,
+            pendingSizeAfter: pendingLibraryUpdatedIds.size,
+            debounceMs: LIBRARY_UPDATED_DEBOUNCE_MS,
+        });
+        if (libraryUpdatedFlushTimer) clearTimeout(libraryUpdatedFlushTimer);
+        libraryUpdatedFlushTimer = setTimeout(flushVisibleCardLibraryUpdates, LIBRARY_UPDATED_DEBOUNCE_MS);
+    }
+
+    function handleLibraryChangedMessage(msg) {
+        const data = msg?.Data ?? msg;
+        const updated = data?.ItemsUpdated;
+        const dataKeys = data && typeof data === 'object' ? Object.keys(data) : [];
+        liveSyncLog('LibraryChanged received', {
+            deliveryMode: window.websocketHelper?.getDeliveryMode?.() || null,
+            messageType: msg?.MessageType,
+            dataKeys,
+            itemsUpdatedType: Array.isArray(updated) ? 'array' : typeof updated,
+            itemsUpdatedCount: Array.isArray(updated) ? updated.length : null,
+            itemsUpdated: Array.isArray(updated) ? updated : updated,
+            itemsAdded: data?.ItemsAdded,
+            itemsRemoved: data?.ItemsRemoved,
+        });
+        if (!Array.isArray(updated) || !updated.length) {
+            liveSyncLog('Ignoring LibraryChanged — ItemsUpdated empty or not an array');
+            return;
+        }
+        queueLibraryUpdatedItemIds(updated, 'LibraryChanged.ItemsUpdated');
+    }
+
+    function startCardLibraryChangedListener() {
+        if (cardLibraryChangedListenerStarted) return;
+
+        if (!window.websocketHelper?.listen) {
+            liveSyncLog('websocketHelper not ready — retrying listener in 1s');
+            setTimeout(startCardLibraryChangedListener, 1000);
+            return;
+        }
+
+        window.websocketHelper.listen('LibraryChanged', handleLibraryChangedMessage);
+        cardLibraryChangedListenerStarted = true;
+        liveSyncLog('Listening for LibraryChanged to sync visible card metadata', {
+            deliveryMode: window.websocketHelper?.getDeliveryMode?.() || 'pending',
+        });
+    }
+
+    let cardEditorCloseLiveSyncStarted = false;
+    const editorDialogDirty = new WeakMap();
+
+    function isImageEditorDialog(dlg) {
+        if (!dlg?.querySelector) return false;
+        return !!(dlg.querySelector('.imageEditorCard') || dlg.querySelector('#images') || dlg.querySelector('#backdrops'));
+    }
+
+    function isMetadataEditorDialog(dlg) {
+        if (!dlg?.querySelector) return false;
+        if (isImageEditorDialog(dlg)) return false;
+        return !!(
+            dlg.querySelector('.metadataEditor') ||
+            dlg.querySelector('#metadataEditor') ||
+            dlg.querySelector('.metadataEditorContent') ||
+            dlg.querySelector('form.metadataEditorForm') ||
+            dlg.querySelector('.btnSaveMetadata, #btnSaveMetadata')
+        );
+    }
+
+    function resolveEditorDialogItemId(dlg) {
+        if (!dlg) return null;
+        const fromCard = dlg.querySelector?.('.imageEditorCard[data-id], [data-id][data-imagetype], [data-itemid]');
+        const attrId =
+            fromCard?.getAttribute('data-id') ||
+            fromCard?.getAttribute('data-itemid') ||
+            dlg.getAttribute?.('data-itemid') ||
+            dlg.getAttribute?.('data-id') ||
+            dlg.dataset?.itemId ||
+            null;
+        if (attrId) return attrId;
+
+        try {
+            const hash = String(window.location.hash || '');
+            const match = hash.match(/[?&]id=([^&]+)/i);
+            if (match?.[1]) return decodeURIComponent(match[1]);
+        } catch (e) {
+            // ignore
+        }
+        return null;
+    }
+
+    function markEditorDialogDirty(dlg) {
+        if (!dlg) return;
+        editorDialogDirty.set(dlg, true);
+    }
+
+    function handleEditorDialogClose(dlg) {
+        if (!dlg) return;
+        const isImage = isImageEditorDialog(dlg);
+        const isMeta = isMetadataEditorDialog(dlg);
+        if (!isImage && !isMeta) return;
+
+        const dirty = editorDialogDirty.get(dlg) === true;
+        // Mirror imageeditor hasChanges: only rebuild when the dialog was dirtied while open.
+        if (!dirty) {
+            liveSyncLog('Editor closed without changes — skip rebuild', {
+                kind: isImage ? 'image' : 'metadata',
+            });
+            return;
+        }
+
+        const itemId = resolveEditorDialogItemId(dlg);
+        if (!itemId) {
+            liveSyncWarn('Editor closed but could not resolve item id');
+            return;
+        }
+
+        liveSyncLog('Editor closed — queueing live sync', {
+            itemId,
+            kind: isImage ? 'image' : 'metadata',
+            dirty,
+        });
+        queueLibraryUpdatedItemIds([itemId], isImage ? 'imageEditor.close' : 'metadataEditor.close');
+    }
+
+    function watchEditorDialog(dlg) {
+        if (!dlg || dlg.__kefinLiveSyncWatched) return;
+        if (!isImageEditorDialog(dlg) && !isMetadataEditorDialog(dlg)) return;
+
+        dlg.__kefinLiveSyncWatched = true;
+        editorDialogDirty.set(dlg, false);
+
+        if (isImageEditorDialog(dlg)) {
+            // imageeditor.js mutates #images during initial reload — ignore until settled.
+            let armed = false;
+            const armTimer = setTimeout(() => {
+                armed = true;
+                editorDialogDirty.set(dlg, false);
+            }, 800);
+            dlg.__kefinLiveSyncArmTimer = armTimer;
+
+            const mo = new MutationObserver(() => {
+                if (!armed) return;
+                markEditorDialogDirty(dlg);
+            });
+            const images = dlg.querySelector('#images') || dlg.querySelector('#backdrops') || dlg;
+            try {
+                mo.observe(images, {
+                    childList: true,
+                    subtree: true,
+                    attributes: true,
+                    attributeFilter: ['data-src', 'style', 'src'],
+                });
+            } catch (e) {
+                mo.observe(dlg, { childList: true, subtree: true });
+            }
+            dlg.__kefinLiveSyncMo = mo;
+        } else if (isMetadataEditorDialog(dlg)) {
+            const onFieldEdit = () => markEditorDialogDirty(dlg);
+            dlg.addEventListener('input', onFieldEdit, true);
+            dlg.addEventListener('change', onFieldEdit, true);
+            dlg.__kefinLiveSyncFieldEdit = onFieldEdit;
+        }
+
+        const onClose = () => {
+            if (dlg.__kefinLiveSyncArmTimer) {
+                clearTimeout(dlg.__kefinLiveSyncArmTimer);
+            }
+            if (dlg.__kefinLiveSyncFieldEdit) {
+                dlg.removeEventListener('input', dlg.__kefinLiveSyncFieldEdit, true);
+                dlg.removeEventListener('change', dlg.__kefinLiveSyncFieldEdit, true);
+            }
+            try {
+                dlg.__kefinLiveSyncMo?.disconnect?.();
+            } catch (e) {
+                // ignore
+            }
+            handleEditorDialogClose(dlg);
+            dlg.removeEventListener('close', onClose);
+        };
+        dlg.addEventListener('close', onClose);
+
+        liveSyncLog('Watching editor dialog for close', {
+            image: isImageEditorDialog(dlg),
+            metadata: isMetadataEditorDialog(dlg),
+            itemId: resolveEditorDialogItemId(dlg),
+        });
+    }
+
+    function startCardEditorCloseLiveSync() {
+        if (cardEditorCloseLiveSyncStarted) return;
+        cardEditorCloseLiveSyncStarted = true;
+
+        document.querySelectorAll('.formDialog').forEach((dlg) => watchEditorDialog(dlg));
+
+        const bodyObserver = new MutationObserver((mutations) => {
+            mutations.forEach((m) => {
+                m.addedNodes.forEach((node) => {
+                    if (!(node instanceof HTMLElement)) return;
+                    if (node.matches?.('.formDialog')) watchEditorDialog(node);
+                    node.querySelectorAll?.('.formDialog').forEach((dlg) => watchEditorDialog(dlg));
+                });
+            });
+        });
+        bodyObserver.observe(document.body, { childList: true, subtree: true });
+        liveSyncLog('Editor-close live sync observer started');
     }
 
     // Main card builder object
@@ -9996,6 +10479,8 @@
             await window.userHelper.waitForLogin();
         }
         startCardUserDataListener();
+        startCardLibraryChangedListener();
+        startCardEditorCloseLiveSync();
         try {
             const userId = typeof ApiClient !== 'undefined' && ApiClient.getCurrentUserId ? ApiClient.getCurrentUserId() : null;
             if (userId) {
