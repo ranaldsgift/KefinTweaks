@@ -654,6 +654,10 @@
                 url: [
                     {
                         majorServerVersions: [10],
+                        urls: ['https://cdn.jsdelivr.net/gh/MakD/zombie-release@latest/graveyard/zombie-min-git.css']
+                    },
+                    {
+                        majorServerVersions: [12],
                         urls: ['https://cdn.jsdelivr.net/gh/MakD/zombie-release@latest/zombie_revived.css']
                     }
                 ],
