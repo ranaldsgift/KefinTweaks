@@ -214,6 +214,12 @@
         };
     }
 
+    function getSearchCardFormat(itemType) {
+        if (itemType === 'Episode') return 'Thumb';
+        if (itemType === 'MusicArtist' || itemType === 'Audio' || itemType === 'MusicAlbum') return 'Square';
+        return null;
+    }
+
     async function buildSearchSection(itemType, searchTerm, order) {
         const apiHelper = window.apiHelper;
         if (!apiHelper?.getQuery || !apiHelper?.buildQueryFromSection) {
@@ -234,6 +240,7 @@
         });
 
         const termKey = searchTerm.toLowerCase().trim().replace(/[^a-z0-9]+/gi, '-').slice(0, 48);
+        const cardFormat = getSearchCardFormat(itemType);
         const sectionConfig = {
             id: `search-${itemType}-${termKey}`,
             name: getTypeDisplayName(itemType),
@@ -241,7 +248,8 @@
             order,
             queries: [query],
             ttl: SEARCH_CACHE_TTL,
-            userConfigurable: false
+            userConfigurable: false,
+            ...(cardFormat ? { cardFormat } : {})
         };
 
         let mappedDataPromise = null;
