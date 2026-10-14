@@ -1363,7 +1363,7 @@
    Shape inferred from data-card-format (see resolveGridShape); default = portrait.
    Columns use @container against the scroller width (not viewport), so inset /
    max-width sections (e.g. 67vw series episodes) get fewer, correctly sized cards. */
-.emby-scroller-container > .emby-scroller {
+.custom-scroller-container > .custom-scroller {
 	container-type: inline-size;
 	container-name: kefin-items;
 }
@@ -4624,3 +4624,108 @@ html.layout-tv .spotlight-section .spotlight-metadata-section {
 html.layout-tv .spotlight-section .spotlight-tagline {
 	display: none !important;
 }
+
+/* --- Variant Row Layouts --- */
+
+.rows-2.focus-1 {
+	--r2-gap: 1em;
+	--r2-small: 16.5vw;
+	--r2-focus: calc(var(--r2-small) * 2 + var(--r2-gap) * 2);
+}
+
+/* Portrait family: narrower → similar row height to backdrop */
+.rows-2.focus-1.emby-scroller-container[data-card-format="Poster"],
+.rows-2.focus-1.emby-scroller-container[data-card-format="Series Poster"],
+.rows-2.focus-1.emby-scroller-container[data-card-format="Default"] {
+	--r2-small: 6.2vw; /* ≈ 16.5 * (2/3) / (16/9) */
+}
+
+/* Square / Disc */
+.rows-2.focus-1.emby-scroller-container[data-card-format="Square"],
+.rows-2.focus-1.emby-scroller-container[data-card-format="Disc"] {
+	--r2-small: 9.3vw; /* ≈ 16.5 * 9/16 */
+}
+
+/* Banner: wider so short pads get usable height */
+.rows-2.focus-1.emby-scroller-container[data-card-format="Banner"] {
+	--r2-small: 28vw; /* tune up/down until banner height feels right */
+}
+
+/* Logo / Clear Art: usually closer to square or soft landscape */
+.rows-2.focus-1.emby-scroller-container[data-card-format="Logo"],
+.rows-2.focus-1.emby-scroller-container[data-card-format="Clear Art"] {
+	--r2-small: 11vw;
+}
+
+.rows-2.focus-1.emby-scroller-container[data-card-format] .itemsContainer {
+	display: grid !important;
+	grid-template-rows: repeat(2, auto);
+	grid-auto-flow: column;
+	grid-auto-columns: var(--r2-small);
+	grid-template-columns: var(--r2-focus);
+	gap: var(--r2-gap) !important;
+	align-items: start;
+	white-space: normal;
+}
+
+.rows-2.focus-1 .itemsContainer > .card {
+	width: var(--r2-small) !important;
+	min-width: 0;
+	max-width: none;
+	margin: 0;
+	padding: 0;
+	contain: none;
+}
+
+.rows-2.focus-1 .itemsContainer > .card:first-child {
+	grid-row: 1 / span 2;
+	width: var(--r2-small) !important; /* outer track; box grows via --r2-focus */
+	overflow: visible;
+	height: 100%;
+}
+
+.rows-2.focus-1 .itemsContainer > .card > .cardBox {
+	position: relative;
+	margin: 0 !important;
+}
+
+.rows-2.focus-1 .itemsContainer > .card:first-child > .cardBox {
+	width: var(--r2-focus);
+	contain: none !important;
+	overflow: visible !important;
+	height: 100%;
+	display: grid;
+	grid-template-rows: 1fr auto;
+}
+
+.rows-2.focus-1 .itemsContainer > .card:first-child .cardScalable {
+	height: 100%;
+	min-height: 0;
+}
+.rows-2.focus-1 .itemsContainer > .card:first-child .cardPadder {
+	padding-bottom: 0 !important;
+	height: 100%;
+}
+.rows-2.focus-1 .itemsContainer > .card:first-child .cardImageContainer,
+.rows-2.focus-1 .itemsContainer > .card:first-child .coveredImage {
+	position: absolute;
+	inset: 0;
+	height: 100% !important;
+	width: 100% !important;
+}
+
+.rows-2.focus-1.divider-1 .itemsContainer > .card:first-child .cardBox::after {
+	content: "";
+  	position: absolute;
+  	top: 0;
+  	right: -0.18em;
+  	border: 1px solid #e1e1e16b;
+  	height: 100%;
+  	border-radius: 5px;
+}
+
+.rows-2.focus-1.divider-1 .itemsContainer > .card:first-child .cardScalable {
+	width: calc(100% - var(--r2-gap));
+}
+
+  /* --- End Variant Row Layouts --- */
