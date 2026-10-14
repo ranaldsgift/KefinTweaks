@@ -2660,8 +2660,13 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         try {
             const keep = Math.max(1, Math.floor(Number(keepCount) || DEFAULT_BACKUP_KEEP_COUNT));
             const { pluginId, injectorConfig } = await fetchInjectorConfigForBackups();
+            // Keep/prune applies only to scheduled backups; manual & skin-conflict are untouched
             const backups = (injectorConfig.CustomJavaScripts || [])
-                .filter((entry) => isKefinConfigScriptEntry(entry) && entry.Name !== KEFIN_CONFIG_ENTRY_NAME)
+                .filter((entry) =>
+                    isKefinConfigScriptEntry(entry)
+                    && entry.Name !== KEFIN_CONFIG_ENTRY_NAME
+                    && getBackupKindFromName(entry.Name) === 'scheduled'
+                )
                 .map((entry) => ({
                     entry,
                     date: parseBackupTimestamp(entry.Name, entry.Script)
@@ -2678,7 +2683,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                 (entry) => !toRemove.has(entry.Name)
             );
             await postInjectorConfig(pluginId, injectorConfig);
-            LOG(`Pruned ${toRemove.size} config backup(s); kept ${keep}`);
+            LOG(`Pruned ${toRemove.size} scheduled config backup(s); kept ${keep}`);
             return { pruned: toRemove.size };
         } catch (err) {
             ERR('Error pruning config backups:', err);

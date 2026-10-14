@@ -4876,7 +4876,7 @@
     function backupsSettingsDescription(scheduledEnabled, keepCount) {
         const x = Math.max(1, Math.floor(Number(keepCount) || 5));
         if (scheduledEnabled) {
-            return `KefinTweaks will backup your configuration once per day and keep up to ${x} previous backups. Backups are only created from an admin account that is logged in.`;
+            return `KefinTweaks will backup your configuration once per day and keep up to ${x} previous scheduled backups. Backups are only created from an admin account that is logged in.`;
         }
         return 'KefinTweaks will never automatically backup your configuration unless necessary during a migration task or other operations.';
     }
