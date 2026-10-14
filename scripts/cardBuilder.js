@@ -3954,30 +3954,50 @@
             }
         }
 
-        // Card overlay container
-        const cardOverlayContainer = document.createElement('div');
-        cardOverlayContainer.className = 'cardOverlayContainer';
+        // Overlays: desktop = hover FAB + br actions; mobile = native bottom-right play only
+        const NON_PLAYABLE_TYPES = ['CollectionFolder', 'Folder', 'UserView', 'Virtual', 'Studio', 'Genre', 'Person'];
+        const canShowPlayOverlay =
+            !isCustomCard
+            && !NON_PLAYABLE_TYPES.includes(item.Type)
+            && item.LocationType !== 'Virtual'
+            && item.Type !== 'Person';
+
+        let cardOverlayContainer = null;
+        let mobileOverlayPlayButton = null;
 
         if (isCustomCard) {
-            // Overlay link (first so it sits under buttons)
+            cardOverlayContainer = document.createElement('div');
+            cardOverlayContainer.className = 'cardOverlayContainer';
             const overlayLink = document.createElement('a');
             overlayLink.href = cardUrl;
             overlayLink.className = 'button-link';
             overlayLink.setAttribute('is', 'emby-linkbutton');
-
-            // Add target=_blank if its an external link, internal links will start with / or #
             if (!cardUrl.startsWith('/') && !cardUrl.startsWith('#')) {
                 overlayLink.setAttribute('target', '_blank');
             }
-
             cardOverlayContainer.appendChild(overlayLink);
+        } else if (isMobileLayout()) {
+            // Match jellyfin-web layoutManager.mobile: play button with cardOverlayButton-br on the button
+            if (canShowPlayOverlay) {
+                mobileOverlayPlayButton = document.createElement('button');
+                mobileOverlayPlayButton.type = 'button';
+                mobileOverlayPlayButton.className =
+                    'cardOverlayButton cardOverlayButton-br itemAction paper-icon-button-light';
+                mobileOverlayPlayButton.setAttribute('data-action', 'play');
+                mobileOverlayPlayButton.title = 'Play';
+                const playIcon = document.createElement('span');
+                playIcon.className = 'material-icons cardOverlayButtonIcon play_arrow';
+                playIcon.setAttribute('aria-hidden', 'true');
+                mobileOverlayPlayButton.appendChild(playIcon);
+            }
         } else {
+            cardOverlayContainer = document.createElement('div');
             cardOverlayContainer.className = 'cardOverlayContainer itemAction';
             cardOverlayContainer.setAttribute('data-action', 'link');
-            // Play button
+
             const playButton = document.createElement('button');
-            playButton.setAttribute('is', 'paper-icon-button-light');
-            playButton.className = 'cardOverlayButton cardOverlayButton-hover itemAction paper-icon-button-light cardOverlayFab-primary';
+            playButton.className =
+                'cardOverlayButton cardOverlayButton-hover itemAction paper-icon-button-light cardOverlayFab-primary';
             playButton.setAttribute('data-action', 'resume');
 
             const playIcon = document.createElement('span');
@@ -3985,11 +4005,9 @@
             playIcon.setAttribute('aria-hidden', 'true');
             playButton.appendChild(playIcon);
 
-            // Button container for additional overlay buttons (watchlist, etc.)
             const buttonContainer = document.createElement('div');
             buttonContainer.className = 'cardOverlayButton-br flex';
 
-            // Watchlist button (active state from UserData.Likes; click bound by watchlist.js)
             const watchlistSupportedTypes = ['Movie', 'Series', 'Season', 'Episode', 'BoxSet', 'Playlist', 'Video'];
             if (state.watchlist && watchlistSupportedTypes.includes(itemType)) {
                 const isLiked = item.UserData?.Likes === true;
@@ -4009,7 +4027,6 @@
                 buttonContainer.appendChild(watchlistButton);
             }
 
-            // Watched button
             const watchedButton = document.createElement('button');
             watchedButton.setAttribute('is', 'emby-playstatebutton');
             watchedButton.type = 'button';
@@ -4027,7 +4044,6 @@
             watchedButton.appendChild(watchedIcon);
             buttonContainer.appendChild(watchedButton);
 
-            // Favorite button
             const favoriteButton = document.createElement('button');
             favoriteButton.setAttribute('is', 'emby-ratingbutton');
             favoriteButton.type = 'button';
@@ -4054,11 +4070,9 @@
             moreIcon.className = 'material-icons cardOverlayButtonIcon cardOverlayButtonIcon-hover more_vert';
             moreIcon.setAttribute('aria-hidden', 'true');
             moreButton.appendChild(moreIcon);
-
             buttonContainer.appendChild(moreButton);
 
-			const NON_PLAYABLE_TYPES = ['CollectionFolder', 'Folder', 'UserView', 'Virtual', 'Studio', 'Genre', 'Person'];
-            if (!NON_PLAYABLE_TYPES.includes(item.Type) && item.LocationType !== 'Virtual') {
+            if (canShowPlayOverlay) {
                 cardOverlayContainer.appendChild(playButton);
             }
             cardOverlayContainer.appendChild(buttonContainer);
@@ -4280,7 +4294,11 @@
             cardScalable.appendChild(blurhashCanvas);
         }
         cardScalable.appendChild(cardImageContainer);
-        cardScalable.appendChild(cardOverlayContainer);
+        if (mobileOverlayPlayButton) {
+            cardScalable.appendChild(mobileOverlayPlayButton);
+        } else if (cardOverlayContainer) {
+            cardScalable.appendChild(cardOverlayContainer);
+        }
         cardScalable.appendChild(createCardBorderHost());
 
         cardBox.appendChild(cardScalable);
@@ -4657,7 +4675,7 @@
 
                 if (viewMoreUrl) {
                     const titleLink = document.createElement('a');
-                    titleLink.className = 'emby-tab-button emby-tab-button-active emby-button';
+                    titleLink.className = 'emby-tab-button emby-tab-button-active emby-button-foreground emby-button';
                     titleLink.textContent = title;
                     titleLink.title = 'See All';
                     titleLink.style.textDecoration = 'none';
@@ -5638,7 +5656,7 @@
             // Navigation buttons (top right)
             if (showNavButtons && items.length > 1) {
                 const navButtonsContainer = document.createElement('div');
-                navButtonsContainer.className = 'spotlight-nav-buttons-container emby-tab-button emby-tab-button-active';
+                navButtonsContainer.className = 'spotlight-nav-buttons-container emby-tab-button emby-tab-button-active emby-button-foreground';
 
                 const prevButton = document.createElement('button');
                 prevButton.className = 'spotlight-nav-button spotlight-nav-prev emby-button';
