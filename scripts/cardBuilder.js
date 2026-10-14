@@ -1875,6 +1875,8 @@
                 initialFocus: selectedItemElement,
                 anchor: selectButton,
                 dialogClassName: 'kefin-multi-query-modal',
+                // Match breadcrumb season popover: page scrolls unless the list itself overflows
+                lockPageScroll: false,
                 onOpen: (modal) => {
                     if (modal.backdrop) modal.backdrop.style.background = 'transparent';
                     // Document-absolute shell via ModalSystem.positionNearAnchor.
@@ -1883,6 +1885,10 @@
                         modal.dialogContent.style.overflowY = 'auto';
                         modal.dialogContent.style.minHeight = '0';
                         modal.dialogContent.style.flex = '0 1 auto';
+                        modal.dialogContent.style.overscrollBehavior = 'auto';
+                    }
+                    if (modal.dialog) {
+                        modal.dialog.style.overscrollBehavior = 'auto';
                     }
                     if (selectedItemElement) {
                         requestAnimationFrame(() => {

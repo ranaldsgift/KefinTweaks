@@ -438,6 +438,7 @@ window.ModalSystem = (function() {
     /**
      * Create a Jellyfin-style modal dialog
      * @param {Object} options - Modal configuration
+     * @param {boolean} [options.lockPageScroll=true] - When true, contain overscroll so wheel on the dialog does not chain to the page. Set false for anchored popovers so short lists allow page scroll.
      * @returns {Object} Modal instance
      */
     function createModal(options = {}) {
@@ -458,6 +459,9 @@ window.ModalSystem = (function() {
             trapFocus,
             anchor = null,
             dialogClassName = '',
+            // When true (default), contain overscroll so wheel on the dialog does not chain to the page.
+            // Set false for anchored popovers (e.g. multi-query) so short lists let the page scroll.
+            lockPageScroll = true,
         } = options;
 
         if (!id) {
@@ -559,10 +563,12 @@ window.ModalSystem = (function() {
         dialogContent.style.overflowY = 'auto';
         dialogContent.style.flex = '1';
         dialogContent.style.minHeight = '0';
-        // Contain overscroll so nested wheel/touch scroll does not chain to the page
-        // (avoids a non-passive wheel listener that delays input while the main thread is busy)
-        dialogContent.style.overscrollBehavior = 'contain';
-        dialog.style.overscrollBehavior = 'contain';
+        if (lockPageScroll) {
+            // Contain overscroll so nested wheel/touch scroll does not chain to the page
+            // (avoids a non-passive wheel listener that delays input while the main thread is busy)
+            dialogContent.style.overscrollBehavior = 'contain';
+            dialog.style.overscrollBehavior = 'contain';
+        }
 
         // Add content
         if (content) {
@@ -614,6 +620,7 @@ window.ModalSystem = (function() {
             dialogFooter,
             isOpen: true,
             closeOnBackdrop: !!closeOnBackdrop,
+            lockPageScroll: !!lockPageScroll,
             onClose: typeof onClose === 'function' ? onClose : null,
             returnFocusEl,
             close: () => closeModal(id),
