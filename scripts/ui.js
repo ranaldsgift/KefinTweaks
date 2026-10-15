@@ -894,6 +894,10 @@
         const captionHtml = captionText
             ? `<div class="listItemBodyText secondary section-row-caption" style="font-size: 0.85em; margin-top: 0.2em; opacity: 0.85;">${escapeHtml(captionText)}</div>`
             : '';
+        const descriptionText = String(section.description || '').trim();
+        const descriptionHtml = descriptionText
+            ? `<div class="listItemBodyText secondary section-row-description" style="font-size: 0.85em; margin-top: 0.2em; opacity: 0.85;">${escapeHtml(descriptionText)}</div>`
+            : '';
 
         return `
             <div class="listItem viewItem section-row" data-section-id="${sectionId}" data-section-type="${sectionType}" ${draggableAttr} ${dataAttrsStr}>
@@ -910,6 +914,7 @@
                         ${discoveryBadge}
                     </div>
                     ${captionHtml}
+                    ${descriptionHtml}
                 </div>
                 <div class="section-row-actions">
                     ${isPinnedSection ? `
