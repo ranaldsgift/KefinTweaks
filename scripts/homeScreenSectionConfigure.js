@@ -401,7 +401,7 @@
 
         if (norm(overrides.renderMode) !== norm(defaults.renderMode || 'Normal')
             && norm(overrides.renderMode) !== '') return true;
-        if (norm(overrides.order) !== norm(defaults.order)) return true;
+        // Order is managed by drag-reorder and intentionally preserved on restore — exclude from dirty.
         if (norm(overrides.ttl) !== norm(defaults.ttl)) return true;
         if (norm(overrides.cardFormat) !== norm(defaults.cardFormat)) return true;
         {
@@ -414,9 +414,21 @@
         if (norm(overrides.cardTitlePosition) !== norm(defaults.cardTitlePosition)) return true;
         if (norm(overrides.borderStyle) !== norm(defaults.borderStyle)) return true;
         if (norm(overrides.borderColor) !== norm(defaults.borderColor)) return true;
-        if (norm(overrides.spotlightLayout) !== norm(defaults.spotlightLayout)) return true;
-        if (norm(overrides.spotlightSize) !== norm(defaults.spotlightSize)) return true;
-        if (norm(overrides.spotlightTileCount) !== norm(defaults.spotlightTileCount)) return true;
+        {
+            const resolvedOverrides = resolveSpotlightPresentationLocal({
+                spotlightLayout: overrides.spotlightLayout,
+                spotlightSize: overrides.spotlightSize,
+                tileCount: overrides.spotlightTileCount
+            });
+            const resolvedDefaults = resolveSpotlightPresentationLocal({
+                spotlightLayout: defaults.spotlightLayout,
+                spotlightSize: defaults.spotlightSize,
+                tileCount: defaults.spotlightTileCount
+            });
+            if (resolvedOverrides.layout !== resolvedDefaults.layout) return true;
+            if (resolvedOverrides.size !== resolvedDefaults.size) return true;
+            if (resolvedOverrides.tileCount !== resolvedDefaults.tileCount) return true;
+        }
         if (layout !== serverLayout) return true;
         if (!boolEq(overrides.useGaplessCards === true, defaults.useGaplessCards === true)) return true;
         if (norm(overrides.cardTitleCapitalization || 'normal') !== norm(defaults.cardTitleCapitalization || 'normal')) return true;
@@ -472,12 +484,17 @@
         if (defaults.useGaplessCards === true) cfg.useGaplessCards = true;
         else delete cfg.useGaplessCards;
 
+        const resolvedSpotlight = resolveSpotlightPresentationLocal({
+            spotlightLayout: defaults.spotlightLayout,
+            spotlightSize: defaults.spotlightSize,
+            tileCount: defaults.spotlightTileCount
+        });
         cfg.spotlightConfig = {
             ...(cfg.spotlightConfig || {}),
             panAnimation: defaults.animationEnabled !== false && defaults.panAnimation !== false,
-            spotlightLayout: defaults.spotlightLayout ?? 'Border',
-            spotlightSize: defaults.spotlightSize ?? 'normal',
-            tileCount: defaults.spotlightTileCount || 1
+            spotlightLayout: resolvedSpotlight.layout,
+            spotlightSize: resolvedSpotlight.size,
+            tileCount: resolvedSpotlight.tileCount
         };
     }
 
