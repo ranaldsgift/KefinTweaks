@@ -1374,15 +1374,40 @@
         const resolveFreshItems = async () => {
             if (results.length > 1) {
                 const merged = ApiHelper.mergeMultiQueryResults(results, sectionConfig);
+                // Kick SWR so _refreshPromise is attached when cache is stale
                 const raw =
                     typeof merged.result?.ensureData === 'function'
                         ? await merged.result.ensureData()
                         : await (merged.result?.dataPromise ?? merged.result?.data);
+
+                const hasRefresh = results.some((r) => r && r._refreshPromise);
+                if (hasRefresh) {
+                    const allData = await Promise.all(
+                        results.map((r) => r._refreshPromise || Promise.resolve(r.data)),
+                    );
+                    const itemsByFreshQuery = [];
+                    allData.forEach((data) => {
+                        if (data?.Items) itemsByFreshQuery.push(data.Items);
+                        else if (Array.isArray(data)) itemsByFreshQuery.push(data);
+                    });
+                    return postProcessItemsByQuery(sectionConfig, itemsByFreshQuery);
+                }
+
                 return extractItemsFromQueryPayload(raw);
             }
             if (results.length === 1) {
                 const qr = results[0];
-                const raw = typeof qr.ensureData === 'function' ? await qr.ensureData() : await (qr.dataPromise ?? qr.data);
+                // Kick SWR so _refreshPromise is attached when cache is stale
+                const raw =
+                    typeof qr.ensureData === 'function'
+                        ? await qr.ensureData()
+                        : await (qr.dataPromise ?? qr.data);
+
+                if (qr._refreshPromise) {
+                    const fresh = await qr._refreshPromise;
+                    return postProcessItems(sectionConfig, extractItemsFromQueryPayload(fresh));
+                }
+
                 return postProcessItems(sectionConfig, extractItemsFromQueryPayload(raw));
             }
             return [];

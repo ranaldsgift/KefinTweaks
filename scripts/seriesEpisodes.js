@@ -100,13 +100,6 @@
         };
     }
 
-    function postProcessEpisodes(data) {
-        const items = Array.isArray(data)
-            ? data.slice()
-            : (Array.isArray(data?.Items) ? data.Items.slice() : []);
-        return items.sort((a, b) => (a.IndexNumber || 0) - (b.IndexNumber || 0));
-    }
-
     function formatSeasonName(seasonNameValue, seasonNumber) {
         if (!seasonNameValue) {
             return `Season ${seasonNumber}`;
@@ -122,9 +115,8 @@
     }
 
     async function buildSeriesEpisodesSection(seriesId, seasons, initialSeason, onMultiQueryChange) {
-        const apiHelper = window.apiHelper;
-        if (!apiHelper?.getQuery || !apiHelper?.buildQueryFromSection) {
-            throw new Error('apiHelper.getQuery / buildQueryFromSection unavailable');
+        if (!window.sectionHelper?.loadSectionForRendering) {
+            throw new Error('sectionHelper.loadSectionForRendering unavailable');
         }
 
         const initialIndex = Math.max(0, seasons.findIndex((season) => seasonId(season) === seasonId(initialSeason)));
@@ -176,50 +168,11 @@
             sectionConfig._onMultiQueryChange = onMultiQueryChange;
         }
 
-        const initialQuery = queries[initialIndex];
-        const userId = ApiClient.getCurrentUserId();
-        const serverUrl = ApiClient.serverAddress();
-        const url = apiHelper.buildQueryFromSection(initialQuery, userId, serverUrl);
-        if (typeof url !== 'string') {
-            throw new Error(`Invalid episodes query URL for season ${seasonId(initialSeasonObj)}`);
+        const loaded = await window.sectionHelper.loadSectionForRendering(sectionConfig);
+        if (!loaded?.config || !loaded?.result) {
+            throw new Error(`Failed to load series-episodes section for ${seriesId}`);
         }
-
-        const queryResult = await apiHelper.getQuery(url, {
-            useCache: true,
-            ttl: EPISODES_CACHE_TTL
-        });
-
-        let mappedDataPromise = null;
-        const ensureData = () => {
-            if (!mappedDataPromise) {
-                const raw = typeof queryResult.ensureData === 'function'
-                    ? queryResult.ensureData()
-                    : queryResult.dataPromise;
-                mappedDataPromise = Promise.resolve(raw)
-                    .then((data) => postProcessEpisodes(data))
-                    .catch((err) => {
-                        WARN('episodes ensureData failed for season', seasonId(initialSeasonObj), err);
-                        return [];
-                    });
-            }
-            return mappedDataPromise;
-        };
-
-        const result = {
-            data: postProcessEpisodes(queryResult.data),
-            isStale: queryResult.isStale === true,
-            isStalePromise: queryResult.isStalePromise,
-            ensureData
-        };
-        Object.defineProperty(result, 'dataPromise', {
-            configurable: true,
-            enumerable: true,
-            get() {
-                return ensureData();
-            }
-        });
-
-        return { config: sectionConfig, result };
+        return loaded;
     }
 
     function getSectionTitleContainer(host) {
