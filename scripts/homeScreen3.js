@@ -1957,6 +1957,166 @@
         return enqueueHomeViewJob({ type: 'home', hash: window.location.hash || '' });
     }
 
+    /**
+     * Full re-render + replace a single mounted home section (admin editor save).
+     * If the section is not mounted, no-ops (does not refresh the whole home).
+     * @param {string} sectionId
+     * @param {Object} [sectionConfig] saved section config from the editor
+     * @returns {Promise<boolean>} true if replaced
+     */
+    async function refreshHomeSectionById(sectionId, sectionConfig) {
+        if (!sectionId) return false;
+
+        invalidateHomeScreenConfig('refreshHomeSectionById');
+
+        const escaped = typeof CSS !== 'undefined' && CSS.escape
+            ? CSS.escape(String(sectionId))
+            : String(sectionId).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        const sectionElement =
+            document.querySelector(`.homePage:not(.hide) #homeTab .sections [data-section-id="${escaped}"]`)
+            || document.querySelector(`[data-section-id="${escaped}"]`);
+        if (!sectionElement?.isConnected) {
+            LOG('refreshHomeSectionById: section not mounted', sectionId);
+            return false;
+        }
+
+        const runtime = window.KefinHomeScreenSectionRuntime?.get?.(sectionId);
+        const cfg = sectionConfig
+            ? { ...(runtime?.effectiveConfig || {}), ...sectionConfig }
+            : (runtime?.effectiveConfig || null);
+        if (!cfg) {
+            WARN('refreshHomeSectionById: no section config for', sectionId);
+            return false;
+        }
+
+        const cardBuilder = window.cardBuilder;
+        if (!cardBuilder?.createSectionScrollableContainer || !cardBuilder?.renderSpotlightSection) {
+            WARN('refreshHomeSectionById: cardBuilder rebuild APIs unavailable');
+            return false;
+        }
+
+        let items = [];
+        try {
+            if (Array.isArray(cfg.items) && cfg.items.length > 0) {
+                items = cardBuilder.postProcessItems
+                    ? cardBuilder.postProcessItems(cfg, cfg.items)
+                    : cfg.items.slice();
+            } else if (window.sectionHelper?.loadSectionForRendering) {
+                const loaded = await window.sectionHelper.loadSectionForRendering(cfg);
+                const result = loaded?.result;
+                const raw = typeof result?.ensureData === 'function'
+                    ? await result.ensureData()
+                    : await (result?.dataPromise ?? result?.data);
+                if (Array.isArray(raw)) items = raw;
+                else if (Array.isArray(raw?.Items)) items = raw.Items;
+                else items = [];
+            } else if (cardBuilder.refreshSectionQueries) {
+                items = await cardBuilder.refreshSectionQueries(cfg);
+            }
+        } catch (e) {
+            ERR('refreshHomeSectionById: failed to load items', sectionId, e);
+            return false;
+        }
+
+        if (!items.length) {
+            WARN('refreshHomeSectionById: no items after load', sectionId);
+            return false;
+        }
+
+        const title = cardBuilder.getSectionTitleForMultiQuery?.(cfg) || cfg.name || '';
+        const viewMoreUrl = cardBuilder.getActiveViewMoreUrl?.(cfg) || cfg.viewMoreUrl || null;
+        const isSpotlight = cfg.renderMode === 'Spotlight' || cfg.spotlight === true;
+
+        let newContent = null;
+        if (isSpotlight) {
+            newContent = cardBuilder.renderSpotlightSection(items, title, {
+                viewMoreUrl,
+                ...(cfg.spotlightConfig || {}),
+            });
+        } else {
+            let cardFormat = cfg.cardFormat;
+            if (cardFormat === 'random' || cardFormat === 'Random') {
+                cardFormat = cardBuilder.getRandomCardFormat?.() || 'Poster';
+            }
+            newContent = cardBuilder.createSectionScrollableContainer(
+                items,
+                title,
+                viewMoreUrl,
+                cfg.overflowCard !== false,
+                cardFormat,
+                cfg,
+            );
+        }
+
+        if (!newContent) {
+            WARN('refreshHomeSectionById: failed to build section DOM', sectionId);
+            return false;
+        }
+
+        newContent.setAttribute('data-section-id', cfg.id);
+        if (cfg.order != null) {
+            newContent.dataset.order = String(cfg.order);
+            newContent.style.order = cfg.order;
+        }
+        if (cfg.cardFormat) {
+            newContent.setAttribute('data-card-format', cfg.cardFormat);
+        }
+
+        // Preserve non-mode layout classes from the previous root (e.g. category filters)
+        const SPOTLIGHT_MODE_CLASSES = ['spotlight-section', 'padded-left'];
+        const NORMAL_MODE_CLASSES = ['verticalSection', 'emby-scroller-container', 'custom-scroller-container'];
+        const wasSpotlight = sectionElement.classList.contains('spotlight-section');
+        const modeChanged = wasSpotlight !== isSpotlight;
+        if (modeChanged) {
+            const stale = wasSpotlight ? SPOTLIGHT_MODE_CLASSES : NORMAL_MODE_CLASSES;
+            sectionElement.classList.forEach((cls) => {
+                if (!stale.includes(cls)) newContent.classList.add(cls);
+            });
+        }
+
+        if (typeof cardBuilder.applySectionPresentationAttrs === 'function') {
+            cardBuilder.applySectionPresentationAttrs(newContent, cfg);
+        }
+
+        const layout = cardBuilder.resolveItemsLayout?.(cfg) || 'row';
+        const gapless = cardBuilder.resolveUseGaplessCards?.(cfg) === true;
+
+        sectionElement.replaceWith(newContent);
+
+        if (!isSpotlight && cardBuilder.applyItemsLayoutState) {
+            cardBuilder.applyItemsLayoutState(newContent, layout, gapless);
+        }
+        if (cardBuilder.ensureCardBorders) {
+            cardBuilder.ensureCardBorders(newContent);
+        }
+        if (cardBuilder.attachSectionControlButtons) {
+            cardBuilder.attachSectionControlButtons(cfg, newContent, items);
+        }
+        if (cardBuilder.registerLazyImagesInSection) {
+            cardBuilder.registerLazyImagesInSection(newContent);
+        } else if (cardBuilder.registerLazyImagesIn) {
+            cardBuilder.registerLazyImagesIn(newContent);
+        }
+
+        if (runtime) {
+            runtime.element = newContent;
+            runtime.effectiveConfig = cfg;
+            runtime.cachedItems = items;
+            window.KefinHomeScreenSectionRuntime?.register?.(runtime);
+        } else if (window.KefinHomeScreenSectionRuntime?.register) {
+            window.KefinHomeScreenSectionRuntime.register({
+                sectionId: cfg.id,
+                element: newContent,
+                effectiveConfig: cfg,
+                cachedItems: items,
+                serverDefaults: {},
+            });
+        }
+
+        LOG('refreshHomeSectionById: replaced section', sectionId);
+        return true;
+    }
+
     const HOME_CHROME_CREATE_ID = 'kefin-home-create-section-btn';
     const HOME_CHROME_CATEGORY_RAIL_ID = 'kefin-home-category-rail';
     const HOME_CHROME_CATEGORY_STYLE_ID = 'kefin-home-category-filter-styles';
@@ -2731,6 +2891,7 @@
     window.homeScreen3 = {
         init: () => enqueueHomeViewJob({ type: 'home', hash: window.location.hash || '' }),
         refreshHomeSections,
+        refreshHomeSectionById,
         resolveDiscoverySection: buildDiscoverySectionInstance,
         sectionHelper: () => window.sectionHelper,
         getActiveHomeCategory: () => homeChromeActiveCategory || 'none',
