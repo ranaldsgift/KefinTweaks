@@ -1530,6 +1530,12 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
      * Get enabled home sections and discovery sections
      * @returns {Object} Object with enabledHomeSections and enabledDiscoverySections
      */
+    function applyGlobalCacheTtlToSections(sections, globalCacheTtl) {
+        if (!(Number(globalCacheTtl) >= 0) || !Array.isArray(sections)) return sections;
+        const ttl = Number(globalCacheTtl);
+        return sections.map((section) => (section ? { ...section, ttl } : section));
+    }
+
     function getSections() {
 
         const config = getConfig();
@@ -1543,10 +1549,19 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             isInSeasonalPeriod
         });
 
+        const globalCacheTtl = config.CACHE?.globalCacheTtl;
+        const home = applyGlobalCacheTtlToSections(
+            [...enabledHomeSections, ...enabledSeasonalSections, ...enabledCustomSections],
+            globalCacheTtl
+        );
+        const discovery = applyGlobalCacheTtlToSections(
+            [...enabledDiscoverySections, ...enabledCustomDiscoverySections],
+            globalCacheTtl
+        );
 
         return {
-            enabledHomeSections: [...enabledHomeSections, ...enabledSeasonalSections, ...enabledCustomSections],
-            enabledDiscoverySections: [...enabledDiscoverySections, ...enabledCustomDiscoverySections]
+            enabledHomeSections: home,
+            enabledDiscoverySections: discovery
         }
     }
 
@@ -2105,12 +2120,16 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
     /**
      * Build compact section row HTML
      */
-    function buildSectionRowHTML(section, type = 'home', groupName = null) {
+    function buildSectionRowHTML(section, type = 'home') {
         const isEnabled = section.enabled !== false;
         const isSeasonal = section.startDate && section.endDate;
         const isSpotlight = section.renderMode === 'Spotlight';
         const isDiscovery = section.discoveryEnabled === true;
         const isCustom = type.toLowerCase() === 'custom' || section.id.startsWith('custom');
+        const descriptionText = String(section.description || '').trim();
+        const descriptionHtml = descriptionText
+            ? `<span class="listItemBodyText secondary section-row-description" style="font-size: 0.85em; border-left: 1px solid rgba(255,255,255,0.25); padding-left: 1em; margin-left: 0.25em; opacity: 0.9;">${escapeHtml(descriptionText)}</span>`
+            : '';
 
         return `
             <div class="listItem section-row" data-section-id="${section.id}" data-section-type="${type}" draggable="true" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 0.5em; display: flex; align-items: center; justify-content: space-between; cursor: pointer; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='rgba(255,255,255,0.05)'" onmouseout="this.style.backgroundColor=''">
@@ -2125,12 +2144,12 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                     <div style="flex: 1;">
                         <input type="text" class="listItemBodyText editable-section-name" data-section-id="${section.id}" value="${(section.name || 'Unnamed Section').replace(/"/g, '&quot;')}" size="${Math.max((section.name || 'Unnamed Section').length, 15)}" style="font-weight: 500; margin-bottom: 0.25em; cursor: text; padding: 0.25em 0.5em; border-radius: 3px; transition: background-color 0.2s; display: inline-block; border: none; outline: none; background: transparent; font-family: inherit; font-size: inherit; color: inherit;" onmouseover="this.style.backgroundColor='rgba(255,255,255,0.05)'" onmouseout="this.style.backgroundColor='transparent'" onfocus="this.style.backgroundColor='rgba(255,255,255,0.1)'" onblur="this.style.backgroundColor='transparent'" onclick="event.stopPropagation();" oninput="this.size=Math.max(this.value.length,15)" />
                         <div style="display: flex; gap: 1em; align-items: center; flex-wrap: wrap;">
-                            ${groupName ? `<span class="listItemBodyText secondary" style="font-size: 0.8em; background: rgba(255,255,255,0.1); padding: 0.2em 0.5em; border-radius: 3px;">${groupName}</span>` : ''}
                             <span class="listItemBodyText secondary" style="font-size: 0.85em;">Order: ${section.order || 0}</span>
                             ${section.cardFormat && !isSpotlight ? `<span class="listItemBodyText secondary" style="font-size: 0.85em;">${section.cardFormat}</span>` : ''}
                             ${isSpotlight ? `<span class="listItemBodyText secondary spotlight-tag" style="font-size: 0.85em;">Spotlight</span>` : ''}
                             ${isSeasonal ? `<span class="listItemBodyText secondary seasonal-tag" style="font-size: 0.85em;">Active from: ${section.startDate} - ${section.endDate}</span>` : ''}
                             ${isDiscovery ? `<span class="listItemBodyText secondary discovery-tag" style="font-size: 0.85em;">Discovery</span>` : ''}
+                            ${descriptionHtml}
                         </div>
                     </div>
                 </div>
@@ -2291,7 +2310,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                     </button>
                 </div>
                 <div class="group-sections-list" data-group-id="${groupId}">
-                    ${sections.map(s => buildSectionRowHTML(s, s.sectionType ?? sectionType, s.sectionType)).join('')}
+                    ${sections.map(s => buildSectionRowHTML(s, s.sectionType ?? sectionType)).join('')}
                 </div>
             </div>
         `;
@@ -2814,12 +2833,51 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         ];
     }
 
+    /** Full section-cache style presets including No Cache + Disabled (undefined). */
+    function getGlobalCachePresets() {
+        const presets = window.KefinHomeScreenAdvancedEditor?.getCachePresets?.();
+        const cache = currentConfig?.CACHE || window.KefinHomeConfig2?.CACHE || {};
+        const base = Array.isArray(presets) && presets.length
+            ? presets.slice()
+            : [
+                { key: 'FORCE_REFRESH', label: 'No Cache', ms: cache.FORCE_REFRESH_TTL ?? 0 },
+                { key: 'VERY_SHORT', label: 'Very Short (1 min)', ms: cache.VERY_SHORT_TTL ?? 60000 },
+                { key: 'SHORT', label: 'Short (5 min)', ms: cache.SHORT_TTL ?? 300000 },
+                { key: 'DEFAULT', label: 'Default (1 hour)', ms: cache.DEFAULT_TTL ?? 3600000 },
+                { key: 'LONG', label: 'Long (24 hours)', ms: cache.LONG_TTL ?? 86400000 },
+                { key: 'STATIC', label: 'Static (1 week)', ms: cache.STATIC_TTL ?? 604800000 },
+                { key: 'DISCOVERY', label: 'Discovery (6 hours)', ms: cache.DISCOVERY_TTL ?? 21600000 },
+                { key: 'CUSTOM', label: 'Custom', ms: null }
+            ];
+        return [
+            { key: 'DISABLED', label: 'Disabled', ms: undefined },
+            ...base
+        ];
+    }
+
     function matchDefaultTtlPreset(ms) {
         const value = Number(ms);
         if (!Number.isFinite(value)) {
             return { preset: 'DEFAULT', customValue: '', customUnit: 'minutes' };
         }
         const exact = getDefaultTtlPresets().find((p) => p.key !== 'CUSTOM' && p.ms === value);
+        if (exact) return { preset: exact.key, customValue: '', customUnit: 'minutes' };
+        const minutes = Math.round(value / 60000);
+        if (minutes > 0 && minutes * 60000 === value) {
+            return { preset: 'CUSTOM', customValue: String(minutes), customUnit: 'minutes' };
+        }
+        const seconds = Math.round(value / 1000);
+        return { preset: 'CUSTOM', customValue: String(seconds), customUnit: 'seconds' };
+    }
+
+    function matchGlobalCachePreset(ms) {
+        if (ms == null || ms === '' || !Number.isFinite(Number(ms))) {
+            return { preset: 'DISABLED', customValue: '', customUnit: 'minutes' };
+        }
+        const value = Number(ms);
+        const exact = getGlobalCachePresets().find(
+            (p) => p.key !== 'CUSTOM' && p.key !== 'DISABLED' && p.ms === value
+        );
         if (exact) return { preset: exact.key, customValue: '', customUnit: 'minutes' };
         const minutes = Math.round(value / 60000);
         if (minutes > 0 && minutes * 60000 === value) {
@@ -2844,6 +2902,23 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         return preset?.ms ?? (currentConfig?.CACHE?.DEFAULT_TTL ?? 3600000);
     }
 
+    /** @returns {number|undefined} undefined = Disabled (omit / clear globalCacheTtl) */
+    function resolveGlobalCacheTtlMsFromForm(root) {
+        const presetEl = root.querySelector('#cache-globalCacheTtl-preset');
+        if (!presetEl) return null;
+        const presetKey = presetEl.value || 'DISABLED';
+        if (presetKey === 'DISABLED') return undefined;
+        if (presetKey === 'CUSTOM') {
+            const raw = parseFloat(root.querySelector('#cache-globalCacheTtl-custom-value')?.value || '');
+            const unit = root.querySelector('#cache-globalCacheTtl-custom-unit')?.value || 'minutes';
+            const unitMs = TTL_UNIT_OPTIONS.find((u) => u.value === unit)?.ms || 60000;
+            if (!Number.isFinite(raw) || raw < 0) return 0;
+            return Math.round(raw * unitMs);
+        }
+        const preset = getGlobalCachePresets().find((p) => p.key === presetKey);
+        return preset?.ms ?? undefined;
+    }
+
     /**
      * Build cache settings HTML
      */
@@ -2856,6 +2931,12 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             value: p.key,
             label: p.label
         }));
+        const globalMatch = matchGlobalCachePreset(cache.globalCacheTtl);
+        const isCustomGlobal = globalMatch.preset === 'CUSTOM';
+        const globalPresetOptions = getGlobalCachePresets().map((p) => ({
+            value: p.key,
+            label: p.label
+        }));
 
         return `
             <div class="hsc-settings-panel">
@@ -2863,8 +2944,16 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                     <p>Every Home Screen Section has a cache expiration time associated to it. If the section has no explicitly defined cache value, it will use the Default setting below.</p>
                     <p>When a Section is being loaded, if the cache has not expired, the cached items will be rendered instead of requesting new data. If a Section has "No Cache" set, it will always request new data from the server.</p>
                     <p>The Cache settings listed below will appear as options when creating or editing a Home Screen Section in the "Advanced Options" at the bottom of the editor.</p>
+                    <p><strong>Global Cache:</strong> when set (not Disabled), individual section cache timers are ignored and every section uses this value.</p>
                 </div>
                 <div class="hsc-settings-grid hsc-settings-grid-3">
+                    <div class="hsc-global-ttl-field" style="grid-column: 1 / -1;">
+                        ${buildSelect('cache-globalCacheTtl-preset', globalPresetOptions, globalMatch.preset, 'Global Cache')}
+                        <div id="cache-globalCacheTtl-custom-row" class="hsc-global-ttl-custom" style="display:${isCustomGlobal ? 'grid' : 'none'}; grid-template-columns: 1fr 1fr; gap: 0.75em; margin-top: 0.75em; max-width: 28em;">
+                            ${buildTextInput('cache-globalCacheTtl-custom-value', globalMatch.customValue || '', 'Custom Duration', 'number')}
+                            ${buildSelect('cache-globalCacheTtl-custom-unit', TTL_UNIT_OPTIONS.map((u) => ({ value: u.value, label: u.value })), globalMatch.customUnit || 'minutes', 'Unit')}
+                        </div>
+                    </div>
                     <div class="hsc-default-ttl-field">
                         ${buildSelect('cache-DEFAULT_TTL-preset', presetOptions, defaultMatch.preset, 'Default')}
                         <div id="cache-DEFAULT_TTL-custom-row" class="hsc-default-ttl-custom" style="display:${isCustomDefault ? 'grid' : 'none'}; grid-template-columns: 1fr 1fr; gap: 0.75em; margin-top: 0.75em;">
@@ -2979,9 +3068,11 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             }
         }
 
-        if (root.querySelector('#cache-DEFAULT_TTL-preset') || root.querySelector('#cache-VERY_SHORT_TTL')) {
+        if (root.querySelector('#cache-DEFAULT_TTL-preset')
+            || root.querySelector('#cache-VERY_SHORT_TTL')
+            || root.querySelector('#cache-globalCacheTtl-preset')) {
             const defaultTtl = resolveDefaultTtlMsFromForm(root);
-            currentConfig.CACHE = {
+            const nextCache = {
                 ...(currentConfig.CACHE || {}),
                 DEFAULT_TTL: defaultTtl != null ? defaultTtl : (currentConfig.CACHE?.DEFAULT_TTL ?? 1800000),
                 VERY_SHORT_TTL: minutesToMs(parseInt(root.querySelector('#cache-VERY_SHORT_TTL')?.value || '1', 10)),
@@ -2991,6 +3082,15 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                 DISCOVERY_TTL: minutesToMs(parseInt(root.querySelector('#cache-DISCOVERY_TTL')?.value || '60', 10)),
                 FORCE_REFRESH_TTL: 0
             };
+            if (root.querySelector('#cache-globalCacheTtl-preset')) {
+                const globalTtl = resolveGlobalCacheTtlMsFromForm(root);
+                if (globalTtl === undefined) {
+                    delete nextCache.globalCacheTtl;
+                } else if (globalTtl != null) {
+                    nextCache.globalCacheTtl = globalTtl;
+                }
+            }
+            currentConfig.CACHE = nextCache;
         }
 
         if (root.querySelector('#spotlight-cycleBackdrops') || root.querySelector('[id^="spotlight-"]')) {
@@ -3100,7 +3200,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                         updateSectionInGroups(currentConfig[found.groupType], sectionData.id, sectionData);
                         await saveConfig(currentConfig);
                         showToast('Section saved');
-                        if (updateSectionRowInPlace(sectionData, sectionTypeForRow, found.group?.name)) {
+                        if (updateSectionRowInPlace(sectionData, sectionTypeForRow)) {
                             scrollSectionRowIntoView(sectionData.id);
                         } else {
                             refreshMainModal({
@@ -3121,9 +3221,9 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
 
                 if (options.refreshHomeOnSave && !mainModalInstance) {
                     try {
-                        await window.homeScreen3?.refreshHomeSections?.();
+                        await window.homeScreen3?.refreshHomeSectionById?.(sectionData.id, sectionData);
                     } catch (e) {
-                        WARN('Failed to refresh home after section save:', e);
+                        WARN('Failed to refresh home section after save:', e);
                     }
                 }
             },
@@ -3240,7 +3340,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
      * Replace a single .section-row in the main modal without full refresh (preserves scroll).
      * @returns {boolean} true if row was updated
      */
-    function updateSectionRowInPlace(sectionData, sectionType = 'home', groupName = null) {
+    function updateSectionRowInPlace(sectionData, sectionType = 'home') {
         if (!mainModalInstance?.dialogContent || !sectionData?.id) return false;
         const escapedId = escapeSectionIdForSelector(sectionData.id);
         const row = mainModalInstance.dialogContent.querySelector(`.section-row[data-section-id="${escapedId}"]`);
@@ -3248,7 +3348,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
 
         const type = sectionType || row.dataset.sectionType || 'home';
         const wrap = document.createElement('div');
-        wrap.innerHTML = buildSectionRowHTML(sectionData, type, groupName).trim();
+        wrap.innerHTML = buildSectionRowHTML(sectionData, type).trim();
         const newRow = wrap.firstElementChild;
         if (!newRow) return false;
         row.replaceWith(newRow);
@@ -3527,9 +3627,19 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         row.style.display = preset.value === 'CUSTOM' ? 'grid' : 'none';
     }
 
+    function syncGlobalCacheTtlCustomRow(contentRoot) {
+        const root = contentRoot || document.querySelector(`.dialogContainer[data-modal-id="${MAIN_MODAL_ID}"] #global-settings-content`);
+        if (!root) return;
+        const preset = root.querySelector('#cache-globalCacheTtl-preset');
+        const row = root.querySelector('#cache-globalCacheTtl-custom-row');
+        if (!row || !preset) return;
+        row.style.display = preset.value === 'CUSTOM' ? 'grid' : 'none';
+    }
+
     function wireGlobalSettingsPanelListeners(contentRoot) {
         if (!contentRoot) return;
         syncDefaultTtlCustomRow(contentRoot);
+        syncGlobalCacheTtlCustomRow(contentRoot);
         window.KefinTweaksUI?.bindToggleCards?.(contentRoot);
         updateHscToggleCardHints(contentRoot, GENERAL_TOGGLE_DESCRIPTIONS);
         updateHscToggleCardHints(contentRoot, DISCOVERY_TOGGLE_DESCRIPTIONS);
@@ -3543,6 +3653,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         dialog.addEventListener('change', (e) => {
             if (!e.target?.closest?.('#global-settings-content')) return;
             if (e.target.id === 'cache-DEFAULT_TTL-preset') syncDefaultTtlCustomRow();
+            if (e.target.id === 'cache-globalCacheTtl-preset') syncGlobalCacheTtlCustomRow();
             const content = dialog.querySelector('#global-settings-content');
             updateHscToggleCardHints(content, GENERAL_TOGGLE_DESCRIPTIONS);
             updateHscToggleCardHints(content, DISCOVERY_TOGGLE_DESCRIPTIONS);
