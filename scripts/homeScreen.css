@@ -642,6 +642,7 @@ html[data-active-page="home"] body[data-seasonal-background="true"] #reactRoot >
 
 .sections.homeSectionsContainer:not([data-category="none"]) {
 	margin-top: 0 !important;
+	top: 0 !important;
 }
 
 html[data-active-page="home"] [data-seasonal-theme="seasonal-halloween"][data-seasonal-background="true"] header.MuiAppBar-root,
