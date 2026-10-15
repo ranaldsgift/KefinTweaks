@@ -1375,6 +1375,7 @@
 	transform: none !important;
 	transition: none !important;
 	grid-template-columns: repeat(3, 1fr);
+	gap: 1em !important;
 }
 
 /* Cards fill tracks; override JF portraitCard/backdropCard % widths and Banner 33vw */
