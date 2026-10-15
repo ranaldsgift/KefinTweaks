@@ -110,11 +110,17 @@
             hookedSocket = socket;
 
             socket.onmessage = function(event) {
-                try {
-                    if (originalHandler) {
+                // Keep JF handler isolated so its throws do not look like parse failures
+                // and do not block KefinTweaks listener delivery.
+                if (originalHandler) {
+                    try {
                         originalHandler.call(this, event);
+                    } catch (err) {
+                        WARN('Original WebSocket onmessage handler error:', err);
                     }
+                }
 
+                try {
                     const messageData = event.Data || event.data;
                     const data = typeof messageData === 'string' ? JSON.parse(messageData) : messageData;
                     dispatchMessage(data);
