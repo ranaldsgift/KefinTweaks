@@ -2242,6 +2242,11 @@ div[data-tab="watchlist"] .loading-message {
 	display: none;
 }
 
+/* Do not show watchlist ahead of native Play reveal */
+.mainDetailButtons:not(:has(.btnPlay:not(.hide))) .watchlist-icon {
+	display: none !important;
+}
+
 /* Import/Export Modal Styles */
 .import-export-modal-content {
 	min-width: 500px;

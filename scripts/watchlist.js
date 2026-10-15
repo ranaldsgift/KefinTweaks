@@ -7890,89 +7890,137 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 
 	/************ Item Detail Page Observer ************/
 
+	function getVisiblePlayButton() {
+		return document.querySelector('.itemDetailPage:not(.hide) .mainDetailButtons .btnPlay:not(.hide)');
+	}
+
+	function syncWatchlistDetailVisibility(watchlistIcon) {
+		if (!watchlistIcon?.isConnected) return;
+		const playBtn = getVisiblePlayButton();
+		if (playBtn) {
+			watchlistIcon.classList.remove('hide');
+		} else {
+			watchlistIcon.classList.add('hide');
+		}
+	}
+
+	function observeWatchlistRevealWithPlay(watchlistIcon) {
+		const mainDetailButtons = document.querySelector('.itemDetailPage:not(.hide) .mainDetailButtons');
+		if (!mainDetailButtons || !watchlistIcon) return;
+
+		syncWatchlistDetailVisibility(watchlistIcon);
+
+		const observer = new MutationObserver(() => {
+			syncWatchlistDetailVisibility(watchlistIcon);
+			if (!watchlistIcon.classList.contains('hide')) {
+				observer.disconnect();
+			}
+		});
+		observer.observe(mainDetailButtons, {
+			attributes: true,
+			attributeFilter: ['class'],
+			subtree: true,
+			childList: true
+		});
+	}
+
 	// Function to add watchlist button to item detail page
-	function addDetailPageWatchlistButton(item = null) {
+	async function addDetailPageWatchlistButton(item = null) {
 		const trailerButton = document.querySelector('.itemDetailPage:not(.hide) .btnPlayTrailer');
-		
 		if (!trailerButton) {
 			return;
 		}
-		
+
 		// Check if watchlist button already exists
 		const existingButton = document.querySelector('.itemDetailPage:not(.hide) .watchlist-icon');
 		if (existingButton) {
 			return;
 		}
 
-		const isTVLayout = document.getRootNode().documentElement.className.includes('layout-tv')
-		
+		// Wait until native Play is revealed so we do not show ahead of the row
+		const pollUntil = window.KefinTweaksUtils?.pollUntil;
+		if (typeof pollUntil === 'function') {
+			const ready = await pollUntil(() => !!getVisiblePlayButton() || !!document.querySelector('.itemDetailPage:not(.hide) .mainDetailButtons .btnPlay'), {
+				timeoutMs: 8000,
+				intervalMs: 50
+			});
+			if (!ready && !document.querySelector('.itemDetailPage:not(.hide) .btnPlayTrailer')) {
+				return;
+			}
+		}
+
+		// Trailer may have been replaced during paint — re-query
+		const trailerAnchor = document.querySelector('.itemDetailPage:not(.hide) .btnPlayTrailer');
+		if (!trailerAnchor) {
+			return;
+		}
+		if (document.querySelector('.itemDetailPage:not(.hide) .watchlist-icon')) {
+			return;
+		}
+
+		const isTVLayout = document.getRootNode().documentElement.className.includes('layout-tv');
+
 		const watchlistIcon = document.createElement('button');
-		watchlistIcon.setAttribute("is", "emby-button");
-		watchlistIcon.className = `watchlist-icon detailButton emby-button button-flat${isTVLayout ? ' show-focus' : ''}`;	
-		watchlistIcon.title = "Add to Watchlist";
+		watchlistIcon.setAttribute('is', 'emby-button');
+		watchlistIcon.className = `watchlist-icon detailButton emby-button button-flat hide${isTVLayout ? ' show-focus' : ''}`;
+		watchlistIcon.title = 'Add to Watchlist';
 		watchlistIcon.dataset.active = 'false';
-		
-		// Add the content wrapper and icon span inside the button
+
 		const contentWrapper = document.createElement('div');
 		contentWrapper.className = 'detailButton-content';
-		
+
 		const iconSpan = document.createElement('span');
 		iconSpan.className = 'material-icons detailButton-icon watchlist';
 		iconSpan.setAttribute('aria-hidden', 'true');
-		
+
 		contentWrapper.appendChild(iconSpan);
 		watchlistIcon.appendChild(contentWrapper);
-		
-		// Get item ID from URL
-		const itemId = window.location.href.substring(window.location.href.indexOf("id=") + 3, window.location.href.indexOf("id=") + 35);
-		
+
+		const itemId = item?.Id
+			|| window.location.href.substring(window.location.href.indexOf('id=') + 3, window.location.href.indexOf('id=') + 35);
+
 		watchlistIcon.addEventListener('click', async () => {
 			const newRating = watchlistIcon.dataset.active === 'false' ? 'true' : 'false';
 			await ApiClient.updateUserItemRating(ApiClient.getCurrentUserId(), itemId, newRating);
 			watchlistIcon.dataset.active = newRating;
-			
-			// Update title based on state
+
 			const isActive = watchlistIcon.dataset.active === 'true';
 			watchlistIcon.title = isActive ? 'Remove from Watchlist' : 'Add to Watchlist';
-			
-			// Update watchlist cache immediately
-			// Get item type from the item data we already have
-			const item = await ApiClient.getItem(ApiClient.getCurrentUserId(), itemId);
-			if (item) {
-				await updateWatchlistCacheOnToggle(itemId, item.Type, isActive);
+
+			const toggledItem = await ApiClient.getItem(ApiClient.getCurrentUserId(), itemId);
+			if (toggledItem) {
+				await updateWatchlistCacheOnToggle(itemId, toggledItem.Type, isActive);
 			}
-		});	
-		
-		if (item) {
-			// Set initial state based on current watchlist status
-			if (item.UserData && item.UserData.Likes) {
+		});
+
+		const applyItemState = (resolvedItem) => {
+			if (!resolvedItem) return;
+			if (resolvedItem.Type !== 'Movie' && resolvedItem.Type !== 'Series' && resolvedItem.Type !== 'Season'
+				&& resolvedItem.Type !== 'Episode' && resolvedItem.Type !== 'BoxSet'
+				&& resolvedItem.Type !== 'Playlist' && resolvedItem.Type !== 'Video') {
+				watchlistIcon.style.display = 'none';
+				return;
+			}
+			if (resolvedItem.UserData && resolvedItem.UserData.Played) {
+				watchlistIcon.style.display = 'none';
+				return;
+			}
+			if (resolvedItem.UserData && resolvedItem.UserData.Likes) {
 				watchlistIcon.dataset.active = 'true';
 				watchlistIcon.title = 'Remove from Watchlist';
 			}
-		} else {
-			// Get item data to check if it should be shown and current state
-			ApiClient.getItem(ApiClient.getCurrentUserId(), itemId).then((item) => {
-				// Only show for Movies, Series, Seasons, and Episodes
-				if (item.Type !== "Movie" && item.Type !== "Series" && item.Type !== "Season" && item.Type !== "Episode" && item.Type !== "BoxSet" && item.Type !== "Playlist" && item.Type !== "Video") {
-					watchlistIcon.style.display = "none";
-				}
+		};
 
-				if (item.UserData && item.UserData.Played) {
-					watchlistIcon.style.display = "none";
-				}
-				
-				// Set initial state based on current watchlist status
-				if (item.UserData && item.UserData.Likes) {
-					watchlistIcon.dataset.active = 'true';
-					watchlistIcon.title = 'Remove from Watchlist';
-				}
-			}).catch(err => {
+		if (item) {
+			applyItemState(item);
+		} else {
+			ApiClient.getItem(ApiClient.getCurrentUserId(), itemId).then(applyItemState).catch((err) => {
 				ERR('Error fetching item data:', err);
 			});
 		}
 
-		// Add button after trailer button
-		trailerButton.after(watchlistIcon);
+		trailerAnchor.after(watchlistIcon);
+		observeWatchlistRevealWithPlay(watchlistIcon);
 	}
 
 	// Function to monitor item detail pages using onViewPage
@@ -7986,32 +8034,35 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		LOG('Registering item detail page handler with KefinTweaksUtils');
 
 		window.KefinTweaksUtils.onViewPage(async (view, element, hash, itemPromise) => {
-			// Await the item promise to get the actual item data
 			const item = await itemPromise;
-			
-			// Small delay to ensure details DOM is ready
-			setTimeout(() => {
-				const visibleItemDetailPage = document.querySelector('.itemDetailPage:not(.hide)');
-				if (!visibleItemDetailPage) {
-					return;
-				}
+			const visibleItemDetailPage = document.querySelector('.itemDetailPage:not(.hide)');
+			if (!visibleItemDetailPage) {
+				return;
+			}
 
-				if (visibleItemDetailPage.dataset.watchlistButtonAdded === 'true') {
-					return;
-				}
-				
-				// Check if watchlist button already exists
-				const existingButton = document.querySelector('.itemDetailPage:not(.hide) .watchlist-icon');
-				if (existingButton) {
-					return;
-				}
+			const itemId = item?.Id || '';
+			if (itemId && visibleItemDetailPage.dataset.watchlistButtonAdded === itemId) {
+				return;
+			}
+			if (!itemId && visibleItemDetailPage.dataset.watchlistButtonAdded === 'true') {
+				return;
+			}
 
-				// Check if item is provided and if item type is supported for watchlist
-				if (item && (item.Type === "Movie" || item.Type === "Series" || item.Type === "Season" || item.Type === "Episode" || item.Type === "BoxSet" || item.Type === "Playlist" || item.Type === "Video")) {
-					visibleItemDetailPage.dataset.watchlistButtonAdded = 'true';
-					addDetailPageWatchlistButton(item);
-				}
-			}, 100);
+			const existingButton = document.querySelector('.itemDetailPage:not(.hide) .watchlist-icon');
+			if (existingButton && itemId && existingButton.dataset.itemId === itemId) {
+				return;
+			}
+			if (existingButton && itemId && existingButton.dataset.itemId !== itemId) {
+				existingButton.remove();
+			}
+
+			if (item && (item.Type === 'Movie' || item.Type === 'Series' || item.Type === 'Season'
+				|| item.Type === 'Episode' || item.Type === 'BoxSet' || item.Type === 'Playlist' || item.Type === 'Video')) {
+				visibleItemDetailPage.dataset.watchlistButtonAdded = itemId || 'true';
+				await addDetailPageWatchlistButton(item);
+				const btn = document.querySelector('.itemDetailPage:not(.hide) .watchlist-icon');
+				if (btn && itemId) btn.dataset.itemId = itemId;
+			}
 		}, {
 			pages: ['details']
 		});
