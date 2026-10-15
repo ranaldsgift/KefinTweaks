@@ -292,11 +292,9 @@ Export your Watchlist to JSON which can later be imported using the Watchlist Im
 
 Have you ever wanted to be able to fully customize nearly every aspect of your Home Screen? Be able to set it up for all users in a particular way, with the ability for them to make changes to their liking? That's what the Enhanced Home Screen does. So much has been added here that it won't even be possible to give a clear overview of everything that is possible with the new features. I'll do my best to list out everything, but you can always ask me on Discord if you want to know how to create something specific that you can't quite figure out. It's probably achievable.
 
-| Home Sections Available in KefinTweaks |
+| New Home Sections Available in KefinTweaks |
 | :---: |
 | ![New sections available in KefinTweaks](https://i.imgur.com/uispy2q.png) |
-
-&nbsp;
 
 - **Every native Jellyfin section**  
   KefinTweaks supports all of the native sections included in Jellyfin by default. The section status (enabled/disabled) in KefinTweaks will sync to your Jellyfin user preferences so these sections remain available when using a client that doesn't support KefinTweaks.
@@ -332,8 +330,6 @@ Have you ever wanted to be able to fully customize nearly every aspect of your H
 | :---: |
 | ![Seasonal Content](pages/images/seasonalsection.png) |  
 
-&nbsp;
-
 - **Watchlist Integration**:  
   Add a section for your Watchlist directly on your home screen
 
@@ -343,52 +339,53 @@ Have you ever wanted to be able to fully customize nearly every aspect of your H
 
 &nbsp;
 
-- **Home Category Navigation**:  
-    - Adds navigation controls to navigate between Home / Discovery / Pinned or any custom Category
-    - Start discovering content without scrolling through the entire home screen  
+Home Category Navigation
+---
+- Adds navigation controls to navigate between Home / Discovery / Pinned or any custom Category
+- Start discovering content without scrolling through the entire home screen
 
-| Home Category Navigation |
-| :---: |
-| ![Home Category Navigation](https://i.imgur.com/CLLuAlp.png) |  
-
-&nbsp;
-
-- **Pinned Content**  
-    - Pin specific items to your home screen
-        - Choose a name for the section you want to pin the item to
-    - Pin Children items to your home screen
-        - Pick a Parent item: Studio, Genre, Series, Person, etc  
-
-| Pinned Content |
-| :---: |
-| ![Pinned Content](https://i.imgur.com/dRiWEHM.png) |  
+| ![Home Category Navigation](https://i.imgur.com/CLLuAlp.png) |
+| :---: |  
 
 &nbsp;
 
-- **Personalized Discovery Sections**  
-    - Personalized dynamic recommendations based on your watch history, favorites, watchlist, etc
-    - Suggested content from popular Genres, Studios, People
-    - Custom user created static discovery sections (dynamic user created sections coming soon!  
+Pinned Content
+---
+- Pin specific items to your home screen
+    - Choose a name for the section you want to pin the item to
+- Pin Children items to your home screen
+    - Pick a Parent item: Studio, Genre, Series, Person, etc
 
-| Personalized Discovery Sections |
-| :---: |
-| ![Personalized Discovery Sections](https://i.imgur.com/LDVx0r5.png) |  
+| ![Pinned Content](https://i.imgur.com/dRiWEHM.png) |
+| :---: |  
 
 &nbsp;
 
-- **Section Layout: Normal**
-    - Pick the Artwork
-        - Support for every Jellyfin artwork type
-    - Pick a Border
-        - 14 different border styles
-        - Custom border color
-    - Customize the footer text
-        - 12 different fonts
-        - Font size
-        - Font color
-        - Text capitalization options
-        - Horizontal and vertical positioning (text overlay) 
-    - Switch between Row and Grid view
+Personalized Discovery Sections
+---
+- Personalized dynamic recommendations based on your watch history, favorites, watchlist, etc
+- Suggested content from popular Genres, Studios, People
+- Custom user created static discovery sections (dynamic user created sections coming soon!
+
+| ![Personalized Discovery Sections](https://i.imgur.com/LDVx0r5.png) |
+| :---: |  
+
+&nbsp;
+
+Section Customization
+---
+- Pick the Artwork
+    - Support for every Jellyfin artwork type
+- Pick a Border
+    - 14 different border styles
+    - Custom border color
+- Customize the footer text
+    - 12 different fonts
+    - Font size
+    - Font color
+    - Text capitalization options
+    - Horizontal and vertical positioning (text overlay) 
+- Switch between Row and Grid view
 
 | All existing Jellyfin artwork types supported |
 | :---: |
@@ -398,21 +395,22 @@ Have you ever wanted to be able to fully customize nearly every aspect of your H
 
 &nbsp;
 
-- **Section Layout: Spotlight**
-    - Pick the Layout
-        - Borderless
-        - Border
-    - Pick the size
-        - Normal
-        - Large
-        - Full
-    - Cycle your backdrops
-        - Decide how many backdrops appear for an item before advancing slides
-    - Tile your backdrops
-        - Up to 3 backdrops side by side
-    - Slide animations
-        - Enable or disable animations
-        - Pick your preferred animation for each backdrop tile  
+Spotlight Customization
+---
+- Pick the Layout
+    - Borderless
+    - Border
+- Pick the size
+    - Normal
+    - Large
+    - Full
+- Cycle your backdrops
+    - Decide how many backdrops appear for an item before advancing slides
+- Tile your backdrops
+    - Up to 3 backdrops side by side
+- Slide animations
+    - Enable or disable animations
+    - Pick your preferred animation for each backdrop tile
 
 | Spotlight Section Variations |
 | :---: |
@@ -420,9 +418,10 @@ Have you ever wanted to be able to fully customize nearly every aspect of your H
 
 &nbsp;
 
-- **Section Editor: Wizard**
-    - Use pre-defined templates to easily create new sections
-    - Sections created by the Wizard can still be fully edited in the Advanced Editor later
+Section Editor: Wizard
+---
+- Use pre-defined templates to easily create new sections
+- Sections created by the Wizard can still be fully edited in the Advanced Editor later
 
 | Section Creation Wizard |
 | :---: |
@@ -430,23 +429,23 @@ Have you ever wanted to be able to fully customize nearly every aspect of your H
 
 &nbsp;
 
-- Section Editor: Advanced
-    - Create any custom section where the limits are only what Jellyfin can handle
-    - Define multiple queries for a section
-        - Sort each query individually
-        - Choose a post-process items strategy: Merge / Separate / Random
-        - Choose a post-process sorting strategy
-    - Merged mode results are merged before post processing
-    - Separate mode adds a "Query Picker" to the section to switch between the defined queries
-    - Random mode chooses one query from the list at random every time the section loads
-    - Limited only by your creativity, you can create almost any section you like:
-        - Top rated Series Premiere episodes from the last 365 days
-        - Lowest rated Series that aired for more than a decade
-        - Movies that start with the letter B and have a rating above 7
-        - Movies released by Universal Pictures before 1995 starring Keith David
+Section Editor: Advanced
+---
+- Create any custom section where the limits are only what Jellyfin can handle
+- Define multiple queries for a section
+    - Sort each query individually
+    - Choose a post-process items strategy: Merge / Separate / Random
+    - Choose a post-process sorting strategy
+- Merged mode results are merged before post processing
+- Separate mode adds a "Query Picker" to the section to switch between the defined queries
+- Random mode chooses one query from the list at random every time the section loads
+- Limited only by your creativity, you can create almost any section you like:
+    - Top rated Series Premiere episodes from the last 365 days
+    - Lowest rated Series that aired for more than a decade
+    - Movies that start with the letter B and have a rating above 7
+    - Movies released by Universal Pictures before 1995 starring Keith David
 
-Just watch the [teaser trailer](https://www.youtube.com/watch?v=URw8q6acdmo) if you want an idea of the level of customization.  
-&nbsp;
+Just watch the [teaser trailer](https://www.youtube.com/watch?v=URw8q6acdmo) if you want an idea of the level of customization.
 
 ## **Enhanced Search**
 
@@ -465,7 +464,8 @@ Just watch the [teaser trailer](https://www.youtube.com/watch?v=URw8q6acdmo) if 
 
 &nbsp;
 
-## **Thumbnail Scrubber**
+Thumbnail Scrubber
+---
 Tired of Youtube hover previews and the seekbar functionality to quickly seek through a video? Well, wake up! We brought it to Jellyfin.
 
 - Adds a seekbar and "scrubbing" functionality when hovering a card similar to Youtube
@@ -476,26 +476,28 @@ FR: [1](https://features.jellyfin.org/posts/139/show-video-preview-on-thumbnail-
 
 | Thumbnail Scrubber | Video Preview on Hover |
 | :-: | :-: |
-| ![Scrubber Example](https://i.imgur.com/Lr2bbxy.gif) | ![Hover Preview Example](https://i.imgur.com/CpcOE5A.gif) |
+| ![Scrubber Example](https://i.imgur.com/Lr2bbxy.gif) | ![Hover Preview Example](https://i.imgur.com/CpcOE5A.gif) |  
 
 &nbsp;
 
-## **Watch Together**
+Watch Together
+---
 This feature is designed to be used by people who are watching something together on the same device and want the Watched status and progress to be synced to each of their individual accounts. This could be watching together in your living room, in the sauna, or even while you travel to the moon in your preferred spacecraft.
 
 Authenticate the user accounts you want to sync progress with. If you have active users in your Watch Together group, you will be reminded at the beginning of playback if you'd like to continue syncing with any of them.
 
 [Checkout how it works!](https://streamable.com/yfj8xk) The UI has been improved since this video, but the functionality remains.
 
-FR: [1](https://features.jellyfin.org/posts/389/watch-together-watch-with-multiples-accounts), [2](https://features.jellyfin.org/posts/3950/would-love-to-see-a-watch-together-or-a-syncplay-feature-for-the-jellyfin-tv)  
+FR: [1](https://features.jellyfin.org/posts/389/watch-together-watch-with-multiples-accounts), [2](https://features.jellyfin.org/posts/3950/would-love-to-see-a-watch-together-or-a-syncplay-feature-for-the-jellyfin-tv)
 
 | Video OSD Access and Reminder |
 | :---: |
-| ![Watch Together](https://i.imgur.com/m6eiZmS.png) |
+| ![Watch Together](https://i.imgur.com/m6eiZmS.png) |  
 
 &nbsp;
 
-## **Version Preferences**
+Version Preferences
+---
 Have you ever wanted Jellyfin to respect its own naming schemes? Why is that pesky 1080p version listed before the 4k version? Forget about it!
 
 - Specify priorities across both Versions and Editions
@@ -503,31 +505,31 @@ Have you ever wanted Jellyfin to respect its own naming schemes? Why is that pes
 - Multiple Versions from the same Edition are grouped together
 - Your choice of format: "Edition - Version" or "Version - Edition"
 
-FR: [1](https://features.jellyfin.org/posts/3816/smart-default-version-selection-for-grouped-media-by-bitrate-audio-tracks-codec-resolution), [2](https://features.jellyfin.org/posts/1465/multiple-editions-of-a-movie-with-multiple-resolutions), [3](https://features.jellyfin.org/posts/3758/option-to-manually-change-the-order-of-movie-versions-in-group-versions)  
+FR: [1](https://features.jellyfin.org/posts/3816/smart-default-version-selection-for-grouped-media-by-bitrate-audio-tracks-codec-resolution), [2](https://features.jellyfin.org/posts/1465/multiple-editions-of-a-movie-with-multiple-resolutions), [3](https://features.jellyfin.org/posts/3758/option-to-manually-change-the-order-of-movie-versions-in-group-versions)
 
 | Prioritize your item Versions and Editions |
 | :---: |
-| ![Version Preferences](https://i.imgur.com/jnYoB3p.png) |
+| ![Version Preferences](https://i.imgur.com/jnYoB3p.png) |  
 
 &nbsp;
 
-## **User Manager**
+User Manager
+---
 Every Jellyfin admin cuts their teeth by manually configuring each of their freshly created user accounts with their preferred defaults. It's a time-honored tradition, but what do I know about tradition?
 
 - Create User Templates
 - Pick a default User Template
 - New Users default to the chosen Template with the ability to select a different one instead
-- Bulk Update existing users with the settings from any of your User Templates  
-
-FR: [1](https://features.jellyfin.org/posts/3798/user-template), [2](https://features.jellyfin.org/posts/363/default-user-settings-on-user-creation), [3](https://features.jellyfin.org/posts/4006/a-feature-to-create-a-moderator-user)  
+- Bulk Update existing users with the settings from any of your User Templates
 
 | User Profile Templates and Bulk User Editing |
 | :---: |
-| ![](https://i.imgur.com/3ThokAo.png) |
+| ![User Profile Templates](https://i.imgur.com/3ThokAo.png) |  
 
 &nbsp;
 
-## **Games**
+Games
+---
 Frivolous games where the points don't matter? Test your knowledge of your library with some random mini-games!
 
 - [Movie LUTs Game](https://game.movieluts.com/)
@@ -535,7 +537,7 @@ Frivolous games where the points don't matter? Test your knowledge of your libra
 
 | Movie LUTs and more! |
 | :---: |
-| ![Games](https://i.imgur.com/f7aDWkm.png) |
+| ![Games](https://i.imgur.com/f7aDWkm.png) |  
 
 &nbsp;
 
