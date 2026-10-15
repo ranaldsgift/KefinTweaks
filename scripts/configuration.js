@@ -5653,18 +5653,20 @@
 
     // Apply imported configuration
     async function applyImportedConfig(importedConfig, modalInstance) {
-        // Save to JavaScript Injector
+        // Update in-memory config before reopen (getKefinTweaksConfig reads window.KefinTweaksConfig)
+        window.KefinTweaksConfig = importedConfig;
+        window.KefinTweaksCurrentConfig = importedConfig;
+        currentLoadedConfig = importedConfig;
+        window.KefinTweaksConfigEnabled = importedConfig.enabled !== false;
+
         await KefinTweaksUtils.saveConfigToJavaScriptInjector(importedConfig);
-        
-        // Reload the modal with new config
+
         modalInstance.close();
-        
-        // Show success message
+
         if (window.KefinTweaksToaster && window.KefinTweaksToaster.toast) {
             window.KefinTweaksToaster.toast('Configuration imported successfully! Reloading...');
         }
-        
-        // Reopen modal with new config after a short delay
+
         setTimeout(() => {
             openConfigurationModal();
         }, 500);
@@ -6028,6 +6030,11 @@
             const existingConfig = await getKefinTweaksConfig();
             defaultConfig.kefinTweaksRoot = existingConfig.kefinTweaksRoot;
             // Note: scriptRoot is no longer used - scripts are loaded from kefinTweaksRoot + '/scripts/'
+
+            window.KefinTweaksConfig = defaultConfig;
+            window.KefinTweaksCurrentConfig = defaultConfig;
+            currentLoadedConfig = defaultConfig;
+            window.KefinTweaksConfigEnabled = defaultConfig.enabled !== false;
 
             await KefinTweaksUtils.saveConfigToJavaScriptInjector(defaultConfig);
 
