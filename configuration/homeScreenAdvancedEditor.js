@@ -2361,7 +2361,7 @@
                             )}
                         </div>
                     </div>
-                    <div class="hsae-toggle-card-grid" data-hsae-profiles="full minimal">
+                    <div class="hsae-toggle-card-grid" data-hsae-profiles="full minimal postProcessing normal dateCutoffs">
                         ${buildToggleCard(
                             'hsae-use-parent-card',
                             section.useParentCard === true,

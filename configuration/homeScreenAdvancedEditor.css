@@ -1712,9 +1712,9 @@
 	flex: 1;
 }
 
+/* Full-width only when Flatten Series is hidden for the profile (solo toggle in the row). */
 .hsae-root[data-editor-profile="minimal"] .hsae-advanced-limit-before-sort,
-.hsae-root[data-editor-profile="postProcessing"] .hsae-advanced-limit-before-sort,
-.hsae-root[data-editor-profile="normal"] .hsae-advanced-limit-before-sort {
+.hsae-root[data-editor-profile="postProcessing"] .hsae-advanced-limit-before-sort {
 	grid-column: -1 / 1;
 }
 

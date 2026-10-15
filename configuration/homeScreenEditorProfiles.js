@@ -21,7 +21,7 @@
         },
         postProcessing: {
             queryFields: ['limit'],
-            advancedFields: ['cache', 'sectionSort', 'minimumItems', 'itemLimit', 'limitBeforeSort'],
+            advancedFields: ['cache', 'sectionSort', 'minimumItems', 'itemLimit', 'limitBeforeSort', 'useParentCard'],
             lockVisibility: true,
             allowGroupChange: false,
             allowItemSourceChange: false,
@@ -29,14 +29,14 @@
         },
         normal: {
             queryFields: ['limit', 'sortBy', 'sortOrder'],
-            advancedFields: ['cache', 'sectionSort', 'itemLimit', 'minimumItems', 'flattenSeries', 'limitBeforeSort'],
+            advancedFields: ['cache', 'sectionSort', 'itemLimit', 'minimumItems', 'flattenSeries', 'limitBeforeSort', 'useParentCard'],
             lockVisibility: true,
             allowGroupChange: false,
             allowItemSourceChange: false
         },
         dateCutoffs: {
             queryFields: ['limit', 'sortBy', 'sortOrder'],
-            advancedFields: ['cache', 'sectionSort', 'itemLimit', 'minimumItems', 'flattenSeries', 'limitBeforeSort', 'minAge', 'maxAge'],
+            advancedFields: ['cache', 'sectionSort', 'itemLimit', 'minimumItems', 'flattenSeries', 'limitBeforeSort', 'minAge', 'maxAge', 'useParentCard'],
             lockVisibility: true,
             allowGroupChange: false,
             allowItemSourceChange: false
