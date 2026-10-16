@@ -2500,6 +2500,27 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
         }
     }
 
+    function padBackupTimePart(n) {
+        return String(n).padStart(2, '0');
+    }
+
+    /** Local wall-clock stamp for backup filenames (matches toLocaleString calendar day). */
+    function formatBackupTimestampLocal(date = new Date()) {
+        let d = date instanceof Date ? date : new Date(date);
+        if (Number.isNaN(d.getTime())) d = new Date();
+        return [
+            d.getFullYear(),
+            padBackupTimePart(d.getMonth() + 1),
+            padBackupTimePart(d.getDate())
+        ].join('-')
+            + 'T'
+            + [
+                padBackupTimePart(d.getHours()),
+                padBackupTimePart(d.getMinutes()),
+                padBackupTimePart(d.getSeconds())
+            ].join('-');
+    }
+
     function parseBackupTimestamp(name, script) {
         const createdMatch = String(script || '').match(/Created:\s*(\d{4}-\d{2}-\d{2}T[^\s\n]+)/i);
         if (createdMatch) {
@@ -2508,8 +2529,9 @@ window.KefinTweaksConfig = ${JSON.stringify(configToSave, null, 2)};`;
         }
         const nameMatch = String(name || '').match(/(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})/);
         if (nameMatch) {
-            const iso = nameMatch[1].replace(/T(\d{2})-(\d{2})-(\d{2})/, 'T$1:$2:$3') + 'Z';
-            const d = new Date(iso);
+            // Filenames use local wall-clock; do not append Z (that caused UTC→local day skew).
+            const localIso = nameMatch[1].replace(/T(\d{2})-(\d{2})-(\d{2})/, 'T$1:$2:$3');
+            const d = new Date(localIso);
             if (!Number.isNaN(d.getTime())) return d;
         }
         return null;
@@ -2524,10 +2546,26 @@ ${reasonLine}// Created: ${new Date().toISOString()}
 window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
     }
 
-    function makeBackupName(kind = 'manual') {
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+    function sanitizeBackupLabel(label) {
+        let s = String(label || '').trim();
+        if (!s) return '';
+        s = s
+            .replace(/[\\/<>:"|?*\u0000-\u001f;]/g, '')
+            .replace(/\s+/g, '-')
+            .replace(/-+/g, '-')
+            .replace(/^-+|-+$/g, '');
+        if (s.length > 48) s = s.slice(0, 48).replace(/-+$/g, '');
+        return s;
+    }
+
+    function makeBackupName(kind = 'manual', options = {}) {
+        const timestamp = formatBackupTimestampLocal(new Date());
+        const label = sanitizeBackupLabel(options.label || options.name || '');
         if (kind === 'scheduled') {
             return `KefinTweaks-Config-ScheduledBackup-${timestamp}`;
+        }
+        if (label) {
+            return `KefinTweaks-Config-Backup-${label}-${timestamp}`;
         }
         return `KefinTweaks-Config-Backup-${timestamp}`;
     }
@@ -2601,7 +2639,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
     }
 
     async function createKefinConfigBackup(config = null, options = {}) {
-        const { reason = 'manual', kind } = options;
+        const { reason = 'manual', kind, label, name } = options;
         try {
             const configToBackup = config || window.KefinTweaksConfig;
             if (!configToBackup) throw new Error('No config available to backup');
@@ -2609,7 +2647,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             const backupKind = kind
                 || (reason === 'scheduled-daily' ? 'scheduled' : 'manual');
             const { pluginId, injectorConfig } = await fetchInjectorConfigForBackups();
-            const backupName = makeBackupName(backupKind);
+            const backupName = makeBackupName(backupKind, { label: label || name });
             injectorConfig.CustomJavaScripts.push({
                 Name: backupName,
                 Script: buildConfigBackupScript(configToBackup, reason),

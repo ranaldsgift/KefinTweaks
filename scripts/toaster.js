@@ -56,6 +56,35 @@
             .toast.kefin-toast-rich .kefin-toast-action .material-icons {
                 font-size: 1.25rem;
             }
+            .toast.kefin-toast-rich.kefin-toast-with-buttons {
+                flex-wrap: wrap;
+                align-items: flex-start;
+            }
+            .toast.kefin-toast-rich .kefin-toast-buttons {
+                flex: 1 1 100%;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 0.5em;
+                margin-top: 0.15em;
+            }
+            .toast.kefin-toast-rich .kefin-toast-text-btn {
+                flex: 0 0 auto;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                padding: 0.35em 0.9em;
+                margin: 0;
+                border: 1px solid rgba(255, 255, 255, 0.28);
+                border-radius: 4px;
+                background: rgba(255, 255, 255, 0.08);
+                color: inherit;
+                font: inherit;
+                font-weight: 500;
+                cursor: pointer;
+            }
+            .toast.kefin-toast-rich .kefin-toast-text-btn:hover {
+                background: rgba(255, 255, 255, 0.16);
+            }
         `;
         document.head.appendChild(style);
     }
@@ -119,7 +148,10 @@
     function buildToastContent(toastElement, message, options) {
         const link = options?.link;
         const action = options?.action;
-        const rich = !!(link || action);
+        const buttons = Array.isArray(options?.buttons)
+            ? options.buttons.filter((b) => b && typeof b.label === 'string' && typeof b.onClick === 'function')
+            : [];
+        const rich = !!(link || action || buttons.length);
         if (!rich) {
             toastElement.textContent = message;
             return;
@@ -127,6 +159,9 @@
 
         ensureToastStyles();
         toastElement.classList.add('kefin-toast-rich');
+        if (buttons.length) {
+            toastElement.classList.add('kefin-toast-with-buttons');
+        }
 
         const messageEl = document.createElement('span');
         messageEl.className = 'kefin-toast-message';
@@ -202,6 +237,28 @@
             });
             toastElement.appendChild(btn);
         }
+
+        if (buttons.length) {
+            const row = document.createElement('div');
+            row.className = 'kefin-toast-buttons';
+            buttons.forEach((spec) => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'kefin-toast-text-btn';
+                btn.textContent = spec.label;
+                btn.addEventListener('click', (ev) => {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    try {
+                        spec.onClick();
+                    } catch (e) {
+                        ERR('Toast button action failed:', e);
+                    }
+                });
+                row.appendChild(btn);
+            });
+            toastElement.appendChild(row);
+        }
     }
     
     /**
@@ -209,7 +266,7 @@
      * @param {string} message - The message to display
      * @param {string|number} duration - Duration in seconds
      * @param {boolean} autoHide - Whether to automatically hide the toast after duration (default: true)
-     * @param {{ link?: { label: string, href?: string, onClick?: Function }, action?: { icon?: string, label?: string, onClick: Function } }} [options]
+     * @param {{ link?: { label: string, href?: string, onClick?: Function }, action?: { icon?: string, label?: string, onClick: Function }, buttons?: Array<{ label: string, onClick: Function }> }} [options]
      * @returns {{ dismiss: Function, element: HTMLElement }|undefined}
      */
     function toast(message, duration = '3', autoHide = true, options = null) {

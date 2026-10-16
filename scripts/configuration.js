@@ -4944,6 +4944,7 @@
         `).join('');
         return `
             <div style="display:flex;flex-wrap:wrap;gap:0.5em;align-items:center;margin-bottom:0.75em;">
+                <button type="button" class="emby-button raised" id="manageBackupsCreateBtn" style="padding:0.4em 1em;">Create</button>
                 <button type="button" class="emby-button raised" id="manageBackupsSelectAllBtn" style="padding:0.4em 1em;">Select all</button>
                 <button type="button" class="emby-button raised" id="manageBackupsDeselectAllBtn" style="padding:0.4em 1em;">Deselect all</button>
                 <button type="button" class="emby-button raised" id="manageBackupsDeleteSelectedBtn" style="padding:0.4em 1em;" disabled>Delete selected</button>
@@ -4987,6 +4988,54 @@
 
     function confirmDeleteBackup(name) {
         return confirmDeleteBackups([name]);
+    }
+
+    function confirmCreateBackup() {
+        return new Promise((resolve) => {
+            if (!window.ModalSystem) {
+                const label = window.prompt('Optional backup name (leave blank for default):', '') || '';
+                resolve(window.confirm('Create a configuration backup now?')
+                    ? { create: true, label: String(label).trim() }
+                    : { create: false });
+                return;
+            }
+            window.ModalSystem.create({
+                id: 'manageCreateBackupConfirm',
+                title: 'Create Backup',
+                content: `
+                    <div class="listItemBodyText" style="margin-bottom:1em;">
+                        Create a backup of your current KefinTweaks configuration?
+                    </div>
+                    <label class="listItemBodyText" for="manageCreateBackupName" style="display:block;margin-bottom:0.35em;">
+                        Optional name
+                    </label>
+                    <input type="text" id="manageCreateBackupName" class="fld emby-input" placeholder="e.g. PreRelease"
+                        style="width:100%;" autocomplete="off">
+                    <div class="listItemBodyText secondary" style="margin-top:0.35em;">
+                        When set, the backup is named KefinTweaks-Config-Backup-[Name]-Timestamp. Leave blank for the default name.
+                    </div>
+                `,
+                footer: `
+                    <button class="emby-button raised button-submit" id="manageCreateBackupConfirmBtn" style="padding:0.75em 2em;margin-right:1em;">Create</button>
+                    <button class="emby-button raised" id="manageCreateBackupCancelBtn" style="padding:0.75em 2em;">Cancel</button>
+                `,
+                closeOnBackdrop: true,
+                closeOnEscape: true,
+                onOpen: (mi) => {
+                    const input = mi.dialogContent?.querySelector('#manageCreateBackupName');
+                    setTimeout(() => input?.focus(), 100);
+                    mi.dialogFooter?.querySelector('#manageCreateBackupConfirmBtn')?.addEventListener('click', () => {
+                        const label = (input?.value || '').trim();
+                        mi.close();
+                        resolve({ create: true, label });
+                    });
+                    mi.dialogFooter?.querySelector('#manageCreateBackupCancelBtn')?.addEventListener('click', () => {
+                        mi.close();
+                        resolve({ create: false });
+                    });
+                }
+            });
+        });
     }
 
     function confirmDeleteBackups(names) {
@@ -5147,6 +5196,7 @@
         });
 
         tableHost?.addEventListener('click', async (e) => {
+            const createBtn = e.target.closest?.('#manageBackupsCreateBtn');
             const selectAllBtn = e.target.closest?.('#manageBackupsSelectAllBtn');
             const deselectAllBtn = e.target.closest?.('#manageBackupsDeselectAllBtn');
             const deleteSelectedBtn = e.target.closest?.('#manageBackupsDeleteSelectedBtn');
@@ -5175,6 +5225,22 @@
                 syncSelectionUi();
             };
 
+            if (createBtn) {
+                const choice = await confirmCreateBackup();
+                if (!choice?.create) return;
+                const result = await window.KefinTweaksUtils?.createKefinConfigBackup?.(config, {
+                    reason: 'manual',
+                    kind: 'manual',
+                    label: choice.label || ''
+                });
+                if (result?.ok) {
+                    toastMsg(`Backup created: ${result.name}`);
+                    await refreshManageBackupsTable(tableHost);
+                } else {
+                    toastMsg('Failed to create backup', '5');
+                }
+                return;
+            }
             if (selectAllBtn) {
                 setAllChecked(true);
                 return;

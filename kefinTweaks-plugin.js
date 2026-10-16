@@ -1006,7 +1006,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             }
 
             resolvedHashEl.style.display = 'block';
-            resolvedHashEl.textContent = 'Resolved commit: …';
+            resolvedHashEl.textContent = 'Version: …';
 
             let sha = extractShaFromRoot(currentConfig?.kefinTweaksRootResolved);
             const symbolicMatchesSelection =
@@ -1029,9 +1029,9 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
 
             if (sha) {
                 const short = sha.length > 12 ? sha.slice(0, 12) : sha;
-                resolvedHashEl.textContent = `Resolved commit: ${short}`;
+                resolvedHashEl.textContent = `Version: ${short}`;
             } else {
-                resolvedHashEl.textContent = 'Resolved commit: unavailable';
+                resolvedHashEl.textContent = 'Version: unavailable';
             }
         }
 

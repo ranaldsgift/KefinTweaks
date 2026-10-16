@@ -258,13 +258,6 @@
             description: 'Library cache facade for KefinTweaks'
         },
         {
-            name: 'externalList',
-            script: 'externalList.js',
-            css: null,
-            dependencies: ['libraryCache', 'libraryCacheUtils', 'apiHelper'],
-            description: 'MDBList external list matching for home sections'
-        },
-        {
             name: 'skinManager',
             script: 'skinManager.js',
             css: 'defaultSkin.css',
@@ -290,7 +283,7 @@
             name: 'cardBuilder',
             script: 'cardBuilder.js',
             css: 'cardBuilder.css',
-            dependencies: ['apiHelper', 'userHelper'],
+            dependencies: ['apiHelper', 'userHelper', 'websocketHelper'],
             description: 'Core card building functionality (required by other scripts)'
         },
         {
@@ -388,7 +381,7 @@
             name: 'watchlist',
             script: 'watchlist.js',
             css: 'watchlist.css',
-            dependencies: ['cardBuilder', 'localStorageCache', 'modal', 'utils', 'statistics', 'watchlist-configuration'],
+            dependencies: ['cardBuilder', 'localStorageCache', 'modal', 'utils', 'statistics', 'watchlist-configuration', 'websocketHelper'],
             thirdParty: ['chartjs'],
             description: 'Adds watchlist functionality throughout Jellyfin interface'
         },
@@ -396,7 +389,7 @@
             name: 'homeScreen',
             script: 'homeScreen3.js',
             css: 'homeScreen.css',
-            dependencies: ['cardBuilder', 'localStorageCache', 'utils', 'userHelper', 'homeScreenConfig2', 'homeScreen-configuration', 'peopleCache', 'studiosCache', 'moviesCache', 'seriesCache', 'libraryCache', 'libraryCacheUtils', 'externalList', 'indexedDBCache', 'homeScreenConfigCommunity', 'dataHelper', 'apiHelper', 'sectionHelper', 'homeScreen-migration', 'homeScreen-user-configuration', 'homeScreenSectionConfigure', 'homeScreenPin'],
+            dependencies: ['cardBuilder', 'localStorageCache', 'utils', 'userHelper', 'homeScreenConfig2', 'homeScreen-configuration', 'peopleCache', 'studiosCache', 'moviesCache', 'seriesCache', 'libraryCache', 'libraryCacheUtils', 'indexedDBCache', 'homeScreenConfigCommunity', 'dataHelper', 'apiHelper', 'sectionHelper', 'homeScreen-migration', 'homeScreen-user-configuration', 'homeScreenSectionConfigure', 'homeScreenPin'],
             priority: true, // Load immediately after dependencies to reduce UI disruption
             description: 'Adds custom home screen sections'
         },
