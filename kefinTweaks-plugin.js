@@ -399,7 +399,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
 
     /**
      * After tip re-pin is persisted to disk, force reload so Config/bake/scripts stay aligned.
-     * Single-flight per page session.
+     * Single-flight per page session. Countdown updates the same toast in place (no reopen).
      */
     function scheduleForcedTipReloadCountdown({ symbolicRoot, nextResolved }) {
         if (window.__kefinTipReloadScheduled) return;
@@ -407,15 +407,43 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
 
         const label = formatResolvedUpdateLabel(symbolicRoot, nextResolved);
         let remaining = 5;
+        const msg = (n) => `KefinTweaks updated to ${label} — refreshing in ${n}…`;
 
-        const show = (n) => {
-            queueRootUpdateToast(
-                `KefinTweaks updated to ${label} — refreshing in ${n}…`,
-                { sticky: true, duration: '6' }
-            );
+        let toastHandle = null;
+
+        const setToastMessage = (el, text) => {
+            if (!el) return;
+            const messageEl = el.querySelector('.kefin-toast-message');
+            if (messageEl) messageEl.textContent = text;
+            else el.textContent = text;
         };
 
-        show(remaining);
+        const ensureToast = () => {
+            if (toastHandle?.element?.isConnected) return toastHandle;
+            if (typeof window.KefinTweaksToaster?.toast === 'function') {
+                toastHandle = window.KefinTweaksToaster.toast(msg(remaining), '6', false);
+                return toastHandle;
+            }
+            // Toaster not ready yet — queue once; flush will show sticky toast
+            queueRootUpdateToast(msg(remaining), { sticky: true, duration: '6' });
+            return null;
+        };
+
+        const update = (n) => {
+            const handle = ensureToast();
+            if (handle?.element?.isConnected) {
+                setToastMessage(handle.element, msg(n));
+                return;
+            }
+            // Pending toast may have been flushed by toaster init — adopt it if present
+            const existing = document.querySelector('.toastContainer .toast');
+            if (existing) {
+                toastHandle = { element: existing, dismiss: () => {} };
+                setToastMessage(existing, msg(n));
+            }
+        };
+
+        update(remaining);
         const tick = setInterval(() => {
             remaining -= 1;
             if (remaining <= 0) {
@@ -427,7 +455,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                 }
                 return;
             }
-            show(remaining);
+            update(remaining);
         }, 1000);
     }
 
