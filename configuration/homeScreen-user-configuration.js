@@ -63,7 +63,15 @@
      * User whose Home prefs are being edited on mypreferenceshome / userpreferences.
      * Prefers ?userId= from the hash or query (admin editing another user); else session user.
      */
-    function resolvePreferencesTargetUserId() {
+    /**
+     * Resolve whose display prefs to load/save (URL userId or current user).
+     * Always waits for login first so ApiClient has a current user before peeking.
+     * Callers must await.
+     */
+    async function resolvePreferencesTargetUserId() {
+        if (window.userHelper?.waitForLogin) {
+            await window.userHelper.waitForLogin();
+        }
         try {
             const hash = String(window.location.hash || '');
             const search = String(window.location.search || '');
@@ -90,7 +98,7 @@
     }
 
     async function getEditorDisplayPreferences() {
-        const userId = resolvePreferencesTargetUserId();
+        const userId = await resolvePreferencesTargetUserId();
         if (!userId) return null;
         const currentId = window.ApiClient?.getCurrentUserId?.();
         if (userId !== currentId && window.userHelper?.getUserDisplayPreferencesForUser) {
@@ -102,7 +110,7 @@
     }
 
     async function saveEditorDisplayPreferences(displayPrefs) {
-        const userId = resolvePreferencesTargetUserId();
+        const userId = await resolvePreferencesTargetUserId();
         if (!userId || !displayPrefs) return false;
         if (window.userHelper?.updateDisplayPreferencesForUser) {
             return window.userHelper.updateDisplayPreferencesForUser(userId, displayPrefs, {
@@ -1101,7 +1109,7 @@
     }
 
     async function fetchUserViewsItems() {
-        const userId = resolvePreferencesTargetUserId();
+        const userId = await resolvePreferencesTargetUserId();
         if (!userId || !window.ApiClient) return [];
         if (window.ApiClient.getUserViews) {
             const result = await window.ApiClient.getUserViews({}, userId);
@@ -1121,7 +1129,7 @@
         const list = Array.isArray(sections) ? sections : [];
         let user = null;
         try {
-            const targetId = resolvePreferencesTargetUserId();
+            const targetId = await resolvePreferencesTargetUserId();
             const currentId = window.ApiClient?.getCurrentUserId?.();
             if (targetId && currentId && targetId !== currentId && typeof window.ApiClient?.getUser === 'function') {
                 user = await window.ApiClient.getUser(targetId);
