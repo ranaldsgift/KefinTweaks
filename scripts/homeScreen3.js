@@ -2888,22 +2888,8 @@
         syncHomeScreenChromeVisibility();
     }
 
-    window.homeScreen3 = {
-        init: () => enqueueHomeViewJob({ type: 'home', hash: window.location.hash || '' }),
-        refreshHomeSections,
-        refreshHomeSectionById,
-        resolveDiscoverySection: buildDiscoverySectionInstance,
-        sectionHelper: () => window.sectionHelper,
-        getActiveHomeCategory: () => homeChromeActiveCategory || 'none',
-        isDiscoveryAllowedForActiveCategory,
-        refreshHomeCategoryChrome
-    };
-
-    //enhanceHomeScreen();
-    connectHomeSectionsReadyObserver();
-    //initHomeScreenChrome();
-
-    // Serialize home-view work: latest-wins pending + one drain at a time
+    // Serialize home-view work: latest-wins pending + one drain at a time.
+    // Declared before connectHomeSectionsReadyObserver / homeScreen3.init (they call enqueueHomeViewJob).
     let homeViewPending = undefined; // undefined = empty; else { type, hash? }
     let homeViewDrain = Promise.resolve();
 
@@ -2954,6 +2940,21 @@
             });
         return homeViewDrain;
     }
+
+    window.homeScreen3 = {
+        init: () => enqueueHomeViewJob({ type: 'home', hash: window.location.hash || '' }),
+        refreshHomeSections,
+        refreshHomeSectionById,
+        resolveDiscoverySection: buildDiscoverySectionInstance,
+        sectionHelper: () => window.sectionHelper,
+        getActiveHomeCategory: () => homeChromeActiveCategory || 'none',
+        isDiscoveryAllowedForActiveCategory,
+        refreshHomeCategoryChrome
+    };
+
+    //enhanceHomeScreen();
+    connectHomeSectionsReadyObserver();
+    //initHomeScreenChrome();
 
     if (window.KefinTweaksUtils && typeof window.KefinTweaksUtils.onViewPage === 'function') {
         window.KefinTweaksUtils.onViewPage(() => {
