@@ -3,12 +3,6 @@
 	display: none;
 }
 
-.MuiToolbar-root:has(.kefinTweaks-breadcrumbs-wrapper) {
-	display: grid;
-	grid-template-columns: auto 1fr auto;
-	grid-template-rows: 1fr auto;
-}
-
 @media (min-width: 768px) {
 	.kefinTweaks-breadcrumbs-wrapper {
 		display: block;
@@ -137,6 +131,7 @@
 	padding: 0 !important;
 	overflow-y: auto !important;
 	backdrop-filter: blur(50px);
+	margin-top: 0 !important;
 }
 .kefinTweaks-popover.itemDetailsGroup:has(.detailsGroupItem:not(.hide)) .kefinTweaks-popover-item.detailsGroupItem {
 	padding: 0.5em 2em;
@@ -145,4 +140,9 @@
 	width: initial !important;
 	max-width: initial !important;
 	white-space: nowrap;
+}
+.MuiToolbar-root:has(.kefinTweaks-breadcrumbs-wrapper) {
+	display: grid;
+	grid-template-columns: auto 1fr auto;
+	grid-template-rows: 1fr auto;
 }

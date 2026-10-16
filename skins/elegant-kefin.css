@@ -23,13 +23,21 @@
 	grid-column: 1 / 5;
 }
 
-.detailSection:has(.series-episodes-section) > #listChildrenCollapsible {
+/* .detailSection:has(.series-episodes-section) > #listChildrenCollapsible {
 	grid-column: 1 / 5;
-}
+} */
 
 .skinHeader
 	.headerTabs.sectionTabs
 	.emby-tabs-slider
 	> .emby-tab-button.kefin-custom-menu-top-link[data-kefin-custom-menu-top-link^="Watchlist||"]::before {
 	content: "bookmark";
+}
+
+.spotlight-section-title.headerTabs.sectionTabs,
+.spotlight-section .headerTabs.sectionTabs,
+.spotlight-nav-container.headerTabs.sectionTabs {
+  background-color: transparent;
+  border-radius: unset;
+  backdrop-filter: none;
 }

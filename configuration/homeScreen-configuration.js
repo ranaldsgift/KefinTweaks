@@ -68,8 +68,8 @@
             off: 'Studios without any image may be rendered in Popular Studios sections. You can enable the Optional CSS Module "Studio Thumbnails" to overlay a background with the Studio Name on items without an image.'
         },
         'home-loadPeopleEpisodeData': {
-            on: 'Not Recommended for larger libraries. Loads all Person appearances from all episodes in your library. This data takes much longer to cache than just the Movies/Series level data.',
-            off: 'This is recommended. Person appearance data is limited to only Movies and Series.'
+            on: 'This is NOT recommended for larger libraries. Loads all Person appearances from all episodes in your library. This data takes much longer to cache.',
+            off: 'This is recommended to remain disabled. Person appearance data is limited to only Movies and Series.'
         },
         'home-showCreateSectionButtonOnHome': {
             on: 'Adds a button to the bottom left corner of the home screen so that you can quickly create a new section directly from the Home Screen. Only admins will see this button. The button is hidden on mobile.',
@@ -129,7 +129,7 @@
     }    // Current config state
     let currentConfig = null;
     let mainModalInstance = null;
-    let currentActiveTab = 'settings'; // Track the currently active tab
+    let currentActiveTab = 'sections'; // Track the currently active tab
     let currentGlobalSettingsSubTab = 'general'; // Track active sub-tab in Global Settings (general, spotlight, discovery, cache)
     let globalSettingsSaveTimer = null;
     const UPDATE_ALL_CONFIRM_MODAL_ID = 'kefin-homescreen-config-update-all-confirm';
@@ -180,7 +180,7 @@
     function normalizeActiveTab(tab) {
         if (tab === 'community') return 'import-export';
         if (tab === 'benchmark') return 'troubleshoot';
-        return tab || 'settings';
+        return tab || 'sections';
     }
 
     /**
@@ -236,6 +236,53 @@
                 }
             }
         }
+    }
+
+    /**
+     * Whether today falls in an MM-DD (or M-D) seasonal window.
+     * Supports year-wrap when end < start (e.g. 12-20 … 01-05).
+     * @param {string} startDate
+     * @param {string} endDate
+     * @returns {boolean}
+     */
+    function isInSeasonalPeriod(startDate, endDate) {
+        if (startDate == null || endDate == null || startDate === '' || endDate === '') {
+            return false;
+        }
+        const parseMonthDay = (value) => {
+            const parts = String(value).trim().split(/[-/.]/).map((p) => parseInt(p, 10));
+            if (parts.length < 2 || parts.some((n) => !Number.isFinite(n))) return null;
+            let month;
+            let day;
+            // YYYY-MM-DD → take month/day
+            if (parts.length >= 3 && parts[0] > 31) {
+                month = parts[1];
+                day = parts[2];
+            } else {
+                month = parts[0];
+                day = parts[1];
+            }
+            if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+            return { month, day };
+        };
+        const startMd = parseMonthDay(startDate);
+        const endMd = parseMonthDay(endDate);
+        if (!startMd || !endMd) return false;
+
+        const now = new Date();
+        const year = now.getFullYear();
+        const start = new Date(year, startMd.month - 1, startMd.day, 0, 0, 0, 0);
+        let end = new Date(year, endMd.month - 1, endMd.day, 23, 59, 59, 999);
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return false;
+
+        if (end < start) {
+            if (now >= start) {
+                end.setFullYear(year + 1);
+            } else {
+                start.setFullYear(year - 1);
+            }
+        }
+        return now >= start && now <= end;
     }
 
     /**
@@ -569,7 +616,9 @@
     function updateSectionInGroups(groups, sectionId, updatedSection) {
         const found = findSectionInGroups(groups, sectionId);
         if (found) {
-            found.group.sections[found.sectionIndex] = { ...found.section, ...updatedSection };
+            // Full replace: collectData returns a complete section clone; spread-merge
+            // would resurrect keys that collectData intentionally deleted/cleared.
+            found.group.sections[found.sectionIndex] = updatedSection;
             return true;
         }
         return false;
@@ -652,17 +701,19 @@
         { name: 'Dreamworks Animation', file: 'DreamWorks_Animation.svg' },
         { name: 'FX', file: 'FX.svg' },
         { name: 'HBO', file: 'HBO.svg' },
-        { name: 'Lucasfilm', file: 'Lucasfilm.svg' },
+        { name: 'Lucasfilm Ltd.', file: 'Lucasfilm.svg' },
         { name: 'Marvel Studios', file: 'Marvel_Studios.svg' },
         { name: 'New Line Cinema', file: 'New_Line_Cinema.svg' },
         { name: 'Paramount Pictures', file: 'Paramount_Pictures.svg' },
         { name: 'Pixar', file: 'Pixar.svg' },
-        { name: 'Showtime', file: 'Showtime.svg' },
+        { name: 'Paramount+ with Showtime', file: 'Paramount+_with_Showtime.svg' },
         { name: 'Universal Pictures', file: 'Universal_Pictures.svg' },
         { name: 'Walt Disney Pictures', file: 'Walt_Disney_Pictures.svg' },
         { name: 'Warner Bros.', file: 'Warner_Bros..svg' },
         { name: 'HBO Max', file: 'HBO_Max.svg' },
-        { name: 'Prime Video', file: 'Prime_Video.svg' }
+        { name: 'Prime Video', file: 'Prime_Video.svg' },
+        { name: 'Hulu', file: 'Hulu.svg' },
+        { name: 'Peacock', file: 'Peacock.svg' }
     ];
 
     const BROWSE_BY_STUDIO_SECTION_ID = 'browse-by-studio';
@@ -783,7 +834,7 @@
             }
 
             const libraries = await window.dataHelper.getLibraries();
-            const filteredLibraries = (libraries || []).filter(l => l.CollectionType && l.CollectionType !== 'boxsets' && l.CollectionType !== 'playlists');
+            const filteredLibraries = (libraries || []).filter(l => !l.CollectionType || (l.CollectionType !== 'boxsets' && l.CollectionType !== 'playlists'));
             const currentLibraryIds = new Set(filteredLibraries.map(l => l.Id));
 
             if (!libraries || libraries.length === 0) {
@@ -817,6 +868,7 @@
                                     viewMoreUrl: viewMoreUrl,
                                     jellyfinId: 'latestmedia',
                                     userConfigurable: true,
+                                    ttl: 0,
                                     queries: [{
                                         path: '/Items/Latest',
                                         queryOptions: {
@@ -891,6 +943,7 @@
                     const sectionsToRemove = groupSections.filter(s => {
                         if (!s.id || !s.id.startsWith(template.idPrefix)) return false;
                         const libId = s.id.replace(template.idPrefix, '');
+                        // Drop legacy recently-added-grouped-* shells and libs that no longer exist
                         return !currentLibraryIds.has(libId);
                     });
                     const sectionsToRemoveIds = new Set(sectionsToRemove.map(s => s.id));
@@ -955,6 +1008,7 @@
                 }
 
                 const browseSection = studiosGroup.sections.find((s) => s?.id === BROWSE_BY_STUDIO_SECTION_ID);
+                // Append-only: do not prune user-kept studios that leave the Kefin catalog
                 const existingItems = Array.isArray(browseSection?.items) ? browseSection.items : [];
 
                 if (browseSection && isBrowseByStudioCatalogFullyResolved(existingItems)) {
@@ -1023,7 +1077,9 @@
 
     const KEFIN_DEFAULT_GROUP_KEYS = ['HOME_SECTION_GROUPS', 'SEASONAL_SECTION_GROUPS', 'DISCOVERY_SECTION_GROUPS'];
     const LIBRARY_RESOLVED_ID_PREFIXES = ['recently-added-', 'popular-genres-'];
-    const FIXED_TEMPLATE_SECTION_IDS = new Set([BROWSE_BY_STUDIO_SECTION_ID]);
+    const FIXED_TEMPLATE_SECTION_IDS = new Set([
+        BROWSE_BY_STUDIO_SECTION_ID
+    ]);
 
     function isLibraryResolvedSectionId(sectionId) {
         if (!sectionId) return false;
@@ -1435,18 +1491,6 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             // ENABLED_DISCOVERY_SECTIONS is all enabled sections from DISCOVERY_SECTION_GROUPS and CUSTOM_SECTION_GROUPS that are discovery sections
             // If they have a start/end date the current date must fall within that date range
 
-            const isInSeasonalPeriod = (startDate, endDate) => {
-                const currentDate = new Date();
-                const start = new Date(startDate);
-                const end = new Date(endDate);
-
-                // Ensure the years are the same as the current date year
-                start.setFullYear(currentDate.getFullYear());
-                end.setFullYear(currentDate.getFullYear());
-
-                return currentDate >= start && currentDate <= end;
-            };
-
             const enabledHomeSections = flattenSectionGroups(mergedConfig.HOME_SECTION_GROUPS).filter(s => s.enabled === true && s.discoveryEnabled !== true && (s.startDate && s.endDate ? isInSeasonalPeriod(s.startDate, s.endDate) : true));
             const enabledSeasonalSections = flattenSectionGroups(mergedConfig.SEASONAL_SECTION_GROUPS).filter(s => s.enabled === true && s.discoveryEnabled !== true && isInSeasonalPeriod(s.startDate, s.endDate));
             const enabledCustomSections = flattenSectionGroups(mergedConfig.CUSTOM_SECTION_GROUPS).filter(s => s.enabled === true && s.discoveryEnabled !== true && (s.startDate && s.endDate ? isInSeasonalPeriod(s.startDate, s.endDate) : true));
@@ -1486,21 +1530,15 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
      * Get enabled home sections and discovery sections
      * @returns {Object} Object with enabledHomeSections and enabledDiscoverySections
      */
+    function applyGlobalCacheTtlToSections(sections, globalCacheTtl) {
+        if (!(Number(globalCacheTtl) >= 0) || !Array.isArray(sections)) return sections;
+        const ttl = Number(globalCacheTtl);
+        return sections.map((section) => (section ? { ...section, ttl } : section));
+    }
+
     function getSections() {
 
         const config = getConfig();
-
-        const isInSeasonalPeriod = (startDate, endDate) => {
-            const currentDate = new Date();
-            const start = new Date(startDate);
-            const end = new Date(endDate);
-
-            // Ensure the years are the same as the current date year
-            start.setFullYear(currentDate.getFullYear());
-            end.setFullYear(currentDate.getFullYear());
-
-            return currentDate >= start && currentDate <= end;
-        };
 
         const enabledHomeSections = flattenSectionGroups(config.HOME_SECTION_GROUPS).filter(s => (s.enabled || s.userConfigurable || s.userConfigurable === undefined) && s.discoveryEnabled !== true && (s.startDate && s.endDate ? isInSeasonalPeriod(s.startDate, s.endDate) : true));
         const enabledSeasonalSections = flattenSectionGroups(config.SEASONAL_SECTION_GROUPS).filter(s => (s.enabled || s.userConfigurable || s.userConfigurable === undefined) && s.discoveryEnabled !== true && isInSeasonalPeriod(s.startDate, s.endDate));
@@ -1511,10 +1549,19 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             isInSeasonalPeriod
         });
 
+        const globalCacheTtl = config.CACHE?.globalCacheTtl;
+        const home = applyGlobalCacheTtlToSections(
+            [...enabledHomeSections, ...enabledSeasonalSections, ...enabledCustomSections],
+            globalCacheTtl
+        );
+        const discovery = applyGlobalCacheTtlToSections(
+            [...enabledDiscoverySections, ...enabledCustomDiscoverySections],
+            globalCacheTtl
+        );
 
         return {
-            enabledHomeSections: [...enabledHomeSections, ...enabledSeasonalSections, ...enabledCustomSections],
-            enabledDiscoverySections: [...enabledDiscoverySections, ...enabledCustomDiscoverySections]
+            enabledHomeSections: home,
+            enabledDiscoverySections: discovery
         }
     }
 
@@ -1842,12 +1889,15 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
     const LIBRARY_SYNC_GROUP_IDS = new Set(['home-recently-added', 'home-popular-genres']);
 
     /**
-     * Merge group objects, matching sections by id
+     * Merge group objects, matching sections by id.
      * @param {Object} savedGroup - Group from saved config
      * @param {Object} currentGroup - Group from current config
+     * @param {{ authoritativeSections?: boolean }} [options] - When authoritativeSections is true
+     *   (or group is in LIBRARY_SYNC_GROUP_IDS), current section list wins — saved-only sections
+     *   are not re-appended (discovery prune / library verify).
      * @returns {Object} Merged group object
      */
-    function mergeGroup(savedGroup, currentGroup) {
+    function mergeGroup(savedGroup, currentGroup, options = {}) {
         if (!savedGroup && !currentGroup) return null;
         if (!savedGroup) return JSON.parse(JSON.stringify(currentGroup));
         if (!currentGroup) return JSON.parse(JSON.stringify(savedGroup));
@@ -1892,9 +1942,12 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             }
         });
 
-        // Library template groups: current list is authoritative (verify may have pruned sections)
+        // Library sync groups + callers with authoritativeSections (e.g. discovery): current list wins
         const groupId = currentGroup.id || savedGroup.id;
-        if (!LIBRARY_SYNC_GROUP_IDS.has(groupId)) {
+        const authoritative =
+            options.authoritativeSections === true ||
+            LIBRARY_SYNC_GROUP_IDS.has(groupId);
+        if (!authoritative) {
             savedSectionMap.forEach(savedSection => {
                 if (!savedSection.deleted) {
                     mergedSections.push(JSON.parse(JSON.stringify(savedSection)));
@@ -1910,9 +1963,10 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
      * Merge home screen group configs, matching groups by id
      * @param {Array} currentGroups - Groups from current config
      * @param {Array} savedGroups - Groups from saved config
+     * @param {{ authoritativeSections?: boolean }} [options] - Forwarded to mergeGroup
      * @returns {Array} Merged groups array
      */
-    function mergeHomeScreenGroupConfig(currentGroups, savedGroups) {
+    function mergeHomeScreenGroupConfig(currentGroups, savedGroups, options = {}) {
         if (!currentGroups || currentGroups.length === 0) {
             // Filter out deleted groups from saved config
             return (savedGroups || []).filter(g => !g.deleted).map(g => JSON.parse(JSON.stringify(g)));
@@ -1946,7 +2000,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             
             if (savedGroup) {
                 // Group exists in both - merge them
-                merged.push(mergeGroup(savedGroup, currentGroup));
+                merged.push(mergeGroup(savedGroup, currentGroup, options));
                 savedGroupMap.delete(key);
             } else {
                 // New group - add it
@@ -1992,7 +2046,8 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                 ),
                 DISCOVERY_SECTION_GROUPS: mergeHomeScreenGroupConfig(
                     config.DISCOVERY_SECTION_GROUPS || [],
-                    savedHomeScreenConfig.DISCOVERY_SECTION_GROUPS || []
+                    savedHomeScreenConfig.DISCOVERY_SECTION_GROUPS || [],
+                    { authoritativeSections: true }
                 ),
                 // Custom groups are replaced entirely (UI is source of truth)
                 CUSTOM_SECTION_GROUPS: config.CUSTOM_SECTION_GROUPS || [],
@@ -2065,12 +2120,16 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
     /**
      * Build compact section row HTML
      */
-    function buildSectionRowHTML(section, type = 'home', groupName = null) {
+    function buildSectionRowHTML(section, type = 'home') {
         const isEnabled = section.enabled !== false;
         const isSeasonal = section.startDate && section.endDate;
         const isSpotlight = section.renderMode === 'Spotlight';
         const isDiscovery = section.discoveryEnabled === true;
         const isCustom = type.toLowerCase() === 'custom' || section.id.startsWith('custom');
+        const descriptionText = String(section.description || '').trim();
+        const descriptionHtml = descriptionText
+            ? `<span class="listItemBodyText secondary section-row-description" style="font-size: 0.85em; border-left: 1px solid rgba(255,255,255,0.25); padding-left: 1em; margin-left: 0.25em; opacity: 0.9;">${escapeHtml(descriptionText)}</span>`
+            : '';
 
         return `
             <div class="listItem section-row" data-section-id="${section.id}" data-section-type="${type}" draggable="true" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 0.5em; display: flex; align-items: center; justify-content: space-between; cursor: pointer; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='rgba(255,255,255,0.05)'" onmouseout="this.style.backgroundColor=''">
@@ -2085,12 +2144,12 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                     <div style="flex: 1;">
                         <input type="text" class="listItemBodyText editable-section-name" data-section-id="${section.id}" value="${(section.name || 'Unnamed Section').replace(/"/g, '&quot;')}" size="${Math.max((section.name || 'Unnamed Section').length, 15)}" style="font-weight: 500; margin-bottom: 0.25em; cursor: text; padding: 0.25em 0.5em; border-radius: 3px; transition: background-color 0.2s; display: inline-block; border: none; outline: none; background: transparent; font-family: inherit; font-size: inherit; color: inherit;" onmouseover="this.style.backgroundColor='rgba(255,255,255,0.05)'" onmouseout="this.style.backgroundColor='transparent'" onfocus="this.style.backgroundColor='rgba(255,255,255,0.1)'" onblur="this.style.backgroundColor='transparent'" onclick="event.stopPropagation();" oninput="this.size=Math.max(this.value.length,15)" />
                         <div style="display: flex; gap: 1em; align-items: center; flex-wrap: wrap;">
-                            ${groupName ? `<span class="listItemBodyText secondary" style="font-size: 0.8em; background: rgba(255,255,255,0.1); padding: 0.2em 0.5em; border-radius: 3px;">${groupName}</span>` : ''}
                             <span class="listItemBodyText secondary" style="font-size: 0.85em;">Order: ${section.order || 0}</span>
                             ${section.cardFormat && !isSpotlight ? `<span class="listItemBodyText secondary" style="font-size: 0.85em;">${section.cardFormat}</span>` : ''}
                             ${isSpotlight ? `<span class="listItemBodyText secondary spotlight-tag" style="font-size: 0.85em;">Spotlight</span>` : ''}
                             ${isSeasonal ? `<span class="listItemBodyText secondary seasonal-tag" style="font-size: 0.85em;">Active from: ${section.startDate} - ${section.endDate}</span>` : ''}
                             ${isDiscovery ? `<span class="listItemBodyText secondary discovery-tag" style="font-size: 0.85em;">Discovery</span>` : ''}
+                            ${descriptionHtml}
                         </div>
                     </div>
                 </div>
@@ -2165,10 +2224,10 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
      */
     function buildSectionNavigationHTML(activeType = 'home') {
         const types = [
-            { id: 'home', label: 'Home Sections' },
-            { id: 'seasonal', label: 'Seasonal Sections' },
-            { id: 'discovery', label: 'Discovery Sections' },
-            { id: 'custom', label: 'Custom Sections' }
+            { id: 'home', label: 'Home' },
+            { id: 'seasonal', label: 'Seasonal' },
+            { id: 'discovery', label: 'Discovery' },
+            { id: 'custom', label: 'Custom' }
         ];
 
         return `
@@ -2190,11 +2249,11 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
      */
     function buildGlobalSettingsNavigationHTML(activeSubTab = 'general') {
         const tabs = [
-            { id: 'general', label: 'General Settings' },
-            { id: 'spotlight', label: 'Spotlight Settings' },
-            { id: 'discovery', label: 'Discovery Settings' },
-            { id: 'categories', label: 'Category Settings' },
-            { id: 'cache', label: 'Cache Settings' }
+            { id: 'general', label: 'General' },
+            { id: 'spotlight', label: 'Spotlight' },
+            { id: 'discovery', label: 'Discovery' },
+            { id: 'categories', label: 'Category' },
+            { id: 'cache', label: 'Cache' }
         ];
         return `
             <div style="display: flex; flex-direction: column; gap: 0.5em;">
@@ -2251,7 +2310,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                     </button>
                 </div>
                 <div class="group-sections-list" data-group-id="${groupId}">
-                    ${sections.map(s => buildSectionRowHTML(s, s.sectionType ?? sectionType, s.sectionType)).join('')}
+                    ${sections.map(s => buildSectionRowHTML(s, s.sectionType ?? sectionType)).join('')}
                 </div>
             </div>
         `;
@@ -2297,7 +2356,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                 return `
                     <div>
                         <div class="listItemBodyText" style="font-weight: 500; margin-bottom: 1em;">Discovery Sections</div>
-                        <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-bottom: 0.75em;">Discovery sections will appear dynamically on the home screen as the user scrolls down. They are pre-fetched and cached in the background to ensure a smooth experience. You can customize their settings here.</div>
+                        <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-bottom: 0.75em;">Discovery sections will appear dynamically on the home screen as the user scrolls down.</div>
                         <div id="discovery-sections-list">
                             ${discoveryGroups.map(g => buildGroupHTML(g, 'discovery')).join('')}
                         </div>
@@ -2310,8 +2369,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                 return `
                     <div>
                         <div class="listItemBodyText" style="font-weight: 500; margin-bottom: 1em;">Custom Sections</div>
-                        <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-bottom: 0.75em;">Customize your Custom Home Sections here. You can add, edit, and delete your own sections. You can also import community collections or a file you exported from the Import / Export tab.</div>
-                        <div id="custom-sections-list">
+                        <div class="listItemBodyText secondary" style="font-size: 0.85em; margin-bottom: 0.75em;">Customize your Custom Home Sections here. You can add, edit, and delete your own sections.</div>                        <div id="custom-sections-list">
                             ${customGroups.map(g => buildGroupHTML(g, 'custom')).join('')}
                         </div>
                         <button type="button" class="emby-button button-submit raised add-custom-section-btn" style="padding: 0.75em 1.5em; margin-top: 0.75em;">
@@ -2345,7 +2403,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                         <span>New Section</span>
                     </button>
                     <button type="button" class="emby-button raised hsc-toolbar-update-btn" title="Save and apply these settings to all users.">
-                        <span class="material-icons" style="margin-right: 0.35em; font-size: 1.1em; vertical-align: middle;">sync</span>
+                        <span class="material-icons" style="margin-right: 0.35em; font-size: 1.1em; vertical-align: middle;">publish</span>
                         <span>Update</span>
                     </button>
                     <button type="button" class="emby-button raised hsc-toolbar-restore-defaults-btn" title="Restore default Home Screen sections">
@@ -2356,13 +2414,13 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
 
                 <!-- Tab Navigation -->
                 <div class="config-tab-nav">
-                    <button type="button" class="config-tab-btn ${activeTab === 'settings' ? 'active' : ''}" data-tab="settings" title="Global Settings">
-                        <span class="material-icons config-tab-icon" aria-hidden="true">settings</span>
-                        <span class="config-tab-label">Global Settings</span>
-                    </button>
                     <button type="button" class="config-tab-btn ${activeTab === 'sections' ? 'active' : ''}" data-tab="sections" title="Edit Sections">
                         <span class="material-icons config-tab-icon" aria-hidden="true">edit</span>
                         <span class="config-tab-label">Edit Sections</span>
+                    </button>
+                    <button type="button" class="config-tab-btn ${activeTab === 'settings' ? 'active' : ''}" data-tab="settings" title="Global Settings">
+                        <span class="material-icons config-tab-icon" aria-hidden="true">settings</span>
+                        <span class="config-tab-label">Global Settings</span>
                     </button>
                     <button type="button" class="config-tab-btn ${activeTab === 'order' ? 'active' : ''}" data-tab="order" title="Order Sections">
                         <span class="material-icons config-tab-icon" aria-hidden="true">reorder</span>
@@ -2543,6 +2601,8 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                     ${buildTextInput('discovery-spotlightDiscoveryChance', discovery.spotlightDiscoveryChance ?? 0.5, 'Spotlight Discovery Chance (0-1)', 'number')}
                     ${buildTextInput('discovery-minGenreMovieCount', discovery.minGenreMovieCount || 50, 'Genre Movie Count', 'number')}
                     ${buildTextInput('discovery-minGenreSeriesCount', discovery.minGenreSeriesCount || 10, 'Genre Series Count', 'number')}
+                    ${buildTextInput('discovery-minStudioMovieCount', discovery.minStudioMovieCount || 25, 'Studio Movie Count', 'number')}
+                    ${buildTextInput('discovery-minStudioSeriesCount', discovery.minStudioSeriesCount || 5, 'Studio Series Count', 'number')}
                 </div>
             </div>
         `;
@@ -2773,12 +2833,51 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         ];
     }
 
+    /** Full section-cache style presets including No Cache + Disabled (undefined). */
+    function getGlobalCachePresets() {
+        const presets = window.KefinHomeScreenAdvancedEditor?.getCachePresets?.();
+        const cache = currentConfig?.CACHE || window.KefinHomeConfig2?.CACHE || {};
+        const base = Array.isArray(presets) && presets.length
+            ? presets.slice()
+            : [
+                { key: 'FORCE_REFRESH', label: 'No Cache', ms: cache.FORCE_REFRESH_TTL ?? 0 },
+                { key: 'VERY_SHORT', label: 'Very Short (1 min)', ms: cache.VERY_SHORT_TTL ?? 60000 },
+                { key: 'SHORT', label: 'Short (5 min)', ms: cache.SHORT_TTL ?? 300000 },
+                { key: 'DEFAULT', label: 'Default (1 hour)', ms: cache.DEFAULT_TTL ?? 3600000 },
+                { key: 'LONG', label: 'Long (24 hours)', ms: cache.LONG_TTL ?? 86400000 },
+                { key: 'STATIC', label: 'Static (1 week)', ms: cache.STATIC_TTL ?? 604800000 },
+                { key: 'DISCOVERY', label: 'Discovery (6 hours)', ms: cache.DISCOVERY_TTL ?? 21600000 },
+                { key: 'CUSTOM', label: 'Custom', ms: null }
+            ];
+        return [
+            { key: 'DISABLED', label: 'Disabled', ms: undefined },
+            ...base
+        ];
+    }
+
     function matchDefaultTtlPreset(ms) {
         const value = Number(ms);
         if (!Number.isFinite(value)) {
             return { preset: 'DEFAULT', customValue: '', customUnit: 'minutes' };
         }
         const exact = getDefaultTtlPresets().find((p) => p.key !== 'CUSTOM' && p.ms === value);
+        if (exact) return { preset: exact.key, customValue: '', customUnit: 'minutes' };
+        const minutes = Math.round(value / 60000);
+        if (minutes > 0 && minutes * 60000 === value) {
+            return { preset: 'CUSTOM', customValue: String(minutes), customUnit: 'minutes' };
+        }
+        const seconds = Math.round(value / 1000);
+        return { preset: 'CUSTOM', customValue: String(seconds), customUnit: 'seconds' };
+    }
+
+    function matchGlobalCachePreset(ms) {
+        if (ms == null || ms === '' || !Number.isFinite(Number(ms))) {
+            return { preset: 'DISABLED', customValue: '', customUnit: 'minutes' };
+        }
+        const value = Number(ms);
+        const exact = getGlobalCachePresets().find(
+            (p) => p.key !== 'CUSTOM' && p.key !== 'DISABLED' && p.ms === value
+        );
         if (exact) return { preset: exact.key, customValue: '', customUnit: 'minutes' };
         const minutes = Math.round(value / 60000);
         if (minutes > 0 && minutes * 60000 === value) {
@@ -2803,6 +2902,23 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         return preset?.ms ?? (currentConfig?.CACHE?.DEFAULT_TTL ?? 3600000);
     }
 
+    /** @returns {number|undefined} undefined = Disabled (omit / clear globalCacheTtl) */
+    function resolveGlobalCacheTtlMsFromForm(root) {
+        const presetEl = root.querySelector('#cache-globalCacheTtl-preset');
+        if (!presetEl) return null;
+        const presetKey = presetEl.value || 'DISABLED';
+        if (presetKey === 'DISABLED') return undefined;
+        if (presetKey === 'CUSTOM') {
+            const raw = parseFloat(root.querySelector('#cache-globalCacheTtl-custom-value')?.value || '');
+            const unit = root.querySelector('#cache-globalCacheTtl-custom-unit')?.value || 'minutes';
+            const unitMs = TTL_UNIT_OPTIONS.find((u) => u.value === unit)?.ms || 60000;
+            if (!Number.isFinite(raw) || raw < 0) return 0;
+            return Math.round(raw * unitMs);
+        }
+        const preset = getGlobalCachePresets().find((p) => p.key === presetKey);
+        return preset?.ms ?? undefined;
+    }
+
     /**
      * Build cache settings HTML
      */
@@ -2815,6 +2931,12 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             value: p.key,
             label: p.label
         }));
+        const globalMatch = matchGlobalCachePreset(cache.globalCacheTtl);
+        const isCustomGlobal = globalMatch.preset === 'CUSTOM';
+        const globalPresetOptions = getGlobalCachePresets().map((p) => ({
+            value: p.key,
+            label: p.label
+        }));
 
         return `
             <div class="hsc-settings-panel">
@@ -2822,8 +2944,16 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                     <p>Every Home Screen Section has a cache expiration time associated to it. If the section has no explicitly defined cache value, it will use the Default setting below.</p>
                     <p>When a Section is being loaded, if the cache has not expired, the cached items will be rendered instead of requesting new data. If a Section has "No Cache" set, it will always request new data from the server.</p>
                     <p>The Cache settings listed below will appear as options when creating or editing a Home Screen Section in the "Advanced Options" at the bottom of the editor.</p>
+                    <p><strong>Global Cache:</strong> when set (not Disabled), individual section cache timers are ignored and every section uses this value.</p>
                 </div>
                 <div class="hsc-settings-grid hsc-settings-grid-3">
+                    <div class="hsc-global-ttl-field" style="grid-column: 1 / -1;">
+                        ${buildSelect('cache-globalCacheTtl-preset', globalPresetOptions, globalMatch.preset, 'Global Cache')}
+                        <div id="cache-globalCacheTtl-custom-row" class="hsc-global-ttl-custom" style="display:${isCustomGlobal ? 'grid' : 'none'}; grid-template-columns: 1fr 1fr; gap: 0.75em; margin-top: 0.75em; max-width: 28em;">
+                            ${buildTextInput('cache-globalCacheTtl-custom-value', globalMatch.customValue || '', 'Custom Duration', 'number')}
+                            ${buildSelect('cache-globalCacheTtl-custom-unit', TTL_UNIT_OPTIONS.map((u) => ({ value: u.value, label: u.value })), globalMatch.customUnit || 'minutes', 'Unit')}
+                        </div>
+                    </div>
                     <div class="hsc-default-ttl-field">
                         ${buildSelect('cache-DEFAULT_TTL-preset', presetOptions, defaultMatch.preset, 'Default')}
                         <div id="cache-DEFAULT_TTL-custom-row" class="hsc-default-ttl-custom" style="display:${isCustomDefault ? 'grid' : 'none'}; grid-template-columns: 1fr 1fr; gap: 0.75em; margin-top: 0.75em;">
@@ -2874,6 +3004,8 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                 infiniteScroll: root.querySelector('#discovery-infiniteScroll')?.checked !== false,
                 minGenreMovieCount: parseInt(root.querySelector('#discovery-minGenreMovieCount')?.value || '50', 10),
                 minGenreSeriesCount: parseInt(root.querySelector('#discovery-minGenreSeriesCount')?.value || '10', 10),
+                minStudioMovieCount: parseInt(root.querySelector('#discovery-minStudioMovieCount')?.value || '25', 10),
+                minStudioSeriesCount: parseInt(root.querySelector('#discovery-minStudioSeriesCount')?.value || '5', 10),
                 spotlightDiscoveryChance: parseFloat(root.querySelector('#discovery-spotlightDiscoveryChance')?.value || '0.5'),
                 renderSpotlightAboveMatching: root.querySelector('#discovery-renderSpotlightAboveMatching')?.checked === true,
                 randomizeOrder: root.querySelector('#discovery-randomizeOrder')?.checked === true,
@@ -2936,9 +3068,11 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             }
         }
 
-        if (root.querySelector('#cache-DEFAULT_TTL-preset') || root.querySelector('#cache-VERY_SHORT_TTL')) {
+        if (root.querySelector('#cache-DEFAULT_TTL-preset')
+            || root.querySelector('#cache-VERY_SHORT_TTL')
+            || root.querySelector('#cache-globalCacheTtl-preset')) {
             const defaultTtl = resolveDefaultTtlMsFromForm(root);
-            currentConfig.CACHE = {
+            const nextCache = {
                 ...(currentConfig.CACHE || {}),
                 DEFAULT_TTL: defaultTtl != null ? defaultTtl : (currentConfig.CACHE?.DEFAULT_TTL ?? 1800000),
                 VERY_SHORT_TTL: minutesToMs(parseInt(root.querySelector('#cache-VERY_SHORT_TTL')?.value || '1', 10)),
@@ -2948,6 +3082,15 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                 DISCOVERY_TTL: minutesToMs(parseInt(root.querySelector('#cache-DISCOVERY_TTL')?.value || '60', 10)),
                 FORCE_REFRESH_TTL: 0
             };
+            if (root.querySelector('#cache-globalCacheTtl-preset')) {
+                const globalTtl = resolveGlobalCacheTtlMsFromForm(root);
+                if (globalTtl === undefined) {
+                    delete nextCache.globalCacheTtl;
+                } else if (globalTtl != null) {
+                    nextCache.globalCacheTtl = globalTtl;
+                }
+            }
+            currentConfig.CACHE = nextCache;
         }
 
         if (root.querySelector('#spotlight-cycleBackdrops') || root.querySelector('[id^="spotlight-"]')) {
@@ -3043,24 +3186,44 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                 }
 
                 if (found) {
+                    const sectionTypeForRow = GROUP_TYPE_TO_SECTION_TYPE[found.groupType] || sectionData.type || 'home';
                     if (targetGroupName && targetGroupName !== found.group.name) {
                         found.group.sections.splice(found.sectionIndex, 1);
                         addSectionToGroup(currentConfig[found.groupType], targetGroupName, sectionData);
+                        await saveConfig(currentConfig);
+                        showToast('Section saved');
+                        refreshMainModal({
+                            focusSectionId: sectionData.id,
+                            sectionType: sectionTypeForRow
+                        });
                     } else {
                         updateSectionInGroups(currentConfig[found.groupType], sectionData.id, sectionData);
+                        await saveConfig(currentConfig);
+                        showToast('Section saved');
+                        if (updateSectionRowInPlace(sectionData, sectionTypeForRow)) {
+                            scrollSectionRowIntoView(sectionData.id);
+                        } else {
+                            refreshMainModal({
+                                focusSectionId: sectionData.id,
+                                sectionType: sectionTypeForRow
+                            });
+                        }
                     }
                 } else {
                     addSectionToGroup(currentConfig.CUSTOM_SECTION_GROUPS, targetGroupName || 'Custom Sections', sectionData);
+                    await saveConfig(currentConfig);
+                    showToast('Saved new Home Screen Section');
+                    refreshMainModal({
+                        focusSectionId: sectionData.id,
+                        sectionType: 'custom'
+                    });
                 }
 
-                await saveConfig(currentConfig);
-                showToast(found ? 'Section saved' : 'Saved new Home Screen Section');
-                refreshMainModal();
                 if (options.refreshHomeOnSave && !mainModalInstance) {
                     try {
-                        await window.homeScreen3?.refreshHomeSections?.();
+                        await window.homeScreen3?.refreshHomeSectionById?.(sectionData.id, sectionData);
                     } catch (e) {
-                        WARN('Failed to refresh home after section save:', e);
+                        WARN('Failed to refresh home section after save:', e);
                     }
                 }
             },
@@ -3138,9 +3301,70 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
     }
 
 
-    function refreshMainModal() {
+    function escapeSectionIdForSelector(sectionId) {
+        if (typeof CSS !== 'undefined' && CSS.escape) {
+            return CSS.escape(sectionId);
+        }
+        return String(sectionId).replace(/["\\]/g, '\\$&');
+    }
+
+    /**
+     * Scroll a .section-row into view inside #section-content (the Edit Sections scrollport).
+     * @param {string} sectionId
+     * @returns {boolean}
+     */
+    function scrollSectionRowIntoView(sectionId) {
+        if (!mainModalInstance || !sectionId) return false;
+        const root = mainModalInstance.dialogContainer || mainModalInstance.dialogContent;
+        if (!root) return false;
+
+        const content = root.querySelector('#section-content');
+        if (!content) return false;
+
+        const escapedId = escapeSectionIdForSelector(sectionId);
+        const row = content.querySelector(`.section-row[data-section-id="${escapedId}"]`);
+        if (!row) return false;
+
+        const contentRect = content.getBoundingClientRect();
+        const rowRect = row.getBoundingClientRect();
+        const padding = 16;
+        if (rowRect.top < contentRect.top + padding) {
+            content.scrollTop += rowRect.top - contentRect.top - padding;
+        } else if (rowRect.bottom > contentRect.bottom - padding) {
+            content.scrollTop += rowRect.bottom - contentRect.bottom + padding;
+        }
+        return true;
+    }
+
+    /**
+     * Replace a single .section-row in the main modal without full refresh (preserves scroll).
+     * @returns {boolean} true if row was updated
+     */
+    function updateSectionRowInPlace(sectionData, sectionType = 'home') {
+        if (!mainModalInstance?.dialogContent || !sectionData?.id) return false;
+        const escapedId = escapeSectionIdForSelector(sectionData.id);
+        const row = mainModalInstance.dialogContent.querySelector(`.section-row[data-section-id="${escapedId}"]`);
+        if (!row) return false;
+
+        const type = sectionType || row.dataset.sectionType || 'home';
+        const wrap = document.createElement('div');
+        wrap.innerHTML = buildSectionRowHTML(sectionData, type).trim();
+        const newRow = wrap.firstElementChild;
+        if (!newRow) return false;
+        row.replaceWith(newRow);
+        return true;
+    }
+
+    /**
+     * Refresh main modal content.
+     * @param {{ focusSectionId?: string, sectionType?: string }} [options]
+     */
+    function refreshMainModal(options = {}) {
         if (!mainModalInstance) return;
-        
+
+        const focusSectionId = options.focusSectionId || null;
+        const focusSectionType = options.sectionType || null;
+
         // Store current section type if on sections tab
         let currentSectionType = 'home';
         if (currentActiveTab === 'sections') {
@@ -3149,9 +3373,17 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                 currentSectionType = activeNavBtn.dataset.sectionType;
             }
         }
+        if (focusSectionType) {
+            currentSectionType = focusSectionType;
+        }
 
         // Store current active tab before refresh
-        const savedActiveTab = normalizeActiveTab(currentActiveTab);
+        const savedActiveTab = focusSectionId
+            ? 'sections'
+            : normalizeActiveTab(currentActiveTab);
+
+        const sectionContentEl = mainModalInstance.dialogContent?.querySelector('#section-content');
+        const sectionScrollTop = sectionContentEl?.scrollTop ?? 0;
 
         const content = document.createElement('div');
         content.innerHTML = buildMainConfigHTML();
@@ -3166,7 +3398,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         // Re-attach event listeners (including tab listeners)
         attachMainModalListeners();
         attachTabListeners(mainModalInstance); */
-        
+
         // Restore active tab
         if (savedActiveTab) {
             const dialog = mainModalInstance.dialogContainer;
@@ -3177,9 +3409,9 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                 }
             }
         }
-        
-        // If we were on sections tab, restore the section type navigation
-        if (currentActiveTab === 'sections') {
+
+        // If we were on sections tab (or focusing a section), restore the section type navigation
+        if (savedActiveTab === 'sections' || currentActiveTab === 'sections') {
             const dialog = mainModalInstance.dialogContainer;
             const navBtns = dialog.querySelectorAll('.section-type-nav-btn');
             navBtns.forEach(btn => {
@@ -3188,6 +3420,19 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                 }
             });
         }
+
+        const restoreOrFocus = () => {
+            if (focusSectionId) {
+                scrollSectionRowIntoView(focusSectionId);
+                return;
+            }
+            if (savedActiveTab === 'sections' || currentActiveTab === 'sections') {
+                const el = mainModalInstance?.dialogContent?.querySelector('#section-content');
+                if (el) el.scrollTop = sectionScrollTop;
+            }
+        };
+        restoreOrFocus();
+        requestAnimationFrame(restoreOrFocus);
     }
 
 
@@ -3382,9 +3627,19 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         row.style.display = preset.value === 'CUSTOM' ? 'grid' : 'none';
     }
 
+    function syncGlobalCacheTtlCustomRow(contentRoot) {
+        const root = contentRoot || document.querySelector(`.dialogContainer[data-modal-id="${MAIN_MODAL_ID}"] #global-settings-content`);
+        if (!root) return;
+        const preset = root.querySelector('#cache-globalCacheTtl-preset');
+        const row = root.querySelector('#cache-globalCacheTtl-custom-row');
+        if (!row || !preset) return;
+        row.style.display = preset.value === 'CUSTOM' ? 'grid' : 'none';
+    }
+
     function wireGlobalSettingsPanelListeners(contentRoot) {
         if (!contentRoot) return;
         syncDefaultTtlCustomRow(contentRoot);
+        syncGlobalCacheTtlCustomRow(contentRoot);
         window.KefinTweaksUI?.bindToggleCards?.(contentRoot);
         updateHscToggleCardHints(contentRoot, GENERAL_TOGGLE_DESCRIPTIONS);
         updateHscToggleCardHints(contentRoot, DISCOVERY_TOGGLE_DESCRIPTIONS);
@@ -3398,6 +3653,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         dialog.addEventListener('change', (e) => {
             if (!e.target?.closest?.('#global-settings-content')) return;
             if (e.target.id === 'cache-DEFAULT_TTL-preset') syncDefaultTtlCustomRow();
+            if (e.target.id === 'cache-globalCacheTtl-preset') syncGlobalCacheTtlCustomRow();
             const content = dialog.querySelector('#global-settings-content');
             updateHscToggleCardHints(content, GENERAL_TOGGLE_DESCRIPTIONS);
             updateHscToggleCardHints(content, DISCOVERY_TOGGLE_DESCRIPTIONS);
@@ -3667,6 +3923,20 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         });
     }
 
+    function getServerEnabledSectionsForUpdatePreview() {
+        const config = currentConfig || getConfig();
+        if (!config) return [];
+        const inSeason = (s) => (s.startDate && s.endDate ? isInSeasonalPeriod(s.startDate, s.endDate) : true);
+        const enabledFrom = (groups) => flattenSectionGroups(groups || []).filter(
+            (s) => s.enabled === true && s.discoveryEnabled !== true && inSeason(s)
+        );
+        return [
+            ...enabledFrom(config.HOME_SECTION_GROUPS),
+            ...enabledFrom(config.SEASONAL_SECTION_GROUPS),
+            ...enabledFrom(config.CUSTOM_SECTION_GROUPS)
+        ];
+    }
+
     function confirmAndUpdateAllUsers() {
         if (!window.ModalSystem) {
             ERR('ModalSystem not available for update confirmation');
@@ -3676,10 +3946,26 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             window.ModalSystem.close(UPDATE_ALL_CONFIRM_MODAL_ID);
         }
 
+        // Reflect current order UI before previewing native slots
+        try {
+            applyOrderListFromForm(mainModalInstance?.dialogContent);
+        } catch (_) { /* preview best-effort */ }
+
+        const serverEnabled = getServerEnabledSectionsForUpdatePreview();
+        const slots = window.KefinUserHomeScreenConfig?.buildHomesectionSlotsFromKefin?.(serverEnabled) || [];
+        const pairedSlotPreview = slots.filter((id) => id && id !== 'none').join(', ') || '(none)';
+
         const content = document.createElement('div');
         content.innerHTML = `
             <div class="listItemBodyText" style="line-height: 1.5;">
                 WARNING: This will forcefully update the KefinTweaks Home Screen user preferences for all accounts on your server. Any changes those users have made to customize their home screen will be lost.
+            </div>
+            <div class="listItemBodyText" style="line-height: 1.5; margin-top: 0.75em;">
+                Users with Pair Home Sections on will get these native Jellyfin slots:
+                <code style="display: block; margin-top: 0.35em; word-break: break-word;">${pairedSlotPreview}</code>
+            </div>
+            <div class="listItemBodyText" style="line-height: 1.5; margin-top: 0.75em;">
+                Users with Pair Home Sections off get all native slots set to <code>none</code>.
             </div>
         `;
         const footer = document.createElement('div');
@@ -3699,7 +3985,11 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             closeOnBackdrop: true,
             closeOnEscape: true,
             showCloseButton: true,
-            fixedSize: true,
+            fixedSize: false,
+            dialogStyle: {
+                width: 'min(28rem, calc(100vw - 2rem))',
+                maxWidth: '28rem'
+            },
             onOpen: (modal) => {
                 modal.dialogFooter?.querySelector('#hsc-update-all-cancel')?.addEventListener('click', () => {
                     window.ModalSystem.close(UPDATE_ALL_CONFIRM_MODAL_ID);
@@ -3951,21 +4241,18 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         // Community Collections tab setup
         setupCommunityCollectionsTab(dialog);
 
-        // Export Sections button
-        const exportSectionsBtn = dialog.querySelector('.export-sections-btn');
-        if (exportSectionsBtn) {
-            exportSectionsBtn.addEventListener('click', () => {
+        // Import / Export — delegated so buttons survive refreshMainModal content swaps
+        dialog.addEventListener('click', (e) => {
+            if (e.target.closest('.export-sections-btn')) {
+                e.preventDefault();
                 showExportDialog();
-            });
-        }
-
-        // Import Sections button
-        const importSectionsBtn = dialog.querySelector('.import-sections-btn');
-        if (importSectionsBtn) {
-            importSectionsBtn.addEventListener('click', () => {
+                return;
+            }
+            if (e.target.closest('.import-sections-btn')) {
+                e.preventDefault();
                 showImportDialog();
-            });
-        }
+            }
+        });
     }
 
     /**
@@ -4548,8 +4835,12 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             return;
         }
 
+        const collectionDesc = collection.description
+            ? `<div class="listItemBodyText secondary" style="margin-bottom: 0.75em;">${escapeHtml(String(collection.description))}</div>`
+            : '';
         const content = document.createElement('div');
         content.innerHTML = `
+            ${collectionDesc}
             <div class="listItemBodyText secondary" style="margin-bottom: 1em;">Select sections to import from this collection.</div>
             <div id="communitySectionsContainer">
                 <div id="communitySectionsList"></div>
@@ -4654,12 +4945,21 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
 
         sectionsList.innerHTML = `
             <div style="background: rgba(0,0,0,0.2); border-radius: 4px; padding: 0.5em;">
-                ${collection.sections.map((s, i) => `
-                    <label class="checkboxContainer" style="display: flex; align-items: center; padding: 0.5em; margin-bottom: 0.25em;">
-                        <input type="checkbox" class="import-community-check" data-index="${i}" checked>
-                        <span class="listItemBodyText" style="margin-left: 0.5em;">${s.name || 'Unnamed'}</span>
+                ${collection.sections.map((s, i) => {
+                    const name = escapeHtml(s.name || 'Unnamed');
+                    const desc = s.description
+                        ? `<div class="listItemBodyText secondary" style="font-size: 0.85em; margin-top: 0.25em;">${escapeHtml(String(s.description))}</div>`
+                        : '';
+                    return `
+                    <label class="checkboxContainer" style="display: flex; align-items: flex-start; padding: 0.5em; margin-bottom: 0.25em;">
+                        <input type="checkbox" class="import-community-check" data-index="${i}" checked style="margin-top: 0.2em;">
+                        <div style="margin-left: 0.5em; flex: 1; min-width: 0;">
+                            <span class="listItemBodyText">${name}</span>
+                            ${desc}
+                        </div>
                     </label>
-                `).join('')}
+                `;
+                }).join('')}
             </div>
         `;
 
@@ -5220,25 +5520,6 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                 });
             }
         });
-
-        // Community Collections tab setup
-        setupCommunityCollectionsTab(dialog);
-
-        // Export Sections button
-        const exportSectionsBtn = dialog.querySelector('.export-sections-btn');
-        if (exportSectionsBtn) {
-            exportSectionsBtn.addEventListener('click', () => {
-                showExportDialog();
-            });
-        }
-
-        // Import Sections button
-        const importSectionsBtn = dialog.querySelector('.import-sections-btn');
-        if (importSectionsBtn) {
-            importSectionsBtn.addEventListener('click', () => {
-                showImportDialog();
-            });
-        }
     }
 
     /**
@@ -5248,11 +5529,6 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         try {
             // Load config
             const config = loadConfig();
-
-            const { hasChanges } = await verifyLibrarySectionsConfig(config);
-            if (hasChanges) {
-                await saveConfig(config);
-            }
 
             // Build content
             const content = document.createElement('div');
@@ -5283,6 +5559,9 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                 closeOnBackdrop: true,
                 closeOnEscape: true,
                 showCloseButton: true,
+                dialogStyle: window.innerWidth >= 900
+                    ? { maxWidth: '90vw', width: '1400px', height: '90vh' }
+                    : undefined,
                 onOpen: (modalInstance) => {
                     // Attach tab switching
                     attachTabListeners(modalInstance);
@@ -5332,12 +5611,6 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                 }
             });
 
-            if (window.innerWidth >= 900) {
-                mainModalInstance.dialog.style.maxWidth = '90vw';
-                mainModalInstance.dialog.style.width = '1400px';
-                mainModalInstance.dialog.style.height = '90vh';
-            }
-
             LOG('Main configuration modal opened');
         } catch (error) {
             ERR('Error opening config modal:', error);
@@ -5353,7 +5626,6 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         if (Array.isArray(section.items) && section.items.length > 0) return false;
         if (Array.isArray(section.externalListUrls) && section.externalListUrls.length > 0) return false;
         if (section.discoveryType) return true;
-        if (section.discoveryEnabled === true) return true;
         const type = String(section.type || '').toLowerCase();
         return ['genre', 'studio', 'person', 'collection', 'similar', 'watchlist', 'tag'].includes(type);
     }
@@ -5505,11 +5777,17 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             throw new Error('Section has no queries to preview');
         }
 
+        // Match home-screen selection: picker / random load one query; otherwise merge all
+        const resolveQueries = window.cardBuilder.resolveQueriesToLoad;
+        const queriesToLoad = typeof resolveQueries === 'function'
+            ? resolveQueries(previewSection, { initialize: true })
+            : queries;
+
         const useSpotlightFields = options.useSpotlightFields === true
             || previewSection.renderMode === 'Spotlight';
 
         let allItems = [];
-        for (const query of queries) {
+        for (const query of queriesToLoad) {
             const previewQuery = withPreviewQueryOptions(query);
             let queryUrl = null;
 
@@ -5539,7 +5817,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             return { items: [], limit: 0, section: previewSection };
         }
 
-        const limit = withPreviewQueryOptions(queries[0]).queryOptions.Limit
+        const limit = withPreviewQueryOptions(queriesToLoad[0]).queryOptions.Limit
             || previewSection.itemLimit
             || PREVIEW_DEFAULT_LIMIT;
         allItems = window.cardBuilder.postProcessItems(previewSection, allItems);
@@ -5736,9 +6014,9 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                 size: 'large',
                 closeOnBackdrop: true,
                 closeOnEscape: true,
+                dialogStyle: { width: '1400px' },
                 onOpen: async (modalInstance) => {
                     const container = modalInstance.dialogContent.querySelector('#preview-container');
-                    modalInstance.dialog.style.width = '1400px';
                     await renderSectionPreviewInto(previewSection, items, container);
                 }
             });
@@ -5756,6 +6034,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
 
     // Export getConfig for use by other scripts
     window.KefinHomeScreen = window.KefinHomeScreen || {};
+    window.KefinHomeScreen.isInSeasonalPeriod = isInSeasonalPeriod;
     window.KefinHomeScreen.getConfig = getConfig;
     window.KefinHomeScreen.getSections = getSections;
     window.KefinHomeScreen.fetchSectionPreviewItems = fetchSectionPreviewItems;
@@ -5814,6 +6093,10 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
     // Load user config script after a short delay to ensure this script is fully initialized
     //setTimeout(loadUserConfigurationScript, 100);
 
-    runStartupDefaultSectionSync().catch(err => ERR('Startup default section sync failed:', err));
+    // Defer admin library/studio catalog sync so it does not compete with home first paint
+    const STARTUP_DEFAULT_SECTION_SYNC_DELAY_MS = 15000;
+    setTimeout(() => {
+        runStartupDefaultSectionSync().catch(err => ERR('Startup default section sync failed:', err));
+    }, STARTUP_DEFAULT_SECTION_SYNC_DELAY_MS);
     
 })();

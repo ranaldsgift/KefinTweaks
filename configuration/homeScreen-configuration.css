@@ -332,6 +332,12 @@ span.listItemBodyText.secondary.seasonal-tag {
 	[data-modal-id="kefin-homescreen-config-main"] #global-settings-content .hsc-settings-grid-3 {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}
+	.hsc-config-toolbar button > span:nth-child(2) {
+		display: none;
+	}
+	.hsc-config-toolbar button > span {
+		margin: 0 !important;
+	}
 }
 
 @media (max-width: 640px) {

@@ -246,7 +246,7 @@
             `;
 
             // Create modal
-            const modalInstance = window.ModalSystem.create({
+            window.ModalSystem.create({
                 id: MODAL_ID,
                 title: 'Thumbnail Scrubber Configuration',
                 content: content,
@@ -254,6 +254,9 @@
                 closeOnBackdrop: true,
                 closeOnEscape: true,
                 showCloseButton: true,
+                dialogStyle: window.innerWidth >= 900
+                    ? { maxWidth: '90vw', width: '800px', height: 'auto' }
+                    : undefined,
                 onOpen: (modal) => {
                     // Save button
                     const saveBtn = modal.dialogFooter.querySelector('#save-thumbnailscrubber-config-btn');
@@ -273,12 +276,6 @@
                     }
                 }
             });
-
-            if (window.innerWidth >= 900) {
-                modalInstance.dialog.style.maxWidth = '90vw';
-                modalInstance.dialog.style.width = '800px';
-                modalInstance.dialog.style.height = 'auto';
-            }
 
             LOG('Thumbnail Scrubber configuration modal opened');
         } catch (error) {

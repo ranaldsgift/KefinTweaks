@@ -1014,21 +1014,35 @@
             LOG('Queue updated successfully');
         },
         /**
-         * Gets a genre ID from cached movie genres
+         * Lookup a genre ID from the local movie-genres catalog (localStorage / memory).
+         * Never awaits network — schedules a background sync when missing or older than 24h.
          * @param {string} genreName - Name of the genre to find
-         * @returns {Promise<string|null>} - Genre ID or null if not found
+         * @returns {Promise<string|null>} - Genre ID or null if not found / not yet cached
          */
         getGenreId: async function(genreName) {
-            if (!cachedMovieGenres) {
-                const url = `${ApiClient.serverAddress()}/Genres?IncludeItemTypes=Movie`;
-                // Use getData to fetch the genres with caching
-                const genres = await this.getData(url, true, GENRE_TTL);
-                cachedMovieGenres = genres.Items;
+            if (!genreName) return null;
+
+            hydrateMovieGenresFromStorage();
+            const empty = !cachedMovieGenres || cachedMovieGenres.length === 0;
+            if (empty || isMovieGenresSyncDue()) {
+                ensureGenreSyncScheduled();
             }
-            
-            // Find the genre by name (case insensitive)
-            const genre = cachedMovieGenres.find(g => g.Name.toLowerCase() === genreName.toLowerCase());
+            if (!cachedMovieGenres || cachedMovieGenres.length === 0) return null;
+
+            const needle = String(genreName).toLowerCase();
+            const genre = cachedMovieGenres.find((g) => g?.Name && g.Name.toLowerCase() === needle);
             return genre ? genre.Id : null;
+        },
+
+        /**
+         * Subscribe to movie-genres catalog sync completion (localStorage + memory refreshed).
+         * @param {Function} callback
+         * @returns {Function} unsubscribe
+         */
+        onMovieGenresSynced: function(callback) {
+            if (typeof callback !== 'function') return () => {};
+            movieGenresSyncedListeners.add(callback);
+            return () => movieGenresSyncedListeners.delete(callback);
         },
 
         /**
@@ -1069,7 +1083,11 @@
             }
             
             if (query.dataSource) {
-                return { dataSource: query.dataSource, options: queryOptions };
+                return {
+                    dataSource: query.dataSource,
+                    options: queryOptions,
+                    dataSourceOptions: query.dataSourceOptions || {}
+                };
             }
             
             return this.buildStandardQuery(queryOptions, userId, serverUrl, buildContext);
@@ -1142,14 +1160,37 @@
         },
         
         /**
+         * Resolve args for a cache dataSource method.
+         * Prefers explicit dataSourceOptions; falls back to legacy ItemType/MinCount in queryOptions.
+         */
+        resolveDataSourceMethodArgs: function(dataSourceOptions, queryOptions) {
+            if (dataSourceOptions && typeof dataSourceOptions === 'object') {
+                const keys = Object.keys(dataSourceOptions);
+                if (keys.length) return { ...dataSourceOptions };
+            }
+            const qo = queryOptions || {};
+            const out = {};
+            if (qo.ItemType != null && qo.ItemType !== '') out.ItemType = qo.ItemType;
+            else if (qo.itemType != null && qo.itemType !== '') out.ItemType = qo.itemType;
+            if (qo.MinCount != null && qo.MinCount !== '') out.MinCount = qo.MinCount;
+            else if (qo.minCount != null && qo.minCount !== '') out.MinCount = qo.minCount;
+            else if (qo.minimumSeries != null && qo.minimumSeries !== '') out.minimumSeries = qo.minimumSeries;
+            return out;
+        },
+
+        /**
          * Fetch from data source (cache-based)
          * @param {string} dataSource - Data source in format "CacheName.methodName"
-         * @param {Object} options - Query options (sorting, limits, etc.)
+         * @param {Object} queryOptions - Post-processing options (SortBy, SortOrder, Limit, etc.)
+         * @param {boolean} [useCache=true]
+         * @param {Object} [dataSourceOptions] - Args passed to the cache method (e.g. ItemType, MinCount)
          * @returns {Object} - Object with data, dataPromise, and isStalePromise
          */
-        fetchFromDataSource: async function(dataSource, options, useCache = true) {
+        fetchFromDataSource: async function(dataSource, queryOptions, useCache = true, dataSourceOptions) {
             const [cacheName, methodName] = dataSource.split('.');
             const cache = window[cacheName];
+            const options = queryOptions || {};
+            const methodArgs = this.resolveDataSourceMethodArgs(dataSourceOptions, options);
             
             if (!cache || !cache[methodName]) {
                 WARN(`Data source not available: ${dataSource}`);
@@ -1161,7 +1202,7 @@
             }
             
             try {
-                let dataPromise = Promise.resolve(cache[methodName](options));
+                let dataPromise = Promise.resolve(cache[methodName](methodArgs));
                 dataPromise = dataPromise.then(data => {
                     if (!Array.isArray(data)) {
                         data = [];
@@ -1309,10 +1350,162 @@
     };
 
     const GENRE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+    const GENRE_SETTLE_DELAY_MS = 1500;
     let cachedMovieGenres = null;
-    
+    let movieGenresLastSyncedAt = null;
+    let genreSyncScheduledPromise = null;
+    let genreSyncInFlightPromise = null;
+    const movieGenresSyncedListeners = new Set();
+
+    function normalizeServerAddressForStorage(serverAddress) {
+        if (!serverAddress) return '';
+        return String(serverAddress).replace(/\/+$/, '');
+    }
+
+    function getMovieGenresStorageKey() {
+        try {
+            const serverAddress = normalizeServerAddressForStorage(
+                (typeof ApiClient !== 'undefined' && ApiClient?.serverAddress?.()) || ''
+            );
+            if (!serverAddress) return null;
+            return `kefinTweaks_movieGenres_${encodeURIComponent(serverAddress)}`;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function readMovieGenresFromStorage() {
+        const key = getMovieGenresStorageKey();
+        if (!key) return null;
+        try {
+            const raw = localStorage.getItem(key);
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            if (!parsed || !Array.isArray(parsed.items)) return null;
+            return {
+                items: parsed.items.filter((g) => g && g.Id && g.Name),
+                lastSyncedAt: Number(parsed.lastSyncedAt) || 0
+            };
+        } catch (err) {
+            WARN('Failed to read movie genres from localStorage:', err);
+            return null;
+        }
+    }
+
+    function writeMovieGenresToStorage(items, lastSyncedAt) {
+        const key = getMovieGenresStorageKey();
+        if (!key) return;
+        try {
+            localStorage.setItem(key, JSON.stringify({
+                items: (items || []).map((g) => ({ Id: g.Id, Name: g.Name })),
+                lastSyncedAt: lastSyncedAt || Date.now()
+            }));
+        } catch (err) {
+            WARN('Failed to write movie genres to localStorage:', err);
+        }
+    }
+
+    function hydrateMovieGenresFromStorage() {
+        if (cachedMovieGenres && cachedMovieGenres.length > 0) return true;
+        const stored = readMovieGenresFromStorage();
+        if (!stored?.items?.length) return false;
+        cachedMovieGenres = stored.items;
+        movieGenresLastSyncedAt = stored.lastSyncedAt || movieGenresLastSyncedAt;
+        LOG(`Hydrated movie genres from localStorage: ${cachedMovieGenres.length} items`);
+        return true;
+    }
+
+    function isMovieGenresSyncDue() {
+        const stored = readMovieGenresFromStorage();
+        const last = movieGenresLastSyncedAt || stored?.lastSyncedAt || 0;
+        const hasItems = (cachedMovieGenres && cachedMovieGenres.length > 0) || (stored?.items?.length > 0);
+        if (!hasItems) return true;
+        if (!last) return true;
+        return (Date.now() - last) >= GENRE_TTL;
+    }
+
+    function waitForDocumentComplete() {
+        if (document.readyState === 'complete') return Promise.resolve();
+        return new Promise((resolve) => {
+            window.addEventListener('load', () => resolve(), { once: true });
+        });
+    }
+
+    function notifyMovieGenresSynced() {
+        try {
+            window.dispatchEvent(new CustomEvent('kefinTweaksMovieGenresSynced'));
+        } catch (_) { /* ignore */ }
+        movieGenresSyncedListeners.forEach((cb) => {
+            try {
+                cb();
+            } catch (err) {
+                WARN('onMovieGenresSynced listener failed:', err);
+            }
+        });
+    }
+
+    async function runMovieGenresSync() {
+        if (genreSyncInFlightPromise) return genreSyncInFlightPromise;
+
+        genreSyncInFlightPromise = (async () => {
+            try {
+                if (window.userHelper?.waitForLogin) {
+                    await window.userHelper.waitForLogin();
+                }
+                ensureApiClient();
+                const url = `${ApiClient.serverAddress()}/Genres?IncludeItemTypes=Movie`;
+                const genres = await apiHelper.getData(url, true, GENRE_TTL);
+                const items = Array.isArray(genres?.Items) ? genres.Items : [];
+                cachedMovieGenres = items;
+                movieGenresLastSyncedAt = Date.now();
+                writeMovieGenresToStorage(items, movieGenresLastSyncedAt);
+                LOG(`Synced movie genres: ${items.length} items`);
+                notifyMovieGenresSynced();
+            } catch (err) {
+                ERR('Failed to sync movie genres:', err);
+            } finally {
+                genreSyncInFlightPromise = null;
+            }
+        })();
+
+        return genreSyncInFlightPromise;
+    }
+
+    /**
+     * Deduped: after settle, sync Genres when cache is missing or older than 24h.
+     */
+    function ensureGenreSyncScheduled() {
+        hydrateMovieGenresFromStorage();
+        if (!isMovieGenresSyncDue()) {
+            return genreSyncScheduledPromise || Promise.resolve();
+        }
+        if (genreSyncScheduledPromise) return genreSyncScheduledPromise;
+
+        genreSyncScheduledPromise = (async () => {
+            try {
+                if (window.userHelper?.waitForLogin) {
+                    await window.userHelper.waitForLogin();
+                }
+                await waitForDocumentComplete();
+                await new Promise((resolve) => setTimeout(resolve, GENRE_SETTLE_DELAY_MS));
+                hydrateMovieGenresFromStorage();
+                if (!isMovieGenresSyncDue()) return;
+                await runMovieGenresSync();
+            } catch (err) {
+                ERR('Failed to schedule movie genres sync:', err);
+            } finally {
+                genreSyncScheduledPromise = null;
+            }
+        })();
+
+        return genreSyncScheduledPromise;
+    }
+
     // Expose apiHelper to global window object
     window.apiHelper = apiHelper;
-    
+
+    // Daily / empty-cache sync without waiting for a getGenreId caller
+    ensureGenreSyncScheduled();
+
     console.log('[KefinTweaks APIHelper] Module loaded and available at window.apiHelper');
 })();

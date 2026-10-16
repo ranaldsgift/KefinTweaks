@@ -145,6 +145,21 @@
                 name: 'Hide Missing And Unaired Indicators On Home Screen',
                 url: `${getKefinTweaksRoot()}skins/optional/global/hideMissingAndUnairedIndicatorsOnHomeScreen.css`,
                 enabled: false
+            },
+            {
+                name: 'Hide Seasonal Background Images',
+                url: `${getKefinTweaksRoot()}skins/optional/global/seasonalBackgroundHide.css`,
+                enabled: false
+            },
+            {
+                name: 'Disable Seasonal Animations',
+                url: `${getKefinTweaksRoot()}skins/optional/global/seasonalAnimationDisable.css`,
+                enabled: false
+            },
+            {
+                name: 'Unhide Native User Home Controls on User > Home settings page',
+                url: `${getKefinTweaksRoot()}skins/optional/global/unhideNativeUserHomeControls.css`,
+                enabled: false
             }
         ],
         
@@ -160,7 +175,7 @@
         // Each skin should have an author field indicating who created the skin
         skins: [
             {
-                name: 'Default',
+                name: 'Jellyfin Default',
                 author: 'Jellyfin',
                 url: null,  // null means no additional CSS (default Jellyfin theme)
                 colorSchemes: []
@@ -528,13 +543,16 @@
                 url: [
                     {
                         majorServerVersions: [10],
-                        urls: ['https://cdn.jsdelivr.net/gh/n00bcodr/jellyfish@main/theme.css']
+                        urls: ['https://cdn.jsdelivr.net/gh/n00bcodr/jellyfish@main/theme.css',
+                            `${getKefinTweaksRoot()}skins/jellyfish-kefin.css`
+                        ]
                     },
                     {
                         majorServerVersions: [11, 12],
                         urls: [
                             'https://cdn.jsdelivr.net/gh/n00bcodr/jellyfish@main/theme.css',
-                            'https://cdn.jsdelivr.net/gh/n00bcodr/jellyfish@main/10.11_fixes.css'
+                            'https://cdn.jsdelivr.net/gh/n00bcodr/jellyfish@main/10.11_fixes.css',
+                            `${getKefinTweaksRoot()}skins/jellyfish-kefin.css`
                         ]
                     }
                 ],
@@ -622,7 +640,10 @@
                 url: [
                     {
                         majorServerVersions: [10, 11, 12],
-                        urls: ['https://cdn.jsdelivr.net/gh/alexyle/jellyfin-theme@main/glassmorphism/theme.css']
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/alexyle/jellyfin-theme@main/glassmorphism/theme.css',
+                            `${getKefinTweaksRoot()}skins/glassmorphism-kefin.css`
+                        ]
                     }
                 ],
                 colorSchemes: []
@@ -633,6 +654,10 @@
                 url: [
                     {
                         majorServerVersions: [10],
+                        urls: ['https://cdn.jsdelivr.net/gh/MakD/zombie-release@latest/graveyard/zombie-min-git.css']
+                    },
+                    {
+                        majorServerVersions: [12],
                         urls: ['https://cdn.jsdelivr.net/gh/MakD/zombie-release@latest/zombie_revived.css']
                     }
                 ],

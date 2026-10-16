@@ -27,32 +27,36 @@
     opacity: 1;
 } */
 
-#indexPage[data-discovery-ready] div#discovery-loading-indicator:not(.show)::before {
+#discovery-loading-indicator {
+	order: 999999999 !important;
+	width: fit-content;
+	margin: 0 auto;
+}
+
+#indexPage[data-discovery-ready] #discovery-loading-indicator:not(.show)::before {
 	content: "Discover More";
 }
 
-#indexPage[data-discovery-exhausted] div#discovery-loading-indicator:not(.show)::before {
+#indexPage[data-discovery-exhausted] #discovery-loading-indicator:not(.show)::before {
 	content: "No More Content to Discover";
 }
 
-div#discovery-loading-indicator:not(.show)::after {
+#discovery-loading-indicator:not(.show)::after {
 	content: "\E313";
 	font-family: "Material Icons";
-	position: absolute;
-	top: calc(50% + 0.4em);
-	left: 50%;
-	transform: translateX(-50%) translateY(-50%);
 	font-size: 1.5em;
 	color: #ffffff;
 	visibility: visible;
 	opacity: 1;
 }
 
-#indexPage[data-discovery-exhausted] div#discovery-loading-indicator:not(.show)::after {
+#indexPage[data-discovery-exhausted] #discovery-loading-indicator:not(.show)::after {
 	content: "";
 }
 
-[data-loading-discovery="true"] div#discovery-loading-indicator {
+[data-loading-discovery="true"] #discovery-loading-indicator,
+.homeSectionsContainer[data-loading-discovery="true"] #discovery-loading-indicator,
+.sections[data-loading-discovery="true"] #discovery-loading-indicator {
 	display: flex;
 }
 
@@ -61,6 +65,7 @@ div#discovery-loading-indicator:not(.show)::after {
 	display: flex !important;
 	visibility: visible !important;
 	opacity: 1 !important;
+	gap: 0;
 }
 
 /* Hide Discover More / loading affordance outside Home + Discover categories */
@@ -87,13 +92,14 @@ div#discovery-loading-indicator:not(.show)::after {
 #indexPage[data-discovery-ready] #discovery-loading-indicator:not(.show) .spinner {
 	visibility: hidden;
 	opacity: 0;
+	display: none;
 }
 
 /* #indexPage[data-discovery-ready]:not([data-infinite-scroll='true']) div#discovery-loading-indicator {
     display: none;
 } */
 
-#indexPage:not([data-discovery-ready]) div#discovery-loading-indicator:not(.show)::after {
+#indexPage:not([data-discovery-ready]) #discovery-loading-indicator:not(.show)::after {
 	content: "";
 }
 
@@ -122,13 +128,19 @@ div#discovery-loading-indicator:not(.show)::after {
 	opacity: 1 !important;
 }
 
-.discovery-loading-indicator,
-.load-more-discovery-btn {
-	height: 50px;
-}
-
 .discovery-loading-indicator {
 	display: none;
+	appearance: none;
+	-webkit-appearance: none;
+	background: transparent;
+	border: none;
+	margin: 0;
+	padding: 0;
+	width: 100%;
+	font: inherit;
+	text-align: center;
+	color: inherit;
+	cursor: default;
 	opacity: 1;
 	flex-direction: column;
 	gap: 10px;
@@ -140,6 +152,46 @@ div#discovery-loading-indicator:not(.show)::after {
 	transition: opacity 0.3s ease;
 	position: relative;
 	justify-content: start;
+}
+
+/* Chevron mode: clickable Discover More (desktop optional; TV focus stop) */
+#indexPage[data-discovery-ready]:not([data-discovery-exhausted]) #discovery-loading-indicator:not(.show) {
+	cursor: pointer;
+}
+
+/* TV: real button + emby-button for spatial nav; keep Discover More chrome unstyled */
+.layout-tv button#discovery-loading-indicator.emby-button,
+.layout-tv #discovery-loading-indicator.discovery-load-more-focusable {
+	outline: none;
+	min-height: 3em;
+	padding: 0.5em 1em;
+	box-sizing: border-box;
+	background: transparent;
+	border: 0;
+	box-shadow: none;
+	transform: none;
+	-webkit-appearance: none;
+	appearance: none;
+	font: inherit;
+	color: inherit;
+	cursor: pointer;
+}
+
+.layout-tv #discovery-loading-indicator.discovery-load-more-focusable.show-focus:focus,
+.layout-tv button#discovery-loading-indicator.emby-button.show-focus:focus {
+	background-color: var(--theme-primary-color, #00a4dc) !important;
+	background: var(--theme-primary-color, #00a4dc) !important;
+	color: #fff !important;
+	outline: none;
+	box-shadow: none;
+	border-radius: 8px;
+}
+
+.layout-tv #discovery-loading-indicator.discovery-load-more-focusable.show-focus:focus::before,
+.layout-tv #discovery-loading-indicator.discovery-load-more-focusable.show-focus:focus::after,
+.layout-tv button#discovery-loading-indicator.emby-button.show-focus:focus::before,
+.layout-tv button#discovery-loading-indicator.emby-button.show-focus:focus::after {
+	color: #fff !important;
 }
 
 .discovery-loading-indicator .spinner {
@@ -174,7 +226,9 @@ div#discovery-loading-indicator:not(.show)::after {
 	display: none !important;
 }
 
-.sections[data-loading-discovery="true"] .discovery-loading-indicator {
+.sections[data-loading-discovery="true"] .discovery-loading-indicator,
+.sections[data-loading-discovery="true"] #discovery-loading-indicator,
+.homeSectionsContainer[data-loading-discovery="true"] #discovery-loading-indicator {
 	display: flex !important;
 	opacity: 1 !important;
 }
@@ -239,18 +293,6 @@ div#discovery-loading-indicator:not(.show)::after {
 	font-size: 1.5rem !important;
 	line-height: 1.8rem !important;
 }
-.section0:not([data-page]),
-.section1:not([data-page]),
-.section2:not([data-page]),
-.section3:not([data-page]),
-.section4:not([data-page]),
-.section5:not([data-page]),
-.section6:not([data-page]),
-.section7:not([data-page]),
-.section8:not([data-page]),
-.section9:not([data-page]) {
-	display: none !important;
-}
 
 .homeSectionsContainer .card[data-type="TvChannel"] a.cardImageContainer:not([style])::after {
 	content: attr(aria-label);
@@ -270,7 +312,7 @@ div#discovery-loading-indicator:not(.show)::after {
 	display: none;
 }
 
-.homePage[data-discovery-ready] div#discovery-loading-indicator:not(.show) {
+.homePage[data-discovery-ready] #discovery-loading-indicator:not(.show) {
 	min-height: 50px;
 }
 
@@ -322,6 +364,11 @@ div#discovery-loading-indicator:not(.show)::after {
 		opacity: 1;
 	}
 }
+/* TV: rail must be fully visible while focused (no hover) */
+.layout-tv #kefin-home-category-rail:focus-within,
+.layout-tv #kefin-home-category-rail:focus-within .kefin-home-category-rail {
+	opacity: 1;
+}
 .kefin-home-chrome.hide,
 #kefin-home-category-rail.hide,
 #kefin-home-category-rail.hide .kefin-home-category-rail {
@@ -356,7 +403,7 @@ html:not([data-active-page="home"]) #kefin-home-create-section-btn {
 }
 
 /* Inner visual bar — keep our layout over skinHeader / MuiAppBar positioning */
-.kefin-home-category-rail {
+:where(.kefin-home-category-rail) {
 	--AppBar-background: var(--jf-palette-AppBar-defaultBg);
 	--AppBar-color: var(--jf-palette-text-primary);
 	background-color: var(--jf-palette-AppBar-darkBg, var(--AppBar-background));
@@ -433,20 +480,14 @@ html:not([data-active-page="home"]) #kefin-home-create-section-btn {
 		opacity: 1;
 		pointer-events: auto;
 		margin: 0 !important;
-		-webkit-backdrop-filter: blur(10px);
-		backdrop-filter: blur(10px);
 		border: none !important;
 		transition:
 			transform 0.25s ease,
 			opacity 0.25s ease;
-		background: var(--jf-palette-AppBar-darkBg, var(--AppBar-background));
 	}
-	#kefin-home-category-rail .kefin-home-category-rail:hover,
-	#kefin-home-category-rail .kefin-home-category-rail:focus-within {
+	:where(#kefin-home-category-rail) .kefin-home-category-rail:hover,
+	:where(#kefin-home-category-rail) .kefin-home-category-rail:focus-within {
 		opacity: 1;
-		background: var(--jf-palette-AppBar-darkBg, var(--AppBar-background)) !important;
-		border-radius: 0;
-		box-shadow: 1px 1px 1px 1px #fff !important;
 	}
 	.kefin-home-category-btn-label {
 		display: block;
@@ -523,10 +564,31 @@ html:not([data-active-page="home"]) #kefin-home-create-section-btn {
 	height: auto !important;
 }
 
+.sections.homeSectionsContainer[data-category="discovery"] {
+	position: relative;
+}
+
 .sections.homeSectionsContainer[data-category="discovery"]::before {
-	content: "Discover Something To Watch";
+	content: "\E87A";
+	font-family: "Material Icons";
 	padding-left: max(env(safe-area-inset-left), 3.3%);
 	font-size: 1.5rem;
+	margin: 0;
+	padding-bottom: .2em;
+	padding-top: 1em;
+	display: block;
+	line-height: 1.2;
+}
+
+.sections.homeSectionsContainer[data-category="discovery"]::after {
+	content: "Discover Something To Watch";
+	font-family: inherit;
+	font-size: 1.5rem;
+	position: absolute;
+	left: calc(max(env(safe-area-inset-left), 3.3%) + 1.7em);
+	top: 1em;
+	line-height: 1.2;
+	pointer-events: none;
 }
 
 html:not([data-active-page="home"]) .snowverlay {
@@ -540,18 +602,7 @@ html:not([data-active-page="home"]) .snowverlay {
 	}
 }
 
-main.MuiBox-root .homeSectionsContainer[data-sections-rendered] {
-	margin-top: 3rem;
-}
-
-html[data-active-page="home"] body[data-seasonal-background="true"] .backdropContainer .backdropImage {
-	background: none !important;
-}
-
-html[data-active-page="home"]
-	body[data-seasonal-background="true"]:has(.homePage:not(.hide))
-	#reactRoot:has(.homePage:not(.hide) #homeTab.is-active)
-	> .backgroundContainer::after {
+html[data-active-page="home"] body[data-seasonal-background="true"] #reactRoot > .backgroundContainer::after {
 	content: "";
 	position: absolute;
 	top: 0;
@@ -563,7 +614,8 @@ html[data-active-page="home"]
 	background-size: cover;
 }
 
-.homeSectionsContainer:has(> .verticalSection.section0:empty):has(> .verticalSection.section1:empty):has(
+/* Figure out a better way to do this without requiring :has() */
+/* .homeSectionsContainer:has(> .verticalSection.section0:empty):has(> .verticalSection.section1:empty):has(
 		> .verticalSection.section2:empty
 	):has(> .verticalSection.section3:empty):has(> .verticalSection.section4:empty):has(> .verticalSection.section5:empty):has(
 		> .verticalSection.section6:empty
@@ -577,4 +629,73 @@ html[data-active-page="home"]
 	animation: fadeInDelayed 0.1s linear 1s forwards;
 	opacity: 0;
 	visibility: hidden;
+}
+ */
+
+.kefin-home-category-btn span:is(.emby-button-foreground) {
+	top: 0px !important;
+}
+
+#kefin-home-category-rail[data-category]:not([data-category="none"]) ~ #slides-container {
+	display: none !important;
+}
+
+.sections.homeSectionsContainer:not([data-category="none"]) {
+	margin-top: 0 !important;
+	top: 0 !important;
+}
+
+html[data-active-page="home"] [data-seasonal-theme="seasonal-halloween"][data-seasonal-background="true"] header.MuiAppBar-root,
+html[data-active-page="home"] [data-seasonal-theme="seasonal-halloween"][data-seasonal-background="true"] .skinHeader:not(.osdHeader) .headerTop {
+	box-shadow: 0 3px 12px rgba(180, 0, 0, 0.7) !important;
+	border-bottom: 2px solid #8b0000;
+}
+html[data-active-page="home"] [data-seasonal-theme="seasonal-halloween"][data-seasonal-background="true"] .skinHeader:not(.osdHeader) .headerTop {
+	position: relative;
+}
+
+html[data-active-page="home"] [data-seasonal-theme="seasonal-halloween"][data-seasonal-background="true"] header.MuiAppBar-root::after,
+html[data-active-page="home"] [data-seasonal-theme="seasonal-halloween"][data-seasonal-background="true"] .skinHeader:not(.osdHeader) .headerTop::after {
+	content: "";
+	position: absolute;
+	top: 100%;
+	left: 0;
+	width: 100%;
+	height: 14px;
+	pointer-events: none;
+	z-index: 9998;
+	background-color: #8b0000;
+	-webkit-mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 100" preserveAspectRatio="none"><path d="M0,0 L1000,0 L1000,20 C950,20 940,80 930,80 C920,80 910,20 860,20 C820,20 810,95 800,95 C790,95 780,20 720,20 C680,20 670,60 660,60 C650,60 640,20 580,20 C540,20 530,100 520,100 C510,100 500,20 440,20 C400,20 390,75 380,75 C370,75 360,20 300,20 C260,20 250,50 240,50 C230,50 220,20 160,20 C120,20 110,85 100,85 C90,85 80,20 0,20 Z"/></svg>');
+	mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 100" preserveAspectRatio="none"><path d="M0,0 L1000,0 L1000,20 C950,20 940,80 930,80 C920,80 910,20 860,20 C820,20 810,95 800,95 C790,95 780,20 720,20 C680,20 670,60 660,60 C650,60 640,20 580,20 C540,20 530,100 520,100 C510,100 500,20 440,20 C400,20 390,75 380,75 C370,75 360,20 300,20 C260,20 250,50 240,50 C230,50 220,20 160,20 C120,20 110,85 100,85 C90,85 80,20 0,20 Z"/></svg>');
+	-webkit-mask-size: 100% 100%;
+	mask-size: 100% 100%;
+}
+
+/* Procedural blood edge (SVG via --halloween-blood-splatter from homeScreen3.js) */
+html[data-active-page="home"] [data-seasonal-theme="seasonal-halloween"][data-seasonal-background="true"] header.MuiAppBar-root::before,
+html[data-active-page="home"] [data-seasonal-theme="seasonal-halloween"][data-seasonal-background="true"] .skinHeader:not(.osdHeader) .headerTop::before {
+	content: "";
+	position: absolute;
+	top: auto;
+	bottom: 0;
+	left: 0;
+	width: 100%;
+	height: var(--halloween-blood-band, 10px);
+	pointer-events: none;
+	opacity: var(--halloween-blood-opacity, 0.95);
+	z-index: 1;
+	background-image: var(--halloween-blood-splatter, none);
+	background-repeat: no-repeat !important;
+	background-size: 100% 100%;
+	background-position: bottom center;
+}
+
+html[data-active-page="home"] body[data-seasonal-background="true"] .backdropContainer .backdropImage { 
+	display: none !important;
+}
+
+@media (hover: hover) and (pointer: fine) and (min-width: 900px) {
+	#kefin-home-category-rail .kefin-home-category-rail.kefin-home-chrome {
+		pointer-events: auto;
+	}
 }

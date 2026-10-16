@@ -37,9 +37,14 @@
                 addItem: 'wizard-add-custom-item',
                 removeItem: 'wizard-remove-custom-item',
                 toggleImages: 'wizard-toggle-custom-images',
+                toggleHide: 'wizard-toggle-custom-item-hide',
+                moveLeft: 'wizard-move-custom-item-left',
+                moveRight: 'wizard-move-custom-item-right',
                 ...(options.actions || {})
             },
-            intro: options.intro !== false
+            intro: options.intro !== false,
+            // Default Kefin sections pass false — hide only, never delete
+            allowRemove: options.allowRemove !== false
         };
     }
 
@@ -61,7 +66,8 @@
             backdropUrl: '',
             squareUrl: '',
             bannerUrl: '',
-            logoUrl: ''
+            logoUrl: '',
+            hidden: false
         };
     }
 
@@ -77,6 +83,9 @@
         draft.squareUrl = item.squareUrl || '';
         draft.bannerUrl = item.bannerUrl || '';
         draft.logoUrl = item.logoUrl || '';
+        draft.hidden = item.hidden === true;
+        if (item.Id || item.id) draft.id = item.Id || item.id;
+        if (item.Type) draft.type = item.Type;
         return draft;
     }
 
@@ -114,6 +123,33 @@
         state.customItemAdditionalExpanded = next;
     }
 
+    function swapCustomItemExpanded(state, fromIndex, toIndex) {
+        if (!state.customItemAdditionalExpanded) return;
+        const a = state.customItemAdditionalExpanded[fromIndex];
+        const b = state.customItemAdditionalExpanded[toIndex];
+        if (a === undefined && b === undefined) return;
+        if (b === undefined) delete state.customItemAdditionalExpanded[fromIndex];
+        else state.customItemAdditionalExpanded[fromIndex] = b;
+        if (a === undefined) delete state.customItemAdditionalExpanded[toIndex];
+        else state.customItemAdditionalExpanded[toIndex] = a;
+    }
+
+    function moveCustomItemExpanded(state, fromIndex, toIndex) {
+        if (!state.customItemAdditionalExpanded || fromIndex === toIndex) return;
+        const next = {};
+        const moved = state.customItemAdditionalExpanded[fromIndex];
+        Object.entries(state.customItemAdditionalExpanded).forEach(([key, value]) => {
+            const i = parseInt(key, 10);
+            if (Number.isNaN(i) || i === fromIndex) return;
+            let dest = i;
+            if (fromIndex < toIndex && i > fromIndex && i <= toIndex) dest = i - 1;
+            else if (fromIndex > toIndex && i >= toIndex && i < fromIndex) dest = i + 1;
+            next[dest] = value;
+        });
+        if (moved !== undefined) next[toIndex] = moved;
+        state.customItemAdditionalExpanded = next;
+    }
+
     function hasValidCustomItems(items) {
         return (items || []).some(item => item.name?.trim() && item.posterUrl?.trim());
     }
@@ -138,11 +174,13 @@
             if (value) provided[key] = value;
         });
 
-        const item = { Name: name, Type: 'Folder' };
+        const item = { Name: name, Type: draft.type || 'Folder' };
+        if (draft.id) item.Id = draft.id;
         const cardUrl = draft.cardUrl?.trim();
         if (cardUrl) item.cardUrl = cardUrl;
         const cardFooter = draft.cardFooter?.trim();
         if (cardFooter) item.cardFooter = cardFooter;
+        if (draft.hidden === true) item.hidden = true;
 
         const keys = Object.keys(provided);
         if (keys.length === 1 && provided.posterUrl) {
@@ -177,9 +215,20 @@
         }
     }
 
+    function resolvePreviewUrl(url) {
+        const kefinTweaksRoot = window.KefinTweaksConfig?.kefinTweaksRoot || '';
+        const serverId = (typeof ApiClient !== 'undefined' && typeof ApiClient.serverId === 'function')
+            ? ApiClient.serverId()
+            : '';
+        return String(url || '')
+            .replace(/\$\{kefinTweaksRoot\}/g, kefinTweaksRoot)
+            .replace(/\$\{serverId\}/g, serverId)
+            .trim();
+    }
+
     function updateCustomImagePreview(imgEl, url) {
         if (!imgEl) return;
-        const trimmed = (url || '').trim();
+        const trimmed = resolvePreviewUrl(url);
         if (!trimmed) {
             imgEl.removeAttribute('src');
             imgEl.style.display = 'none';
@@ -268,19 +317,41 @@
         `;
     }
 
-    function renderCustomItemTileHTML(index, item, canRemove, options) {
+    function renderCustomItemTileHTML(index, item, canRemove, options, itemCount) {
         const opts = getOptions(options);
         const label = item.name?.trim() || `Item ${index + 1}`;
+        const isHidden = item.hidden === true;
+        const canMoveLeft = index > 0;
+        const canMoveRight = index < itemCount - 1;
+        const hideIcon = isHidden ? 'visibility_off' : 'visibility';
+        const hideLabel = isHidden ? `Show ${label}` : `Hide ${label}`;
+        const removeTitle = canRemove
+            ? `Remove ${label}`
+            : (opts.allowRemove === false
+                ? 'Default section items cannot be deleted — hide instead'
+                : `Remove ${label}`);
+
         return `
-            <div class="hsse-custom-item-tile" data-custom-item-index="${index}">
+            <div class="hsse-custom-item-tile${isHidden ? ' is-hidden' : ''}" data-custom-item-index="${index}">
                 <button type="button" class="hsse-custom-item-tile-image hsse-image-preview hsse-item-tile-preview" ${actionAttr(opts, 'openEditor')} data-item-index="${index}" aria-label="Edit ${escapeHtml(label)}">
                     <img class="hsse-image-preview-img" alt="" data-tile-index="${index}">
                     <span class="hsse-custom-item-edit-badge">${renderMaterialIcon('edit')}</span>
                 </button>
                 <div class="listItemBodyText hsse-custom-item-tile-label">${escapeHtml(label)}</div>
-                <button type="button" class="emby-button raised hsse-custom-item-trash" ${actionAttr(opts, 'removeItem')} data-item-index="${index}"${canRemove ? '' : ' disabled'} aria-label="Remove ${escapeHtml(label)}">
-                    ${renderMaterialIcon('delete', 'hsse-custom-item-trash-icon')}
-                </button>
+                <div class="hsse-custom-item-actions">
+                    <button type="button" class="emby-button raised hsse-custom-item-action" ${actionAttr(opts, 'moveLeft')} data-item-index="${index}"${canMoveLeft ? '' : ' disabled'} aria-label="Move ${escapeHtml(label)} left">
+                        ${renderMaterialIcon('chevron_left', 'hsse-custom-item-action-icon')}
+                    </button>
+                    <button type="button" class="emby-button raised hsse-custom-item-action hsse-custom-item-hide" ${actionAttr(opts, 'toggleHide')} data-item-index="${index}" aria-label="${escapeHtml(hideLabel)}" aria-pressed="${isHidden ? 'true' : 'false'}">
+                        ${renderMaterialIcon(hideIcon, 'hsse-custom-item-action-icon')}
+                    </button>
+                    <button type="button" class="emby-button raised hsse-custom-item-action hsse-custom-item-trash" ${actionAttr(opts, 'removeItem')} data-item-index="${index}"${canRemove ? '' : ' disabled'} title="${escapeHtml(removeTitle)}" aria-label="${escapeHtml(removeTitle)}">
+                        ${renderMaterialIcon('delete', 'hsse-custom-item-action-icon hsse-custom-item-trash-icon')}
+                    </button>
+                    <button type="button" class="emby-button raised hsse-custom-item-action" ${actionAttr(opts, 'moveRight')} data-item-index="${index}"${canMoveRight ? '' : ' disabled'} aria-label="Move ${escapeHtml(label)} right">
+                        ${renderMaterialIcon('chevron_right', 'hsse-custom-item-action-icon')}
+                    </button>
+                </div>
             </div>
         `;
     }
@@ -319,7 +390,7 @@
         const opts = getOptions(options);
         ensureCustomItemsInitialized(state);
         const items = state.customItems;
-        const canRemove = items.length > 1;
+        const canRemove = opts.allowRemove !== false && items.length > 1;
 
         return `
             <div class="hsse-custom-items-stage">
@@ -329,7 +400,7 @@
                     <p class="listItemBodyText secondary hsse-field-hint">Name and poster required. Link and other images optional.</p>
                 </div>` : ''}
                 <div class="hsse-custom-items-grid">
-                    ${items.map((item, index) => renderCustomItemTileHTML(index, item, canRemove, opts)).join('')}
+                    ${items.map((item, index) => renderCustomItemTileHTML(index, item, canRemove, opts, items.length)).join('')}
                     <button type="button" class="hsse-custom-item-add-tile" ${actionAttr(opts, 'addItem')} aria-label="Add item">
                         ${renderMaterialIcon('add', 'hsse-custom-item-add-icon')}
                     </button>
@@ -337,6 +408,48 @@
                 ${renderCustomItemEditorPanelHTML(state, opts)}
             </div>
         `;
+    }
+
+    function reindexTileDom(tile, index, itemCount) {
+        if (!tile) return;
+        tile.dataset.customItemIndex = String(index);
+        tile.querySelectorAll('[data-item-index]').forEach((el) => {
+            el.dataset.itemIndex = String(index);
+        });
+        const tileImg = tile.querySelector('img[data-tile-index]');
+        if (tileImg) tileImg.dataset.tileIndex = String(index);
+
+        // Action order: left | hide | delete | right
+        const actions = tile.querySelectorAll('.hsse-custom-item-actions .hsse-custom-item-action');
+        if (actions.length >= 4) {
+            actions[0].disabled = index <= 0;
+            actions[3].disabled = index >= itemCount - 1;
+        }
+    }
+
+    function swapAdjacentCustomItemTiles(root, fromIndex, toIndex) {
+        if (!root || fromIndex === toIndex) return false;
+        const grid = root.querySelector('.hsse-custom-items-grid');
+        if (!grid) return false;
+        const a = grid.querySelector(`[data-custom-item-index="${fromIndex}"]`);
+        const b = grid.querySelector(`[data-custom-item-index="${toIndex}"]`);
+        if (!a || !b) return false;
+
+        const aNext = a.nextSibling;
+        const bNext = b.nextSibling;
+        if (aNext === b) {
+            grid.insertBefore(b, a);
+        } else if (bNext === a) {
+            grid.insertBefore(a, b);
+        } else {
+            grid.insertBefore(a, bNext);
+            grid.insertBefore(b, aNext);
+        }
+
+        const itemCount = grid.querySelectorAll('[data-custom-item-index]').length;
+        reindexTileDom(a, toIndex, itemCount);
+        reindexTileDom(b, fromIndex, itemCount);
+        return true;
     }
 
     function handleAction(action, el, root, state, options, onRefresh) {
@@ -371,6 +484,7 @@
                 break;
             }
             case actions.removeItem: {
+                if (opts.allowRemove === false) break;
                 const removeIndex = parseInt(el.dataset.itemIndex, 10);
                 if (state.customItems.length <= 1 || Number.isNaN(removeIndex)) break;
                 if (state.customItemEditorIndex === removeIndex) {
@@ -403,6 +517,74 @@
                 if (typeof onRefresh === 'function') onRefresh(root);
                 break;
             }
+            case actions.toggleHide: {
+                const hideIndex = parseInt(el.dataset.itemIndex, 10);
+                if (Number.isNaN(hideIndex) || !state.customItems?.[hideIndex]) break;
+                collectCustomItemsFromForm(root, state, opts);
+                const item = state.customItems[hideIndex];
+                item.hidden = !item.hidden;
+
+                // Remove, then reinsert at the target slot among remaining items
+                state.customItems.splice(hideIndex, 1);
+                let insertAt;
+                if (item.hidden === true) {
+                    // Hidden items stay at the end
+                    insertAt = state.customItems.length;
+                } else {
+                    // Unhide: last active item, immediately before the first still-hidden item
+                    insertAt = state.customItems.findIndex((it) => it.hidden === true);
+                    if (insertAt < 0) insertAt = state.customItems.length;
+                }
+                state.customItems.splice(insertAt, 0, item);
+
+                if (insertAt !== hideIndex) {
+                    moveCustomItemExpanded(state, hideIndex, insertAt);
+                    if (state.customItemEditorIndex === hideIndex) {
+                        state.customItemEditorIndex = insertAt;
+                    } else if (state.customItemEditorIndex != null) {
+                        if (hideIndex < state.customItemEditorIndex && insertAt >= state.customItemEditorIndex) {
+                            state.customItemEditorIndex -= 1;
+                        } else if (hideIndex > state.customItemEditorIndex && insertAt <= state.customItemEditorIndex) {
+                            state.customItemEditorIndex += 1;
+                        }
+                    }
+                }
+
+                if (typeof onRefresh === 'function') onRefresh(root);
+                break;
+            }
+            case actions.moveLeft: {
+                const leftIndex = parseInt(el.dataset.itemIndex, 10);
+                if (Number.isNaN(leftIndex) || leftIndex <= 0) break;
+                collectCustomItemsFromForm(root, state, opts);
+                const swapWith = leftIndex - 1;
+                const tmp = state.customItems[leftIndex];
+                state.customItems[leftIndex] = state.customItems[swapWith];
+                state.customItems[swapWith] = tmp;
+                swapCustomItemExpanded(state, leftIndex, swapWith);
+                if (state.customItemEditorIndex === leftIndex) state.customItemEditorIndex = swapWith;
+                else if (state.customItemEditorIndex === swapWith) state.customItemEditorIndex = leftIndex;
+                if (!swapAdjacentCustomItemTiles(root, leftIndex, swapWith) && typeof onRefresh === 'function') {
+                    onRefresh(root);
+                }
+                break;
+            }
+            case actions.moveRight: {
+                const rightIndex = parseInt(el.dataset.itemIndex, 10);
+                if (Number.isNaN(rightIndex) || rightIndex >= state.customItems.length - 1) break;
+                collectCustomItemsFromForm(root, state, opts);
+                const swapWith = rightIndex + 1;
+                const tmp = state.customItems[rightIndex];
+                state.customItems[rightIndex] = state.customItems[swapWith];
+                state.customItems[swapWith] = tmp;
+                swapCustomItemExpanded(state, rightIndex, swapWith);
+                if (state.customItemEditorIndex === rightIndex) state.customItemEditorIndex = swapWith;
+                else if (state.customItemEditorIndex === swapWith) state.customItemEditorIndex = rightIndex;
+                if (!swapAdjacentCustomItemTiles(root, rightIndex, swapWith) && typeof onRefresh === 'function') {
+                    onRefresh(root);
+                }
+                break;
+            }
             default:
                 break;
         }
@@ -431,7 +613,10 @@
                 closeEditor: 'hsae-close-custom-item-editor',
                 addItem: 'hsae-add-custom-item',
                 removeItem: 'hsae-remove-custom-item',
-                toggleImages: 'hsae-toggle-custom-images'
+                toggleImages: 'hsae-toggle-custom-images',
+                toggleHide: 'hsae-toggle-custom-item-hide',
+                moveLeft: 'hsae-move-custom-item-left',
+                moveRight: 'hsae-move-custom-item-right'
             },
             ...overrides
         })

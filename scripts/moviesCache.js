@@ -7,13 +7,13 @@
     const WARN = (...args) => console.warn('[KefinTweaks Movies Cache]', ...args);
     const ERR = (...args) => console.error('[KefinTweaks Movies Cache]', ...args);
 
-    const CACHE_NAME = 'movies_library';
-    const PARTIAL_CACHE_NAME = 'movies_library_partial';
+    const CACHE_NAME = 'movies_library_v2';
+    const PARTIAL_CACHE_NAME = 'movies_library_partial_v2';
     const LAST_FETCH_KEY_PREFIX = 'kefinTweaks_lastDateFetchedMovieCache_';
     const IMDB_TOP_250_CACHE_TTL = 24 * 60 * 60 * 1000;
     const MOVIE_FIELDS = [
         'ProviderIds', 'People', 'Studios', 'Taglines', 'Genres', 'Overview', 'PrimaryImageAspectRatio',
-        'DateCreated', 'DateLastMediaAdded'
+        'ImageBlurHashes', 'DateCreated', 'DateLastMediaAdded'
     ].join(',');
 
     let movies = null;
@@ -116,7 +116,7 @@
     }
 
     /**
-     * Full crawl with partial resume. Commits to movies_library only when complete.
+     * Full crawl with partial resume. Commits to movies_library_v2 only when complete.
      */
     async function fetchAndCacheMovies() {
         const cache = window.IndexedDBCache;
@@ -448,6 +448,7 @@
         });
     }
 
+    /** Defer crawl until idle/hidden/fallback after home has a chance to paint. */
     let bootstrapStarted = false;
     let bootstrapScheduled = false;
 
@@ -462,30 +463,19 @@
         }
     }
 
-    /** Defer crawl until home has painted (or 3s after login) so home getQuery is not starved. */
     function scheduleBootstrap() {
         if (bootstrapScheduled) return;
         bootstrapScheduled = true;
-
-        const start = () => { bootstrap(); };
-
-        const onPainted = () => {
-            document.removeEventListener('kefinTweaksHomePainted', onPainted);
-            start();
-        };
-        document.addEventListener('kefinTweaksHomePainted', onPainted);
-
-        waitForLoginReady().then((ok) => {
-            if (!ok) {
-                document.removeEventListener('kefinTweaksHomePainted', onPainted);
-                start();
-                return;
-            }
-            setTimeout(() => {
-                document.removeEventListener('kefinTweaksHomePainted', onPainted);
-                start();
-            }, 3000);
-        });
+        const utils = window.LibraryCacheUtils;
+        if (utils?.scheduleIdleBootstrap) {
+            utils.scheduleIdleBootstrap({
+                waitForLogin: waitForLoginReady,
+                onReady: () => { bootstrap(); }
+            });
+            return;
+        }
+        // Fallback if LibraryCacheUtils not loaded yet
+        waitForLoginReady().then(() => bootstrap());
     }
 
     window.MoviesCache = {

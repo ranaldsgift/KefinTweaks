@@ -569,6 +569,9 @@
                         card.setAttribute('data-index', startIndex + index);
                         container.appendChild(card);
                     });
+                    if (typeof window.cardBuilder.registerLazyImagesIn === 'function') {
+                        window.cardBuilder.registerLazyImagesIn(container);
+                    }
                     
                     LOG('Cards built successfully');
                 }
@@ -660,13 +663,12 @@
     function checkScrollPosition() {
         // Don't trigger if already loading, no more items, or request in progress
         if (loading || !hasMore || isScrollTriggered || isRequestInProgress) {
-            LOG('Scroll check blocked:', { loading, hasMore, isScrollTriggered, isRequestInProgress });
             return;
         }
         
+        // Don't trigger when not on a supported page
         const container = getContainer();
         if (!container) {
-            LOG('No container found in scroll check');
             return;
         }
         
@@ -684,19 +686,6 @@
         // Calculate distance from bottom - trigger when one viewport height away
         const distanceFromBottom = documentHeight - (scrollTop + windowHeight);
         const triggerThreshold = windowHeight; // One viewport height from bottom
-        
-        LOG('Scroll check:', {
-            scrollTop,
-            windowHeight,
-            documentHeight,
-            distanceFromBottom,
-            triggerThreshold,
-            existingItemsCount,
-            loading,
-            hasMore,
-            isScrollTriggered,
-            isRequestInProgress
-        });
         
         if (distanceFromBottom <= triggerThreshold) {
             isScrollTriggered = true;
@@ -798,21 +787,46 @@
     }
     
     // Scroll state loading removed - not needed
-    
-    // Wait for page to mount
-    const observer = new MutationObserver(() => {
+
+    function tryInitializeFromView() {
         if (shouldInitialize()) {
             initialize().catch(err => ERR('Initialization failed:', err));
+            return true;
         }
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
-    
-    // Also try to initialize immediately if page is already loaded
-    if (document.readyState === 'complete') {
-        setTimeout(() => {
-            initialize().catch(err => ERR('Initial initialization failed:', err));
-        }, 100);
+        return false;
     }
+
+    function armLibraryPageInit() {
+        if (tryInitializeFromView()) return;
+        const utils = window.KefinTweaksUtils;
+        if (utils?.pollUntil) {
+            utils.pollUntil(() => (tryInitializeFromView() ? true : null), {
+                intervalMs: 200,
+                timeoutMs: 15000
+            });
+            return;
+        }
+        // Fallback brief poll
+        let tries = 0;
+        const timer = setInterval(() => {
+            tries += 1;
+            if (tryInitializeFromView() || tries >= 75) clearInterval(timer);
+        }, 200);
+    }
+
+    function startInfiniteScrollHook() {
+        const utils = window.KefinTweaksUtils;
+        if (!utils?.onViewPage) {
+            setTimeout(startInfiniteScrollHook, 500);
+            return;
+        }
+        utils.onViewPage(() => {
+            armLibraryPageInit();
+        }, { pages: SUPPORTED_PAGES });
+        armLibraryPageInit();
+    }
+
+    startInfiniteScrollHook();
     
     // Cleanup function
     function cleanup() {

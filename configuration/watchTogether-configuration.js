@@ -88,7 +88,7 @@
                 <button class="emby-button raised block button-submit" id="save-watchtogether-config-btn">Save</button>
             `;
 
-            const modalInstance = window.ModalSystem.create({
+            window.ModalSystem.create({
                 id: MODAL_ID,
                 title: 'Watch Together',
                 content,
@@ -96,6 +96,7 @@
                 closeOnBackdrop: true,
                 closeOnEscape: true,
                 showCloseButton: true,
+                dialogStyle: { maxWidth: '90vw', width: '560px' },
                 onOpen: (modal) => {
                     const saveBtn = modal.dialogFooter.querySelector('#save-watchtogether-config-btn');
                     if (saveBtn) {
@@ -112,11 +113,6 @@
                     }
                 }
             });
-
-            if (modalInstance?.dialog) {
-                modalInstance.dialog.style.maxWidth = '90vw';
-                modalInstance.dialog.style.width = '560px';
-            }
             LOG('Watch Together configuration modal opened');
         } catch (error) {
             ERR('Error opening Watch Together config modal:', error);

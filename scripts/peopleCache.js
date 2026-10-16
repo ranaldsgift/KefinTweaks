@@ -460,7 +460,7 @@
                 setEpisodeCrawl(startIndex, newestAt, oldestApplied);
                 await persistPeople({ prune: false });
             }
-        } else {
+                } else {
             LOG('Episode people sync: full crawl…');
             startIndex = 0;
             newestAt = null;
@@ -747,7 +747,7 @@
             try {
                 const cache = window.IndexedDBCache;
                 const userId = window.ApiClient.getCurrentUserId();
-                if (cache && await cache.isCacheValid(CACHE_NAME, userId)) {
+                if (cache) {
                     const cached = await cache.get(CACHE_NAME, userId);
                     if (cached?.isComplete && Array.isArray(cached.peopleData)) {
                         const currentMode = shouldLoadPeopleEpisodeData();
@@ -791,7 +791,7 @@
                                 // Resume partial, incremental watermark, or start full — never wipe on missing watermark alone
                                 scheduleEpisodePeopleSync();
                             }
-                            return;
+                    return;
                         }
                     }
                 }
@@ -921,6 +921,7 @@
         return window.userHelper.waitForLogin(maxWaitMs);
     }
 
+    /** Defer crawl until idle/hidden/fallback after home has a chance to paint. */
     let bootstrapStarted = false;
     let bootstrapScheduled = false;
 
@@ -940,26 +941,15 @@
     function scheduleBootstrap() {
         if (bootstrapScheduled) return;
         bootstrapScheduled = true;
-
-        const start = () => { bootstrap(); };
-
-        const onPainted = () => {
-            document.removeEventListener('kefinTweaksHomePainted', onPainted);
-            start();
-        };
-        document.addEventListener('kefinTweaksHomePainted', onPainted);
-
-        waitForLoginReady().then((ok) => {
-            if (!ok) {
-                document.removeEventListener('kefinTweaksHomePainted', onPainted);
-                start();
-                return;
-            }
-            setTimeout(() => {
-                document.removeEventListener('kefinTweaksHomePainted', onPainted);
-                start();
-            }, 3000);
-        });
+        const utils = window.LibraryCacheUtils;
+        if (utils?.scheduleIdleBootstrap) {
+            utils.scheduleIdleBootstrap({
+                waitForLogin: waitForLoginReady,
+                onReady: () => { bootstrap(); }
+            });
+            return;
+        }
+        waitForLoginReady().then(() => bootstrap());
     }
 
     window.PeopleCache = {

@@ -277,7 +277,6 @@
                  data-history="true" data-removeonclose="true" 
                  style="animation: 140ms ease-out 0s 1 normal both running scaleup; position: fixed; margin: 0px;">
                 <div class="actionSheetContent">
-                    <span style="padding: 10px 20px;margin: -6px auto 10px;max-width: 450px;background: #c1c1c1;border-radius: 0 0 10px 10px;color: #000000;">If you have ${serverName} open in multiple tabs the subtitle will be downloaded, but the player will not switch to the subtitle and it will appear as if the download is hanging.</span>
                     <h1 class="actionSheetTitle">Subtitle Search Results</h1>
                     <div class="actionSheetScroller scrollY" id="subtitleSearchResults">
                         <div class="listItem">
@@ -1090,11 +1089,13 @@
         }
         
         try {
-            // Check if ApiClient is available first
-            if (!isApiClientAvailable()) {
-                LOG('ApiClient not available, skipping initialization');
+            // Wait for login to complete
+            if (!window.userHelper?.waitForLogin) {
+                LOG('userHelper.waitForLogin not available, waiting');
+                setTimeout(initialize, 1000);
                 return;
             }
+            await window.userHelper.waitForLogin();
             
             // Check permissions first
             const hasPermission = await checkSubtitlePermissions();

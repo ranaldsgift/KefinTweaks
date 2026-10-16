@@ -338,10 +338,12 @@
         }
 
         // Check if already added
-        if (miscInfoContainer.querySelector('.kt-season-info')) {
+        if (miscInfoContainer.dataset.seasonInfo) {
             LOG('Season info already added, skipping');
             return;
         }
+
+        miscInfoContainer.dataset.seasonInfo = 'true';
 
         const infoContainer = document.createElement('div');
         infoContainer.className = 'kt-season-info';

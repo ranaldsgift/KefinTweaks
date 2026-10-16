@@ -1077,19 +1077,17 @@
 
 .search-input-wrapper .search-icon {
 	position: absolute;
-	left: -26px;
 	top: 50%;
-	transform: translateY(-50%);
+	transform: translateY(-50%) translateX(50%);
 	color: rgba(255, 255, 255, 0.6);
 	font-size: 20px;
 	pointer-events: none;
 }
 
 .search-input {
-	width: 100%;
+	width: calc(100% - 80px);
 	height: 40px;
 	padding: 0 40px 0 40px;
-	transform: translateX(-40px);
 	background: rgba(255, 255, 255, 0.1);
 	border: 1px solid rgba(255, 255, 255, 0.2);
 	border-radius: 20px;
@@ -2242,6 +2240,11 @@ div[data-tab="watchlist"] .loading-message {
 .card:has(button[data-played="true"]) .watchlist-button,
 .mainDetailButtons:has(button[data-played].playstatebutton-played) .watchlist-icon {
 	display: none;
+}
+
+/* Do not show watchlist ahead of native Play reveal */
+.mainDetailButtons:not(:has(.btnPlay:not(.hide))) .watchlist-icon {
+	display: none !important;
 }
 
 /* Import/Export Modal Styles */

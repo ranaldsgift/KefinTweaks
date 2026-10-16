@@ -8,38 +8,28 @@
 	align-items: center;
 }
 
-.layout-desktop .searchFieldsInner {
-	padding-left: calc(30px + 1em);
+div#smart-search-wrapper:not([style*="display: none"]) ~ #jellyseerr-search-icon {
+	transform: translateX(calc(100% + 1.5em)) translateY(calc(-50%));
+	position: absolute;  
+	top: 24px;
+	right: 0;
 }
 
 div#smart-search-wrapper:not([style*="display: none"]) ~ #jellyseerr-search-icon {
-	transform: unset;
-	position: relative;
-	top: 0.4em;
-	right: unset;
+	width: 30px;
+	height: 30px;
 }
 
-.inputContainer.flex-grow:has(.smart-search-wrapper) {
-	display: grid;
-	grid-template-columns: 1fr 30px;
-	gap: 1em;
-}
-
-.smart-search-mode .searchFieldsInner {
+#searchPage .searchFieldsInner {
 	position: relative;
 }
 
-div#searchPage {
-	padding-top: 3rem !important;
-}
-
-@media (min-width: 600px) {
-	div#searchPage {
-		padding-top: 5rem !important;
-	}
+main.MuiBox-root div#searchPage {
+	padding-top: 2rem !important;
 }
 
 div#searchPage {
+	padding-top: 5rem !important;
 	display: flex;
 	flex-direction: column;
 }

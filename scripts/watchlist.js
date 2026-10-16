@@ -24,7 +24,6 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	const localStorageCache = new window.LocalStorageCache();
 	
 	const WATCHLIST_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-	const WATCHLIST_URL = window.KefinTweaksUtils._watchlistUrl || '#/watchlist';
 
 	// Playback monitoring for watchlist cleanup
 	let playbackMonitorInitialized = false;
@@ -927,27 +926,86 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		});
 	}
 
-	// Show all shows modal
-	function showAllShowsModal() {
-		// Get all progress data and sort it the same way as top 5
-		const progressData = progressCache.data;
-		const allShows = progressData
-			.map(progress => ({
-				name: progress.series.Name,
-				episodesWatched: progress.watchedCount,
-				totalEpisodes: progress.totalEpisodes,
-				percentage: progress.percentage,
-				seriesId: progress.series.Id
+	/** Sum played-episode RunTimeTicks for a progress row (watchedRuntime is seconds when set). */
+	function getSeriesWatchedRuntimeTicks(progress) {
+		if (!progress) return 0;
+		const source = Array.isArray(progress.episodes) && progress.episodes.length
+			? progress.episodes
+			: (progress.playEvents || []);
+		if (source.length) {
+			let totalTicks = 0;
+			source.forEach((ep) => {
+				const key = ep?.UserData?.LastPlayedDate || ep?.LastPlayedDate;
+				const played = ep?.UserData ? ep.UserData.Played === true : !!key;
+				if (!played) return;
+				totalTicks += Number(ep.RunTimeTicks) || 0;
+			});
+			return totalTicks;
+		}
+		if (typeof progress.watchedRuntime === 'number' && progress.watchedRuntime > 0) {
+			return Math.round(progress.watchedRuntime * 10000000);
+		}
+		return 0;
+	}
+
+	function formatWatchedRuntimeLabel(ticks) {
+		const seconds = (Number(ticks) || 0) / 10000000;
+		const hours = seconds / 3600;
+		if (hours >= 1) return `${hours.toFixed(1)} hours`;
+		const mins = Math.round(seconds / 60);
+		return `${mins} min`;
+	}
+
+	function escapeHtmlWatchlist(str) {
+		return String(str || '')
+			.replace(/&/g, '&amp;')
+			.replace(/</g, '&lt;')
+			.replace(/>/g, '&gt;')
+			.replace(/"/g, '&quot;');
+	}
+
+	/** Map progress rows to top-show entries sorted by total watch time. */
+	function mapProgressToTopShows(progressData, limit = null) {
+		const mapped = (progressData || [])
+			.map((progress) => ({
+				name: progress.series?.Name || 'Unknown',
+				episodesWatched: progress.watchedCount || 0,
+				totalEpisodes: progress.totalEpisodes || 0,
+				percentage: progress.percentage || 0,
+				seriesId: progress.series?.Id,
+				watchedRuntimeTicks: getSeriesWatchedRuntimeTicks(progress)
 			}))
 			.sort((a, b) => {
-				// Primary sort: completion percentage (highest first)
-				const percentageDiff = b.percentage - a.percentage;
-				if (percentageDiff !== 0) {
-					return percentageDiff;
-				}
-				// Tiebreaker: episode count (most episodes first)
-				return b.totalEpisodes - a.totalEpisodes;
+				const tickDiff = b.watchedRuntimeTicks - a.watchedRuntimeTicks;
+				if (tickDiff !== 0) return tickDiff;
+				return (b.episodesWatched || 0) - (a.episodesWatched || 0);
 			});
+		return limit != null ? mapped.slice(0, limit) : mapped;
+	}
+
+	function bindShowAllShowsButton(root) {
+		const scope = root && root.querySelector ? root : document;
+		const showAllBtn = scope.querySelector?.('#show-all-shows-btn')
+			|| getElementByIdSafe('show-all-shows-btn');
+		if (!showAllBtn || showAllBtn.dataset.showAllBound === 'true') return;
+		showAllBtn.dataset.showAllBound = 'true';
+		showAllBtn.addEventListener('click', (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			showAllShowsModal();
+		});
+	}
+
+	// Show all shows modal
+	function showAllShowsModal() {
+		if (!window.ModalSystem) {
+			WARN('ModalSystem not available');
+			return;
+		}
+
+		// Get all progress data and sort by total watch time (same as Top Shows)
+		const progressData = progressCache.data || [];
+		const allShows = mapProgressToTopShows(progressData);
 		
 		let showsHtml = '';
 		if (allShows.length === 0) {
@@ -961,8 +1019,8 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 					<div class="all-show-item">
 						<div class="show-rank">${rank}</div>
 						<div class="show-info">
-							<div class="show-name">${show.name}</div>
-							<div class="show-episodes">${show.episodesWatched} of ${show.totalEpisodes} ${episodesText} (${show.percentage}%)</div>
+							<div class="show-name">${escapeHtmlWatchlist(show.name)}</div>
+							<div class="show-episodes">${formatWatchedRuntimeLabel(show.watchedRuntimeTicks)} · ${show.episodesWatched} of ${show.totalEpisodes} ${episodesText} (${show.percentage}%)</div>
 						</div>
 					</div>
 				`;
@@ -1074,7 +1132,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	}
 
 	function getWatchlistSection() {
-		const visibleWatchlistSections = document.querySelectorAll('.libraryPage:not(.hide) .sections.watchlist');
+		const visibleWatchlistSections = document.querySelectorAll('.libraryPage:not(.hide) .sections.watchlist, div[id^="customTab_"] .sections.watchlist');
 
 		if (!visibleWatchlistSections || visibleWatchlistSections.length === 0) {
 			return null;
@@ -1085,12 +1143,6 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		}
 
 		return visibleWatchlistSections[0];
-	}
-	
-	// Safe element getter that targets the visible library page
-	function getElementByIdSafe(elementId) {
-		const libraryPage = getVisibleLibraryPage();
-		return libraryPage ? libraryPage.querySelector(`#${elementId}`) : getElementByIdSafe(elementId);
 	}
 	
 	// Add custom CSS for watchlist icon
@@ -2177,12 +2229,19 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	// Hash change listener for browser navigation / in-page tab URL sync
 	function setupHashChangeListener() {
 		window.addEventListener('hashchange', async () => {
-			const path = String(window.location.hash || '').split('?')[0];
-			if (path !== '#/watchlist') {
+			const [path, search = ''] = String(window.location.hash || '').split('?');
+			const [watchlistPath, watchlistSearch = ''] = String(window.KefinTweaksUtils._watchlistUrl || '').split('?');
+			const currentParams = new URLSearchParams(search);
+			const requiredParams = new URLSearchParams(watchlistSearch);
+			if (
+				!watchlistPath ||
+				path !== watchlistPath ||
+				Array.from(requiredParams).some(([key, value]) => currentParams.get(key) !== value)
+			) {
 				return;
 			}
 
-			LOG('Hash changed on #/watchlist, syncing watchlist state');
+			LOG('Hash changed, syncing watchlist state');
 			await renderWatchlist();
 
 			const params = getUrlParams();
@@ -2790,25 +2849,8 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		const moviesWatched = movieCache.data.length;
 		const hoursWatched = sumWatchedRuntimeHours(progressData, movieCache.data);
 
-		// Calculate top 5 shows by completion percentage, then by episode count
-		const topShows = progressData
-			.map(progress => ({
-				name: progress.series.Name,
-				episodesWatched: progress.watchedCount,
-				totalEpisodes: progress.totalEpisodes,
-				percentage: progress.percentage,
-				seriesId: progress.series.Id
-			}))
-			.sort((a, b) => {
-				// Primary sort: completion percentage (highest first)
-				const percentageDiff = b.percentage - a.percentage;
-				if (percentageDiff !== 0) {
-					return percentageDiff;
-				}
-				// Tiebreaker: episode count (most episodes first)
-				return b.totalEpisodes - a.totalEpisodes;
-			})
-			.slice(0, 5);
+		// Top 5 shows by total watch time (RunTimeTicks), then episode count
+		const topShows = mapProgressToTopShows(progressData, 5);
 
 		return {
 			seriesStarted,
@@ -2855,12 +2897,13 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			const rank = index + 1;
 			const rankClass = rank <= 3 ? ` rank-${rank}` : '';
 			const episodesText = show.episodesWatched === 1 ? 'episode' : 'episodes';
+			const timeLabel = formatWatchedRuntimeLabel(show.watchedRuntimeTicks);
 			
 			return `
 				<div class="top-show-item${rankClass}">
 					<div class="show-rank">${rank}</div>
-					<div class="top-show-name" title="${show.name}">${show.name}</div>
-					<div class="top-show-episodes">${show.episodesWatched} of ${show.totalEpisodes} ${episodesText} (${show.percentage}%)</div>
+					<div class="top-show-name" title="${escapeHtmlWatchlist(show.name)}">${escapeHtmlWatchlist(show.name)}</div>
+					<div class="top-show-episodes">${timeLabel} · ${show.episodesWatched} of ${show.totalEpisodes} ${episodesText} (${show.percentage}%)</div>
 				</div>
 			`;
 		}).join('');
@@ -3095,9 +3138,65 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	const watchlistLikedIds = new Set();
 	let watchlistLikedIdsLoaded = false;
 	let watchlistLikedIdsLoadPromise = null;
+	let watchlistLikedIdsBaselineScheduled = false;
+	const WATCHLIST_LIKED_IDS_SETTLE_DELAY_MS = 15000;
 
 	function isWatchlistSupportedType(itemType) {
 		return WATCHLIST_SUPPORTED_TYPES.includes(itemType);
+	}
+
+	function normalizeServerAddressForStorage(serverAddress) {
+		if (!serverAddress) return '';
+		return String(serverAddress).replace(/\/+$/, '');
+	}
+
+	function getLikedIdsStorageKey() {
+		const userId = window.ApiClient?.getCurrentUserId?.();
+		const serverAddress = normalizeServerAddressForStorage(window.ApiClient?.serverAddress?.());
+		if (!userId || !serverAddress) return null;
+		return `kefinTweaks_watchlistLikedIds_${userId}_${encodeURIComponent(serverAddress)}`;
+	}
+
+	function readLikedIdsFromStorage() {
+		const key = getLikedIdsStorageKey();
+		if (!key) return null;
+		try {
+			const raw = localStorage.getItem(key);
+			if (!raw) return null;
+			const parsed = JSON.parse(raw);
+			if (!Array.isArray(parsed)) return null;
+			return parsed.filter((id) => typeof id === 'string' && id);
+		} catch (err) {
+			WARN('Failed to read watchlist liked Ids from localStorage:', err);
+			return null;
+		}
+	}
+
+	function writeLikedIdsToStorage() {
+		const key = getLikedIdsStorageKey();
+		if (!key) return;
+		try {
+			localStorage.setItem(key, JSON.stringify([...watchlistLikedIds]));
+		} catch (err) {
+			WARN('Failed to write watchlist liked Ids to localStorage:', err);
+		}
+	}
+
+	function hydrateWatchlistLikedIdsFromStorage() {
+		const ids = readLikedIdsFromStorage();
+		if (!ids) return false;
+		watchlistLikedIds.clear();
+		ids.forEach((id) => watchlistLikedIds.add(id));
+		watchlistLikedIdsLoaded = true;
+		LOG(`Hydrated watchlist liked Id cache from localStorage: ${watchlistLikedIds.size} items`);
+		return true;
+	}
+
+	function waitForDocumentComplete() {
+		if (document.readyState === 'complete') return Promise.resolve();
+		return new Promise((resolve) => {
+			window.addEventListener('load', () => resolve(), { once: true });
+		});
 	}
 
 	function isItemInLikedIdCache(itemId) {
@@ -3108,6 +3207,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		if (!itemId) return;
 		if (isLiked) watchlistLikedIds.add(itemId);
 		else watchlistLikedIds.delete(itemId);
+		writeLikedIdsToStorage();
 	}
 
 	function mergeLikedIdsFromItems(items) {
@@ -3115,6 +3215,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		list.forEach((item) => {
 			if (item?.Id) watchlistLikedIds.add(item.Id);
 		});
+		writeLikedIdsToStorage();
 	}
 
 	function applyWatchlistButtonActiveState(button, isActive) {
@@ -3130,8 +3231,8 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		});
 	}
 
-	async function loadWatchlistLikedIdsBaseline() {
-		if (watchlistLikedIdsLoaded) return watchlistLikedIds;
+	/** Network refresh of liked-Id set (always runs when scheduled; not skipped after hydrate). */
+	async function refreshWatchlistLikedIdsFromNetwork() {
 		if (watchlistLikedIdsLoadPromise) return watchlistLikedIdsLoadPromise;
 
 		watchlistLikedIdsLoadPromise = (async () => {
@@ -3151,6 +3252,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				watchlistLikedIds.clear();
 				mergeLikedIdsFromItems(result);
 				watchlistLikedIdsLoaded = true;
+				writeLikedIdsToStorage();
 				LOG(`Loaded watchlist liked Id cache: ${watchlistLikedIds.size} items`);
 				syncOverlayWatchlistButtons();
 				processExistingOverlayContainers();
@@ -3163,6 +3265,28 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		})();
 
 		return watchlistLikedIdsLoadPromise;
+	}
+
+	async function scheduleWatchlistLikedIdsBaseline() {
+		if (watchlistLikedIdsBaselineScheduled) return;
+		watchlistLikedIdsBaselineScheduled = true;
+
+		try {
+			if (window.userHelper?.waitForLogin) {
+				await window.userHelper.waitForLogin();
+			}
+
+			if (hydrateWatchlistLikedIdsFromStorage()) {
+				syncOverlayWatchlistButtons();
+				processExistingOverlayContainers();
+			}
+
+			await waitForDocumentComplete();
+			await new Promise((resolve) => setTimeout(resolve, WATCHLIST_LIKED_IDS_SETTLE_DELAY_MS));
+			await refreshWatchlistLikedIdsFromNetwork();
+		} catch (err) {
+			ERR('Failed to schedule watchlist liked Id baseline:', err);
+		}
 	}
 
 	let watchlistRenderGeneration = 0;
@@ -3229,7 +3353,9 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 					Recursive: true,
 					ImageTypeLimit: 1,
 					EnableImageTypes: 'Primary,Backdrop,Thumb',
-					...queryOptions
+					...queryOptions,
+					SortBy: 'PremiereDate',
+					SortOrder: 'Descending'
 				}
 			}]
 		};
@@ -3539,6 +3665,9 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		watchlistSection.dataset.htmlRendered = 'true';
 		// Reset listeners setup flag since we have new DOM elements
 		watchlistSection.dataset.listenersSetup = 'false';
+
+		// Bind Show All immediately on the fresh button (does not wait for tab listener pass)
+		bindShowAllShowsButton(watchlistSection);
 
 		// Add refresh buttons after HTML is rendered
 		addRefreshButtons();
@@ -4836,6 +4965,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		resetWatchlistItemsByType();
 		watchlistLikedIds.clear();
 		watchlistLikedIdsLoaded = true;
+		writeLikedIdsToStorage();
 		syncOverlayWatchlistButtons();
 
 		// Refresh watchlist
@@ -5722,6 +5852,8 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 					WARN('KefinWatchlistStats unavailable; falling back to summary cards only');
 					await updateProgressStatistics(progressCache.data);
 				}
+
+				bindShowAllShowsButton(statisticsTab);
 
 				LOG('Statistics content rendered successfully');
 			} catch (err) {
@@ -6814,14 +6946,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		setupMovieSearch();
 		
 		// Setup "Show All" button for top shows
-		const showAllBtn = getElementByIdSafe('show-all-shows-btn');
-		if (showAllBtn) {
-			showAllBtn.addEventListener('click', (e) => {
-				e.preventDefault();
-				e.stopPropagation();
-				showAllShowsModal();
-			});
-		}
+		bindShowAllShowsButton(watchlistSection);
 		
 		// Mark as setup to prevent duplicates
 		watchlistSection.dataset.listenersSetup = 'true';
@@ -7034,7 +7159,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		}
 	}
 
-	// Set up observer to watch for watchlist section mount (custom page / library page)
+	// Page-scoped observer for watchlist section remount (attributes+class required)
 	function setupWatchlistSectionObserver() {
 		function isVisibleLibraryOrCustomPage(el) {
 			return el &&
@@ -7051,34 +7176,17 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			return isVisibleLibraryOrCustomPage(node);
 		}
 
-		const observer = new MutationObserver((mutations) => {
-			let shouldCheck = false;
-			mutations.forEach((mutation) => {
-				if (mutation.type === 'childList') {
-					mutation.addedNodes.forEach((node) => {
-						if (nodeMayContainWatchlist(node)) shouldCheck = true;
-					});
-				}
-				if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
-					const target = mutation.target;
-					if (isVisibleLibraryOrCustomPage(target)) shouldCheck = true;
-				}
-			});
-			if (shouldCheck) {
-				checkForEmptyWatchlist();
-			}
-		});
+		let emptyWatchlistObserver = null;
 
-		observer.observe(document.body, {
-			childList: true,
-			subtree: true,
-			attributes: true,
-			attributeFilter: ['class']
-		});
+		function disconnectEmptyWatchlistObserver() {
+			if (!emptyWatchlistObserver) return;
+			emptyWatchlistObserver.disconnect();
+			emptyWatchlistObserver = null;
+		}
 
 		function checkForEmptyWatchlist() {
 			const onWatchlistPage = window.location.pathname.includes(window.KefinTweaksUtils._watchlistUrl) || window.location.hash.includes(window.KefinTweaksUtils._watchlistUrl);
-			
+
 			if (!onWatchlistPage) {
 				return;
 			}
@@ -7097,10 +7205,60 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			});
 		}
 
-		// In case #/watchlist is already visible
-		checkForEmptyWatchlist();
-	}
+		function armEmptyWatchlistObserver() {
+			const onWatchlistPage = window.location.pathname.includes(window.KefinTweaksUtils._watchlistUrl) || window.location.hash.includes(window.KefinTweaksUtils._watchlistUrl);
+			if (!onWatchlistPage) {
+				disconnectEmptyWatchlistObserver();
+				return;
+			}
 
+			checkForEmptyWatchlist();
+
+			const pageRoot =
+				document.querySelector('.libraryPage:not(.hide)') ||
+				document.querySelector('.customPage:not(.hide)') ||
+				document.querySelector('.homePage:not(.hide)');
+			const target = pageRoot || document.body;
+
+			if (emptyWatchlistObserver && emptyWatchlistObserver.__kefinTarget === target) {
+				return;
+			}
+			disconnectEmptyWatchlistObserver();
+
+			emptyWatchlistObserver = new MutationObserver((mutations) => {
+				let shouldCheck = false;
+				for (const mutation of mutations) {
+					if (mutation.type === 'childList') {
+						for (const node of mutation.addedNodes) {
+							if (nodeMayContainWatchlist(node)) {
+								shouldCheck = true;
+								break;
+							}
+						}
+					} else if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+						if (isVisibleLibraryOrCustomPage(mutation.target)) shouldCheck = true;
+					}
+					if (shouldCheck) break;
+				}
+				if (shouldCheck) checkForEmptyWatchlist();
+			});
+			emptyWatchlistObserver.__kefinTarget = target;
+			emptyWatchlistObserver.observe(target, {
+				childList: true,
+				subtree: true,
+				attributes: true,
+				attributeFilter: ['class']
+			});
+		}
+
+		const utils = window.KefinTweaksUtils;
+		if (utils?.onViewPage) {
+			utils.onViewPage(() => {
+				armEmptyWatchlistObserver();
+			});
+		}
+		armEmptyWatchlistObserver();
+	}
 
 	// Initialize the watchlist section observer
 	setupWatchlistSectionObserver();
@@ -7451,11 +7609,12 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		};
 
 		const watchlistUrl = await window.KefinTweaksUtils.getWatchlistUrl();
+		const isCustomTabUrl = watchlistUrl.includes('/home?tab=');
 
 		const options = {
 			sideMenu: watchlistCfg.sideMenu !== false,
 			userMenu: watchlistCfg.userMenu === true,
-			topNavigation: watchlistCfg.topNavigation,
+			topNavigation: isCustomTabUrl ? 'none' : watchlistCfg.topNavigation,
 			order: watchlistCfg.order
 		};
 
@@ -7510,6 +7669,52 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	initializePlaybackMonitoring();
 
 	/************ Watchlist Button Observer ************/
+
+	function bindWatchlistButton(button, itemId, itemType) {
+		if (!button || !itemId) return;
+		if (!button.getAttribute('data-id')) {
+			button.setAttribute('data-id', itemId);
+		}
+		if (button.dataset.watchlistBound === 'true') return;
+		button.dataset.watchlistBound = 'true';
+		button.addEventListener('click', async (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+
+			const newRating = button.dataset.active === 'false' ? 'true' : 'false';
+			await ApiClient.updateUserItemRating(ApiClient.getCurrentUserId(), itemId, newRating);
+			const isActive = newRating === 'true';
+			applyWatchlistButtonActiveState(button, isActive);
+			await updateWatchlistCacheOnToggle(itemId, itemType, isActive);
+		});
+	}
+
+	function bindSpotlightWatchlistButtons(root) {
+		const scope = root && root.nodeType === Node.ELEMENT_NODE ? root : document;
+		const buttons = new Set();
+		if (
+			scope.classList?.contains('watchlist-button') &&
+			scope.getAttribute('data-id') &&
+			(scope.classList.contains('spotlight-watchlist-button') || scope.closest?.('.spotlight-section'))
+		) {
+			buttons.add(scope);
+		}
+		scope.querySelectorAll?.(
+			'.spotlight-section .watchlist-button[data-id], .watchlist-button.spotlight-watchlist-button[data-id]'
+		)?.forEach((button) => buttons.add(button));
+
+		buttons.forEach((button) => {
+			const itemId = button.getAttribute('data-id');
+			if (!itemId) return;
+			const host = button.closest('[data-item-type], [data-type]');
+			const itemType =
+				button.getAttribute('data-type') ||
+				host?.getAttribute('data-item-type') ||
+				host?.getAttribute('data-type') ||
+				'';
+			bindWatchlistButton(button, itemId, itemType);
+		});
+	}
 
 	// Function to add watchlist button to a card overlay container
 	function addWatchlistButton(overlayContainer) {
@@ -7579,19 +7784,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			applyWatchlistButtonActiveState(watchlistButton, isItemInLikedIdCache(itemId));
 		}
 
-		if (watchlistButton.dataset.watchlistBound !== 'true') {
-			watchlistButton.dataset.watchlistBound = 'true';
-			watchlistButton.addEventListener('click', async (e) => {
-				e.preventDefault();
-				e.stopPropagation();
-
-				const newRating = watchlistButton.dataset.active === 'false' ? 'true' : 'false';
-				await ApiClient.updateUserItemRating(ApiClient.getCurrentUserId(), itemId, newRating);
-				const isActive = newRating === 'true';
-				applyWatchlistButtonActiveState(watchlistButton, isActive);
-				await updateWatchlistCacheOnToggle(itemId, itemType, isActive);
-			});
-		}
+		bindWatchlistButton(watchlistButton, itemId, itemType);
 	}
 
 	// Function to process all existing overlay containers
@@ -7604,10 +7797,12 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				addWatchlistButton(overlayContainer);
 			}
 		});
+		bindSpotlightWatchlistButtons(document);
 	}
 
 	function processWatchlistOverlaysInRoot(root) {
 		if (!root || root.nodeType !== Node.ELEMENT_NODE) return;
+		bindSpotlightWatchlistButtons(root);
 		if (root.classList?.contains('cardOverlayContainer')) {
 			const buttonContainer = root.querySelector('.cardOverlayButton-br');
 			if (buttonContainer) addWatchlistButton(root);
@@ -7652,10 +7847,11 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			root.querySelectorAll?.('.itemsContainer').forEach(attachItemsContainerObserver);
 		}
 
-		const discoveryObserver = new MutationObserver((mutations) => {
+		function onDiscoveryMutations(mutations) {
 			for (const mutation of mutations) {
 				for (const node of mutation.addedNodes) {
 					if (node.nodeType !== Node.ELEMENT_NODE) continue;
+					bindSpotlightWatchlistButtons(node);
 					// Skip deep card-internal inserts (handled by shallow itemsContainer observers)
 					if (node.closest?.('.card') && !node.classList?.contains('itemsContainer')) {
 						continue;
@@ -7663,12 +7859,15 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 					discoverItemsContainers(node);
 				}
 			}
-		});
+		}
 
-		discoveryObserver.observe(document.body, {
-			childList: true,
-			subtree: true
-		});
+		const utils = window.KefinTweaksUtils;
+		if (utils?.onBodyMutation) {
+			utils.onBodyMutation('watchlist-overlay-discovery', onDiscoveryMutations);
+		} else if (typeof MutationObserver !== 'undefined' && document.body) {
+			const discoveryObserver = new MutationObserver(onDiscoveryMutations);
+			discoveryObserver.observe(document.body, { childList: true, subtree: true });
+		}
 
 		discoverItemsContainers(document.body);
 		processExistingOverlayContainers();
@@ -7677,101 +7876,95 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	// Initialize the observer
 	setupWatchlistButtonObserver();
 
-	// Baseline liked-Id cache for overlay button state (one query after login)
-	loadWatchlistLikedIdsBaseline();
+	// Hydrate liked-Id cache from localStorage; network refresh after settle + 5s
+	scheduleWatchlistLikedIdsBaseline();
 
 	// Expose helpers so cardBuilder can keep overlay buttons / Set aligned on UserData.Likes
 	window.KefinWatchlistLikedIds = {
 		has: isItemInLikedIdCache,
 		set: setLikedIdInCache,
 		syncOverlayButtons: syncOverlayWatchlistButtons,
+		bindWatchlistButton,
 		isSupportedType: isWatchlistSupportedType
 	};
 
 	/************ Item Detail Page Observer ************/
 
-	// Function to add watchlist button to item detail page
+	// Function to add watchlist button to item detail page.
+	// Visibility vs native Play is gated in watchlist.css via :has(.btnPlay:not(.hide)).
 	function addDetailPageWatchlistButton(item = null) {
 		const trailerButton = document.querySelector('.itemDetailPage:not(.hide) .btnPlayTrailer');
-		
 		if (!trailerButton) {
 			return;
 		}
-		
+
 		// Check if watchlist button already exists
 		const existingButton = document.querySelector('.itemDetailPage:not(.hide) .watchlist-icon');
 		if (existingButton) {
 			return;
 		}
 
-		const isTVLayout = document.getRootNode().documentElement.className.includes('layout-tv')
-		
+		const isTVLayout = document.getRootNode().documentElement.className.includes('layout-tv');
+
 		const watchlistIcon = document.createElement('button');
-		watchlistIcon.setAttribute("is", "emby-button");
-		watchlistIcon.className = `watchlist-icon detailButton emby-button button-flat${isTVLayout ? ' show-focus' : ''}`;	
-		watchlistIcon.title = "Add to Watchlist";
+		watchlistIcon.setAttribute('is', 'emby-button');
+		watchlistIcon.className = `watchlist-icon detailButton emby-button button-flat${isTVLayout ? ' show-focus' : ''}`;
+		watchlistIcon.title = 'Add to Watchlist';
 		watchlistIcon.dataset.active = 'false';
-		
-		// Add the content wrapper and icon span inside the button
+
 		const contentWrapper = document.createElement('div');
 		contentWrapper.className = 'detailButton-content';
-		
+
 		const iconSpan = document.createElement('span');
 		iconSpan.className = 'material-icons detailButton-icon watchlist';
 		iconSpan.setAttribute('aria-hidden', 'true');
-		
+
 		contentWrapper.appendChild(iconSpan);
 		watchlistIcon.appendChild(contentWrapper);
-		
-		// Get item ID from URL
-		const itemId = window.location.href.substring(window.location.href.indexOf("id=") + 3, window.location.href.indexOf("id=") + 35);
-		
+
+		const itemId = item?.Id
+			|| window.location.href.substring(window.location.href.indexOf('id=') + 3, window.location.href.indexOf('id=') + 35);
+
 		watchlistIcon.addEventListener('click', async () => {
 			const newRating = watchlistIcon.dataset.active === 'false' ? 'true' : 'false';
 			await ApiClient.updateUserItemRating(ApiClient.getCurrentUserId(), itemId, newRating);
 			watchlistIcon.dataset.active = newRating;
-			
-			// Update title based on state
+
 			const isActive = watchlistIcon.dataset.active === 'true';
 			watchlistIcon.title = isActive ? 'Remove from Watchlist' : 'Add to Watchlist';
-			
-			// Update watchlist cache immediately
-			// Get item type from the item data we already have
-			const item = await ApiClient.getItem(ApiClient.getCurrentUserId(), itemId);
-			if (item) {
-				await updateWatchlistCacheOnToggle(itemId, item.Type, isActive);
+
+			const toggledItem = await ApiClient.getItem(ApiClient.getCurrentUserId(), itemId);
+			if (toggledItem) {
+				await updateWatchlistCacheOnToggle(itemId, toggledItem.Type, isActive);
 			}
-		});	
-		
-		if (item) {
-			// Set initial state based on current watchlist status
-			if (item.UserData && item.UserData.Likes) {
+		});
+
+		const applyItemState = (resolvedItem) => {
+			if (!resolvedItem) return;
+			if (resolvedItem.Type !== 'Movie' && resolvedItem.Type !== 'Series' && resolvedItem.Type !== 'Season'
+				&& resolvedItem.Type !== 'Episode' && resolvedItem.Type !== 'BoxSet'
+				&& resolvedItem.Type !== 'Playlist' && resolvedItem.Type !== 'Video') {
+				watchlistIcon.style.display = 'none';
+				return;
+			}
+			if (resolvedItem.UserData && resolvedItem.UserData.Played) {
+				watchlistIcon.style.display = 'none';
+				return;
+			}
+			if (resolvedItem.UserData && resolvedItem.UserData.Likes) {
 				watchlistIcon.dataset.active = 'true';
 				watchlistIcon.title = 'Remove from Watchlist';
 			}
-		} else {
-			// Get item data to check if it should be shown and current state
-			ApiClient.getItem(ApiClient.getCurrentUserId(), itemId).then((item) => {
-				// Only show for Movies, Series, Seasons, and Episodes
-				if (item.Type !== "Movie" && item.Type !== "Series" && item.Type !== "Season" && item.Type !== "Episode" && item.Type !== "BoxSet" && item.Type !== "Playlist" && item.Type !== "Video") {
-					watchlistIcon.style.display = "none";
-				}
+		};
 
-				if (item.UserData && item.UserData.Played) {
-					watchlistIcon.style.display = "none";
-				}
-				
-				// Set initial state based on current watchlist status
-				if (item.UserData && item.UserData.Likes) {
-					watchlistIcon.dataset.active = 'true';
-					watchlistIcon.title = 'Remove from Watchlist';
-				}
-			}).catch(err => {
+		if (item) {
+			applyItemState(item);
+		} else {
+			ApiClient.getItem(ApiClient.getCurrentUserId(), itemId).then(applyItemState).catch((err) => {
 				ERR('Error fetching item data:', err);
 			});
 		}
 
-		// Add button after trailer button
 		trailerButton.after(watchlistIcon);
 	}
 
@@ -7786,32 +7979,35 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		LOG('Registering item detail page handler with KefinTweaksUtils');
 
 		window.KefinTweaksUtils.onViewPage(async (view, element, hash, itemPromise) => {
-			// Await the item promise to get the actual item data
 			const item = await itemPromise;
-			
-			// Small delay to ensure details DOM is ready
-			setTimeout(() => {
-				const visibleItemDetailPage = document.querySelector('.itemDetailPage:not(.hide)');
-				if (!visibleItemDetailPage) {
-					return;
-				}
+			const visibleItemDetailPage = document.querySelector('.itemDetailPage:not(.hide)');
+			if (!visibleItemDetailPage) {
+				return;
+			}
 
-				if (visibleItemDetailPage.dataset.watchlistButtonAdded === 'true') {
-					return;
-				}
-				
-				// Check if watchlist button already exists
-				const existingButton = document.querySelector('.itemDetailPage:not(.hide) .watchlist-icon');
-				if (existingButton) {
-					return;
-				}
+			const itemId = item?.Id || '';
+			if (itemId && visibleItemDetailPage.dataset.watchlistButtonAdded === itemId) {
+				return;
+			}
+			if (!itemId && visibleItemDetailPage.dataset.watchlistButtonAdded === 'true') {
+				return;
+			}
 
-				// Check if item is provided and if item type is supported for watchlist
-				if (item && (item.Type === "Movie" || item.Type === "Series" || item.Type === "Season" || item.Type === "Episode" || item.Type === "BoxSet" || item.Type === "Playlist" || item.Type === "Video")) {
-					visibleItemDetailPage.dataset.watchlistButtonAdded = 'true';
-					addDetailPageWatchlistButton(item);
-				}
-			}, 100);
+			const existingButton = document.querySelector('.itemDetailPage:not(.hide) .watchlist-icon');
+			if (existingButton && itemId && existingButton.dataset.itemId === itemId) {
+				return;
+			}
+			if (existingButton && itemId && existingButton.dataset.itemId !== itemId) {
+				existingButton.remove();
+			}
+
+			if (item && (item.Type === 'Movie' || item.Type === 'Series' || item.Type === 'Season'
+				|| item.Type === 'Episode' || item.Type === 'BoxSet' || item.Type === 'Playlist' || item.Type === 'Video')) {
+				visibleItemDetailPage.dataset.watchlistButtonAdded = itemId || 'true';
+				await addDetailPageWatchlistButton(item);
+				const btn = document.querySelector('.itemDetailPage:not(.hide) .watchlist-icon');
+				if (btn && itemId) btn.dataset.itemId = itemId;
+			}
 		}, {
 			pages: ['details']
 		});
@@ -7907,80 +8103,61 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 
 	// Function to monitor slides container for MediaBar Plugin
 	function monitorSlidesContainer() {
-		const observer = new MutationObserver((mutations) => {
-			mutations.forEach((mutation) => {
-				if (mutation.type === 'childList') {
-					// Check for added nodes
-					mutation.addedNodes.forEach((node) => {
-						if (node.nodeType === Node.ELEMENT_NODE) {
-							// Check if the added node is a slide
-							if (node.classList && node.classList.contains('slide')) {
-								addSlideWatchlistButton(node);
-							}
-
-							// Check for slides within the added node
-							const slides = node.querySelectorAll && node.querySelectorAll('.slide');
-							if (slides && slides.length > 0) {
-								slides.forEach((slide) => {
-									addSlideWatchlistButton(slide);
-								});
-							}
-						}
+		const slidesObserver = new MutationObserver((mutations) => {
+			for (const mutation of mutations) {
+				if (mutation.type !== 'childList') continue;
+				for (const node of mutation.addedNodes) {
+					if (node.nodeType !== Node.ELEMENT_NODE) continue;
+					if (node.classList?.contains('slide')) {
+						addSlideWatchlistButton(node);
+					}
+					node.querySelectorAll?.('.slide')?.forEach((slide) => {
+						addSlideWatchlistButton(slide);
 					});
 				}
-			});
+			}
 		});
 
-		// Check if slides container already exists
-		const slidesContainer = document.querySelector('#slides-container');
-		if (slidesContainer) {
-			// Process existing slides
-			const existingSlides = slidesContainer.querySelectorAll('.slide');
-			existingSlides.forEach((slide) => {
+		function bindSlidesContainer(slidesContainer) {
+			if (!slidesContainer) return;
+			slidesContainer.querySelectorAll('.slide').forEach((slide) => {
 				addSlideWatchlistButton(slide);
 			});
-
-			// Start observing the slides container
-			observer.observe(slidesContainer, {
+			slidesObserver.observe(slidesContainer, {
 				childList: true,
 				subtree: true
 			});
 		}
 
-		// Also watch for slides container to be added
-		const containerObserver = new MutationObserver(() => {
-			const slidesContainer = document.querySelector('#slides-container');
-			if (slidesContainer) {
-				// Process existing slides
-				const existingSlides = slidesContainer.querySelectorAll('.slide');
-				existingSlides.forEach((slide) => {
-					addSlideWatchlistButton(slide);
-				});
+		const existing = document.querySelector('#slides-container');
+		if (existing) {
+			bindSlidesContainer(existing);
+			return;
+		}
 
-				// Start observing the slides container
-				observer.observe(slidesContainer, {
-					childList: true,
-					subtree: true
-				});
+		const utils = window.KefinTweaksUtils;
+		if (utils?.waitForElement) {
+			utils.waitForElement('#slides-container', { timeout: 60000, quiet: true }).then((el) => {
+				bindSlidesContainer(el);
+			});
+			return;
+		}
 
-				// Disconnect the container observer since we've found it
-				containerObserver.disconnect();
+		// Fallback: short TTL poll if shared wait helper unavailable
+		const start = Date.now();
+		const pollId = setInterval(() => {
+			const el = document.querySelector('#slides-container');
+			if (el) {
+				clearInterval(pollId);
+				bindSlidesContainer(el);
+			} else if (Date.now() - start > 60000) {
+				clearInterval(pollId);
 			}
-		});
-
-		// Start observing the entire document body for the slides container
-		containerObserver.observe(document.body, {
-			childList: true,
-			subtree: true
-		});
+		}, 250);
 	}
 
 	// Initialize the slides container observer
 	monitorSlidesContainer();
-
-	window.debugWatchlistUrl = function() {
-		LOG('Watchlist URL:', WATCHLIST_URL);
-	};
 
     // Debug functions for troubleshooting (available in console)
     window.debugWatchlistButtons = function() {

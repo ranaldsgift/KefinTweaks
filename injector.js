@@ -426,7 +426,7 @@
             name: 'cardBuilder',
             script: 'cardBuilder.js',
             css: 'cardBuilder.css',
-            dependencies: ['apiHelper', 'userHelper'],
+            dependencies: ['apiHelper', 'userHelper', 'websocketHelper'],
             description: 'Core card building functionality (required by other scripts)'
         },
         {
@@ -514,10 +514,17 @@
             description: 'Watchlist statistics charts and activity analytics'
         },
         {
+            name: 'watchlist-configuration',
+            script: '../configuration/watchlist-configuration.js',
+            css: null,
+            dependencies: ['modal', 'ui'],
+            description: 'Configuration UI for Watchlist menu placements'
+        },
+        {
             name: 'watchlist',
             script: 'watchlist.js',
             css: 'watchlist.css',
-            dependencies: ['cardBuilder', 'localStorageCache', 'modal', 'utils', 'statistics'],
+            dependencies: ['cardBuilder', 'localStorageCache', 'modal', 'utils', 'statistics', 'watchlist-configuration', 'websocketHelper'],
             thirdParty: ['chartjs'],
             description: 'Adds watchlist functionality throughout Jellyfin interface'
         },
@@ -680,18 +687,27 @@
     //const urlSuffix = `?v=${new Date().getTime()}`;
 
     // Inject dashboard drawer version badge CSS using dynamic version number
+    function isFloatingKefinRootUrl(root) {
+        return /@(latest|main|master|experimental)(\/|$)/i.test(String(root || ''));
+    }
+
     async function injectVersionBadgeCSS() {
         const styleId = 'kefinTweaks-version-css';
         if (document.getElementById(styleId)) return;
         
-        // Get version from root URL in config
+        // Prefer pinned resolved root; GitHub resolve only for admins on floating symbolic roots
         let displayVersion = "";
         try {
-            const configRoot = window.KefinTweaksConfig?.kefinTweaksRoot || '';
+            const cfg = window.KefinTweaksConfig || {};
+            let configRoot = cfg.kefinTweaksRootResolved || cfg.kefinTweaksRoot || '';
             if (configRoot) {
-                // Resolve the root to get the actual version (if @latest or @main)
-                const resolvedRoot = await resolveRootVersion(configRoot);
-                displayVersion = extractVersionFromRoot(resolvedRoot);
+                if (isFloatingKefinRootUrl(configRoot)) {
+                    const isAdmin = await checkAdminWithTimeout(2000);
+                    if (isAdmin) {
+                        configRoot = await resolveRootVersion(configRoot);
+                    }
+                }
+                displayVersion = extractVersionFromRoot(configRoot);
             }
         } catch (error) {
             console.warn('[KefinTweaks Injector] Could not extract version, using fallback:', error);
@@ -863,10 +879,12 @@
     }
     
     // Get the root path for scripts from configuration
+    // Prefer kefinTweaksRootResolved; GitHub floating resolve only for admins.
     async function getScriptRoot() {
-        const kefinTweaksRoot = window.KefinTweaksConfig?.kefinTweaksRoot;
+        const cfg = window.KefinTweaksConfig || {};
+        const kefinTweaksRoot = cfg.kefinTweaksRootResolved || cfg.kefinTweaksRoot;
         
-        // If kefinTweaksRoot is not set or empty, return null (scripts should not load)
+        // If root is not set or empty, return null (scripts should not load)
         if (!kefinTweaksRoot || kefinTweaksRoot === '') {
             console.warn('[KefinTweaks Injector] kefinTweaksRoot is not configured');
             return null;
@@ -875,9 +893,14 @@
         // Ensure root ends with /
         let root = kefinTweaksRoot.endsWith('/') ? kefinTweaksRoot : kefinTweaksRoot + '/';
         
-        // Resolve @latest, @main, or @experimental if needed (with caching)
+        // Resolve floating refs only when still floating and user is admin (with caching)
         if (resolvedRootCache === null) {
-            root = await resolveRootVersion(root);
+            if (isFloatingKefinRootUrl(root)) {
+                const isAdmin = await checkAdminWithTimeout(2000);
+                if (isAdmin) {
+                    root = await resolveRootVersion(root);
+                }
+            }
             resolvedRootCache = root;
         } else {
             root = resolvedRootCache;
@@ -1157,7 +1180,7 @@
     }
 
     async function loadConfigurationJS() {
-        const configDependencyNames = ['modal', 'toaster', 'utils', 'homeScreenConfig2', 'ui', 'homeScreen-migration', 'homeScreen-configuration', 'search-configuration', 'seriesEpisodes-configuration', 'seriesInfo-configuration', 'versionPreferences-configuration', 'skinManager-configuration', 'customMenuLinks-configuration', 'thumbnailScrubber-configuration', 'watchTogether-configuration', 'userManager-configuration', 'apiHelper', 'sectionHelper'];
+        const configDependencyNames = ['modal', 'toaster', 'utils', 'homeScreenConfig2', 'ui', 'homeScreen-migration', 'homeScreen-configuration', 'search-configuration', 'seriesEpisodes-configuration', 'seriesInfo-configuration', 'versionPreferences-configuration', 'skinManager-configuration', 'customMenuLinks-configuration', 'thumbnailScrubber-configuration', 'watchTogether-configuration', 'watchlist-configuration', 'userManager-configuration', 'apiHelper', 'sectionHelper'];
         for (const depName of configDependencyNames) {
             const depScript = SCRIPT_DEFINITIONS.find(script => script.name === depName);
             if (depScript) {
@@ -1177,6 +1200,11 @@
     // Main initialization: live load plan (fills gaps vs baked preload) + stamp sync
     async function initialize() {
         console.log('[KefinTweaks Injector] Starting KefinTweaks initialization...');
+
+        const bakeAlreadyAttached = !!(
+            window.KefinTweaksScriptsPreloaded
+            || window.KefinTweaksInjectorAttached
+        );
 
         const scriptRoot = await getScriptRoot();
         if (!scriptRoot) {
@@ -1199,7 +1227,7 @@
         const config = window.KefinTweaksConfig || {};
         const root = Loader.getResolvedKefinRoot
             ? Loader.getResolvedKefinRoot(config)
-            : Loader.normalizeRoot(config.kefinTweaksRoot || '');
+            : Loader.normalizeRoot(config.kefinTweaksRootResolved || config.kefinTweaksRoot || '');
 
         try {
             const plan = Loader.buildLoadPlan(config, majorVersion, {
@@ -1207,8 +1235,15 @@
                 urlSuffix,
                 configOnly: config.enabled === false
             });
+
+            if (bakeAlreadyAttached) {
+                // Belt-and-suspenders: never dual-inject when bake already ran.
+                // Tip re-pin / bake rewrite is owned by kefinTweaks-plugin tip-sync path.
+                console.log('[KefinTweaks Injector] Bake already attached; skipping applyAssetsToDocument (stamp=', plan.stamp, ')');
+                return;
+            }
+
             console.log('[KefinTweaks Injector] Applying ordered assets:', plan.assets.length, 'stamp=', plan.stamp);
-            // Dedupe against tags already injected by baked KefinTweaks-injector
             Loader.applyAssetsToDocument(plan.assets);
             document.dispatchEvent(new CustomEvent('kefinTweaksLoaded', {
                 detail: {
@@ -1507,6 +1542,300 @@
         }
     }
 
+    function normalizeReleaseTag(tag) {
+        const t = String(tag || '').trim();
+        if (!t) return '';
+        return t.startsWith('v') || t.startsWith('V') ? `v${t.slice(1)}` : `v${t}`;
+    }
+
+    function normalizeUpdateState(config) {
+        if (!config || typeof config !== 'object') return { dismissed: true, latestVersion: '' };
+        if (!config.updateState || typeof config.updateState !== 'object') {
+            config.updateState = { dismissed: true, latestVersion: '' };
+        } else {
+            if (typeof config.updateState.dismissed !== 'boolean') {
+                config.updateState.dismissed = true;
+            }
+            if (typeof config.updateState.latestVersion !== 'string') {
+                config.updateState.latestVersion = '';
+            } else {
+                config.updateState.latestVersion = normalizeReleaseTag(config.updateState.latestVersion)
+                    || config.updateState.latestVersion;
+            }
+        }
+        return config.updateState;
+    }
+
+    function isGithubJsdelivrKefinRoot(root) {
+        return /cdn\.jsdelivr\.net\/gh\/ranaldsgift\/KefinTweaks@/i.test(String(root || ''));
+    }
+
+    function isSymbolicLatestRoot(root) {
+        return /@latest(\/|$)/i.test(String(root || ''));
+    }
+
+    function parseGithubRootRef(root) {
+        const s = String(root || '');
+        const floating = s.match(/@(latest|main|master|experimental)(\/|$)/i);
+        if (floating) {
+            const name = floating[1].toLowerCase();
+            return { kind: name === 'master' ? 'main' : name, value: name === 'master' ? 'main' : name };
+        }
+        const semver = s.match(/@(v?\d+\.\d+\.\d+)(\/|$)/i);
+        if (semver) {
+            return { kind: 'semver', value: normalizeReleaseTag(semver[1]) };
+        }
+        const sha = s.match(/@([0-9a-f]{40})(\/|$)/i);
+        if (sha) {
+            return { kind: 'sha', value: sha[1].toLowerCase() };
+        }
+        return null;
+    }
+
+    function parseShaFromRoot(root) {
+        const m = String(root || '').match(/@([0-9a-f]{40})(\/|$)/i);
+        return m ? m[1].toLowerCase() : null;
+    }
+
+    async function waitForGlobal(getter, timeoutMs = 15000, intervalMs = 250) {
+        const start = Date.now();
+        while (Date.now() - start < timeoutMs) {
+            try {
+                const value = getter();
+                if (value) return value;
+            } catch (_) { /* ignore */ }
+            await new Promise((r) => setTimeout(r, intervalMs));
+        }
+        return null;
+    }
+
+    async function persistConfigFromStartup(config) {
+        const saveFn = await waitForGlobal(
+            () => window.KefinTweaksUtils?.saveConfigToJavaScriptInjector,
+            20000
+        );
+        if (!saveFn) {
+            console.warn('[KefinTweaks Startup] saveConfigToJavaScriptInjector unavailable; updateState not persisted');
+            return false;
+        }
+        window.KefinTweaksConfig = config;
+        try {
+            return !!(await saveFn(config));
+        } catch (e) {
+            console.warn('[KefinTweaks Startup] Failed to persist config:', e);
+            return false;
+        }
+    }
+
+    async function fetchGithubJson(url) {
+        const response = await fetch(url);
+        if (!response.ok) return null;
+        return response.json();
+    }
+
+    async function fetchLatestGithubRelease() {
+        const data = await fetchGithubJson('https://api.github.com/repos/ranaldsgift/KefinTweaks/releases/latest');
+        if (!data?.tag_name) return null;
+        const publishedAt = data.published_at ? new Date(data.published_at) : null;
+        if (!publishedAt || Number.isNaN(publishedAt.getTime())) return null;
+        return {
+            tag: normalizeReleaseTag(data.tag_name),
+            publishedAt
+        };
+    }
+
+    async function fetchReleasePublishedAt(tag) {
+        const normalized = normalizeReleaseTag(tag);
+        if (!normalized) return null;
+        const data = await fetchGithubJson(
+            `https://api.github.com/repos/ranaldsgift/KefinTweaks/releases/tags/${encodeURIComponent(normalized)}`
+        );
+        if (!data?.published_at) return null;
+        const d = new Date(data.published_at);
+        return Number.isNaN(d.getTime()) ? null : d;
+    }
+
+    async function fetchCommitDate(shaOrRef) {
+        if (!shaOrRef) return null;
+        const data = await fetchGithubJson(
+            `https://api.github.com/repos/ranaldsgift/KefinTweaks/commits/${encodeURIComponent(shaOrRef)}`
+        );
+        const iso = data?.commit?.committer?.date || data?.commit?.author?.date;
+        if (!iso) return null;
+        const d = new Date(iso);
+        return Number.isNaN(d.getTime()) ? null : d;
+    }
+
+    async function resolveInstalledCommitDate(root, config, branchName) {
+        const resolvedSha = parseShaFromRoot(config?.kefinTweaksRootResolved)
+            || parseShaFromRoot(resolvedRootCache);
+        if (resolvedSha) {
+            const fromResolved = await fetchCommitDate(resolvedSha);
+            if (fromResolved) return fromResolved;
+        }
+        return fetchCommitDate(branchName || 'main');
+    }
+
+    /**
+     * True when the install should treat GitHub Latest as a "new update" vs current pin/tip.
+     */
+    async function isGithubInstallBehindLatest(root, config, latest) {
+        const ref = parseGithubRootRef(root);
+        if (!ref) return true;
+
+        if (ref.kind === 'semver') {
+            if (ref.value === latest.tag) return false;
+            const installedPublished = await fetchReleasePublishedAt(ref.value);
+            if (!installedPublished) return true;
+            return installedPublished.getTime() < latest.publishedAt.getTime();
+        }
+
+        if (ref.kind === 'sha') {
+            const commitDate = await fetchCommitDate(ref.value);
+            if (!commitDate) return true;
+            return commitDate.getTime() < latest.publishedAt.getTime();
+        }
+
+        if (ref.kind === 'main' || ref.kind === 'experimental') {
+            const tipDate = await resolveInstalledCommitDate(root, config, ref.kind);
+            if (!tipDate) return true;
+            // Tip newer than Latest ⇒ following branch tip, not a release-update prompt
+            if (tipDate.getTime() >= latest.publishedAt.getTime()) return false;
+            return true;
+        }
+
+        return true;
+    }
+
+    function buildConcreteLatestRoot(latestTag) {
+        const tag = normalizeReleaseTag(latestTag);
+        return `https://cdn.jsdelivr.net/gh/ranaldsgift/KefinTweaks@${tag}/`;
+    }
+
+    async function showPinnedVersionUpdateToast(config, latestTag) {
+        const toastFn = await waitForGlobal(() => window.KefinTweaksToaster?.toast, 20000);
+        if (!toastFn) {
+            console.warn('[KefinTweaks Startup] Toaster unavailable; skipping update toast');
+            return;
+        }
+
+        const tag = normalizeReleaseTag(latestTag);
+        const githubInstall = isGithubJsdelivrKefinRoot(config?.kefinTweaksRoot);
+
+        const dismissAndSave = async () => {
+            normalizeUpdateState(config);
+            config.updateState.dismissed = true;
+            if (tag) config.updateState.latestVersion = tag;
+            await persistConfigFromStartup(config);
+        };
+
+        const handle = toastFn(
+            'An update for KefinTweaks is available.',
+            '0',
+            false,
+            {
+                buttons: [
+                    {
+                        label: 'Update',
+                        onClick: async () => {
+                            try {
+                                normalizeUpdateState(config);
+                                config.updateState.dismissed = true;
+                                if (tag) config.updateState.latestVersion = tag;
+
+                                if (githubInstall && tag) {
+                                    const nextRoot = buildConcreteLatestRoot(tag);
+                                    config.kefinTweaksRoot = nextRoot;
+                                    config.kefinTweaksRootResolved = nextRoot;
+                                    await persistConfigFromStartup(config);
+                                    handle?.dismiss?.();
+                                    toastFn(
+                                        'KefinTweaks updated. Please refresh the page for the changes to take effect.',
+                                        '8'
+                                    );
+                                } else {
+                                    await persistConfigFromStartup(config);
+                                    handle?.dismiss?.();
+                                    const url = tag
+                                        ? `https://github.com/ranaldsgift/KefinTweaks/releases/tag/${encodeURIComponent(tag)}`
+                                        : 'https://github.com/ranaldsgift/KefinTweaks/releases/latest';
+                                    try {
+                                        window.open(url, '_blank', 'noopener');
+                                    } catch (_) { /* ignore */ }
+                                }
+                            } catch (e) {
+                                console.error('[KefinTweaks Startup] Update action failed:', e);
+                            }
+                        }
+                    },
+                    {
+                        label: 'Dismiss',
+                        onClick: async () => {
+                            try {
+                                await dismissAndSave();
+                                handle?.dismiss?.();
+                            } catch (e) {
+                                console.error('[KefinTweaks Startup] Dismiss action failed:', e);
+                            }
+                        }
+                    }
+                ]
+            }
+        );
+    }
+
+    async function checkPinnedVersionUpdate() {
+        const config = window.KefinTweaksConfig;
+        const root = config?.kefinTweaksRoot;
+        if (!root) return;
+
+        // Floating @latest already auto-resolves to GitHub Latest — skip this prompt flow
+        if (isSymbolicLatestRoot(root)) {
+            normalizeUpdateState(config);
+            return;
+        }
+
+        const state = normalizeUpdateState(config);
+        let latest;
+        try {
+            latest = await fetchLatestGithubRelease();
+        } catch (e) {
+            console.warn('[KefinTweaks Startup] Failed to fetch latest release:', e);
+            return;
+        }
+        if (!latest?.tag) return;
+
+        const known = normalizeReleaseTag(state.latestVersion);
+        if (known !== latest.tag) {
+            let markNew = false;
+            if (isGithubJsdelivrKefinRoot(root)) {
+                try {
+                    markNew = await isGithubInstallBehindLatest(root, config, latest);
+                } catch (e) {
+                    console.warn('[KefinTweaks Startup] Install-vs-latest compare failed; treating as new:', e);
+                    markNew = true;
+                }
+            } else {
+                // Self-hosted / custom root
+                markNew = true;
+            }
+
+            if (markNew) {
+                state.dismissed = false;
+                state.latestVersion = latest.tag;
+                await persistConfigFromStartup(config);
+            } else {
+                // Same or newer install relative to Latest — remember tag without prompting
+                state.latestVersion = latest.tag;
+                await persistConfigFromStartup(config);
+            }
+        }
+
+        if (!state.dismissed) {
+            await showPinnedVersionUpdateToast(config, latest.tag);
+        }
+    }
+
     // Startup task - runs only for admin users
     async function startupTask() {
         console.log('[KefinTweaks Startup] Starting startup task...');
@@ -1528,6 +1857,8 @@
         try {
             // Fire-and-forget: remove leftover Watchlist Custom Tab (best-effort)
             //removeWatchlistFromCustomTabPlugin();
+
+            await checkPinnedVersionUpdate();
             
             console.log('[KefinTweaks Startup] Startup task completed successfully');
         } catch (error) {

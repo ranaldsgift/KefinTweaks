@@ -79,7 +79,6 @@
             InvalidLoginAttemptCount: 0,
             LoginAttemptsBeforeLockout: -1,
             MaxActiveSessions: 0,
-            EnablePublicSharing: true,
             BlockedMediaFolders: [],
             BlockedChannels: [],
             RemoteClientBitrateLimit: 0,
@@ -322,7 +321,6 @@
                     <h2 class="checkboxListLabel">Other</h2>
                     ${buildCheckbox('', !!policy.EnableContentDownloading, 'Allow media downloads', { className: 'um-chk-download', wrapInSection: true })}
                     ${buildCheckbox('', !!policy.EnableUserPreferenceAccess, 'Allow user preference access', { className: 'um-chk-prefs', wrapInSection: true })}
-                    ${buildCheckbox('', !!policy.EnablePublicSharing, 'Allow public sharing', { className: 'um-chk-public-share', wrapInSection: true })}
                     ${buildCheckbox('', !!policy.IsDisabled, 'Disable this user', { className: 'um-chk-disabled', wrapInSection: true })}
                     ${buildCheckbox('', !!policy.IsHidden, 'Hide this user from login screens', { className: 'um-chk-hidden', wrapInSection: true })}
                     <div class="inputContainer" style="margin-top:0.75em;">
@@ -439,7 +437,6 @@
             EnableAllFolders: enableAllFolders,
             LoginAttemptsBeforeLockout: parseInt(root.querySelector('#um-lockout')?.value ?? '-1', 10),
             MaxActiveSessions: parseInt(root.querySelector('#um-max-sessions')?.value ?? '0', 10),
-            EnablePublicSharing: !!root.querySelector('.um-chk-public-share')?.checked,
             RemoteClientBitrateLimit: mbpsToBitrate(root.querySelector('#um-bitrate')?.value),
             AuthenticationProviderId: DEFAULT_AUTH,
             PasswordResetProviderId: DEFAULT_PASSWORD_RESET,
@@ -469,6 +466,7 @@
                 closeOnBackdrop: true,
                 closeOnEscape: true,
                 showCloseButton: true,
+                dialogStyle: { maxWidth: '420px', width: '90vw' },
                 onOpen: (m) => {
                     const input = m.dialogContent.querySelector('#um-tag-input');
                     const finish = (val) => {
@@ -489,10 +487,6 @@
                 },
                 onClose: () => resolve(null)
             });
-            if (modal?.dialog) {
-                modal.dialog.style.maxWidth = '420px';
-                modal.dialog.style.width = '90vw';
-            }
         });
     }
 
@@ -535,6 +529,7 @@
                 closeOnBackdrop: true,
                 closeOnEscape: true,
                 showCloseButton: true,
+                dialogStyle: { maxWidth: '420px', width: '90vw' },
                 onOpen: (m) => {
                     m.dialogFooter.querySelector('#um-sched-cancel')?.addEventListener('click', () => finish(null));
                     m.dialogFooter.querySelector('#um-sched-ok')?.addEventListener('click', () => {
@@ -550,10 +545,6 @@
                 },
                 onClose: () => finish(null)
             });
-            if (modal?.dialog) {
-                modal.dialog.style.maxWidth = '420px';
-                modal.dialog.style.width = '90vw';
-            }
         });
     }
 
@@ -723,13 +714,10 @@
             closeOnBackdrop: true,
             closeOnEscape: true,
             showCloseButton: true,
+            dialogStyle: window.innerWidth >= 900
+                ? { maxWidth: '90vw', width: '1400px', height: '90vh' }
+                : undefined,
             onOpen: (modal) => {
-                if (window.innerWidth >= 900) {
-                    modal.dialog.style.maxWidth = '90vw';
-                    modal.dialog.style.width = '1400px';
-                    modal.dialog.style.height = '90vh';
-                }
-
                 modal.dialogFooter.querySelector('#um-editor-cancel')?.addEventListener('click', () => {
                     window.ModalSystem.close(EDITOR_MODAL_ID);
                 });
@@ -839,20 +827,18 @@
             footer.style.cssText = 'display:flex;gap:0.75em;justify-content:flex-end;';
             footer.innerHTML = `<button class="emby-button raised" onclick="window.ModalSystem.close('${CONFIG_MODAL_ID}')">Close</button>`;
 
-            const modal = window.ModalSystem.create({
+            window.ModalSystem.create({
                 id: CONFIG_MODAL_ID,
                 title: 'User Manager',
                 content,
                 footer,
                 closeOnBackdrop: true,
                 closeOnEscape: true,
-                showCloseButton: true
+                showCloseButton: true,
+                dialogStyle: window.innerWidth >= 900
+                    ? { maxWidth: '90vw', width: '1400px', height: '90vh' }
+                    : undefined
             });
-            if (modal?.dialog && window.innerWidth >= 900) {
-                modal.dialog.style.maxWidth = '90vw';
-                modal.dialog.style.width = '1400px';
-                modal.dialog.style.height = '90vh';
-            }
             LOG('User Manager config opened');
         } catch (e) {
             ERR('Error opening User Manager config', e);

@@ -11,11 +11,14 @@
     const DEFAULT_VERSIONS = ['4k', '2160p', '1080p', '720p', '576p', '480p', '360p', NONE_SENTINEL];
     const DEFAULT_EDITIONS = ['Theatrical', "Director's Cut", 'Extended Edition', 'Fan Edit', NONE_SENTINEL];
 
-    const SELECTOR = '.itemDetailPage:not(.hide) .selectSourceContainer select.detailTrackSelect';
-    const CONTAINER_SELECTOR = '.itemDetailPage:not(.hide) .selectSourceContainer';
+    const PAGE_SELECTOR = '#itemDetailPage:not(.hide)';
+    const FORM_SELECTOR = 'form.trackSelections';
+    const SELECTOR = `${PAGE_SELECTOR} ${FORM_SELECTOR} select.detailTrackSelect`;
+    const SELECT_FALLBACK = `${PAGE_SELECTOR} select.detailTrackSelect`;
     const ORIGINAL_ATTR = 'data-kefin-original-label';
     const SELECTED_INDEX_ATTR = 'data-selected-index';
     const CHANGE_BOUND_ATTR = 'data-kefin-vp-change-bound';
+    const APPLIED_ATTR = 'data-kefin-vp-applied';
 
     function isNoneSentinel(term) {
         return typeof term === 'string' && term.trim().toLowerCase() === NONE_SENTINEL.toLowerCase();
@@ -172,8 +175,76 @@
         });
     }
 
+    /** True after Kefin has completed one full apply for this select / its track form. */
+    function selectAlreadyKefinModified(select) {
+        if (!select) return false;
+        if (select.hasAttribute(APPLIED_ATTR)) return true;
+        const form = select.closest?.(FORM_SELECTOR);
+        return !!form?.hasAttribute?.(APPLIED_ATTR);
+    }
+
+    function markApplied(select) {
+        if (!select) return;
+        select.setAttribute(APPLIED_ATTR, 'true');
+        const form = select.closest?.(FORM_SELECTOR);
+        if (form) form.setAttribute(APPLIED_ATTR, 'true');
+    }
+
+    /**
+     * After the first full apply: only refresh option labels when Jellyfin resets them.
+     * Never reorder options, never change selection, never dispatch change.
+     */
+    function syncLabelsOnly(select) {
+        if (!select?.options?.length) return false;
+
+        const prefs = getPreferences();
+        let updated = 0;
+
+        isApplying = true;
+        try {
+            Array.from(select.options).forEach((option) => {
+                // Fresh/replaced options have no stamp — capture Jellyfin's native label first.
+                // Existing stamps keep the original native text even after we clean textContent.
+                if (!option.hasAttribute(ORIGINAL_ATTR)) {
+                    option.setAttribute(ORIGINAL_ATTR, option.textContent || '');
+                }
+                const originalLabel = option.getAttribute(ORIGINAL_ATTR) || '';
+                const editionMatch = findBestTerm(originalLabel, prefs.editions);
+                const versionMatch = findBestTerm(originalLabel, prefs.versions);
+                const hasMatch = !!(editionMatch || versionMatch);
+                const desc = {
+                    originalLabel,
+                    hasMatch,
+                    editionTerm: editionMatch?.term || null,
+                    versionTerm: versionMatch?.term || null
+                };
+                const label = desiredLabel(desc);
+                if (option.textContent !== label) {
+                    option.textContent = label;
+                    updated += 1;
+                }
+            });
+
+            if (updated > 0) {
+                LOG('Synced version preference labels (selection unchanged)', {
+                    updated,
+                    selectedIndex: select.selectedIndex,
+                    selected: select.value
+                });
+            }
+            return updated > 0;
+        } finally {
+            isApplying = false;
+        }
+    }
+
     function applyToSelect(select) {
         if (!select || !select.options?.length) return false;
+
+        // Subsequent passes: labels only — Jellyfin may reset native text after track changes.
+        if (selectAlreadyKefinModified(select)) {
+            return syncLabelsOnly(select);
+        }
 
         bindSelectedIndexTracker(select);
 
@@ -183,6 +254,7 @@
         const ranked = rankOptions(select.options, prefs);
 
         if (isSelectInExpectedState(select, ranked)) {
+            markApplied(select);
             return false;
         }
 
@@ -218,6 +290,8 @@
             }
 
             select.setAttribute(SELECTED_INDEX_ATTR, String(select.selectedIndex));
+            // Stamp before any Jellyfin rebuild so later passes stay label-only.
+            markApplied(select);
 
             LOG('Applied version preferences to detailTrackSelect', {
                 count: ranked.length,
@@ -232,10 +306,23 @@
     }
 
     function findSourceSelect() {
-        return document.querySelector(SELECTOR);
+        return document.querySelector(SELECTOR) || document.querySelector(SELECT_FALLBACK);
+    }
+
+    function findDetailsPage() {
+        return document.querySelector(PAGE_SELECTOR);
+    }
+
+    function findTrackSelectionsForm(page) {
+        const root = page || findDetailsPage();
+        return root?.querySelector?.(FORM_SELECTOR) || null;
     }
 
     let observer = null;
+    /** @type {Element|null} */
+    let observedRoot = null;
+    /** True while observing the details page until form.trackSelections mounts. */
+    let waitingForTrackForm = false;
     let applyScheduled = false;
     let isApplying = false;
 
@@ -244,6 +331,8 @@
             observer.disconnect();
             observer = null;
         }
+        observedRoot = null;
+        waitingForTrackForm = false;
         applyScheduled = false;
     }
 
@@ -270,6 +359,12 @@
 
     function isRelevantMutation(mutations) {
         for (const mutation of mutations) {
+            if (mutation.type === 'characterData') {
+                const parent = mutation.target?.parentElement;
+                if (parent?.tagName === 'OPTION') return true;
+                if (parent?.closest?.('select.detailTrackSelect')) return true;
+                continue;
+            }
             if (mutation.type !== 'childList') continue;
 
             const target = mutation.target;
@@ -280,32 +375,82 @@
                 if (node.nodeType !== 1) continue;
                 if (node.matches?.('select.detailTrackSelect')) return true;
                 if (node.matches?.('option') && !node.hasAttribute(ORIGINAL_ATTR)) return true;
-                if (node.querySelector?.('select.detailTrackSelect, option')) return true;
+                if (node.matches?.(FORM_SELECTOR)) return true;
+                if (node.querySelector?.('select.detailTrackSelect, option, form.trackSelections')) return true;
             }
         }
         return false;
     }
 
-    /** Long-lived document observer; gates on unbound visible details select. */
-    function ensureDocumentObserver() {
-        if (observer) return;
+    function mutationIntroducesTrackForm(mutations) {
+        for (const mutation of mutations) {
+            if (mutation.type !== 'childList') continue;
+            for (const node of mutation.addedNodes) {
+                if (node.nodeType !== 1) continue;
+                if (node.matches?.(FORM_SELECTOR)) return true;
+                if (node.querySelector?.(FORM_SELECTOR)) return true;
+            }
+        }
+        return false;
+    }
 
-        tryApply();
-
-        const root = document.body || document.documentElement;
+    /**
+     * Observe a narrow root (prefer form.trackSelections; fall back to visible details page).
+     * If observing the page and the form appears, promote to the form.
+     */
+    function observeRoot(root, pendingForm) {
         if (!root) return;
+
+        disconnectObserver();
+
+        waitingForTrackForm = !!pendingForm;
+        observedRoot = root;
 
         observer = new MutationObserver((mutations) => {
             if (isApplying) return;
+
+            if (waitingForTrackForm) {
+                const form =
+                    (mutationIntroducesTrackForm(mutations) && findTrackSelectionsForm(observedRoot)) ||
+                    findTrackSelectionsForm(observedRoot);
+                if (form) {
+                    observeRoot(form, false);
+                    tryApply();
+                    return;
+                }
+            }
+
             if (!isRelevantMutation(mutations)) return;
             scheduleTryApply();
         });
-        observer.observe(root, { childList: true, subtree: true });
+
+        observer.observe(root, { childList: true, subtree: true, characterData: true });
+    }
+
+    function attachDetailsObserver() {
+        disconnectObserver();
+
+        const page = findDetailsPage();
+        if (!page) return;
+
+        const form = findTrackSelectionsForm(page);
+        if (form) {
+            observeRoot(form, false);
+        } else {
+            observeRoot(page, true);
+        }
+        tryApply();
     }
 
     function onDetailsPage() {
-        ensureDocumentObserver();
-        tryApply();
+        attachDetailsObserver();
+    }
+
+    function onAnyPage(view, _doc, hash) {
+        if (isDetailsHash(hash) || (typeof view === 'string' && /details/i.test(view))) {
+            return;
+        }
+        disconnectObserver();
     }
 
     function init() {
@@ -314,8 +459,6 @@
             return;
         }
 
-        ensureDocumentObserver();
-
         window.KefinTweaksUtils.onViewPage(() => {
             try {
                 onDetailsPage();
@@ -323,6 +466,18 @@
                 WARN('Failed to apply version preferences', err);
             }
         }, { pages: ['details'] });
+
+        window.KefinTweaksUtils.onViewPage((view, doc, hash) => {
+            try {
+                onAnyPage(view, doc, hash);
+            } catch (err) {
+                WARN('Failed to clean up version preferences observer', err);
+            }
+        });
+
+        if (isDetailsHash()) {
+            attachDetailsObserver();
+        }
 
         LOG('Initialized');
     }

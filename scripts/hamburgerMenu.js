@@ -82,7 +82,7 @@
 	background-color: rgba(0, 0, 0, 0.5);
 	z-index: -1;
 }
-.MuiDrawer-root[${DRAWER_ATTR}] .MuiDrawer-paper {
+:where(.MuiDrawer-root[${DRAWER_ATTR}]) .MuiDrawer-paper {
 	transform: translateX(-100%);
 	transition: transform 225ms cubic-bezier(0, 0, 0.2, 1);
 	outline: 0px;
@@ -701,30 +701,37 @@
         return isAppVersionAtLeast12();
     }
 
-    function ensureToolbarObserver() {
-        if (toolbarObserver || typeof MutationObserver === 'undefined' || !document.body) return;
-        let scheduled = false;
-        toolbarObserver = new MutationObserver(() => {
-            if (scheduled) return;
-            scheduled = true;
-            requestAnimationFrame(() => {
-                scheduled = false;
-                ensureHamburgerButton();
-            });
-        });
-        toolbarObserver.observe(document.body, { childList: true, subtree: true });
-    }
-
-    function start() {
-        ensureStyles();
+    function armToolbarPoll() {
         ensureHamburgerButton();
-        ensureToolbarObserver();
-        // Retry briefly for late toolbar mount
         let tries = 0;
         const poll = setInterval(() => {
             tries += 1;
             if (ensureHamburgerButton() || tries >= 40) clearInterval(poll);
         }, 250);
+    }
+
+    function start() {
+        ensureStyles();
+        armToolbarPoll();
+
+        const utils = window.KefinTweaksUtils;
+        if (utils?.onViewPage) {
+            // Toolbar remounts across navigations — short poll per view, no permanent body MO
+            utils.onViewPage(() => {
+                armToolbarPoll();
+            });
+        } else if (utils?.onBodyMutation) {
+            let scheduled = false;
+            toolbarObserver = utils.onBodyMutation('hamburger-toolbar', () => {
+                if (scheduled) return;
+                scheduled = true;
+                requestAnimationFrame(() => {
+                    scheduled = false;
+                    ensureHamburgerButton();
+                });
+            });
+        }
+
         LOG('Desktop hamburger menu initialized');
     }
 

@@ -1242,30 +1242,28 @@
     }
 
     function setupPlaylistCardPlayObserver() {
-        const observer = new MutationObserver((mutations) => {
-            mutations.forEach((mutation) => {
-                if (mutation.type !== 'childList') return;
-                mutation.addedNodes.forEach((node) => {
-                    if (node.nodeType !== Node.ELEMENT_NODE) return;
+        const processNode = (node) => {
+            if (!node || node.nodeType !== Node.ELEMENT_NODE) return;
+            if (node.classList?.contains('cardOverlayContainer')) {
+                overridePlaylistCardPlayButton(node);
+            }
+            node.querySelectorAll?.('.cardOverlayContainer').forEach(overridePlaylistCardPlayButton);
+        };
 
-                    if (node.classList && node.classList.contains('cardOverlayContainer')) {
-                        overridePlaylistCardPlayButton(node);
-                    }
+        const onMutations = (mutations) => {
+            for (const mutation of mutations) {
+                if (mutation.type !== 'childList') continue;
+                mutation.addedNodes.forEach(processNode);
+            }
+        };
 
-                    const overlayContainers = node.querySelectorAll && node.querySelectorAll('.cardOverlayContainer');
-                    if (overlayContainers && overlayContainers.length > 0) {
-                        overlayContainers.forEach((overlayContainer) => {
-                            overridePlaylistCardPlayButton(overlayContainer);
-                        });
-                    }
-                });
-            });
-        });
-
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
+        const utils = window.KefinTweaksUtils;
+        if (utils?.onBodyMutation) {
+            utils.onBodyMutation('playlist-cardPlay', onMutations);
+        } else if (typeof MutationObserver !== 'undefined' && document.body) {
+            const observer = new MutationObserver(onMutations);
+            observer.observe(document.body, { childList: true, subtree: true });
+        }
 
         processExistingPlaylistCardOverlays();
     }

@@ -117,12 +117,10 @@
          * @returns {Promise<{ promise: Promise<object>, cached: object|null }>}
          */
         getUserDisplayPreferences: async function(options = {}) {
-            ensureApiClient();
-            ensureLoggedIn();
-
             const cacheOnly = options.cacheOnly === true;
             let cachedDisplayPreferences = null;
 
+            // Cache hits must not wait on login (home paint can race signed-in)
             if (__userDisplayPreferences) {
                 cachedDisplayPreferences = __userDisplayPreferences;
             } else if (window.LocalStorageCache) {
@@ -140,6 +138,20 @@
                     promise: Promise.resolve(cachedDisplayPreferences),
                     cached: cachedDisplayPreferences
                 };
+            }
+
+            // Network path: wait for login instead of hard-throwing ensureLoggedIn
+            ensureApiClient();
+            const loggedIn = await waitForLogin();
+            if (!loggedIn) {
+                if (cachedDisplayPreferences) {
+                    WARN('getUserDisplayPreferences: login wait timed out; returning cache only');
+                    return {
+                        promise: Promise.resolve(cachedDisplayPreferences),
+                        cached: cachedDisplayPreferences
+                    };
+                }
+                throw new Error('User is not logged in');
             }
 
             // Wrap this in a promise to return with the cached data

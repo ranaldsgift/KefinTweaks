@@ -414,6 +414,7 @@
                     order: libConfig.order || 61,
                     cardFormat: libConfig.cardFormat || 'Poster',
                     jellyfinId: 'latestmedia',
+                    ttl: 0,
                     queries: [{
                         path: '/Items/Latest',
                         queryOptions: {

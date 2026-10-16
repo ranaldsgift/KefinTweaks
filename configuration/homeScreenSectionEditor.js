@@ -164,6 +164,9 @@
     }
 
     function createBlankCustomItem() {
+        if (window.KefinHomeScreenCustomItemsEditor?.createBlankCustomItem) {
+            return window.KefinHomeScreenCustomItemsEditor.createBlankCustomItem();
+        }
         return {
             name: '',
             cardFooter: '',
@@ -173,7 +176,8 @@
             backdropUrl: '',
             squareUrl: '',
             bannerUrl: '',
-            logoUrl: ''
+            logoUrl: '',
+            hidden: false
         };
     }
 
@@ -186,7 +190,10 @@
                 closeEditor: 'wizard-close-custom-item-editor',
                 addItem: 'wizard-add-custom-item',
                 removeItem: 'wizard-remove-custom-item',
-                toggleImages: 'wizard-toggle-custom-images'
+                toggleImages: 'wizard-toggle-custom-images',
+                toggleHide: 'wizard-toggle-custom-item-hide',
+                moveLeft: 'wizard-move-custom-item-left',
+                moveRight: 'wizard-move-custom-item-right'
             }
         });
     }
@@ -240,6 +247,9 @@
     }
 
     function buildStaticItemFromDraft(draft) {
+        if (window.KefinHomeScreenCustomItemsEditor?.buildStaticItemFromDraft) {
+            return window.KefinHomeScreenCustomItemsEditor.buildStaticItemFromDraft(draft);
+        }
         const name = draft.name?.trim();
         const posterUrl = draft.posterUrl?.trim();
         if (!name || !posterUrl) return null;
@@ -251,11 +261,13 @@
             if (value) provided[key] = value;
         });
 
-        const item = { Name: name, Type: 'Folder' };
+        const item = { Name: name, Type: draft.type || 'Folder' };
+        if (draft.id) item.Id = draft.id;
         const cardUrl = draft.cardUrl?.trim();
         if (cardUrl) item.cardUrl = cardUrl;
         const cardFooter = draft.cardFooter?.trim();
         if (cardFooter) item.cardFooter = cardFooter;
+        if (draft.hidden === true) item.hidden = true;
 
         const keys = Object.keys(provided);
         if (keys.length === 1 && provided.posterUrl) {
@@ -1780,7 +1792,7 @@
         return `
             <div class="hsse-flow">
                 <p class="listItemBodyText secondary hsse-subtitle">Choose how you&apos;d like to get started</p>
-                <div class="hsse-flow-body">
+                <div class="hsse-flow-body" style="align-content: center;">
                     <div class="hsse-mode-grid">
                         <button type="button" class="hsse-mode-card hsse-wizard" data-hsse-action="select-wizard">
                             <div class="hsse-mode-card-header">
@@ -2298,7 +2310,7 @@
         MinCriticRating: { label: 'Min Critic Rating', type: 'number', hint: '0-10' },
         IsFavorite: { label: 'Is Favorite', type: 'boolean' },
         IsPlayed: { label: 'Is Played', type: 'boolean' },
-        IsUnplayed: { label: 'Is Unplayed', type: 'boolean' },
+        // IsUnplayed is owned by Hide watched — not offered in Additional Options
         IsMissing: { label: 'Is Missing', type: 'boolean' },
         IsUnaired: { label: 'Is Unaired', type: 'boolean' },
         HasThemeSong: { label: 'Has Theme Song', type: 'boolean' },
@@ -2694,14 +2706,6 @@
                 if (!val || val < 2) backdropsCountInput.value = '2';
                 backdropsCountInput.min = '2';
             }
-        }
-        if (sizeSelect) {
-            sizeSelect.addEventListener('change', () => {
-                if (!tileCountSelect) return;
-                const v = sizeSelect.value;
-                tileCountSelect.value = v === 'full' ? '1' : v === 'large' ? '2' : '3';
-                updateFromTileCount(tileCountSelect.value);
-            });
         }
         if (tileCountSelect) {
             tileCountSelect.addEventListener('change', () => updateFromTileCount(tileCountSelect.value));
@@ -4285,7 +4289,10 @@
                 'wizard-close-custom-item-editor',
                 'wizard-add-custom-item',
                 'wizard-remove-custom-item',
-                'wizard-toggle-custom-images'
+                'wizard-toggle-custom-images',
+                'wizard-toggle-custom-item-hide',
+                'wizard-move-custom-item-left',
+                'wizard-move-custom-item-right'
             ]);
             if (wizardCustomActions.has(action) && window.KefinHomeScreenCustomItemsEditor) {
                 window.KefinHomeScreenCustomItemsEditor.handleAction(

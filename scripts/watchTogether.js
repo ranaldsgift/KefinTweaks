@@ -784,11 +784,8 @@
                 closeOnBackdrop: true,
                 closeOnEscape: false,
                 showCloseButton: true,
+                dialogStyle: { maxWidth: '420px', width: '90vw' },
                 onOpen: (modalInstance) => {
-                    if (modalInstance?.dialog) {
-                        modalInstance.dialog.style.maxWidth = '420px';
-                        modalInstance.dialog.style.width = '90vw';
-                    }
                     modalInstance.dialogFooter?.querySelector('#mus-remove-cancel')?.addEventListener('click', (e) => {
                         e.preventDefault();
                         settle(false);
@@ -856,13 +853,10 @@
                 : null,
             closeOnBackdrop: true,
             closeOnEscape: true,
+            dialogStyle: { maxWidth: '480px', width: '92vw' },
             onOpen: (modalInstance) => {
                 watchTogetherModal = modalInstance;
                 if (showRemove) activeModal = modalInstance;
-                if (modalInstance?.dialog) {
-                    modalInstance.dialog.style.maxWidth = '480px';
-                    modalInstance.dialog.style.width = '92vw';
-                }
                 const root = modalInstance.dialogContent;
 
                 const rebind = () => {
@@ -1193,12 +1187,9 @@
             showCloseButton: false,
             closeOnBackdrop: true,
             closeOnEscape: true,
+            dialogStyle: { maxWidth: '400px', width: '90vw' },
             onOpen: async (modalInstance) => {
                 addUserModal = modalInstance;
-                if (modalInstance?.dialog) {
-                    modalInstance.dialog.style.maxWidth = '400px';
-                    modalInstance.dialog.style.width = '90vw';
-                }
                 if (isAdminUser) {
                     bindAdminAddUserModalHandlers(modalInstance);
                     const errorEl = modalInstance.dialogContent?.querySelector('#mus-add-user-error');

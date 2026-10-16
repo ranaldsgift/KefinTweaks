@@ -2,12 +2,27 @@
 // This module provides a main entry point function to build Jellyfin cards
 // Usage: window.cardBuilder.buildCard(jellyfinItem)
 
-(function() {
+(function () {
     'use strict';
 
     // Global toggle for progressive section fade-in.
     // Developers can set this to false to disable the behavior.
     const FADE_IN_SECTIONS = true;
+
+    // Detect flex gap after DOM is ready (JMP/Qt often lacks flex gap).
+    // ensureNoFlexGapClass is a function declaration (hoisted in this IIFE).
+    function scheduleFlexGapDetect() {
+        if (!document.body) {
+            document.addEventListener('DOMContentLoaded', () => ensureNoFlexGapClass(), { once: true });
+            return;
+        }
+        ensureNoFlexGapClass();
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => ensureNoFlexGapClass(), { once: true });
+    } else {
+        scheduleFlexGapDetect();
+    }
 
     // Sliding window: render current slide + 4 prev + 4 next (9 total). As user navigates, remove/add slides.
     const SPOTLIGHT_WINDOW_PREV = 4;
@@ -15,7 +30,27 @@
 
     const state = {
         defaultCardBackgroundNumber: 1,
-        useBlurhash: true
+        useBlurhash: true,
+		watchlist: false,
+    };
+
+    /** In-memory scroller metrics (avoid CSS var style writes for JS-only caches). */
+    const scrollerMetricsByEl = new WeakMap();
+    const cardPaddingByEl = new WeakMap();
+
+    function getScrollerMetrics(scroller) {
+        if (!scroller) return null;
+        let m = scrollerMetricsByEl.get(scroller);
+        if (!m) {
+            m = { scrollX: 0, pad: null, cardPad: null, maxScroll: null };
+            scrollerMetricsByEl.set(scroller, m);
+        }
+        return m;
+    }
+
+    function invalidateScrollerMetrics(scroller) {
+        if (!scroller) return;
+        scrollerMetricsByEl.delete(scroller);
     }
 
     function getSpotlightWindowIndices(currentIndex, totalLength) {
@@ -29,7 +64,7 @@
         }
         return Array.from(indices);
     }
-    
+
     /**
      * Helper function to shuffle array (Fisher-Yates)
      */
@@ -60,30 +95,41 @@
     const CARD_BORDER_DECO_CHILDREN = {
         triple: ['cardBorder-tall', 'cardBorder-mid', 'cardBorder-wide'],
         stairstep: [
-            'cardBorder-outer-left', 'cardBorder-outer-right',
-            'cardBorder-mid-left', 'cardBorder-mid-right',
-            'cardBorder-mid-top', 'cardBorder-mid-bottom',
-            'cardBorder-inner-top', 'cardBorder-inner-bottom'
+            'cardBorder-outer-left',
+            'cardBorder-outer-right',
+            'cardBorder-mid-left',
+            'cardBorder-mid-right',
+            'cardBorder-mid-top',
+            'cardBorder-mid-bottom',
+            'cardBorder-inner-top',
+            'cardBorder-inner-bottom',
         ],
         square: [
             'cardBorder-inner',
-            'cardBorder-square-left-top', 'cardBorder-square-left-bottom',
-            'cardBorder-square-right-top', 'cardBorder-square-right-bottom',
-            'cardBorder-tall', 'cardBorder-wide'
+            'cardBorder-square-left-top',
+            'cardBorder-square-left-bottom',
+            'cardBorder-square-right-top',
+            'cardBorder-square-right-bottom',
+            'cardBorder-tall',
+            'cardBorder-wide',
         ],
         diamond: [
-            'cardBorder-square-left-top', 'cardBorder-square-left-bottom',
-            'cardBorder-square-right-top', 'cardBorder-square-right-bottom',
-            'cardBorder-tall-outer', 'cardBorder-tall-inner',
-            'cardBorder-wide-outer', 'cardBorder-wide-inner'
+            'cardBorder-square-left-top',
+            'cardBorder-square-left-bottom',
+            'cardBorder-square-right-top',
+            'cardBorder-square-right-bottom',
+            'cardBorder-tall-outer',
+            'cardBorder-tall-inner',
+            'cardBorder-wide-outer',
+            'cardBorder-wide-inner',
         ],
         corner: [
             'cardBorder-corner cardBorder-corner-tl',
             'cardBorder-corner cardBorder-corner-tr',
             'cardBorder-corner cardBorder-corner-bl',
-            'cardBorder-corner cardBorder-corner-br'
+            'cardBorder-corner cardBorder-corner-br',
         ],
-        'picture-frame': ['cardBorder-pf-inner']
+        'picture-frame': ['cardBorder-pf-inner'],
     };
 
     /** Legacy art-deco / slim-fancy / vintage-wide prefs map onto current equivalents. */
@@ -91,19 +137,10 @@
         'art-deco': 'stairstep',
         'art-deco-2': 'square',
         'slim-fancy': 'double',
-        'vintage-wide': 'vintage'
+        'vintage-wide': 'vintage',
     };
 
-    const CARD_BORDER_CSS_ONLY = new Set([
-        'fancy',
-        'slim',
-        'double',
-        'modern-poster',
-        'film-reel',
-        'profile',
-        'wood',
-        'art-gallery'
-    ]);
+    const CARD_BORDER_CSS_ONLY = new Set(['fancy', 'slim', 'double', 'modern-poster', 'film-reel', 'profile', 'wood', 'art-gallery']);
 
     function normalizeCardBorderStyle(style) {
         if (!style) return '';
@@ -158,10 +195,7 @@
     }
 
     function fillVintageBorder(host) {
-        host.style.setProperty(
-            '--v-corner-deco',
-            `url("${getCardBorderAssetUrl('corner-decoration.svg')}")`
-        );
+        host.style.setProperty('--v-corner-deco', `url("${getCardBorderAssetUrl("corner-decoration.svg")}")`);
 
         const outer = document.createElement('div');
         outer.className = 'cardBorder-v-outer';
@@ -187,7 +221,7 @@
     const RP_BULB_LAYERS = [
         { cls: 'cardBorder-rp-bulb-glow', r: 5.5 },
         { cls: 'cardBorder-rp-bulb-mid', r: 3.5 },
-        { cls: 'cardBorder-rp-bulb-core', r: 1.75 }
+        { cls: 'cardBorder-rp-bulb-core', r: 1.75 },
     ];
     const RP_DEFAULT_THIN = 2;
     const RP_DEFAULT_BAND = 16;
@@ -292,7 +326,10 @@
         const sH = rh / kH;
 
         const points = [
-            [x1, y1], [x2, y1], [x2, y2], [x1, y2]
+            [x1, y1],
+            [x2, y1],
+            [x2, y2],
+            [x1, y2],
         ];
         for (let i = 1; i < kW; i++) {
             points.push([x1 + i * sW, y1], [x1 + i * sW, y2]);
@@ -351,9 +388,7 @@
         const next = normalizeCardBorderStyle(style);
         const isVintage = next === 'vintage';
         const isRetro = next === 'retro-poster';
-        const needsChildren = next
-            && !CARD_BORDER_CSS_ONLY.has(next)
-            && (isVintage || isRetro || !!CARD_BORDER_DECO_CHILDREN[next]);
+        const needsChildren = next && !CARD_BORDER_CSS_ONLY.has(next) && (isVintage || isRetro || !!CARD_BORDER_DECO_CHILDREN[next]);
         if (host.dataset.style === next) {
             const vintageNeedsRefresh = isVintage && !host.style.getPropertyValue('--v-corner-deco');
             if (!vintageNeedsRefresh && (!needsChildren || host.childElementCount > 0)) return;
@@ -396,14 +431,11 @@
         delete sectionEl._rpBandMetrics;
 
         if (style === 'wood') {
-            sectionEl.style.setProperty(
-                '--wood-vert-img',
-                `url("${getCardBorderAssetUrl('wood.png')}")`
-            );
+            sectionEl.style.setProperty('--wood-vert-img', `url("${getCardBorderAssetUrl("wood.png")}")`);
         } else {
             sectionEl.style.removeProperty('--wood-vert-img');
         }
-        const cards = sectionEl.querySelectorAll('.card:not(.card-layout-dummy) .cardScalable');
+        const cards = sectionEl.querySelectorAll('.card .cardScalable');
         cards.forEach((scalable) => {
             let host = scalable.querySelector(':scope > .cardBorder');
             if (!style) {
@@ -434,7 +466,7 @@
         'art-gallery',
         'wood',
         'profile',
-        'film-reel'
+        'film-reel',
     ]);
 
     function sectionHasSquareCardBorder(el) {
@@ -447,9 +479,7 @@
     function getCardRadius() {
         if (cachedCardRadius != null) return cachedCardRadius;
 
-        const candidates = document.querySelectorAll(
-            '.card:not(.card-layout-dummy) .cardScalable, .card:not(.card-layout-dummy) .cardContent, .card:not(.card-layout-dummy)'
-        );
+        const candidates = document.querySelectorAll('.card .cardScalable, .card .cardContent, .card');
         let sample = null;
         for (const el of candidates) {
             if (!sectionHasSquareCardBorder(el)) {
@@ -463,10 +493,11 @@
         const style = getComputedStyle(sample);
         let radius = (style.borderBottomLeftRadius || style.borderRadius || '').trim();
         if (!radius || radius === '0' || radius === '0px') {
-            const themeRound =
-                (style.getPropertyValue('--theme-roundness') ||
-                    getComputedStyle(document.documentElement).getPropertyValue('--theme-roundness') ||
-                    '').trim();
+            const themeRound = (
+                style.getPropertyValue('--theme-roundness') ||
+                getComputedStyle(document.documentElement).getPropertyValue('--theme-roundness') ||
+                ''
+            ).trim();
             radius = themeRound || radius || '0px';
         }
 
@@ -483,101 +514,175 @@
         document.documentElement.style.removeProperty('--kefin-card-radius');
     }
 
-    function applySectionPresentationAttrs(element, sectionConfig) {
+    function applySectionPresentationAttrs(element, sectionConfig, options = {}) {
         if (!element || !sectionConfig) return;
+        const forceBorders = options.forceBorders === true;
 
         if (sectionConfig.sectionCssClass) {
-            sectionConfig.sectionCssClass.split(/\s+/).filter(Boolean).forEach(cls => element.classList.add(cls));
+            sectionConfig.sectionCssClass
+                .split(/\s+/)
+                .filter(Boolean)
+                .forEach((cls) => element.classList.add(cls));
         }
 
-        const border = sectionConfig.borderStyle;
-        if (border) {
-            element.dataset.border = border;
-            element.dataset.borderStyle = border;
-        } else {
-            delete element.dataset.border;
-            delete element.dataset.borderStyle;
-        }
-        const borderColor = sectionConfig.borderColor && String(sectionConfig.borderColor).trim();
-        if (borderColor) {
-            element.style.setProperty('--kefin-card-border-color', borderColor);
-        } else {
-            element.style.removeProperty('--kefin-card-border-color');
-        }
-        ensureCardBorders(element);
+        const desiredBorderRaw = sectionConfig.borderStyle || '';
+        const desiredBorder = normalizeCardBorderStyle(desiredBorderRaw) || '';
+        const currentBorder = normalizeCardBorderStyle(element.dataset.border || element.dataset.borderStyle || '') || '';
+        const borderChanged = desiredBorder !== currentBorder;
 
-        const titleColor = sectionConfig.cardTitleColor && String(sectionConfig.cardTitleColor).trim();
-        if (titleColor) {
-            element.style.setProperty('--kefin-card-title-color', titleColor);
-        } else {
-            element.style.removeProperty('--kefin-card-title-color');
-        }
+        const desiredBorderColor = (sectionConfig.borderColor && String(sectionConfig.borderColor).trim()) || '';
+        const currentBorderColor = (element.style.getPropertyValue('--kefin-card-border-color') || '').trim();
+        const borderColorChanged = desiredBorderColor !== currentBorderColor;
 
-        if (sectionConfig.hideName === true || sectionConfig.hideName === 'true') {
-            element.dataset.hideSectionName = 'true';
-        } else {
-            delete element.dataset.hideSectionName;
+        const desiredTitleColor = (sectionConfig.cardTitleColor && String(sectionConfig.cardTitleColor).trim()) || '';
+        const currentTitleColor = (element.style.getPropertyValue('--kefin-card-title-color') || '').trim();
+        const titleColorChanged = desiredTitleColor !== currentTitleColor;
+
+        const desiredHideName = sectionConfig.hideName === true || sectionConfig.hideName === 'true';
+        const currentHideName = element.dataset.hideSectionName === 'true';
+        const hideNameChanged = desiredHideName !== currentHideName;
+
+        const desiredTitleVisibility = sectionConfig.cardTitleVisibility || (sectionConfig.hideCardTitles === true ? 'hidden' : '');
+        const currentTitleVisibility = element.dataset.cardTitleVisibility || '';
+        const titleVisChanged =
+            (desiredTitleVisibility && desiredTitleVisibility !== 'visible' ? desiredTitleVisibility : '') !== currentTitleVisibility;
+
+        const desiredTitlePosition = sectionConfig.cardTitlePosition || '';
+        const titlePosChanged = (element.dataset.cardTitlePosition || '') !== desiredTitlePosition;
+
+        const desiredCap = sectionConfig.cardTitleCapitalization && sectionConfig.cardTitleCapitalization !== 'normal'
+            ? sectionConfig.cardTitleCapitalization
+            : '';
+        const capChanged = (element.dataset.cardTitleCapitalization || '') !== desiredCap;
+
+        const desiredFontFamily =
+            sectionConfig.cardTitleFontFamily && sectionConfig.cardTitleFontFamily !== 'default'
+                ? sectionConfig.cardTitleFontFamily
+                : '';
+        const fontFamilyChanged = (element.dataset.fontFamily || '') !== desiredFontFamily;
+
+        const desiredFontSize =
+            sectionConfig.cardTitleFontSize && sectionConfig.cardTitleFontSize !== 'normal' ? sectionConfig.cardTitleFontSize : '';
+        const fontSizeChanged = (element.dataset.fontSize || '') !== desiredFontSize;
+
+        const desiredType = sectionConfig.type || '';
+        const typeChanged = (element.getAttribute('data-section-type') || '') !== desiredType;
+
+        const desiredCategory = resolveSectionCategory(sectionConfig) || '';
+        const categoryChanged = (element.getAttribute('data-category') || '') !== desiredCategory;
+
+        const sectionType = String(sectionConfig.type || '').toLowerCase();
+        const isCustomSection =
+            sectionConfig.isCustom === true ||
+            sectionType === 'custom' ||
+            sectionType === 'custom-discovery' ||
+            String(sectionConfig.id || '').startsWith('custom');
+        const isDiscoverySection =
+            sectionConfig.discoveryEnabled === true ||
+            sectionConfig.discoverySection === true ||
+            sectionType === 'discovery' ||
+            sectionType === 'custom-discovery' ||
+            !!sectionConfig.discoveryType;
+        const customChanged = (element.dataset.customSection === 'true') !== isCustomSection;
+        const discoveryChanged = (element.dataset.discoverySection === 'true') !== isDiscoverySection;
+
+        const itemsLayout = resolveItemsLayout(sectionConfig);
+        const gapless = resolveUseGaplessCards(sectionConfig);
+        const itemsContainer = element.querySelector('.itemsContainer');
+        const layoutChanged =
+            !itemsContainer ||
+            itemsContainer.getAttribute('data-layout') !== itemsLayout ||
+            (itemsContainer.getAttribute('data-gapless') === 'true') !== gapless;
+
+        const presentationChanged =
+            borderChanged ||
+            borderColorChanged ||
+            titleColorChanged ||
+            hideNameChanged ||
+            titleVisChanged ||
+            titlePosChanged ||
+            capChanged ||
+            fontFamilyChanged ||
+            fontSizeChanged ||
+            typeChanged ||
+            categoryChanged ||
+            customChanged ||
+            discoveryChanged ||
+            layoutChanged;
+
+        if (!presentationChanged && !forceBorders) return;
+
+        if (borderChanged) {
+            if (desiredBorder) {
+                element.dataset.border = desiredBorder;
+                element.dataset.borderStyle = desiredBorder;
+            } else {
+                delete element.dataset.border;
+                delete element.dataset.borderStyle;
+            }
+        }
+        if (borderColorChanged) {
+            if (desiredBorderColor) element.style.setProperty('--kefin-card-border-color', desiredBorderColor);
+            else element.style.removeProperty('--kefin-card-border-color');
+        }
+        if (titleColorChanged) {
+            if (desiredTitleColor) element.style.setProperty('--kefin-card-title-color', desiredTitleColor);
+            else element.style.removeProperty('--kefin-card-title-color');
+        }
+        if (hideNameChanged) {
+            if (desiredHideName) element.dataset.hideSectionName = 'true';
+            else delete element.dataset.hideSectionName;
         }
         delete element.dataset.hideName;
 
-        const titleVisibility = sectionConfig.cardTitleVisibility
-            || (sectionConfig.hideCardTitles === true ? 'hidden' : null);
-        if (titleVisibility && titleVisibility !== 'visible') {
-            element.dataset.cardTitleVisibility = titleVisibility;
+        if (titleVisChanged) {
+            if (desiredTitleVisibility && desiredTitleVisibility !== 'visible') {
+                element.dataset.cardTitleVisibility = desiredTitleVisibility;
+            } else {
+                delete element.dataset.cardTitleVisibility;
+            }
         }
-        if (sectionConfig.cardTitlePosition) {
-            element.dataset.cardTitlePosition = sectionConfig.cardTitlePosition;
-        } else {
-            delete element.dataset.cardTitlePosition;
+        if (titlePosChanged) {
+            if (desiredTitlePosition) element.dataset.cardTitlePosition = desiredTitlePosition;
+            else delete element.dataset.cardTitlePosition;
         }
-        if (sectionConfig.cardTitleCapitalization && sectionConfig.cardTitleCapitalization !== 'normal') {
-            element.dataset.cardTitleCapitalization = sectionConfig.cardTitleCapitalization;
-        } else {
-            delete element.dataset.cardTitleCapitalization;
+        if (capChanged) {
+            if (desiredCap) element.dataset.cardTitleCapitalization = desiredCap;
+            else delete element.dataset.cardTitleCapitalization;
         }
-        if (sectionConfig.cardTitleFontFamily && sectionConfig.cardTitleFontFamily !== 'default') {
-            element.dataset.fontFamily = sectionConfig.cardTitleFontFamily;
-        } else {
-            delete element.dataset.fontFamily;
+        if (fontFamilyChanged) {
+            if (desiredFontFamily) element.dataset.fontFamily = desiredFontFamily;
+            else delete element.dataset.fontFamily;
         }
-        if (sectionConfig.cardTitleFontSize && sectionConfig.cardTitleFontSize !== 'normal') {
-            element.dataset.fontSize = sectionConfig.cardTitleFontSize;
-        } else {
-            delete element.dataset.fontSize;
+        if (fontSizeChanged) {
+            if (desiredFontSize) element.dataset.fontSize = desiredFontSize;
+            else delete element.dataset.fontSize;
         }
 
-        const itemsLayout = resolveItemsLayout(sectionConfig);
-        applyItemsLayoutState(element, itemsLayout, resolveUseGaplessCards(sectionConfig));
-
-        const sectionType = String(sectionConfig.type || '').toLowerCase();
-        const isCustomSection = sectionConfig.isCustom === true
-            || sectionType === 'custom'
-            || sectionType === 'custom-discovery'
-            || String(sectionConfig.id || '').startsWith('custom');
-        const isDiscoverySection = sectionConfig.discoveryEnabled === true
-            || sectionConfig.discoverySection === true
-            || sectionType === 'discovery'
-            || sectionType === 'custom-discovery'
-            || !!sectionConfig.discoveryType;
-
-        if (sectionConfig.type) {
-            element.setAttribute('data-section-type', sectionConfig.type);
-        } else {
-            element.removeAttribute('data-section-type');
+        if (layoutChanged) {
+            applyItemsLayoutState(element, itemsLayout, gapless);
         }
 
-        const resolvedCategory = resolveSectionCategory(sectionConfig);
-        if (resolvedCategory) {
-            element.setAttribute('data-category', resolvedCategory);
-        } else {
-            element.removeAttribute('data-category');
+        if (typeChanged) {
+            if (desiredType) element.setAttribute('data-section-type', desiredType);
+            else element.removeAttribute('data-section-type');
+        }
+        if (categoryChanged) {
+            if (desiredCategory) element.setAttribute('data-category', desiredCategory);
+            else element.removeAttribute('data-category');
+        }
+        if (customChanged) {
+            if (isCustomSection) element.dataset.customSection = 'true';
+            else delete element.dataset.customSection;
+        }
+        if (discoveryChanged) {
+            if (isDiscoverySection) element.dataset.discoverySection = 'true';
+            else delete element.dataset.discoverySection;
         }
 
-        if (isCustomSection) element.dataset.customSection = 'true';
-        else delete element.dataset.customSection;
-
-        if (isDiscoverySection) element.dataset.discoverySection = 'true';
-        else delete element.dataset.discoverySection;
+        if (borderChanged || forceBorders) {
+            ensureCardBorders(element);
+        }
     }
 
     function resolveSectionCategory(sectionConfig) {
@@ -585,11 +690,12 @@
         const id = String(sectionConfig.id || '');
         if (id.startsWith('pinned-list-') || id.startsWith('pinned-parent-')) return 'pinned';
         const sectionType = String(sectionConfig.type || '').toLowerCase();
-        const isDiscovery = sectionConfig.discoveryEnabled === true
-            || sectionConfig.discoverySection === true
-            || sectionType === 'discovery'
-            || sectionType === 'custom-discovery'
-            || !!sectionConfig.discoveryType;
+        const isDiscovery =
+            sectionConfig.discoveryEnabled === true ||
+            sectionConfig.discoverySection === true ||
+            sectionType === 'discovery' ||
+            sectionType === 'custom-discovery' ||
+            !!sectionConfig.discoveryType;
         if (isDiscovery) return 'discovery';
         return sectionConfig.category || 'none';
     }
@@ -609,16 +715,13 @@
         const rightButton = scrollButtons.querySelector('button[data-direction="right"]');
         if (!leftButton || !rightButton) return;
 
-        const currentPosition = Math.abs(new DOMMatrixReadOnly(window.getComputedStyle(scroller).transform)?.m41 || 0);
-        const maxPosition = getMaxPositionFromPadding(
-            scroller,
-            readScrollerPadding(scroller),
-            readSampleCardPadding(scroller)
-        );
-        leftButton.disabled = currentPosition === 0;
-        rightButton.disabled = currentPosition >= maxPosition;
+        const pos = getScrollerPosition(scroller);
+        const maxPosition = getMaxPositionFromPadding(scroller, readScrollerPadding(scroller), readSampleCardPadding(scroller));
+        leftButton.disabled = pos <= 20;
+        rightButton.disabled = pos >= maxPosition;
+        scrollButtons.classList.toggle('hide', leftButton.disabled && rightButton.disabled);
     }
-    
+
     /**
      * Sorts items based on sort order and direction
      * @param {Array} items - Array of Jellyfin items
@@ -628,11 +731,11 @@
      */
     function sortItems(items, sortOrder = 'Random', sortOrderDirection = 'Ascending') {
         if (!items || items.length === 0) return items;
-        
+
         const ascending = sortOrderDirection === 'Ascending';
         const sorted = [...items];
-        
-        switch(sortOrder) {
+
+        switch (sortOrder) {
             case 'Random':
                 return shuffle(sorted);
             case 'ReleaseDate':
@@ -669,7 +772,7 @@
                 return sorted;
         }
     }
-    
+
     /**
      * Picks a random card format for a section
      * @returns {string} - Random card format: 'portrait', 'thumb'
@@ -677,6 +780,32 @@
     function getRandomCardFormat() {
         const formats = ['portrait', 'thumb'];
         return formats[Math.floor(Math.random() * formats.length)];
+    }
+
+    /**
+     * Map section cardFormat / data-card-format to JF grid column shape.
+     * Used for CSS grid column tables (no data-grid-shape attribute).
+     * @param {string|null|undefined} cardFormat
+     * @returns {'portrait'|'square'|'backdrop'|'banner'}
+     */
+    function resolveGridShape(cardFormat) {
+        const f = String(cardFormat || '')
+            .trim()
+            .toLowerCase();
+        if (f === 'banner') return 'banner';
+        if (f === 'square' || f === 'sqaure' || f === 'disc') return 'square';
+        if (
+            f === 'backdrop' ||
+            f === 'thumb' ||
+            f === 'series thumb' ||
+            f === 'logo' ||
+            f === 'clear art' ||
+            f === 'button'
+        ) {
+            return 'backdrop';
+        }
+        // Poster, Series Poster, portrait, Random-resolved concrete formats, default
+        return 'portrait';
     }
 
     function sectionHasRandomQuerySort(sectionConfig) {
@@ -688,28 +817,29 @@
         if (sectionConfig?.queries?.some((q) => !q.queryOptions?.SortBy && !q.path)) {
             return true;
         }
-        return (sectionConfig?.queries || []).some((q) =>
-            String(q.queryOptions?.SortBy || '').toLowerCase() === 'random');
+        return (sectionConfig?.queries || []).some((q) => String(q.queryOptions?.SortBy || '').toLowerCase() === 'random');
     }
 
     function flattenSeriesEpisodes(items) {
         if (!items || items.length === 0) return items;
 
-        // Keep only the first item in the array for any given series
-        const seriesMap = new Map();
-        items.forEach(item => {
-            if (item.Type !== 'Episode') {
-                return;
-            }
+        const seenSeries = new Set();
+        const result = [];
 
-            if (seriesMap.has(item.SeriesId)) {
-                return;
+        for (const item of items) {
+            if (item.Type === 'Episode') {
+                // Only keep the first episode seen for a given SeriesId
+                if (item.SeriesId && !seenSeries.has(item.SeriesId)) {
+                    seenSeries.add(item.SeriesId);
+                    result.push(item);
+                }
+            } else {
+                // Keep non-Episode items as-is, in order
+                result.push(item);
             }
+        }
 
-            seriesMap.set(item.SeriesId, item);
-        });
-        
-        return Array.from(seriesMap.values());
+        return result;
     }
 
     function formatAirDate(premiereDate) {
@@ -843,8 +973,8 @@
 
         if (sectionConfig.id === 'continueWatchingAndNextUp') {
             // Get the movies from the items, and the rest as the episodes, then use mergeNextUpAndContinueWatching to merge them
-            const movies = processed.filter(item => item.Type === 'Movie');
-            const episodes = processed.filter(item => item.Type !== 'Movie');
+            const movies = processed.filter((item) => item.Type === 'Movie');
+            const episodes = processed.filter((item) => item.Type !== 'Movie');
             processed = mergeNextUpAndContinueWatching(episodes, movies);
         }
 
@@ -858,8 +988,10 @@
         const imageTypes = sectionConfig.queries?.[0]?.queryOptions?.ImageTypes;
         if (imageTypes && Array.isArray(imageTypes)) {
             // Filter out items which do not have any of the image types
-            processed = processed.filter(item => {
-                const itemImageTypes = imageTypes.filter(imageType => item.ImageTags?.[imageType] || (imageType === 'Backdrop' && item.BackdropImageTags?.[0]));
+            processed = processed.filter((item) => {
+                const itemImageTypes = imageTypes.filter(
+                    (imageType) => item.ImageTags?.[imageType] || (imageType === 'Backdrop' && item.BackdropImageTags?.[0]),
+                );
                 return itemImageTypes.length > 0;
             });
         }
@@ -867,39 +999,49 @@
         // When ParentId is on the query (e.g. Popular Genres per library), assign it to each item for genre card links
         const queryParentId = sectionConfig.queries?.[0]?.ParentId;
         if (queryParentId && Array.isArray(processed)) {
-            processed.forEach(item => { item.ParentId = queryParentId; });
+            processed.forEach((item) => {
+                item.ParentId = queryParentId;
+            });
         }
 
         // Check if the IsUnplayed filter is set on any of the queries
-        const isUnplayedFilter = sectionConfig.queries?.some(query => query.queryOptions?.IsUnplayed === true || query.queryOptions?.Filters?.includes('IsUnplayed'));
+        const isUnplayedFilter = sectionConfig.queries?.some(
+            (query) => query.queryOptions?.IsUnplayed === true || query.queryOptions?.Filters?.includes('IsUnplayed'),
+        );
         if (isUnplayedFilter) {
-            processed = processed.filter(item => item.UserData?.Played === false);
+            processed = processed.filter((item) => item.UserData?.Played === false);
         }
 
         // Check if the IsPlayed filter is set on any of the queries
-        const isPlayedFilter = sectionConfig.queries?.some(query => query.queryOptions?.IsPlayed === true || query.queryOptions?.Filters?.includes('IsPlayed'));
+        const isPlayedFilter = sectionConfig.queries?.some(
+            (query) => query.queryOptions?.IsPlayed === true || query.queryOptions?.Filters?.includes('IsPlayed'),
+        );
         if (isPlayedFilter) {
-            processed = processed.filter(item => item.UserData?.Played === true);
+            processed = processed.filter((item) => item.UserData?.Played === true);
         }
 
         // Check if the IsResumable filter is set on any of the queries
-        const isResumableFilter = sectionConfig.queries?.some(query => query.queryOptions?.IsResumable === true || query.queryOptions?.Filters?.includes('IsResumable'));
+        const isResumableFilter = sectionConfig.queries?.some(
+            (query) => query.queryOptions?.IsResumable === true || query.queryOptions?.Filters?.includes('IsResumable'),
+        );
         if (isResumableFilter) {
-            processed = processed.filter(item => item.UserData?.PlayedPercentage && item.UserData?.PlayedPercentage !== 100 && item.UserData?.PlayedPercentage > 0);
+            processed = processed.filter(
+                (item) => item.UserData?.PlayedPercentage && item.UserData?.PlayedPercentage !== 100 && item.UserData?.PlayedPercentage > 0,
+            );
         }
 
         // Check if the MinPlayCount filter is set on any of the queries
         const minPlayCount = sectionConfig.minPlayCount || sectionConfig.queries?.[0]?.queryOptions?.MinPlayCount || 0;
         if (minPlayCount > 0) {
-            processed = processed.filter(item => item.UserData?.PlayCount && item.UserData?.PlayCount >= minPlayCount);
+            processed = processed.filter((item) => item.UserData?.PlayCount && item.UserData?.PlayCount >= minPlayCount);
         }
 
         // Check if the MaxPlayCount filter is set on any of the queries
         const maxPlayCount = sectionConfig.maxPlayCount || sectionConfig.queries?.[0]?.queryOptions?.MaxPlayCount || 0;
         if (maxPlayCount > 0) {
-            processed = processed.filter(item => item.UserData?.PlayCount && item.UserData?.PlayCount <= maxPlayCount);
+            processed = processed.filter((item) => item.UserData?.PlayCount && item.UserData?.PlayCount <= maxPlayCount);
         }
-                 
+
         // Flatten Series Episodes
         if (sectionConfig.flattenSeries === true) {
             processed = flattenSeriesEpisodes(processed);
@@ -909,15 +1051,15 @@
             processed = [...processed].sort((a, b) => (a.IndexNumber || 0) - (b.IndexNumber || 0));
         }
 
-/*         if (sectionConfig.id === 'popularTVNetworks') {
+        /*         if (sectionConfig.id === 'popularTVNetworks') {
             // Sort items randomly
             processed = shuffle(processed);
         } */
 
         if (sectionConfig.id === 'continueWatchingAndNextUp') {
             // Get the movies from the items, and the rest as the episodes, then use mergeNextUpAndContinueWatching to merge them
-            const movies = processed.filter(item => item.Type === 'Movie');
-            const episodes = processed.filter(item => item.Type !== 'Movie');
+            const movies = processed.filter((item) => item.Type === 'Movie');
+            const episodes = processed.filter((item) => item.Type !== 'Movie');
             processed = mergeNextUpAndContinueWatching(episodes, movies);
         }
 
@@ -925,9 +1067,8 @@
             // Remove items which aired before today
             const today = new Date();
             today.setHours(0, 0, 0, 0);
-            processed = processed.filter(item => {
-                if (!item.PremiereDate || item.LocationType !== 'Virtual')
-                    return false;
+            processed = processed.filter((item) => {
+                if (!item.PremiereDate || item.LocationType !== 'Virtual') return false;
                 const premiereDate = new Date(item.PremiereDate);
                 premiereDate.setHours(0, 0, 0, 0);
                 return premiereDate >= today;
@@ -935,8 +1076,12 @@
         }
 
         // Add Custom Secondary Text for Recently Released Movies
-        if (sectionConfig.id === 'recentlyReleased.movies' || sectionConfig.id === 'upcoming' || sectionConfig.id === 'recentlyReleased.episodes') {
-            processed.forEach(item => {
+        if (
+            sectionConfig.id === 'recentlyReleased.movies' ||
+            sectionConfig.id === 'upcoming' ||
+            sectionConfig.id === 'recentlyReleased.episodes'
+        ) {
+            processed.forEach((item) => {
                 if (item.PremiereDate) {
                     item.CustomFooterText = formatAirDate(item.PremiereDate);
                 }
@@ -952,15 +1097,31 @@
             });
 
             // Remove any items which have no UserData.PlayedPercentage
-            processed = processed.filter(item => item.UserData?.PlayedPercentage && item.UserData?.PlayedPercentage > 0);
+            processed = processed.filter((item) => item.UserData?.PlayedPercentage && item.UserData?.PlayedPercentage > 0);
         }
 
         // Check for SortBy ChildCount and use ChildCount to sort the items
-        // ChildCount = ChildCount + SeriesCount + EpisodeCount + AlbumCount + ArtistCount + ProgramCount + MovieCount + SongCount 
+        // ChildCount = ChildCount + SeriesCount + EpisodeCount + AlbumCount + ArtistCount + ProgramCount + MovieCount + SongCount
         if (sectionConfig.queries?.[0]?.queryOptions?.SortBy === 'ChildCount') {
             processed = processed.sort((a, b) => {
-                const childCountA = (a.ChildCount || 0) + (a.SeriesCount || 0) + (a.EpisodeCount || 0) + (a.AlbumCount || 0) + (a.ArtistCount || 0) + (a.ProgramCount || 0) + (a.MovieCount || 0) + (a.SongCount || 0);
-                const childCountB = (b.ChildCount || 0) + (b.SeriesCount || 0) + (b.EpisodeCount || 0) + (b.AlbumCount || 0) + (b.ArtistCount || 0) + (b.ProgramCount || 0) + (b.MovieCount || 0) + (b.SongCount || 0);
+                const childCountA =
+                    (a.ChildCount || 0) +
+                    (a.SeriesCount || 0) +
+                    (a.EpisodeCount || 0) +
+                    (a.AlbumCount || 0) +
+                    (a.ArtistCount || 0) +
+                    (a.ProgramCount || 0) +
+                    (a.MovieCount || 0) +
+                    (a.SongCount || 0);
+                const childCountB =
+                    (b.ChildCount || 0) +
+                    (b.SeriesCount || 0) +
+                    (b.EpisodeCount || 0) +
+                    (b.AlbumCount || 0) +
+                    (b.ArtistCount || 0) +
+                    (b.ProgramCount || 0) +
+                    (b.MovieCount || 0) +
+                    (b.SongCount || 0);
 
                 if (sectionConfig.queries?.[0]?.queryOptions?.SortOrder === 'Descending') {
                     return childCountB - childCountA;
@@ -971,7 +1132,7 @@
 
         const limit = sectionConfig.itemLimit || sectionConfig.queries?.[0]?.queryOptions?.Limit || 0;
 
-        if (sectionConfig.queries?.[0]?.queryOptions?.SortBy === 'Random' || sectionConfig.sortBy === 'Random') {        
+        if (sectionConfig.queries?.[0]?.queryOptions?.SortBy === 'Random' || sectionConfig.sortBy === 'Random') {
             if (limit > 0 && sectionConfig.limitBeforeSort === true) {
                 processed = processed.slice(0, limit);
             }
@@ -1045,9 +1206,11 @@
     }
 
     function getSectionTitleForMultiQuery(sectionConfig) {
-        if (sectionConfig?.useMultiQueryPicker === true
-            && sectionConfig?.useQueryNamesForSection === true
-            && (sectionConfig?.queries?.length || 0) > 1) {
+        if (
+            sectionConfig?.useMultiQueryPicker === true &&
+            sectionConfig?.useQueryNamesForSection === true &&
+            (sectionConfig?.queries?.length || 0) > 1
+        ) {
             const index = resolveActiveQueryIndex(sectionConfig, { initialize: true });
             return getQueryDisplayName(sectionConfig.queries[index], index);
         }
@@ -1075,7 +1238,9 @@
     function updateSectionTitleText(sectionElement, titleText, captionText) {
         if (!sectionElement) return;
         if (titleText != null) {
-            const titleEl = sectionElement.querySelector('.sectionTitleContainer .sectionTitle.sectionTitle-cards');
+            const titleEl =
+                sectionElement.querySelector('.sectionTitleContainer .sectionTitle.sectionTitle-cards') ||
+                sectionElement.querySelector('.spotlight-section-title .emby-tab-button');
             if (titleEl) titleEl.textContent = titleText;
         }
         if (captionText != null) {
@@ -1086,13 +1251,56 @@
 
     function updateSectionViewMoreLink(sectionElement, url) {
         if (!sectionElement) return;
-        const titleLink = sectionElement.querySelector('a.sectionTitle-link');
+        const titleLink =
+            sectionElement.querySelector('a.sectionTitle-link') ||
+            sectionElement.querySelector('.spotlight-section-title a.emby-tab-button');
         if (!titleLink) return;
         if (url) {
             titleLink.href = url;
             return;
         }
         titleLink.removeAttribute('href');
+    }
+
+    /**
+     * Rebuild title/caption/view-more under an existing sectionTitleContainer without
+     * wiping .section-controls. Used for discovery-pending → resolved and enhance.
+     */
+    function rebuildSectionTitleInPlace(sectionElement, sectionConfig) {
+        if (!sectionElement || !sectionConfig) return;
+        const titleContainer = sectionElement.querySelector('.sectionTitleContainer');
+        if (!titleContainer) {
+            // Spotlight titles live elsewhere — update text/link only
+            const title = getSectionTitleForMultiQuery(sectionConfig);
+            const viewMore = getActiveViewMoreUrl(sectionConfig);
+            updateSectionTitleText(sectionElement, title, getSectionCaption(sectionConfig));
+            updateSectionViewMoreLink(sectionElement, viewMore);
+            return;
+        }
+
+        const controls = titleContainer.querySelector('.section-controls');
+        Array.from(titleContainer.children).forEach((child) => {
+            if (child.classList?.contains('section-controls')) return;
+            // Also keep controls nested under sectionTitle-wrapper
+            if (child.querySelector?.(':scope > .section-controls')) {
+                const nested = child.querySelector(':scope > .section-controls');
+                if (nested) titleContainer.appendChild(nested);
+            }
+            child.remove();
+        });
+
+        appendSectionTitleContent(titleContainer, {
+            title: getSectionTitleForMultiQuery(sectionConfig),
+            caption: getSectionCaption(sectionConfig),
+            captionUrl: getSectionCaptionUrl(sectionConfig),
+            viewMoreUrl: getActiveViewMoreUrl(sectionConfig),
+            discoveryPending: false,
+        });
+
+        if (controls) {
+            const wrapper = titleContainer.querySelector(':scope > .sectionTitle-wrapper');
+            (wrapper || titleContainer).appendChild(controls);
+        }
     }
 
     function resolveSectionQueryTtl(sectionConfig) {
@@ -1123,7 +1331,7 @@
             return {
                 items: [],
                 canPaintCached: false,
-                itemsPromise: Promise.resolve([])
+                itemsPromise: Promise.resolve([]),
             };
         }
 
@@ -1138,20 +1346,21 @@
             let queryResult;
 
             if (query.dataSource) {
-                queryResult = await ApiHelper.fetchFromDataSource(query.dataSource, query.queryOptions || {});
-            } else {
-                const queryUrl = ApiHelper.buildQueryFromSection(
-                    query,
-                    userId,
-                    serverUrl,
-                    sectionConfig.renderMode === 'Spotlight',
-                    { sectionType: sectionConfig.type }
+                queryResult = await ApiHelper.fetchFromDataSource(
+                    query.dataSource,
+                    query.queryOptions || {},
+                    true,
+                    query.dataSourceOptions,
                 );
+            } else {
+                const queryUrl = ApiHelper.buildQueryFromSection(query, userId, serverUrl, sectionConfig.renderMode === 'Spotlight', {
+                    sectionType: sectionConfig.type,
+                });
 
                 if (typeof queryUrl === 'string') {
                     queryResult = await ApiHelper.getQuery(queryUrl, {
                         useCache: true,
-                        ttl: sectionTtl
+                        ttl: sectionTtl,
                     });
                 } else {
                     console.warn(`[KefinTweaks CardBuilder] Invalid query URL for section ${sectionConfig.id}`);
@@ -1165,16 +1374,40 @@
         const resolveFreshItems = async () => {
             if (results.length > 1) {
                 const merged = ApiHelper.mergeMultiQueryResults(results, sectionConfig);
-                const raw = typeof merged.result?.ensureData === 'function'
-                    ? await merged.result.ensureData()
-                    : await (merged.result?.dataPromise ?? merged.result?.data);
+                // Kick SWR so _refreshPromise is attached when cache is stale
+                const raw =
+                    typeof merged.result?.ensureData === 'function'
+                        ? await merged.result.ensureData()
+                        : await (merged.result?.dataPromise ?? merged.result?.data);
+
+                const hasRefresh = results.some((r) => r && r._refreshPromise);
+                if (hasRefresh) {
+                    const allData = await Promise.all(
+                        results.map((r) => r._refreshPromise || Promise.resolve(r.data)),
+                    );
+                    const itemsByFreshQuery = [];
+                    allData.forEach((data) => {
+                        if (data?.Items) itemsByFreshQuery.push(data.Items);
+                        else if (Array.isArray(data)) itemsByFreshQuery.push(data);
+                    });
+                    return postProcessItemsByQuery(sectionConfig, itemsByFreshQuery);
+                }
+
                 return extractItemsFromQueryPayload(raw);
             }
             if (results.length === 1) {
                 const qr = results[0];
-                const raw = typeof qr.ensureData === 'function'
-                    ? await qr.ensureData()
-                    : await (qr.dataPromise ?? qr.data);
+                // Kick SWR so _refreshPromise is attached when cache is stale
+                const raw =
+                    typeof qr.ensureData === 'function'
+                        ? await qr.ensureData()
+                        : await (qr.dataPromise ?? qr.data);
+
+                if (qr._refreshPromise) {
+                    const fresh = await qr._refreshPromise;
+                    return postProcessItems(sectionConfig, extractItemsFromQueryPayload(fresh));
+                }
+
                 return postProcessItems(sectionConfig, extractItemsFromQueryPayload(raw));
             }
             return [];
@@ -1188,7 +1421,7 @@
             return {
                 items: canPaintCached ? syncItems : [],
                 canPaintCached,
-                itemsPromise: canPaintCached ? Promise.resolve(syncItems) : resolveFreshItems()
+                itemsPromise: canPaintCached ? Promise.resolve(syncItems) : resolveFreshItems(),
             };
         }
 
@@ -1200,14 +1433,14 @@
             return {
                 items: canPaintCached ? syncItems : [],
                 canPaintCached,
-                itemsPromise: canPaintCached ? Promise.resolve(syncItems) : resolveFreshItems()
+                itemsPromise: canPaintCached ? Promise.resolve(syncItems) : resolveFreshItems(),
             };
         }
 
         return {
             items: [],
             canPaintCached: false,
-            itemsPromise: Promise.resolve([])
+            itemsPromise: Promise.resolve([]),
         };
     }
 
@@ -1231,32 +1464,39 @@
         // Process each query in the active set
         for (const query of queriesToLoad) {
             let queryResult;
-            
+
             if (query.dataSource) {
                 // Handle cache-based data sources
-                queryResult = await ApiHelper.fetchFromDataSource(query.dataSource, query.queryOptions || {}, false);
+                queryResult = await ApiHelper.fetchFromDataSource(
+                    query.dataSource,
+                    query.queryOptions || {},
+                    false,
+                    query.dataSourceOptions,
+                );
             } else {
                 // Build and execute query
-                const queryUrl = ApiHelper.buildQueryFromSection(query, userId, serverUrl, sectionConfig.renderMode === 'Spotlight', { sectionType: sectionConfig.type });
-                
+                const queryUrl = ApiHelper.buildQueryFromSection(query, userId, serverUrl, sectionConfig.renderMode === 'Spotlight', {
+                    sectionType: sectionConfig.type,
+                });
+
                 if (typeof queryUrl === 'string') {
                     // Standard query - use useCache: false to bypass cache
                     // When useCache is false, getQuery returns a Promise<data> directly
                     const data = await ApiHelper.getQuery(queryUrl, {
-                        useCache: false
+                        useCache: false,
                     });
                     // Wrap in expected format for consistency
                     queryResult = {
                         data: data,
                         dataPromise: Promise.resolve(data),
-                        isStalePromise: Promise.resolve(false)
+                        isStalePromise: Promise.resolve(false),
                     };
                 } else {
                     console.warn(`[KefinTweaks CardBuilder] Invalid query URL for section ${sectionConfig.id}`);
                     continue;
                 }
             }
-            
+
             results.push(queryResult);
         }
 
@@ -1278,44 +1518,77 @@
     }
 
     /**
+     * Toggle data-refreshing (drives refresh-button spin CSS). Manual refresh only —
+     * do not set true during enhance / stale revalidate / multi-query switch.
+     * @param {HTMLElement|null|undefined} el
+     * @param {boolean} refreshing
+     */
+    function setSectionRefreshing(el, refreshing) {
+        if (!el?.dataset) return;
+        el.dataset.refreshing = refreshing ? 'true' : 'false';
+    }
+
+    /**
+     * Paper-icon button with Material Icon on a child span (native Jellyfin pattern).
+     * Keep material-icons off the button — paper-icon-button-light sets font-family: inherit.
+     */
+    function createPaperIconButton({ className = '', icon = '', title = '', ariaLabel = '', showFocus = false } = {}) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `${className} paper-icon-button-light`.trim();
+        if (showFocus) button.classList.add('show-focus');
+        if (title) button.title = title;
+        if (ariaLabel || title) button.setAttribute('aria-label', ariaLabel || title);
+
+        const iconSpan = document.createElement('span');
+        iconSpan.className = `material-icons ${icon}`.trim();
+        iconSpan.setAttribute('aria-hidden', 'true');
+        button.appendChild(iconSpan);
+        return button;
+    }
+
+    /**
      * Show checkmark icon temporarily, then revert to refresh icon
      * @param {HTMLElement} button - The refresh button element
      */
     async function showRefreshComplete(button) {
         // Wait a brief moment for the spinning animation to complete smoothly
         // This ensures the transition from spinning to checkmark looks natural
-        await new Promise(resolve => requestAnimationFrame(resolve));
-        
-        // Fade out current icon
-/*         button.classList.add('icon-fade-out');
-        
-        // Wait for fade out to complete
-        await new Promise(resolve => setTimeout(resolve, 200));*/
-        
-        // Change to checkmark icon
-        button.classList.remove('refresh', 'icon-fade-out'); 
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+
+        const icon = button.querySelector('.material-icons') || button;
+
+        // Change to checkmark icon (state classes on button for CSS; glyph on icon span)
+        button.classList.remove('refresh', 'icon-fade-out');
         button.classList.add('check_circle', 'icon-fade-in');
-        
-        await new Promise(resolve => requestAnimationFrame(resolve));
-        await new Promise(resolve => setTimeout(resolve, 0));
-        
+        icon.classList.remove('refresh', 'icon-fade-out');
+        icon.classList.add('check_circle', 'icon-fade-in');
+
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
         // Wait for fade in to complete
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise((resolve) => setTimeout(resolve, 200));
         button.classList.remove('icon-fade-in');
-        
+        icon.classList.remove('icon-fade-in');
+
         // After 1.5 seconds, fade out checkmark and fade in refresh icon
         setTimeout(async () => {
             // Fade out checkmark
             button.classList.add('icon-fade-out');
-            await new Promise(resolve => setTimeout(resolve, 200));
-            
+            icon.classList.add('icon-fade-out');
+            await new Promise((resolve) => setTimeout(resolve, 200));
+
             // Change to refresh icon
             button.classList.remove('check_circle', 'icon-fade-out');
             button.classList.add('refresh', 'icon-fade-in');
-            
+            icon.classList.remove('check_circle', 'icon-fade-out');
+            icon.classList.add('refresh', 'icon-fade-in');
+
             // Wait for fade in to complete
-            await new Promise(resolve => setTimeout(resolve, 200));
+            await new Promise((resolve) => setTimeout(resolve, 200));
             button.classList.remove('icon-fade-in');
+            icon.classList.remove('icon-fade-in');
         }, 1500);
     }
 
@@ -1341,44 +1614,59 @@
                 spotlightConfig: sectionConfig.spotlightConfig,
                 dataItems: [],
                 keepCurrentSlide: false,
-                sectionConfig
+                sectionConfig,
             });
             const content = refreshed.content;
             ensureCardBorders(content);
-            content.dataset.refreshing = 'false';
+            setSectionRefreshing(content, false);
             attachSectionControlButtons(sectionConfig, content, freshItems);
+            ensureSectionRevealObservation(content);
             return content;
         }
 
-        const content = createScrollableContainer(
-            freshItems,
-            displayTitle,
-            activeViewMoreUrl,
-            sectionConfig.overflowCard,
-            finalCardFormat,
-            sectionConfig
-        );
-        content.style.cssText = sectionElement.style.cssText;
-        content.className = sectionElement.className;
-        Array.from(sectionElement.attributes).forEach(attr => {
-            content.setAttribute(attr.name, attr.value);
+        // In-place card refresh: keep section shell + sticky is=emby-itemscontainer
+        rebuildSectionTitleInPlace(sectionElement, {
+            ...sectionConfig,
+            name: displayTitle,
+            viewMoreUrl: activeViewMoreUrl,
         });
+        // Ensure title text reflects multi-query resolution even if config.name lags
+        updateSectionTitleText(sectionElement, displayTitle, getSectionCaption(sectionConfig));
+        updateSectionViewMoreLink(sectionElement, activeViewMoreUrl);
 
-        const oldItemsContainer = sectionElement.querySelector('.itemsContainer');
-        const layoutFromDom = oldItemsContainer?.getAttribute('data-layout');
-        const layout = (layoutFromDom === 'grid' || layoutFromDom === 'row')
-            ? layoutFromDom
-            : resolveItemsLayout(sectionConfig);
-        const gapless = oldItemsContainer
-            ? oldItemsContainer.getAttribute('data-gapless') === 'true'
-            : resolveUseGaplessCards(sectionConfig);
-        invalidateLastRowPadding(sectionElement.querySelector('.itemsContainer'));
-        sectionElement.replaceWith(content);
-        applyItemsLayoutState(content, layout, gapless);
-        ensureCardBorders(content);
-        attachSectionControlButtons(sectionConfig, content, freshItems);
-        content.dataset.refreshing = 'false';
-        return content;
+        if (!sectionElement.querySelector('.itemsContainer')) {
+            const content = createSectionScrollableContainer(
+                freshItems,
+                displayTitle,
+                activeViewMoreUrl,
+                sectionConfig.overflowCard,
+                finalCardFormat,
+                sectionConfig,
+            );
+            content.style.cssText = sectionElement.style.cssText;
+            content.className = sectionElement.className;
+            Array.from(sectionElement.attributes).forEach((attr) => {
+                content.setAttribute(attr.name, attr.value);
+            });
+            stripCopiedSkeletonSectionClasses(content);
+            unobserveSkeletonShimmer(sectionElement);
+            sectionElement.replaceWith(content);
+            ensureCardBorders(content);
+            attachSectionControlButtons(sectionConfig, content, freshItems);
+            setSectionRefreshing(content, false);
+            registerLazyImagesInSection(content);
+            ensureSectionRevealObservation(content);
+            return content;
+        }
+
+        replaceItemsContainerContents(sectionElement, freshItems, {
+            ...sectionConfig,
+            cardFormat: finalCardFormat,
+        });
+        unobserveSkeletonShimmer(sectionElement);
+        setSectionRefreshing(sectionElement, false);
+        ensureSectionRevealObservation(sectionElement);
+        return sectionElement;
     }
 
     /**
@@ -1411,26 +1699,25 @@
                 activeViewMoreUrl,
                 finalCardFormat,
                 sectionConfig.overflowCard,
-                sectionConfig
+                sectionConfig,
             );
         }
 
         skeleton.style.cssText = sectionElement.style.cssText;
         skeleton.className = sectionElement.className;
-        Array.from(sectionElement.attributes).forEach(attr => {
+        Array.from(sectionElement.attributes).forEach((attr) => {
             skeleton.setAttribute(attr.name, attr.value);
         });
         if (finalCardFormat) {
             skeleton.setAttribute('data-card-format', finalCardFormat);
         }
         applySectionPresentationAttrs(skeleton, sectionConfig);
-        skeleton.dataset.refreshing = 'true';
+        // Preserve data-refreshing from the replaced section if already set (manual refresh);
+        // do not force true here — multi-query / enhance must not spin the button.
 
         const oldItemsContainer = sectionElement.querySelector('.itemsContainer');
         const layoutFromDom = oldItemsContainer?.getAttribute('data-layout');
-        const layout = (layoutFromDom === 'grid' || layoutFromDom === 'row')
-            ? layoutFromDom
-            : resolveItemsLayout(sectionConfig);
+        const layout = layoutFromDom === 'grid' || layoutFromDom === 'row' ? layoutFromDom : resolveItemsLayout(sectionConfig);
         const gapless = oldItemsContainer
             ? oldItemsContainer.getAttribute('data-gapless') === 'true'
             : resolveUseGaplessCards(sectionConfig);
@@ -1438,6 +1725,8 @@
         sectionElement.replaceWith(skeleton);
         applyItemsLayoutState(skeleton, layout, gapless);
         attachSectionControlButtons(sectionConfig, skeleton, []);
+        ensureSectionRevealObservation(skeleton);
+        observeSkeletonShimmer(skeleton);
         return skeleton;
     }
 
@@ -1457,6 +1746,7 @@
         const selectButton = document.createElement('button');
         selectButton.type = 'button';
         selectButton.className = 'emby-button raised multi-query-picker-button';
+        if (isTvLayout()) selectButton.classList.add('show-focus');
         selectButton.textContent = getMultiQueryPickerButtonLabel(sectionConfig);
         selectButton.style.cssText = 'margin-left: 1em; padding: 0.5em 1em; font-size: 0.9em;';
         selectButton.setAttribute('aria-label', 'Select query');
@@ -1464,8 +1754,9 @@
         const controlsMount = titleContainer.querySelector('.section-controls');
         const titleLink = titleContainer.querySelector('a.sectionTitle-link');
         const sectionTitle = titleContainer.querySelector('.sectionTitle');
-        if (controlsMount) {
-            titleContainer.insertBefore(selectButton, controlsMount);
+        // controls may live under .sectionTitle-wrapper when a caption is present
+        if (controlsMount?.parentNode) {
+            controlsMount.parentNode.insertBefore(selectButton, controlsMount);
         } else if (titleLink?.parentNode) {
             titleLink.parentNode.insertBefore(selectButton, titleLink.nextSibling);
         } else if (sectionTitle?.parentNode) {
@@ -1474,132 +1765,163 @@
             titleContainer.appendChild(selectButton);
         }
 
-        let activePopover = null;
-        const closePopover = () => {
-            if (activePopover) {
-                activePopover.remove();
-                activePopover = null;
-            }
-        };
+        const MULTI_QUERY_MODAL_ID = 'kefin-multi-query-picker';
 
-        if (!document.getElementById('kefinTweaks-multiQueryPopover-style')) {
-            const styleElement = document.createElement('style');
-            styleElement.id = 'kefinTweaks-multiQueryPopover-style';
-            styleElement.textContent = `
-                .multiQueryPopover {
-                    background-color: rgba(0, 0, 0, 0.95);
-                    position: absolute !important;
+        const multiQueryPopoverCss = `
+                .kefin-multi-query-modal {
+                    background-color: rgba(0, 0, 0, 0.95) !important;
                     z-index: 1001;
-                    display: block;
+                    min-width: 12rem;
+                    max-width: min(90vw, 320px);
+                    max-height: min(60vh, 420px);
+                    overflow: hidden;
+                    padding: 0 !important;
+					min-width: initial !important;
                 }
+                .kefin-multi-query-modal [data-name="kefin-modal-content"] {
+                    overflow-y: auto !important;
+                    max-height: min(60vh, 420px);
+                }
+				.kefinTweaks-popover.multiQueryPopover {
+					margin-top: 0 !important;
+					display: grid;
+				}
             `;
-            document.head.appendChild(styleElement);
+        let multiQueryStyleEl = document.getElementById('kefinTweaks-multiQueryPopover-style');
+        if (!multiQueryStyleEl) {
+            multiQueryStyleEl = document.createElement('style');
+            multiQueryStyleEl.id = 'kefinTweaks-multiQueryPopover-style';
+            document.head.appendChild(multiQueryStyleEl);
         }
+        multiQueryStyleEl.textContent = multiQueryPopoverCss;
 
         selectButton.addEventListener('click', (e) => {
             e.stopPropagation();
             e.preventDefault();
 
-            if (activePopover) {
-                closePopover();
+            if (!window.ModalSystem?.create) return;
+            if (window.ModalSystem.isOpen?.(MULTI_QUERY_MODAL_ID)) {
+                window.ModalSystem.close(MULTI_QUERY_MODAL_ID);
                 return;
             }
 
-            const popover = document.createElement('div');
-            popover.className = 'kefinTweaks-popover multiQueryPopover itemDetailsGroup';
+            const list = document.createElement('div');
+            list.className = 'kefinTweaks-popover multiQueryPopover itemDetailsGroup';
             const selectedIndex = resolveActiveQueryIndex(sectionConfig, { initialize: false });
             let selectedItemElement = null;
 
-            queries.forEach((query, index) => {
-                const itemElement = document.createElement('div');
-                itemElement.className = 'kefinTweaks-popover-item detailsGroupItem';
-                if (index === selectedIndex) {
-                    itemElement.classList.add('selected');
-                    selectedItemElement = itemElement;
+            const selectQuery = async (index) => {
+                window.ModalSystem.close(MULTI_QUERY_MODAL_ID);
+                if (index === resolveActiveQueryIndex(sectionConfig, { initialize: false })) {
+                    return;
                 }
-                itemElement.textContent = getQueryDisplayName(query, index);
-                itemElement.addEventListener('click', async () => {
-                    closePopover();
-                    if (index === resolveActiveQueryIndex(sectionConfig, { initialize: false })) {
-                        return;
-                    }
 
-                    sectionConfig._selectedQueryIndex = index;
+                sectionConfig._selectedQueryIndex = index;
+                // Clear cached section URL so resolve uses the newly selected query
+                sectionConfig.viewMoreUrl = null;
 
-                    const sectionIdAttr = (typeof CSS !== 'undefined' && typeof CSS.escape === 'function')
+                const sectionIdAttr =
+                    typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
                         ? CSS.escape(String(sectionConfig.id))
                         : String(sectionConfig.id).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 
-                    // Prefer the live section node (may have been replaced by a prior switch).
-                    let activeSectionEl = document.querySelector(
-                        `.verticalSection[data-section-id="${sectionIdAttr}"], .spotlight-section[data-section-id="${sectionIdAttr}"]`
+                let activeSectionEl =
+                    document.querySelector(
+                        `.verticalSection[data-section-id="${sectionIdAttr}"], .spotlight-section[data-section-id="${sectionIdAttr}"]`,
                     ) || sectionElement;
 
-                    const livePicker = activeSectionEl.querySelector('.multi-query-picker-button');
-                    if (livePicker) {
-                        livePicker.textContent = getMultiQueryPickerButtonLabel(sectionConfig);
+                const livePicker = activeSectionEl.querySelector('.multi-query-picker-button');
+                if (livePicker) {
+                    livePicker.textContent = getMultiQueryPickerButtonLabel(sectionConfig);
+                }
+                updateSectionTitleText(activeSectionEl, getSectionTitleForMultiQuery(sectionConfig), getSectionCaption(sectionConfig));
+
+                try {
+                    let viewMoreUrl = getActiveViewMoreUrl(sectionConfig);
+                    if (!viewMoreUrl && typeof window.sectionHelper?.resolveViewMoreUrl === 'function') {
+                        viewMoreUrl = await window.sectionHelper.resolveViewMoreUrl(sectionConfig);
                     }
-                    updateSectionTitleText(activeSectionEl, getSectionTitleForMultiQuery(sectionConfig), getSectionCaption(sectionConfig));
-                    updateSectionViewMoreLink(activeSectionEl, getActiveViewMoreUrl(sectionConfig));
-                    activeSectionEl.dataset.refreshing = 'true';
+                    if (viewMoreUrl) {
+                        sectionConfig.viewMoreUrl = viewMoreUrl;
+                    }
+                    updateSectionViewMoreLink(activeSectionEl, viewMoreUrl || null);
 
-                    try {
-                        const loaded = await loadActiveSectionQueryItems(sectionConfig);
-                        let newContent = null;
+                    const loaded = await loadActiveSectionQueryItems(sectionConfig);
+                    let newContent = null;
 
-                        if (loaded.canPaintCached) {
-                            newContent = await replaceSectionContent(sectionConfig, activeSectionEl, loaded.items);
-                        } else {
-                            // Skeletons before awaiting network — cache check already finished above.
-                            activeSectionEl = showSectionQuerySkeletons(sectionConfig, activeSectionEl);
-                            const freshItems = await loaded.itemsPromise;
-                            newContent = await replaceSectionContent(sectionConfig, activeSectionEl, freshItems);
-                        }
+                    if (loaded.canPaintCached) {
+                        newContent = await replaceSectionContent(sectionConfig, activeSectionEl, loaded.items);
+                    } else {
+                        activeSectionEl = showSectionQuerySkeletons(sectionConfig, activeSectionEl);
+                        const freshItems = await loaded.itemsPromise;
+                        newContent = await replaceSectionContent(sectionConfig, activeSectionEl, freshItems);
+                    }
 
-                        if (typeof sectionConfig._onMultiQueryChange === 'function') {
-                            sectionConfig._onMultiQueryChange(index, sectionConfig, newContent);
-                        }
-                    } catch (error) {
-                        console.error('[KefinTweaks CardBuilder] Error switching query:', error);
-                        const live = document.querySelector(
-                            `.verticalSection[data-section-id="${sectionIdAttr}"], .spotlight-section[data-section-id="${sectionIdAttr}"]`
+                    if (typeof sectionConfig._onMultiQueryChange === 'function') {
+                        sectionConfig._onMultiQueryChange(index, sectionConfig, newContent);
+                    }
+                } catch (error) {
+                    console.error('[KefinTweaks CardBuilder] Error switching query:', error);
+                    const live =
+                        document.querySelector(
+                            `.verticalSection[data-section-id="${sectionIdAttr}"], .spotlight-section[data-section-id="${sectionIdAttr}"]`,
                         ) || activeSectionEl;
-                        if (live) live.dataset.refreshing = 'false';
-                    }
-                });
-                popover.appendChild(itemElement);
-            });
-
-            titleContainer.style.position = 'relative';
-            selectButton.parentNode.insertBefore(popover, selectButton.nextSibling);
-            const buttonRect = selectButton.getBoundingClientRect();
-            const containerRect = titleContainer.getBoundingClientRect();
-            popover.style.left = `${Math.max(0, buttonRect.left - containerRect.left)}px`;
-            popover.style.top = '100%';
-            popover.style.bottom = 'auto';
-            popover.style.marginTop = '8px';
-            popover.style.marginBottom = '0';
-            activePopover = popover;
-
-            if (selectedItemElement) {
-                setTimeout(() => {
-                    selectedItemElement.scrollIntoView({
-                        behavior: 'instant',
-                        block: 'nearest',
-                        inline: 'nearest'
-                    });
-                }, 10);
-            }
-
-            const closeHandler = (ev) => {
-                if (!popover.contains(ev.target) && !selectButton.contains(ev.target)) {
-                    closePopover();
-                    document.removeEventListener('click', closeHandler);
+                    setSectionRefreshing(live, false);
                 }
             };
-            setTimeout(() => {
-                document.addEventListener('click', closeHandler);
-            }, 100);
+
+            queries.forEach((query, index) => {
+                const itemElement = document.createElement('button');
+                itemElement.type = 'button';
+                itemElement.className = 'kefinTweaks-popover-item detailsGroupItem emby-button button-flat';
+                if (index === selectedIndex) {
+                    itemElement.classList.add('selected', 'is-active');
+                    selectedItemElement = itemElement;
+                }
+                itemElement.textContent = getQueryDisplayName(query, index);
+                itemElement.addEventListener('click', (ev) => {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    selectQuery(index);
+                });
+                list.appendChild(itemElement);
+            });
+
+            window.ModalSystem.create({
+                id: MULTI_QUERY_MODAL_ID,
+                title: null,
+                content: list,
+                footer: null,
+                showCloseButton: false,
+                closeOnBackdrop: true,
+                closeOnEscape: true,
+                fixedSize: false,
+                returnFocus: selectButton,
+                initialFocus: selectedItemElement,
+                anchor: selectButton,
+                dialogClassName: 'kefin-multi-query-modal',
+                // Match breadcrumb season popover: page scrolls unless the list itself overflows
+                lockPageScroll: false,
+                onOpen: (modal) => {
+                    if (modal.backdrop) modal.backdrop.style.background = 'transparent';
+                    // Document-absolute shell via ModalSystem.positionNearAnchor.
+                    if (modal.dialogContent) {
+                        modal.dialogContent.style.padding = '0';
+                        modal.dialogContent.style.overflowY = 'auto';
+                        modal.dialogContent.style.minHeight = '0';
+                        modal.dialogContent.style.flex = '0 1 auto';
+                        modal.dialogContent.style.overscrollBehavior = 'auto';
+                    }
+                    if (modal.dialog) {
+                        modal.dialog.style.overscrollBehavior = 'auto';
+                    }
+                    if (selectedItemElement) {
+                        requestAnimationFrame(() => {
+                            selectedItemElement.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+                        });
+                    }
+                },
+            });
         });
     }
 
@@ -1619,11 +1941,12 @@
             const inline = document.createElement('div');
             inline.className = 'section-controls-inline';
 
-            const moreButton = document.createElement('button');
-            moreButton.type = 'button';
-            moreButton.className = 'section-controls-more material-icons more_vert';
-            moreButton.title = 'More';
-            moreButton.setAttribute('aria-label', 'More');
+            const moreButton = createPaperIconButton({
+                className: 'section-controls-more',
+                icon: 'more_vert',
+                title: 'More',
+                showFocus: isTvLayout(),
+            });
 
             controls.appendChild(inline);
             controls.appendChild(moreButton);
@@ -1632,23 +1955,30 @@
             mountParent.appendChild(controls);
         }
 
+        const inline = controls.querySelector('.section-controls-inline');
+        // Controls-only group must not trap L/R — title + controls share one row (below).
+        inline?.classList.remove('focuscontainer-x');
+
+        // TV: title link + section controls in one focuscontainer-x (spotlight uses headerContainer).
+        if (isTvLayout() && titleContainer.classList.contains('sectionTitleContainer')) {
+            mountParent.classList.add('focuscontainer-x');
+        }
+
         return {
             controls,
-            inline: controls.querySelector('.section-controls-inline'),
-            moreButton: controls.querySelector('.section-controls-more')
+            inline,
+            moreButton: controls.querySelector('.section-controls-more'),
         };
     }
 
     function normalizeStaticSectionItems(sectionConfig) {
         const kefinTweaksRoot = window.KefinTweaksConfig?.kefinTweaksRoot || '';
-        const serverId = typeof ApiClient !== 'undefined' && typeof ApiClient.serverId === 'function'
-            ? ApiClient.serverId()
-            : '';
-        const normalizeTemplate = (value) => (value || '')
-            .replace(/\$\{kefinTweaksRoot\}/g, kefinTweaksRoot)
-            .replace(/\$\{serverId\}/g, serverId);
+        const serverId = typeof ApiClient !== 'undefined' && typeof ApiClient.serverId === 'function' ? ApiClient.serverId() : '';
+        const normalizeTemplate = (value) =>
+            (value || '').replace(/\$\{kefinTweaksRoot\}/g, kefinTweaksRoot).replace(/\$\{serverId\}/g, serverId);
 
-        return sectionConfig.items.map((item, index) => ({
+        const visibleItems = (sectionConfig.items || []).filter((item) => item && item.hidden !== true);
+        return visibleItems.map((item, index) => ({
             Name: item.Name,
             Id: item.Id || 'static-' + sectionConfig.id + '-' + index,
             Type: item.Type || 'Folder',
@@ -1660,7 +1990,7 @@
             backdropUrl: normalizeTemplate(item.backdropUrl),
             bannerUrl: normalizeTemplate(item.bannerUrl),
             logoUrl: normalizeTemplate(item.logoUrl),
-            CustomFooterText: item.cardFooter || undefined
+            CustomFooterText: item.cardFooter || undefined,
         }));
     }
 
@@ -1669,7 +1999,7 @@
      * @returns {Promise<HTMLElement|null>} refresh button on the new section, if any
      */
     async function executeSectionRefresh(sectionConfig, sectionElement) {
-        sectionElement.dataset.refreshing = 'true';
+        setSectionRefreshing(sectionElement, true);
 
         try {
             const hasStaticItems = Array.isArray(sectionConfig.items) && sectionConfig.items.length > 0;
@@ -1677,7 +2007,7 @@
 
             if (hasStaticItems) {
                 if (!sectionHasRandomQuerySort(sectionConfig)) {
-                    sectionElement.dataset.refreshing = 'false';
+                    setSectionRefreshing(sectionElement, false);
                     const refreshButton = sectionElement.querySelector('.section-refresh-button');
                     if (refreshButton) {
                         showRefreshComplete(refreshButton);
@@ -1687,7 +2017,7 @@
 
                 freshItems = postProcessItems(sectionConfig, normalizeStaticSectionItems(sectionConfig));
                 if (freshItems.length === 0) {
-                    sectionElement.dataset.refreshing = 'false';
+                    setSectionRefreshing(sectionElement, false);
                     return null;
                 }
             } else {
@@ -1712,11 +2042,11 @@
                     spotlightConfig: sectionConfig.spotlightConfig,
                     dataItems: [],
                     keepCurrentSlide: false,
-                    sectionConfig
+                    sectionConfig,
                 });
                 content = refreshed.content;
                 ensureCardBorders(content);
-                content.dataset.refreshing = 'false';
+                setSectionRefreshing(content, false);
                 const newButton = attachSectionControlButtons(sectionConfig, content, freshItems);
                 if (newButton) {
                     showRefreshComplete(newButton);
@@ -1724,56 +2054,70 @@
                 return newButton;
             }
 
-            content = createScrollableContainer(
+            // In-place card refresh: keep section shell + sticky is=emby-itemscontainer
+            if (sectionElement.querySelector('.itemsContainer')) {
+                rebuildSectionTitleInPlace(sectionElement, sectionConfig);
+                updateSectionTitleText(sectionElement, getSectionTitleForMultiQuery(sectionConfig), getSectionCaption(sectionConfig));
+                updateSectionViewMoreLink(sectionElement, getActiveViewMoreUrl(sectionConfig));
+                replaceItemsContainerContents(sectionElement, freshItems, {
+                    ...sectionConfig,
+                    cardFormat: finalCardFormat,
+                });
+                unobserveSkeletonShimmer(sectionElement);
+                setSectionRefreshing(sectionElement, false);
+                ensureSectionRevealObservation(sectionElement);
+                const newButton = sectionElement.querySelector('.section-refresh-button');
+                if (newButton) {
+                    showRefreshComplete(newButton);
+                }
+                return newButton;
+            }
+
+            content = createSectionScrollableContainer(
                 freshItems,
                 getSectionTitleForMultiQuery(sectionConfig),
                 getActiveViewMoreUrl(sectionConfig),
                 sectionConfig.overflowCard,
                 finalCardFormat,
-                sectionConfig
+                sectionConfig,
             );
 
             content.style.cssText = sectionElement.style.cssText;
             content.className = sectionElement.className;
-            Array.from(sectionElement.attributes).forEach(attr => {
+            Array.from(sectionElement.attributes).forEach((attr) => {
                 content.setAttribute(attr.name, attr.value);
             });
 
-            const oldItemsContainer = sectionElement.querySelector('.itemsContainer');
-            const layoutFromDom = oldItemsContainer?.getAttribute('data-layout');
-            const layout = (layoutFromDom === 'grid' || layoutFromDom === 'row')
-                ? layoutFromDom
-                : resolveItemsLayout(sectionConfig);
-            const gapless = oldItemsContainer
-                ? oldItemsContainer.getAttribute('data-gapless') === 'true'
-                : resolveUseGaplessCards(sectionConfig);
-            invalidateLastRowPadding(content.querySelector('.itemsContainer'));
-
+            invalidateScrollerMetrics(sectionElement.querySelector('.emby-scroller'));
+            stripCopiedSkeletonSectionClasses(content);
+            unobserveSkeletonShimmer(sectionElement);
             sectionElement.replaceWith(content);
-            applyItemsLayoutState(content, layout, gapless);
+            applyItemsLayoutState(content, resolveItemsLayout(sectionConfig), resolveUseGaplessCards(sectionConfig));
             ensureCardBorders(content);
 
             const newButton = attachSectionControlButtons(sectionConfig, content, freshItems);
-            content.dataset.refreshing = 'false';
+            setSectionRefreshing(content, false);
+            registerLazyImagesInSection(content);
+            ensureSectionRevealObservation(content);
             if (newButton) {
                 showRefreshComplete(newButton);
             }
             return newButton;
         } catch (error) {
             console.error('[KefinTweaks CardBuilder] Error refreshing section:', error);
-            sectionElement.dataset.refreshing = 'false';
+            setSectionRefreshing(sectionElement, false);
             return null;
         }
     }
 
     function attachSectionControlButtons(sectionConfig, sectionElement, cachedItems) {
-        const titleContainer = sectionElement.querySelector('.sectionTitleContainer')
-            || sectionElement.querySelector('.spotlight-section-title-container');
+        const titleContainer =
+            sectionElement.querySelector('.sectionTitleContainer') || sectionElement.querySelector('.spotlight-section-title-container');
         if (!titleContainer) return null;
 
-        titleContainer.querySelectorAll(
-            ':scope > .show-all-button, :scope > .section-refresh-button, :scope > .section-configure-button'
-        ).forEach((el) => el.remove());
+        titleContainer
+            .querySelectorAll(':scope > .show-all-button, :scope > .section-refresh-button, :scope > .section-configure-button')
+            .forEach((el) => el.remove());
 
         ensureSectionControlsMount(titleContainer);
         const definitions = getSectionControlDefinitions(sectionConfig, sectionElement, cachedItems);
@@ -1794,19 +2138,41 @@
     }
 
     let cardUserDataListenerStarted = false;
+    let cardLibraryChangedListenerStarted = false;
+    let pendingLibraryUpdatedIds = new Set();
+    let libraryUpdatedFlushTimer = null;
+    let libraryUpdatedFlushRunning = false;
+    const LIBRARY_UPDATED_DEBOUNCE_MS = 750;
+    const LIVE_SYNC_REBUILD_BATCH_SIZE = 8;
+    // Match apiHelper DEFAULT_ITEM_FIELDS so rebuilt cards keep aspect/overlays/indicators.
+    const LIVE_SYNC_ITEM_FIELDS =
+        'PrimaryImageAspectRatio,DateCreated,Overview,Taglines,ProductionYear,RecursiveItemCount,ChildCount,UserData,ProviderIds,MediaSourceCount';
 
-    function getPrimaryUserIdForCardSync() {
-        return (typeof ApiClient !== 'undefined' && typeof ApiClient.getCurrentUserId === 'function')
-            ? ApiClient.getCurrentUserId()
-            : null;
+    function scheduleLibraryUpdatedFlush() {
+        if (libraryUpdatedFlushTimer) clearTimeout(libraryUpdatedFlushTimer);
+        libraryUpdatedFlushTimer = setTimeout(() => {
+            void flushVisibleCardLibraryUpdates();
+        }, LIBRARY_UPDATED_DEBOUNCE_MS);
     }
 
-    function extractUserDataChangePayload(event) {
-        const data = event?.detail ?? event;
-        const userId = data?.Data?.UserId ?? data?.UserId ?? null;
-        const list = data?.Data?.UserDataList ?? data?.UserDataList;
-        if (!Array.isArray(list)) return { userId, entries: [] };
-        return { userId, entries: list };
+    function yieldToMainThread() {
+        return new Promise((resolve) => {
+            if (typeof requestAnimationFrame === 'function') {
+                requestAnimationFrame(() => resolve());
+            } else {
+                setTimeout(resolve, 0);
+            }
+        });
+    }
+
+    function escapeCssIdentForCardSync(value) {
+        return typeof CSS !== 'undefined' && CSS.escape
+            ? CSS.escape(String(value))
+            : String(value).replace(/["\\]/g, '\\$&');
+    }
+
+    function getPrimaryUserIdForCardSync() {
+        return typeof ApiClient !== 'undefined' && typeof ApiClient.getCurrentUserId === 'function' ? ApiClient.getCurrentUserId() : null;
     }
 
     function isPrimaryUserDataChange(userId) {
@@ -1823,10 +2189,7 @@
     function updateCardResumeAttributes(itemId, userData) {
         if (!itemId || !userData) return;
 
-        const escapedId = typeof CSS !== 'undefined' && CSS.escape
-            ? CSS.escape(itemId)
-            : itemId.replace(/["\\]/g, '\\$&');
-        const cards = document.querySelectorAll(`.card[data-id="${escapedId}"]`);
+        const cards = findVisibleCardsForItemId(itemId);
         if (!cards.length) return;
 
         const ticks = userData.PlaybackPositionTicks;
@@ -1845,6 +2208,7 @@
     }
 
     function updateCardWatchlistButtons(itemId, userData) {
+        if (!state.watchlist) return;
         if (!itemId || !userData || !('Likes' in userData)) return;
 
         const isLiked = userData.Likes === true;
@@ -1853,12 +2217,12 @@
             likedHelper.set(itemId, isLiked);
         }
 
-        const escapedId = typeof CSS !== 'undefined' && CSS.escape
-            ? CSS.escape(itemId)
-            : itemId.replace(/["\\]/g, '\\$&');
-        document.querySelectorAll(`.watchlist-button[data-id="${escapedId}"]`).forEach((button) => {
-            button.dataset.active = isLiked ? 'true' : 'false';
-            button.title = isLiked ? 'Remove from Watchlist' : 'Add to Watchlist';
+        itemIdDomVariants(itemId).forEach((variant) => {
+            const escapedId = escapeCssIdentForCardSync(variant);
+            document.querySelectorAll(`.watchlist-button[data-id="${escapedId}"]`).forEach((button) => {
+                button.dataset.active = isLiked ? 'true' : 'false';
+                button.title = isLiked ? 'Remove from Watchlist' : 'Add to Watchlist';
+            });
         });
     }
 
@@ -1872,41 +2236,546 @@
         });
     }
 
-    function handleCardUserDataChangedEvent(event) {
-        const { userId, entries } = extractUserDataChangePayload(event);
-        if (!entries.length) return;
-        applyUserDataEntriesToCards(entries, userId);
-    }
-
     function startCardUserDataListener() {
         if (cardUserDataListenerStarted) return;
 
-        let registered = false;
-
-        if (window.ApiClient?.addEventListener) {
-            window.ApiClient.addEventListener('userdatachanged', handleCardUserDataChangedEvent);
-            registered = true;
-        }
-
-        if (window.websocketHelper?.listen) {
-            window.websocketHelper.listen('UserDataChanged', (msg) => {
-                const userId = msg?.Data?.UserId;
-                const entries = msg?.Data?.UserDataList;
-                if (!Array.isArray(entries) || !entries.length) return;
-                applyUserDataEntriesToCards(entries, userId);
-            });
-            registered = true;
-        }
-
-        if (registered) {
-            cardUserDataListenerStarted = true;
-            console.log('[KefinTweaks CardBuilder] Listening for UserDataChanged to sync card resume attributes');
+        if (!window.websocketHelper?.listen) {
+            setTimeout(startCardUserDataListener, 1000);
             return;
         }
 
-        setTimeout(startCardUserDataListener, 1000);
+        window.websocketHelper.listen('UserDataChanged', (msg) => {
+            const userId = msg?.Data?.UserId;
+            const entries = msg?.Data?.UserDataList;
+            if (!Array.isArray(entries) || !entries.length) return;
+            applyUserDataEntriesToCards(entries, userId);
+        });
+        cardUserDataListenerStarted = true;
+        console.log('[KefinTweaks CardBuilder] Listening for UserDataChanged to sync card resume attributes');
     }
-    
+
+    function liveSyncLog(...args) {
+        console.log('[KefinTweaks CardBuilder][LiveSync]', ...args);
+    }
+
+    function liveSyncWarn(...args) {
+        console.warn('[KefinTweaks CardBuilder][LiveSync]', ...args);
+    }
+
+    /** Strip GUID dashes for comparison (server LibraryChanged often uses "N" format). */
+    function normalizeItemIdKey(id) {
+        return String(id || '')
+            .replace(/-/g, '')
+            .toLowerCase();
+    }
+
+    /** Candidate data-id strings for DOM queries (dashed + undashed). */
+    function itemIdDomVariants(id) {
+        const raw = String(id || '').trim();
+        if (!raw) return [];
+        const variants = new Set([raw]);
+        const naked = normalizeItemIdKey(raw);
+        if (/^[0-9a-f]{32}$/.test(naked)) {
+            variants.add(naked);
+            variants.add(
+                `${naked.slice(0, 8)}-${naked.slice(8, 12)}-${naked.slice(12, 16)}-${naked.slice(16, 20)}-${naked.slice(20)}`,
+            );
+        }
+        return Array.from(variants);
+    }
+
+    function findVisibleCardsForItemId(itemId) {
+        if (!itemId) return [];
+        const found = new Set();
+        itemIdDomVariants(itemId).forEach((variant) => {
+            const escapedId = escapeCssIdentForCardSync(variant);
+            document.querySelectorAll(`.card[data-id="${escapedId}"]:not(.skeleton-card)`).forEach((card) => {
+                found.add(card);
+            });
+        });
+        return Array.from(found);
+    }
+
+    function resolveCardRebuildArgs(card) {
+        const sectionEl = card?.closest?.('[data-section-id]');
+        const sectionId = sectionEl?.getAttribute('data-section-id') || sectionEl?.dataset?.sectionId || null;
+        const runtimeCfg = sectionId ? window.KefinHomeScreenSectionRuntime?.get?.(sectionId)?.effectiveConfig : null;
+
+        const cardFormat = sectionEl?.getAttribute('data-card-format') || runtimeCfg?.cardFormat || null;
+
+        let overflowCard;
+        if (runtimeCfg && typeof runtimeCfg.overflowCard === 'boolean') {
+            overflowCard = runtimeCfg.overflowCard;
+        } else if (/\boverflow(?:Portrait|Backdrop|Square|Banner)Card\b/.test(card?.className || '')) {
+            overflowCard = true;
+        } else if (/\b(?:portrait|backdrop|square|banner)Card\b/.test(card?.className || '')) {
+            overflowCard = false;
+        } else {
+            // Home rows default to overflow sizing.
+            overflowCard = true;
+        }
+
+        const useParentCard = !!runtimeCfg?.useParentCard;
+        const borderStyle =
+            runtimeCfg?.borderStyle || sectionEl?.dataset?.borderStyle || sectionEl?.dataset?.border || null;
+
+        return { cardFormat, overflowCard, useParentCard, borderStyle, sectionId };
+    }
+
+    /** Image tags the card builder may put in data-src (any format / fallback path). */
+    function collectItemImageTagsForLiveSync(item) {
+        const tags = new Set();
+        const add = (t) => {
+            if (t != null && t !== '') tags.add(String(t));
+        };
+        const it = item?.ImageTags;
+        if (it) {
+            add(it.Primary);
+            add(it.Thumb);
+            add(it.Logo);
+            add(it.Banner);
+            add(it.Art);
+            add(it.Disc);
+        }
+        add(item?.BackdropImageTags?.[0]);
+        add(item?.PrimaryImageTag);
+        add(item?.SeriesPrimaryImageTag);
+        add(item?.SeriesThumbImageTag);
+        add(item?.ParentThumbImageTag);
+        add(item?.ParentBackdropImageTags?.[0]);
+        add(item?.ParentPrimaryImageTag);
+        add(item?.ParentLogoImageTag);
+        return tags;
+    }
+
+    function extractTagFromImageUrl(url) {
+        if (!url) return '';
+        try {
+            const m = String(url).match(/[?&]tag=([^&]*)/i);
+            return m?.[1] ? decodeURIComponent(m[1]) : '';
+        } catch (e) {
+            return '';
+        }
+    }
+
+    /**
+     * Skip DOM replace when painted card signals already match the fresh item.
+     * Compares name, image tag in data-src, resume ticks, played / unplayed indicators.
+     */
+    function cardNeedsLiveSyncRebuild(oldCard, freshItem) {
+        if (!oldCard || !freshItem) return false;
+
+        const img =
+            oldCard.querySelector?.('.cardImageContainer[data-src]') ||
+            oldCard.querySelector?.('.cardImageContainer') ||
+            null;
+        const dataSrc = img?.getAttribute('data-src') || '';
+        const paintedTag = extractTagFromImageUrl(dataSrc);
+        const paintedName = (img?.getAttribute('aria-label') || '').trim();
+        const paintedTicks = oldCard.getAttribute('data-positionticks') || '';
+        const paintedPlayed = !!oldCard.querySelector?.('.playedIndicator');
+        const paintedUnplayed = (oldCard.querySelector?.('.countIndicator.indicator')?.textContent || '').trim();
+        const paintedMediaSources = (oldCard.querySelector?.('.mediaSourceIndicator')?.textContent || '').trim();
+
+        const expectedName = String(freshItem.Name || 'Unknown').trim();
+        const nameChanged = paintedName !== expectedName && paintedName !== String(freshItem.Name || '').trim();
+
+        const freshTags = collectItemImageTagsForLiveSync(freshItem);
+        const hadImage = !!dataSrc;
+        const hasImageTags = freshTags.size > 0;
+        let imageChanged = false;
+        if (paintedTag) {
+            // Painted tag no longer on the item → artwork changed for this card.
+            imageChanged = !freshTags.has(paintedTag);
+        } else if (!hadImage && hasImageTags) {
+            imageChanged = true;
+        } else if (hadImage && !hasImageTags) {
+            imageChanged = true;
+        }
+
+        const freshPlayed = freshItem.UserData?.Played === true;
+        const freshTicks =
+            !freshPlayed && typeof freshItem.UserData?.PlaybackPositionTicks === 'number' && freshItem.UserData.PlaybackPositionTicks > 0
+                ? String(freshItem.UserData.PlaybackPositionTicks)
+                : '';
+        const ticksChanged = paintedTicks !== freshTicks;
+        const playedChanged = paintedPlayed !== freshPlayed;
+
+        const freshUnplayed =
+            freshItem.UserData?.UnplayedItemCount && freshItem.UserData.UnplayedItemCount > 0
+                ? String(freshItem.UserData.UnplayedItemCount)
+                : '';
+        const unplayedChanged = paintedUnplayed !== freshUnplayed;
+
+        const freshMediaSources =
+            typeof freshItem.MediaSourceCount === 'number' && freshItem.MediaSourceCount > 1
+                ? String(freshItem.MediaSourceCount)
+                : '';
+        const mediaSourcesChanged = paintedMediaSources !== freshMediaSources;
+
+        const needs = nameChanged || imageChanged || ticksChanged || playedChanged || unplayedChanged || mediaSourcesChanged;
+        if (!needs) {
+            liveSyncLog('Skipping rebuild — no significant painted changes', {
+                itemId: freshItem.Id,
+                name: expectedName,
+                paintedTag,
+            });
+        }
+        return needs;
+    }
+
+    function replaceVisibleCardWithFreshItem(oldCard, freshItem) {
+        if (!oldCard || !freshItem) return false;
+        if (!cardNeedsLiveSyncRebuild(oldCard, freshItem)) return false;
+
+        const { cardFormat, overflowCard, useParentCard, borderStyle, sectionId } = resolveCardRebuildArgs(oldCard);
+        liveSyncLog('Rebuilding card', {
+            itemId: freshItem.Id,
+            name: freshItem.Name,
+            sectionId,
+            cardFormat,
+            overflowCard,
+            useParentCard,
+            borderStyle,
+            imagePrimaryTag: freshItem.ImageTags?.Primary || null,
+        });
+        const next = createCardElement(
+            freshItem,
+            overflowCard,
+            cardFormat,
+            freshItem.cardFooter || freshItem.CustomFooterText || null,
+            useParentCard,
+            borderStyle,
+        );
+        const index = oldCard.getAttribute('data-index');
+        if (index != null) next.setAttribute('data-index', index);
+
+        const hadFocus = document.activeElement === oldCard;
+        oldCard.replaceWith(next);
+        // New card has data-src + .lazy but is not in any IntersectionObserver yet.
+        registerLazyImagesIn(next);
+        if (hadFocus && typeof next.focus === 'function') {
+            try {
+                next.focus({ preventScroll: true });
+            } catch (e) {
+                next.focus();
+            }
+        }
+        return true;
+    }
+
+    async function flushVisibleCardLibraryUpdates() {
+        libraryUpdatedFlushTimer = null;
+        if (libraryUpdatedFlushRunning) {
+            // Keep pending ids; schedule one follow-up after the in-flight flush
+            if (pendingLibraryUpdatedIds.size) {
+                liveSyncLog('Flush already running — deferring follow-up', {
+                    pendingSize: pendingLibraryUpdatedIds.size,
+                });
+                scheduleLibraryUpdatedFlush();
+            }
+            return;
+        }
+
+        const ids = Array.from(pendingLibraryUpdatedIds);
+        pendingLibraryUpdatedIds.clear();
+        liveSyncLog('Flush start', { pendingIds: ids });
+        if (!ids.length) return;
+
+        libraryUpdatedFlushRunning = true;
+        try {
+            const matchCounts = {};
+            const idsToFetch = ids.filter((id) => {
+                const count = findVisibleCardsForItemId(id).length;
+                matchCounts[id] = count;
+                return count > 0;
+            });
+            liveSyncLog('Visible card matches', matchCounts);
+
+            if (!idsToFetch.length) {
+                liveSyncLog('No on-page cards for updated ids — skipping fetch');
+                return;
+            }
+
+            if (typeof ApiClient === 'undefined' || typeof ApiClient.getItems !== 'function') {
+                liveSyncWarn('ApiClient.getItems unavailable — cannot refresh cards');
+                return;
+            }
+
+            const userId = ApiClient.getCurrentUserId?.();
+            liveSyncLog('Fetching items', { userId, idsToFetch, fields: LIVE_SYNC_ITEM_FIELDS });
+
+            const response = await ApiClient.getItems(userId, {
+                Ids: idsToFetch.join(','),
+                Recursive: false,
+                Fields: LIVE_SYNC_ITEM_FIELDS,
+            });
+            const itemsById = new Map();
+            (response?.Items || []).forEach((item) => {
+                if (!item?.Id) return;
+                itemsById.set(normalizeItemIdKey(item.Id), item);
+            });
+            liveSyncLog('Fetch result', {
+                requested: idsToFetch.length,
+                returned: itemsById.size,
+                itemSummaries: Array.from(itemsById.values()).map((item) => ({
+                    id: item.Id,
+                    name: item.Name,
+                    primaryTag: item.ImageTags?.Primary || null,
+                })),
+            });
+
+            // Flatten id → cards into a rebuild work list, then process in rAF batches
+            const work = [];
+            idsToFetch.forEach((id) => {
+                const freshItem = itemsById.get(normalizeItemIdKey(id));
+                if (!freshItem) {
+                    liveSyncWarn('Item missing from getItems response', id);
+                    return;
+                }
+                const cards = findVisibleCardsForItemId(id);
+                liveSyncLog('Replacing cards for item', { id, cardCount: cards.length });
+                cards.forEach((card) => {
+                    work.push({ card, freshItem });
+                });
+            });
+
+            let rebuilt = 0;
+            let skipped = 0;
+            for (let i = 0; i < work.length; i += LIVE_SYNC_REBUILD_BATCH_SIZE) {
+                if (i > 0) await yieldToMainThread();
+                const batch = work.slice(i, i + LIVE_SYNC_REBUILD_BATCH_SIZE);
+                batch.forEach(({ card, freshItem }) => {
+                    if (replaceVisibleCardWithFreshItem(card, freshItem)) rebuilt += 1;
+                    else skipped += 1;
+                });
+            }
+            liveSyncLog('Flush complete', { rebuilt, skipped, workItems: work.length });
+        } catch (err) {
+            console.error('[KefinTweaks CardBuilder][LiveSync] Visible card live sync failed:', err);
+        } finally {
+            libraryUpdatedFlushRunning = false;
+            // Ids queued during this flush — schedule another pass
+            if (pendingLibraryUpdatedIds.size) {
+                scheduleLibraryUpdatedFlush();
+            }
+        }
+    }
+
+    function queueLibraryUpdatedItemIds(ids, source = 'unknown') {
+        if (!Array.isArray(ids) || !ids.length) return;
+        const before = pendingLibraryUpdatedIds.size;
+        ids.forEach((id) => {
+            if (id == null || id === '') return;
+            pendingLibraryUpdatedIds.add(String(id));
+        });
+        liveSyncLog('Queued item ids', {
+            source,
+            incoming: ids.map(String),
+            pendingSizeBefore: before,
+            pendingSizeAfter: pendingLibraryUpdatedIds.size,
+            debounceMs: LIBRARY_UPDATED_DEBOUNCE_MS,
+            flushRunning: libraryUpdatedFlushRunning,
+        });
+        scheduleLibraryUpdatedFlush();
+    }
+
+    function handleLibraryChangedMessage(msg) {
+        const data = msg?.Data ?? msg;
+        const updated = data?.ItemsUpdated;
+        const dataKeys = data && typeof data === 'object' ? Object.keys(data) : [];
+        liveSyncLog('LibraryChanged received', {
+            deliveryMode: window.websocketHelper?.getDeliveryMode?.() || null,
+            messageType: msg?.MessageType,
+            dataKeys,
+            itemsUpdatedType: Array.isArray(updated) ? 'array' : typeof updated,
+            itemsUpdatedCount: Array.isArray(updated) ? updated.length : null,
+            itemsUpdated: Array.isArray(updated) ? updated : updated,
+            itemsAdded: data?.ItemsAdded,
+            itemsRemoved: data?.ItemsRemoved,
+        });
+        if (!Array.isArray(updated) || !updated.length) {
+            liveSyncLog('Ignoring LibraryChanged — ItemsUpdated empty or not an array');
+            return;
+        }
+        queueLibraryUpdatedItemIds(updated, 'LibraryChanged.ItemsUpdated');
+    }
+
+    function startCardLibraryChangedListener() {
+        if (cardLibraryChangedListenerStarted) return;
+
+        if (!window.websocketHelper?.listen) {
+            liveSyncLog('websocketHelper not ready — retrying listener in 1s');
+            setTimeout(startCardLibraryChangedListener, 1000);
+            return;
+        }
+
+        window.websocketHelper.listen('LibraryChanged', handleLibraryChangedMessage);
+        cardLibraryChangedListenerStarted = true;
+        liveSyncLog('Listening for LibraryChanged to sync visible card metadata', {
+            deliveryMode: window.websocketHelper?.getDeliveryMode?.() || 'pending',
+        });
+    }
+
+    let cardEditorCloseLiveSyncStarted = false;
+    const editorDialogDirty = new WeakMap();
+
+    function isImageEditorDialog(dlg) {
+        if (!dlg?.querySelector) return false;
+        return !!(dlg.querySelector('.imageEditorCard') || dlg.querySelector('#images') || dlg.querySelector('#backdrops'));
+    }
+
+    function isMetadataEditorDialog(dlg) {
+        if (!dlg?.querySelector) return false;
+        if (isImageEditorDialog(dlg)) return false;
+        return !!(
+            dlg.querySelector('.metadataEditor') ||
+            dlg.querySelector('#metadataEditor') ||
+            dlg.querySelector('.metadataEditorContent') ||
+            dlg.querySelector('form.metadataEditorForm') ||
+            dlg.querySelector('.btnSaveMetadata, #btnSaveMetadata')
+        );
+    }
+
+    function resolveEditorDialogItemId(dlg) {
+        if (!dlg) return null;
+        const fromCard = dlg.querySelector?.('.imageEditorCard[data-id], [data-id][data-imagetype], [data-itemid]');
+        const attrId =
+            fromCard?.getAttribute('data-id') ||
+            fromCard?.getAttribute('data-itemid') ||
+            dlg.getAttribute?.('data-itemid') ||
+            dlg.getAttribute?.('data-id') ||
+            dlg.dataset?.itemId ||
+            null;
+        if (attrId) return attrId;
+
+        try {
+            const hash = String(window.location.hash || '');
+            const match = hash.match(/[?&]id=([^&]+)/i);
+            if (match?.[1]) return decodeURIComponent(match[1]);
+        } catch (e) {
+            // ignore
+        }
+        return null;
+    }
+
+    function markEditorDialogDirty(dlg) {
+        if (!dlg) return;
+        editorDialogDirty.set(dlg, true);
+    }
+
+    function handleEditorDialogClose(dlg) {
+        if (!dlg) return;
+        const isImage = isImageEditorDialog(dlg);
+        const isMeta = isMetadataEditorDialog(dlg);
+        if (!isImage && !isMeta) return;
+
+        const dirty = editorDialogDirty.get(dlg) === true;
+        // Mirror imageeditor hasChanges: only rebuild when the dialog was dirtied while open.
+        if (!dirty) {
+            liveSyncLog('Editor closed without changes — skip rebuild', {
+                kind: isImage ? 'image' : 'metadata',
+            });
+            return;
+        }
+
+        const itemId = resolveEditorDialogItemId(dlg);
+        if (!itemId) {
+            liveSyncWarn('Editor closed but could not resolve item id');
+            return;
+        }
+
+        liveSyncLog('Editor closed — queueing live sync', {
+            itemId,
+            kind: isImage ? 'image' : 'metadata',
+            dirty,
+        });
+        queueLibraryUpdatedItemIds([itemId], isImage ? 'imageEditor.close' : 'metadataEditor.close');
+    }
+
+    function watchEditorDialog(dlg) {
+        if (!dlg || dlg.__kefinLiveSyncWatched) return;
+        if (!isImageEditorDialog(dlg) && !isMetadataEditorDialog(dlg)) return;
+
+        dlg.__kefinLiveSyncWatched = true;
+        editorDialogDirty.set(dlg, false);
+
+        if (isImageEditorDialog(dlg)) {
+            // imageeditor.js mutates #images during initial reload — ignore until settled.
+            let armed = false;
+            const armTimer = setTimeout(() => {
+                armed = true;
+                editorDialogDirty.set(dlg, false);
+            }, 800);
+            dlg.__kefinLiveSyncArmTimer = armTimer;
+
+            const mo = new MutationObserver(() => {
+                if (!armed) return;
+                markEditorDialogDirty(dlg);
+            });
+            const images = dlg.querySelector('#images') || dlg.querySelector('#backdrops') || dlg;
+            try {
+                mo.observe(images, {
+                    childList: true,
+                    subtree: true,
+                    attributes: true,
+                    attributeFilter: ['data-src', 'style', 'src'],
+                });
+            } catch (e) {
+                mo.observe(dlg, { childList: true, subtree: true });
+            }
+            dlg.__kefinLiveSyncMo = mo;
+        } else if (isMetadataEditorDialog(dlg)) {
+            const onFieldEdit = () => markEditorDialogDirty(dlg);
+            dlg.addEventListener('input', onFieldEdit, true);
+            dlg.addEventListener('change', onFieldEdit, true);
+            dlg.__kefinLiveSyncFieldEdit = onFieldEdit;
+        }
+
+        const onClose = () => {
+            if (dlg.__kefinLiveSyncArmTimer) {
+                clearTimeout(dlg.__kefinLiveSyncArmTimer);
+            }
+            if (dlg.__kefinLiveSyncFieldEdit) {
+                dlg.removeEventListener('input', dlg.__kefinLiveSyncFieldEdit, true);
+                dlg.removeEventListener('change', dlg.__kefinLiveSyncFieldEdit, true);
+            }
+            try {
+                dlg.__kefinLiveSyncMo?.disconnect?.();
+            } catch (e) {
+                // ignore
+            }
+            handleEditorDialogClose(dlg);
+            dlg.removeEventListener('close', onClose);
+        };
+        dlg.addEventListener('close', onClose);
+
+        liveSyncLog('Watching editor dialog for close', {
+            image: isImageEditorDialog(dlg),
+            metadata: isMetadataEditorDialog(dlg),
+            itemId: resolveEditorDialogItemId(dlg),
+        });
+    }
+
+    function startCardEditorCloseLiveSync() {
+        if (cardEditorCloseLiveSyncStarted) return;
+        cardEditorCloseLiveSyncStarted = true;
+
+        document.querySelectorAll('.formDialog').forEach((dlg) => watchEditorDialog(dlg));
+
+        const bodyObserver = new MutationObserver((mutations) => {
+            mutations.forEach((m) => {
+                m.addedNodes.forEach((node) => {
+                    if (!(node instanceof HTMLElement)) return;
+                    if (node.matches?.('.formDialog')) watchEditorDialog(node);
+                    node.querySelectorAll?.('.formDialog').forEach((dlg) => watchEditorDialog(dlg));
+                });
+            });
+        });
+        bodyObserver.observe(document.body, { childList: true, subtree: true });
+        liveSyncLog('Editor-close live sync observer started');
+    }
+
     // Main card builder object
     const cardBuilder = {
         /**
@@ -1924,16 +2793,21 @@
         getActiveViewMoreUrl: getActiveViewMoreUrl,
         refreshSectionQueries: refreshSectionQueries,
         loadActiveSectionQueryItems: loadActiveSectionQueryItems,
+        createSectionScrollableContainer: createSectionScrollableContainer,
+        applySectionPresentationAttrs: applySectionPresentationAttrs,
         attachSectionControlButtons: attachSectionControlButtons,
         ensureCardBorders: ensureCardBorders,
         applyItemsLayoutState: applyItemsLayoutState,
         resolveItemsLayout: resolveItemsLayout,
+        resolveGridShape: resolveGridShape,
+        resolveSpotlightPresentation: resolveSpotlightPresentation,
         resolveUseGaplessCards: resolveUseGaplessCards,
-        invalidateLastRowPadding: invalidateLastRowPadding,
         invalidateCardRadiusCache: invalidateCardRadiusCache,
         ensureCardRadiusCssVar: ensureCardRadiusCssVar,
         getScrollerPosition: getScrollerPosition,
         setScrollerPosition: setScrollerPosition,
+        scrollToCardIndex: scrollToCardIndex,
+        invalidateScrollerMetrics: invalidateScrollerMetrics,
         getItemMaterialIcon: getItemMaterialIcon,
         createLibraryButtonElement: createLibraryButtonElement,
         /**
@@ -1943,12 +2817,24 @@
          * @param {string} cardFormat - Override card format: 'portrait', 'backdrop', 'thumb', or 'square'
          * @param {string} customFooterText - Optional custom footer text (e.g., air date for episodes)
          * @param {boolean} useParentCard - When true, the parent item will be rendered as the card image and link
+         * @param {string|null} borderStyle - Section card border style (e.g. 'retro-poster')
          * @returns {HTMLElement} - The constructed card element
          */
-        buildCard: function(item, overflowCard = false, cardFormat = null, customFooterText = null, useParentCard = false) {
-            return createJellyfinCardElement(item, overflowCard, cardFormat, customFooterText, useParentCard);
+        buildCard: function (
+            item,
+            overflowCard = false,
+            cardFormat = null,
+            customFooterText = null,
+            useParentCard = false,
+            borderStyle = null,
+        ) {
+            return createCardElement(item, overflowCard, cardFormat, customFooterText, useParentCard, borderStyle);
         },
-        
+
+        /** Push-register lazy images under an attached root (parallel native path). */
+        registerLazyImagesIn: registerLazyImagesIn,
+        registerLazyImagesInSection: registerLazyImagesInSection,
+
         /**
          * Renders a scrollable container with cards
          * @param {Array} items - Array of Jellyfin item objects
@@ -1960,7 +2846,15 @@
          * @param {string} sortOrderDirection - Direction: 'Ascending' or 'Descending'
          * @returns {HTMLElement} - The constructed scrollable container
          */
-        renderCards: function(items, title, viewMoreUrl = null, overflowCard = false, cardFormat = null, sortOrder = null, sortOrderDirection = 'Ascending') {
+        renderCards: function (
+            items,
+            title,
+            viewMoreUrl = null,
+            overflowCard = false,
+            cardFormat = null,
+            sortOrder = null,
+            sortOrderDirection = 'Ascending',
+        ) {
             let finalCardFormat = cardFormat;
             if (cardFormat === 'random' || cardFormat === 'Random') {
                 finalCardFormat = getRandomCardFormat();
@@ -1977,7 +2871,7 @@
             return container;
         },
 
-        renderSpotlightSection: function(items, title, options = {}) {
+        renderSpotlightSection: function (items, title, options = {}) {
             return createSpotlightSection(items, title, options);
         },
 
@@ -2003,7 +2897,16 @@
          * @param {string} sortOrderDirection - Direction: 'Ascending' or 'Descending'
          * @returns {HTMLElement} - The constructed scrollable container (initially with skeletons)
          */
-        renderProgressivelyEnhancedCards: async function(itemsPromise, title, viewMoreUrl = null, overflowCard = false, cardFormat = null, sortOrder = null, sortOrderDirection = 'Ascending', minimumItems = -1) {
+        renderProgressivelyEnhancedCards: async function (
+            itemsPromise,
+            title,
+            viewMoreUrl = null,
+            overflowCard = false,
+            cardFormat = null,
+            sortOrder = null,
+            sortOrderDirection = 'Ascending',
+            minimumItems = -1,
+        ) {
             // Handle Random card format - Must resolve ONCE for both skeleton and real cards
             let resolvedFormat = cardFormat;
             if (cardFormat === 'random' || cardFormat === 'Random') {
@@ -2011,7 +2914,7 @@
             }
 
             // Check if promise is already fulfilled
-            if (await promiseState(itemsPromise) === 'fulfilled') {
+            if ((await promiseState(itemsPromise)) === 'fulfilled') {
                 // Resolve the promise and get the items
                 const items = await itemsPromise;
                 // Replace the skeleton with the real cards
@@ -2023,68 +2926,72 @@
             const skeletonContainer = createProgressivelyEnhancedScrollableContainer(title, viewMoreUrl, resolvedFormat, overflowCard);
             const randomId = Math.random().toString(36).substring(2, 15);
             skeletonContainer.setAttribute('data-skeleton-id', randomId);
-            
+
             // When promise resolves, replace skeletons with real cards
-            itemsPromise.then(async items => {
-                // Remove the skeleton container if it exists
-                let skeletonContaineElement = document.querySelector(`[data-skeleton-id="${randomId}"]`);
+            itemsPromise
+                .then(async (items) => {
+                    // Remove the skeleton container if it exists
+                    let skeletonContaineElement = document.querySelector(`[data-skeleton-id="${randomId}"]`);
 
-                // Let's try to find the skeleton 20 times every 100ms
-                for (let i = 0; i < 20; i++) {
-                    skeletonContaineElement = document.querySelector(`[data-skeleton-id="${randomId}"]`);
-                    if (skeletonContaineElement) {
-                        break;
+                    // Let's try to find the skeleton 20 times every 100ms
+                    for (let i = 0; i < 20; i++) {
+                        skeletonContaineElement = document.querySelector(`[data-skeleton-id="${randomId}"]`);
+                        if (skeletonContaineElement) {
+                            break;
+                        }
+                        await new Promise((resolve) => setTimeout(resolve, 150));
                     }
-                    await new Promise(resolve => setTimeout(resolve, 150));
-                }
 
-                if (!items || items.length === 0) {
-                    // Remove container if no items
-                    skeletonContaineElement.remove();
-                    return;
-                }
+                    if (!items || items.length === 0) {
+                        unobserveSkeletonShimmer(skeletonContaineElement);
+                        skeletonContaineElement.remove();
+                        return;
+                    }
 
-                if (items.length < minimumItems) {
-                    // Remove container if not enough items
-                    skeletonContaineElement.remove();
-                    return;
-                }
+                    if (items.length < minimumItems) {
+                        unobserveSkeletonShimmer(skeletonContaineElement);
+                        skeletonContaineElement.remove();
+                        return;
+                    }
 
-                // Sort items if needed
-                let sortedItems = items;
-                if (sortOrder && sortOrder !== 'Random') {
-                    sortedItems = sortItems(items, sortOrder, sortOrderDirection);
-                } else if (sortOrder === 'Random') {
-                    sortedItems = shuffle([...items]);
-                }
+                    // Sort items if needed
+                    let sortedItems = items;
+                    if (sortOrder && sortOrder !== 'Random') {
+                        sortedItems = sortItems(items, sortOrder, sortOrderDirection);
+                    } else if (sortOrder === 'Random') {
+                        sortedItems = shuffle([...items]);
+                    }
 
-                // Generate real cards container (off-DOM) using the SAME resolved format
-                const realContainer = createScrollableContainer(sortedItems, title, viewMoreUrl, overflowCard, resolvedFormat);
+                    // Generate real cards container (off-DOM) using the SAME resolved format
+                    const realContainer = createScrollableContainer(sortedItems, title, viewMoreUrl, overflowCard, resolvedFormat);
 
-                // Copy critical attributes to preserve layout/order
-                if (skeletonContaineElement.style.order) {
-                    realContainer.style.order = skeletonContainer.style.order;
-                }
-                if (skeletonContaineElement.hasAttribute('data-section-id')) {
-                    realContainer.setAttribute('data-section-id', skeletonContainer.getAttribute('data-section-id'));
-                }
-                if (skeletonContaineElement.dataset.border) {
-                    realContainer.dataset.border = skeletonContaineElement.dataset.border;
-                    realContainer.dataset.borderStyle = skeletonContaineElement.dataset.borderStyle
-                        || skeletonContaineElement.dataset.border;
-                }
+                    // Copy critical attributes to preserve layout/order
+                    if (skeletonContaineElement.style.order) {
+                        realContainer.style.order = skeletonContainer.style.order;
+                    }
+                    if (skeletonContaineElement.hasAttribute('data-section-id')) {
+                        realContainer.setAttribute('data-section-id', skeletonContainer.getAttribute('data-section-id'));
+                    }
+                    if (skeletonContaineElement.dataset.border) {
+                        realContainer.dataset.border = skeletonContaineElement.dataset.border;
+                        realContainer.dataset.borderStyle =
+                            skeletonContaineElement.dataset.borderStyle || skeletonContaineElement.dataset.border;
+                    }
 
-                // Replace content of skeleton container with real content
-                // This preserves the container element itself and its layout properties (like order)
-                skeletonContaineElement.replaceWith(realContainer);
-                ensureCardBorders(realContainer);
-            }).catch(error => {
-                console.error('[KefinTweaks CardBuilder] Error loading items for progressive enhancement:', error);
-                // Optionally remove skeleton on error or show error state
-                if (skeletonContaineElement) {
-                    skeletonContaineElement.remove();
-                }
-            });
+                    // Replace content of skeleton container with real content
+                    // This preserves the container element itself and its layout properties (like order)
+                    unobserveSkeletonShimmer(skeletonContaineElement);
+                    skeletonContaineElement.replaceWith(realContainer);
+                    ensureCardBorders(realContainer);
+                })
+                .catch((error) => {
+                    console.error('[KefinTweaks CardBuilder] Error loading items for progressive enhancement:', error);
+                    // Optionally remove skeleton on error or show error state
+                    if (skeletonContaineElement) {
+                        unobserveSkeletonShimmer(skeletonContaineElement);
+                        skeletonContaineElement.remove();
+                    }
+                });
 
             return skeletonContainer;
         },
@@ -2096,13 +3003,14 @@
          * @param {string} title - Section title
          * @param {Object} options - Configuration options
          */
-        renderProgressiveSections: async function(container, sections, options = {}) {
+        renderProgressiveSections: async function (container, sections, options = {}) {
             const {
                 revealSectionsSequentially = false,
                 waitForContainerClass = null,
                 enhanceOnVisible = false,
                 enhanceRootMargin = '30% 0px 30% 0px',
-                showStaleDataBeforeRefresh = true
+                showStaleDataBeforeRefresh = true,
+                insertBefore = null,
             } = options;
 
             const renderProgressiveSectionsStartTime = performance.now();
@@ -2115,7 +3023,9 @@
                 const sectionPromiseEndTime = performance.now();
                 const sectionPromiseDuration = sectionPromiseEndTime - sectionPromiseStartTime;
                 console.log(`Section promise initialization time: ${sectionPromiseDuration.toFixed(2)}ms`);
-                
+
+                if (!section) continue;
+
                 const sectionStartTime = performance.now();
 
                 const sectionConfig = section.config;
@@ -2127,9 +3037,10 @@
                 }
 
                 // Skip if this section id is already in the container (overlapping home renders)
-                const sectionIdAttr = (typeof CSS !== 'undefined' && typeof CSS.escape === 'function')
-                    ? CSS.escape(String(sectionConfig.id))
-                    : String(sectionConfig.id).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+                const sectionIdAttr =
+                    typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+                        ? CSS.escape(String(sectionConfig.id))
+                        : String(sectionConfig.id).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
                 if (container.querySelector(`[data-section-id="${sectionIdAttr}"]`)) {
                     console.log(`[KefinTweaks CardBuilder] Section ${sectionConfig.id} already exists in the container, skipping...`);
                     continue;
@@ -2146,21 +3057,35 @@
 
                 // If the section has items, it is a static query
                 const isStaticQuery = Array.isArray(sectionConfig.items) && sectionConfig.items.length > 0;
-                    
-                const renderCachedData = (isStaticQuery || (!section.result?.isStale && !isRandomQuerySort) || (showStaleDataBeforeRefresh && (!isRandomQuerySort || sectionConfig.renderMode === 'Spotlight'))) && dataItems.length > 0;
+
+                const renderCachedData =
+                    (isStaticQuery ||
+                        (!section.result?.isStale && !isRandomQuerySort) ||
+                        (showStaleDataBeforeRefresh && (!isRandomQuerySort || sectionConfig.renderMode === 'Spotlight'))) &&
+                    dataItems.length > 0;
 
                 // Paint cached cards when valid, or when stale display is opted in
                 if (renderCachedData) {
                     let content = null;
 
                     if (sectionConfig.spotlight || sectionConfig.renderMode === 'Spotlight') {
-                        content = createSpotlightSection(dataItems, getSectionTitleForMultiQuery(sectionConfig), { 
-                            viewMoreUrl: getActiveViewMoreUrl(sectionConfig), 
+                        content = createSpotlightSection(dataItems, getSectionTitleForMultiQuery(sectionConfig), {
+                            viewMoreUrl: getActiveViewMoreUrl(sectionConfig),
                             progressiveEnhancement: true,
-                            ...sectionConfig.spotlightConfig
+                            ...sectionConfig.spotlightConfig,
                         });
                     } else {
-                        content = createScrollableContainer(dataItems, getSectionTitleForMultiQuery(sectionConfig), getActiveViewMoreUrl(sectionConfig), sectionConfig.overflowCard, finalCardFormat, sectionConfig);
+                        // Stale cached paint may still refresh — defer scroll-button register until final apply
+                        const registerScrollButtons = isStaticQuery || section.result?.isStale !== true;
+                        content = createScrollableContainer(
+                            dataItems,
+                            getSectionTitleForMultiQuery(sectionConfig),
+                            getActiveViewMoreUrl(sectionConfig),
+                            sectionConfig.overflowCard,
+                            finalCardFormat,
+                            sectionConfig,
+                            registerScrollButtons,
+                        );
                     }
 
                     content.setAttribute('data-section-id', sectionConfig.id);
@@ -2171,17 +3096,16 @@
                         content.dataset.hideCardFooter = 'true';
                     }
                     applySectionPresentationAttrs(content, sectionConfig);
-                    
+
                     // Add section control buttons to rendered section
                     attachSectionControlButtons(sectionConfig, content, dataItems);
-                    
+
                     sectionEnhancementTargets.push({ element: content, section });
                     //container.appendChild(content);
                     //content.style.contentVisibility = 'hidden';
 
                     if (revealSectionsSequentially) {
                         content.classList.add('cardbuilder-section-reveal');
-                        content.style.display = 'none';
                     }
 
                     fragment.appendChild(content);
@@ -2203,23 +3127,29 @@
                     spotlightSettings.caption = sectionConfig.caption;
                     sectionElement = createSkeletonSpotlightSection(getSectionTitleForMultiQuery(sectionConfig), spotlightSettings);
                 } else {
-                    sectionElement = createProgressivelyEnhancedScrollableContainer(getSectionTitleForMultiQuery(sectionConfig), getActiveViewMoreUrl(sectionConfig), finalCardFormat, sectionConfig.overflowCard, sectionConfig);
+                    sectionElement = createProgressivelyEnhancedScrollableContainer(
+                        getSectionTitleForMultiQuery(sectionConfig),
+                        getActiveViewMoreUrl(sectionConfig),
+                        finalCardFormat,
+                        sectionConfig.overflowCard,
+                        sectionConfig,
+                    );
                 }
                 sectionElement.setAttribute('data-section-id', sectionConfig.id);
                 sectionElement.style.order = sectionConfig.order;
+                sectionElement.dataset.order = sectionConfig.order;
 
                 if (sectionConfig.hideCardFooter === true) {
                     sectionElement.dataset.hideCardFooter = 'true';
                 }
                 applySectionPresentationAttrs(sectionElement, sectionConfig);
                 //container.appendChild(sectionElement);
-                
+
                 // set section element content-visibility to hidden
                 //sectionElement.style.contentVisibility = 'hidden';
 
                 if (revealSectionsSequentially) {
                     sectionElement.classList.add('cardbuilder-section-reveal');
-                    sectionElement.style.display = 'none';
                 }
 
                 sectionEnhancementTargets.push({ element: sectionElement, section });
@@ -2239,78 +3169,42 @@
                 let attempts = 0;
                 while (!container.classList.contains(waitForContainerClass) && attempts < maxAttempts) {
                     attempts++;
-                    await new Promise(resolve => setTimeout(resolve, 100));
+                    await new Promise((resolve) => setTimeout(resolve, 100));
                     if (container.classList.contains(waitForContainerClass)) {
                         break;
                     }
                 }
                 if (!container.classList.contains(waitForContainerClass)) {
                     console.log(`Container did not have class ${waitForContainerClass} after ${maxAttempts} attempts, continuing...`);
-                }    
+                }
             }
 
-            // Append one section per frame so scroll/compositor get frames between paints.
-            // Build already happened in the fragment; only the container append is paced.
-            /* const sectionNodes = Array.from(fragment.childNodes);
-            for (let i = 0; i < sectionNodes.length; i++) {
-                container.appendChild(sectionNodes[i]);
-                if (i + 1 < sectionNodes.length) {
-                    await new Promise((resolve) => requestAnimationFrame(resolve));
-                }
-            } */
-            container.appendChild(fragment);
-            syncAttachedGridTilesLayouts(container);
-
-            // Update the scroll buttons for all scrollable containers
-            /* const scrollableContainers = container.querySelectorAll('.emby-scroller');
-            for (const scroller of scrollableContainers) {
-                updateScrollableContainerScrollButtons(scroller);
-            } */
-
-
-            // Batch append sections to avoid Jellyfin emby-scroller processing
-            // all at once (causes render lag when many sections are added)
-            /* const BATCH_SIZE = 4;
+            // Append in batches so style/layout work is spread across frames.
+            // Register lazy images per section .itemsContainer only (never the home container).
+            const BATCH_SIZE = 2;
             const sectionNodes = Array.from(fragment.childNodes);
             for (let i = 0; i < sectionNodes.length; i += BATCH_SIZE) {
                 const batch = sectionNodes.slice(i, i + BATCH_SIZE);
                 const batchFragment = document.createDocumentFragment();
-                batch.forEach(node => batchFragment.appendChild(node));
-                container.appendChild(batchFragment);
-                if (i + BATCH_SIZE < sectionNodes.length) {
-                    await new Promise(resolve => requestAnimationFrame(resolve));
-                    await new Promise(resolve => setTimeout(resolve, 0));
+                batch.forEach((node) => batchFragment.appendChild(node));
+                if (insertBefore && insertBefore.parentNode === container) {
+                    container.insertBefore(batchFragment, insertBefore);
+                } else {
+                    container.appendChild(batchFragment);
                 }
-            } */
+                batch.forEach((sectionEl) => {
+                    if (sectionEl?.nodeType === 1) registerLazyImagesInSection(sectionEl);
+                });
+                if (i + BATCH_SIZE < sectionNodes.length) {
+                    await new Promise((resolve) => requestAnimationFrame(resolve));
+                    await new Promise((resolve) => setTimeout(resolve, 0));
+                }
+            }
 
-            /* for (const sectionElement of sectionElements) {
-                container.appendChild(sectionElement);
-                await new Promise(resolve => requestAnimationFrame(resolve));
-                await new Promise(resolve => setTimeout(resolve, 0));
-            } */
-
-            /* for (const sectionElement of sectionElements) {
-                sectionElement.style.contentVisibility = 'hidden';
-                container.appendChild(sectionElement);
-                await new Promise(resolve => requestAnimationFrame(resolve));
-                await new Promise(resolve => setTimeout(resolve, 0));
-            } */
-
-/*             for (const sectionElement of sectionElements) {
-                container.appendChild(sectionElement);
-            } */
-
-            // Append all of the section elements to the container at once
-            //container.append(...sectionElements);
-
-            // Wait 5 seconds
-            //await new Promise(resolve => setTimeout(resolve, 500));
-
-            // Set up section reveal animations if enabled
+            // Set up section reveal animations if enabled (opacity/transform only — no display toggle)
             if (revealSectionsSequentially) {
                 initializeSectionRevealObserver();
                 sectionEnhancementTargets.forEach(({ element }) => {
-                    element.style.display = '';
                     observeSectionForReveal(element);
                 });
             }
@@ -2318,7 +3212,7 @@
             const enhanceOptions = {
                 enhanceOnVisible,
                 enhanceRootMargin,
-                revealSectionsSequentially
+                revealSectionsSequentially,
             };
 
             for (let index = 0; index < sectionEnhancementTargets.length; index++) {
@@ -2346,7 +3240,7 @@
          * @param {string} title - Section title
          * @param {Object} options - Configuration options
          */
-        renderProgressiveCards: function(container, itemsOrPromise, title, options = {}) {
+        renderProgressiveCards: function (container, itemsOrPromise, title, options = {}) {
             const {
                 spotlight = false,
                 viewMoreUrl = null,
@@ -2357,7 +3251,7 @@
                 sectionId = null,
                 order = null,
                 expectedItemType = null,
-                minimumItems = 1
+                minimumItems = 1,
             } = options;
 
             // Handle Random card format once
@@ -2406,27 +3300,35 @@
                 container.appendChild(skeleton);
 
                 // Handle Resolution
-                itemsOrPromise.then(items => {
-                    const content = renderContent(items);
-                    if (content) {
-                        setupElement(content);
-                        // Copy of any existing data attributes to the new content
-                        Array.from(skeleton.attributes).forEach(attr => {
-                            content.setAttribute(attr.name, attr.value);
-                        });
-                        skeleton.replaceWith(content);
-                        ensureCardBorders(content);
-                    } else {
+                itemsOrPromise
+                    .then((items) => {
+                        const content = renderContent(items);
+                        if (content) {
+                            setupElement(content);
+                            // Copy of any existing data attributes to the new content
+                            Array.from(skeleton.attributes).forEach((attr) => {
+                                if (attr.name === 'class') return;
+                                content.setAttribute(attr.name, attr.value);
+                            });
+                            stripCopiedSkeletonSectionClasses(content);
+                            unobserveSkeletonShimmer(skeleton);
+                            skeleton.replaceWith(content);
+                            ensureCardBorders(content);
+                            ensureSectionRevealObservation(content);
+                        } else {
+                            unobserveSkeletonShimmer(skeleton);
+                            skeleton.remove();
+                        }
+                    })
+                    .catch((err) => {
+                        console.error('[CardBuilder] Error loading items:', err);
+                        unobserveSkeletonShimmer(skeleton);
                         skeleton.remove();
-                    }
-                }).catch(err => {
-                    console.error('[CardBuilder] Error loading items:', err);
-                    skeleton.remove();
-                });
+                    });
 
                 return skeleton;
-            } 
-            
+            }
+
             // Handle Direct Array
             else {
                 const items = Array.isArray(itemsOrPromise) ? itemsOrPromise : [];
@@ -2439,9 +3341,17 @@
             }
         },
 
-        renderCardsFromIds: async function(itemIds, title, viewMoreUrl = null, overflowCard = false, cardFormat = null, sortOrder = null, sortOrderDirection = 'Ascending') {
+        renderCardsFromIds: async function (
+            itemIds,
+            title,
+            viewMoreUrl = null,
+            overflowCard = false,
+            cardFormat = null,
+            sortOrder = null,
+            sortOrderDirection = 'Ascending',
+        ) {
             const LOG = (...args) => console.log('[KefinTweaks CardBuilder]', ...args);
-            
+
             if (!itemIds || itemIds.length === 0) {
                 LOG(`No item IDs provided for section: ${title}`);
                 return createScrollableContainer([], title, viewMoreUrl, overflowCard, cardFormat);
@@ -2451,18 +3361,18 @@
                 // Fetch all items at once
                 const response = await ApiClient.getItems(ApiClient.getCurrentUserId(), {
                     Ids: itemIds.join(','),
-                    Recursive: false
+                    Recursive: false,
                 });
                 const items = response.Items;
-                
+
                 LOG(`Fetched ${items.length} items for section: ${title}`);
-                
+
                 // Handle Random card format - pick one format for entire section
                 let finalCardFormat = cardFormat;
                 if (cardFormat === 'random' || cardFormat === 'Random') {
                     finalCardFormat = getRandomCardFormat();
                 }
-                
+
                 // Sort items if sortOrder is provided
                 let sortedItems = items;
                 if (sortOrder && sortOrder !== 'Random') {
@@ -2470,7 +3380,7 @@
                 } else if (sortOrder === 'Random') {
                     sortedItems = shuffle([...items]);
                 }
-                
+
                 const container = createScrollableContainer(sortedItems, title, viewMoreUrl, overflowCard, finalCardFormat);
                 return container;
             } catch (error) {
@@ -2478,7 +3388,7 @@
                 return createScrollableContainer([], title, viewMoreUrl, overflowCard, cardFormat);
             }
         },
-        
+
         /**
          * Renders a spotlight section (Netflix-style slim banner carousel)
          * @param {Array|Promise<Array>} items - Array of Jellyfin item objects or Promise resolving to array
@@ -2487,9 +3397,9 @@
          * @param {boolean} options.progressiveEnhancement - If true and items is a Promise, render skeleton first
          * @returns {HTMLElement} - The constructed spotlight container
          */
-        renderSpotlightSection: function(items, title, options = {}) {
+        renderSpotlightSection: function (items, title, options = {}) {
             const { progressiveEnhancement = false } = options;
-            
+
             // If progressive enhancement is enabled and items is a Promise
             if (progressiveEnhancement && items && typeof items.then === 'function') {
                 // Create skeleton spotlight section immediately
@@ -2498,48 +3408,52 @@
                 // Add identifying data-id
                 const randomId = Math.random().toString(36).substring(2, 15);
                 skeletonSpotlightContainer.setAttribute('data-skeleton-id', randomId);
-                
-                // When promise resolves, replace skeleton with real spotlight
-                items.then(async items => {
-                    // Remove the skeleton container if it exists
-                    let skeletonContainerElement = document.querySelector(`[data-skeleton-id="${randomId}"]`);
-    
-                    // Let's try to find the skeleton 20 times every 100ms
-                    for (let i = 0; i < 20; i++) {
-                        skeletonContainerElement = document.querySelector(`[data-skeleton-id="${randomId}"]`);
-                        if (skeletonContainerElement) {
-                            break;
-                        }
-                        await new Promise(resolve => setTimeout(resolve, 150));
-                    }
 
-                    // Generate real spotlight section
-                    const realContainer = createSpotlightSection(items, title, options);
-                    
-                    // Copy critical attributes to preserve layout/order
-                    if (skeletonContainerElement.style.order) {
-                        realContainer.style.order = skeletonContainer.style.order;
-                    }
-                    if (skeletonContainerElement.hasAttribute('data-section-id')) {
-                        realContainer.setAttribute('data-section-id', skeletonContainerElement.getAttribute('data-section-id'));
-                    }
-                    
-                    // Replace skeleton container with real container
-                    skeletonContainerElement.replaceWith(realContainer);
-                }).catch(error => {
-                    console.error('[KefinTweaks CardBuilder] Error loading items for spotlight progressive enhancement:', error);
-                    // Optionally remove skeleton on error or show error state
-                    skeletonSpotlightContainer.remove();
-                });
+                // When promise resolves, replace skeleton with real spotlight
+                items
+                    .then(async (items) => {
+                        // Remove the skeleton container if it exists
+                        let skeletonContainerElement = document.querySelector(`[data-skeleton-id="${randomId}"]`);
+
+                        // Let's try to find the skeleton 20 times every 100ms
+                        for (let i = 0; i < 20; i++) {
+                            skeletonContainerElement = document.querySelector(`[data-skeleton-id="${randomId}"]`);
+                            if (skeletonContainerElement) {
+                                break;
+                            }
+                            await new Promise((resolve) => setTimeout(resolve, 150));
+                        }
+
+                        // Generate real spotlight section
+                        const realContainer = createSpotlightSection(items, title, options);
+
+                        // Copy critical attributes to preserve layout/order
+                        if (skeletonContainerElement.style.order) {
+                            realContainer.style.order = skeletonContainer.style.order;
+                        }
+                        if (skeletonContainerElement.hasAttribute('data-section-id')) {
+                            realContainer.setAttribute('data-section-id', skeletonContainerElement.getAttribute('data-section-id'));
+                        }
+
+                        // Replace skeleton container with real container
+                        unobserveSkeletonShimmer(skeletonContainerElement);
+                        skeletonContainerElement.replaceWith(realContainer);
+                    })
+                    .catch((error) => {
+                        console.error('[KefinTweaks CardBuilder] Error loading items for spotlight progressive enhancement:', error);
+                        // Optionally remove skeleton on error or show error state
+                        unobserveSkeletonShimmer(skeletonSpotlightContainer);
+                        skeletonSpotlightContainer.remove();
+                    });
 
                 return skeletonSpotlightContainer;
             }
-            
+
             // Normal rendering (items is already an array)
             const container = createSpotlightSection(items, title, options);
             return container;
         },
-        
+
         /**
          * Sorts items based on sort order and direction (exposed for use in homeScreen)
          * @param {Array} items - Array of Jellyfin items
@@ -2547,12 +3461,11 @@
          * @param {string} sortOrderDirection - Direction
          * @returns {Array} - Sorted array
          */
-        sortItems: function(items, sortOrder, sortOrderDirection) {
+        sortItems: function (items, sortOrder, sortOrderDirection) {
             return sortItems(items, sortOrder, sortOrderDirection);
         },
 
         updateCardResumeAttributes: updateCardResumeAttributes,
-        
     };
 
     /**
@@ -2614,11 +3527,7 @@
                     const intR = dc >> 16;
                     const intG = (dc >> 8) & 255;
                     const intB = dc & 255;
-                    components.push([
-                        blurhashSrgbToLinear(intR),
-                        blurhashSrgbToLinear(intG),
-                        blurhashSrgbToLinear(intB)
-                    ]);
+                    components.push([blurhashSrgbToLinear(intR), blurhashSrgbToLinear(intG), blurhashSrgbToLinear(intB)]);
                 } else {
                     const acVal = blurhashDecode83(blurhash, 4 + i * 2, 2);
                     if (isNaN(acVal)) return null;
@@ -2628,7 +3537,7 @@
                     components.push([
                         blurhashSignPow((quantR - 9) / 9, 2) * maxVal,
                         blurhashSignPow((quantG - 9) / 9, 2) * maxVal,
-                        blurhashSignPow((quantB - 9) / 9, 2) * maxVal
+                        blurhashSignPow((quantB - 9) / 9, 2) * maxVal,
                     ]);
                 }
             }
@@ -2636,7 +3545,9 @@
             const pixels = new Uint8ClampedArray(width * height * 4);
             for (let y = 0; y < height; y++) {
                 for (let x = 0; x < width; x++) {
-                    let r = 0, g = 0, b = 0;
+                    let r = 0,
+                        g = 0,
+                        b = 0;
                     for (let j = 0; j < numY; j++) {
                         const basisY = Math.cos((Math.PI * y * j) / height);
                         for (let i = 0; i < numX; i++) {
@@ -2715,10 +3626,14 @@
         if (!state.useBlurhash) return true;
         try {
             if (navigator.connection && navigator.connection.saveData === true) return true;
-        } catch (e) { /* ignore */ }
+        } catch (e) {
+            /* ignore */
+        }
         try {
             if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return true;
-        } catch (e) { /* ignore */ }
+        } catch (e) {
+            /* ignore */
+        }
         return false;
     }
 
@@ -2734,18 +3649,18 @@
         if (!canvas || !pixels || !canvas.isConnected) return false;
         const w = canvas.width || 20;
         const h = canvas.height || 20;
-        const ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
         if (!ctx) return false;
 
         const imageData = ctx.createImageData(w, h);
         imageData.data.set(pixels);
         ctx.putImageData(imageData, 0, 0);
+        canvas.setAttribute('data-blurhash-painted', 'true');
         canvas.removeAttribute('data-blurhash-pending');
 
         const cardImageContainer = canvas.nextElementSibling;
-        const imageAlreadyLoaded = cardImageContainer
-            && cardImageContainer.classList
-            && cardImageContainer.classList.contains('lazy-loaded');
+        const imageAlreadyLoaded =
+            cardImageContainer && cardImageContainer.classList && cardImageContainer.classList.contains('lazy-loaded');
 
         if (imageAlreadyLoaded) {
             canvas.classList.add('lazy-hidden');
@@ -2777,7 +3692,7 @@
             '  } catch (err) {',
             '    self.postMessage({ id: id, ok: false, error: String(err && err.message || err) });',
             '  }',
-            '};'
+            '};',
         ].join('\n');
     }
 
@@ -2803,8 +3718,16 @@
                 console.warn('[KefinTweaks CardBuilder] Blurhash worker error:', err);
                 blurhashWorkerPending.forEach((p) => p.reject(err));
                 blurhashWorkerPending.clear();
-                try { worker.terminate(); } catch (e) { /* ignore */ }
-                try { URL.revokeObjectURL(url); } catch (e) { /* ignore */ }
+                try {
+                    worker.terminate();
+                } catch (e) {
+                    /* ignore */
+                }
+                try {
+                    URL.revokeObjectURL(url);
+                } catch (e) {
+                    /* ignore */
+                }
                 blurhashWorker = null;
             };
             blurhashWorker = worker;
@@ -2900,7 +3823,7 @@
     }
 
     function observeBlurhashCanvas(canvas) {
-        if (!canvas || !canvas.hasAttribute('data-blurhash-pending')) return;
+            if (!canvas || !canvas.hasAttribute('data-blurhash-pending')) return;
         if (shouldSkipBlurhashDecode()) {
             canvas.removeAttribute('data-blurhash-pending');
             canvas.classList.add('lazy-hidden');
@@ -2915,20 +3838,23 @@
     }
 
     function initBlurhashFillObserver() {
-        if (blurhashFillObserver) return;
+            if (blurhashFillObserver) return;
         if (typeof IntersectionObserver === 'undefined') return;
 
-        blurhashFillObserver = new IntersectionObserver((entries) => {
-            entries.forEach((entry) => {
-                if (!entry.isIntersecting) return;
-                const canvas = entry.target;
-                blurhashFillObserver.unobserve(canvas);
-                fillBlurhashCanvas(canvas);
-            });
-        }, {
-            threshold: 0,
-            rootMargin: getBlurhashFillRootMargin()
-        });
+        blurhashFillObserver = new IntersectionObserver(
+            (entries) => {
+                entries.forEach((entry) => {
+                    if (!entry.isIntersecting) return;
+                    const canvas = entry.target;
+                    blurhashFillObserver.unobserve(canvas);
+                    fillBlurhashCanvas(canvas);
+                });
+            },
+            {
+                threshold: 0,
+                rootMargin: getBlurhashFillRootMargin(),
+            },
+        );
     }
 
     function observePendingBlurhashInNode(node) {
@@ -2954,22 +3880,19 @@
         cardFormat = cardFormat?.toLowerCase() || null;
 
         if (cardFormat === 'backdrop') {
-            if (item.BackdropImageTags && item.BackdropImageTags[0])
-                return hashes.Backdrop?.[item.BackdropImageTags[0]];
+            if (item.BackdropImageTags && item.BackdropImageTags[0]) return hashes.Backdrop?.[item.BackdropImageTags[0]];
             if (item.ImageTags?.Thumb) return hashes.Thumb?.[item.ImageTags.Thumb];
             if (item.ImageTags?.Primary) return hashes.Primary?.[item.ImageTags.Primary];
             return undefined;
         }
         if (cardFormat === 'square') {
             if (item.Type === 'Season' || item.Type === 'Series' || item.Type === 'Movie') {
-                if (item.BackdropImageTags && item.BackdropImageTags[0])
-                    return hashes.Backdrop?.[item.BackdropImageTags[0]];
+                if (item.BackdropImageTags && item.BackdropImageTags[0]) return hashes.Backdrop?.[item.BackdropImageTags[0]];
                 if (item.ImageTags?.Primary) return hashes.Primary?.[item.ImageTags.Primary];
                 return undefined;
             }
             if (item.ImageTags?.Primary) return hashes.Primary?.[item.ImageTags.Primary];
-            if (item.BackdropImageTags && item.BackdropImageTags[0])
-                return hashes.Backdrop?.[item.BackdropImageTags[0]];
+            if (item.BackdropImageTags && item.BackdropImageTags[0]) return hashes.Backdrop?.[item.BackdropImageTags[0]];
             if (item.ImageTags?.Thumb) return hashes.Thumb?.[item.ImageTags.Thumb];
             return undefined;
         }
@@ -2989,8 +3912,7 @@
             if (item.ParentThumbImageTag) return undefined;
             if (item.ParentBackdropImageTags && item.ParentBackdropImageTags[0]) return undefined;
             if (item.ImageTags?.Thumb) return hashes.Thumb?.[item.ImageTags.Thumb];
-            if (item.BackdropImageTags && item.BackdropImageTags[0])
-                return hashes.Backdrop?.[item.BackdropImageTags[0]];
+            if (item.BackdropImageTags && item.BackdropImageTags[0]) return hashes.Backdrop?.[item.BackdropImageTags[0]];
             if (item.ImageTags?.Primary) return hashes.Primary?.[item.ImageTags.Primary];
             return undefined;
         }
@@ -3008,8 +3930,7 @@
         if (item.IsJellyseerr) return undefined;
         if (item.ImageTags?.Primary) return hashes.Primary?.[item.ImageTags.Primary];
         if (item.ImageTags?.Thumb) return hashes.Thumb?.[item.ImageTags.Thumb];
-        if (item.BackdropImageTags && item.BackdropImageTags.length > 0)
-            return hashes.Backdrop?.[item.BackdropImageTags[0]];
+        if (item.BackdropImageTags && item.BackdropImageTags.length > 0) return hashes.Backdrop?.[item.BackdropImageTags[0]];
         return undefined;
     }
 
@@ -3021,25 +3942,38 @@
         const itemType = item?.Type;
         if (itemType === 'CollectionFolder' || item?.CollectionType) {
             switch ((item.CollectionType || '').toLowerCase()) {
-                case 'tvshows': return 'tv';
-                case 'movies': return 'movie';
-                case 'boxsets': return 'video_library';
-                case 'playlists': return 'queue';
-                case 'books': return 'book';
-                case 'music': return 'music_note';
-                case 'homevideos': return 'photo';
-                case 'folders': return 'folder';
-                case 'livetv': return 'live_tv';
-                default: return 'folder';
+                case 'tvshows':
+                    return 'tv';
+                case 'movies':
+                    return 'movie';
+                case 'boxsets':
+                    return 'video_library';
+                case 'playlists':
+                    return 'queue';
+                case 'books':
+                    return 'book';
+                case 'music':
+                    return 'music_note';
+                case 'homevideos':
+                    return 'photo';
+                case 'folders':
+                    return 'folder';
+                case 'livetv':
+                    return 'live_tv';
+                default:
+                    return 'folder';
             }
         }
         if (itemType === 'Movie') return 'movie';
-        if (itemType === 'Series') return 'tv';
-        if (itemType === 'Episode') return 'play_circle';
-        if (itemType === 'Person') return 'person';
+        if (itemType === 'Series' || itemType === 'Season') return 'tv';
+        if (itemType === 'Episode' || itemType === 'Video') return 'play_circle';
+        if (itemType === 'TvChannel' || itemType === 'Program') return 'live_tv';
+        if (itemType === 'Playlist') return 'queue';
+        if (itemType === 'BoxSet') return 'video_library';
+        if (itemType === 'Book') return 'book';
+        if (itemType === 'Person' || itemType === 'MusicArtist' || itemType === 'Artist') return 'person';
         if (itemType === 'MusicAlbum') return 'album';
         if (itemType === 'Audio') return 'music_note';
-        if (itemType === 'Artist' || itemType === 'MusicArtist') return 'person';
         return 'folder';
     }
 
@@ -3070,9 +4004,7 @@
     function createLibraryButtonElement(item) {
         const serverId = ApiClient.serverId();
         const icon = getItemMaterialIcon(item);
-        const href = item.cardUrl
-            || getCollectionFolderUrl(item, serverId)
-            || `#/details?id=${item.Id}&serverId=${serverId}`;
+        const href = item.cardUrl || getCollectionFolderUrl(item, serverId) || `#/details?id=${item.Id}&serverId=${serverId}`;
 
         const link = document.createElement('a');
         link.setAttribute('is', 'emby-linkbutton');
@@ -3102,9 +4034,17 @@
      * @param {string} cardFormat - Override card format: 'portrait', 'backdrop', 'thumb', 'square', 'series thumb', 'series poster'
      * @param {string} customFooterText - Optional custom footer text (e.g., air date for episodes)
      * @param {boolean} useParentCard - When true, the parent item will be rendered as the card image and link
+     * @param {string|null} borderStyle - Section card border style; used to gate retro marquee attrs
      * @returns {HTMLElement} - The constructed card element
      */
-    function createJellyfinCardElement(item, overflowCard = false, cardFormat = null, customFooterText = null, useParentCard = false) {
+    function createJellyfinCardElement(
+        item,
+        overflowCard = false,
+        cardFormat = null,
+        customFooterText = null,
+        useParentCard = false,
+        borderStyle = null,
+    ) {
         cardFormat = cardFormat?.toLowerCase() || null;
         if (cardFormat === 'button') {
             return createLibraryButtonElement(item);
@@ -3132,7 +4072,13 @@
 
         if (cardFormat) {
             // Use specified cardFormat
-            if (cardFormat === 'backdrop' || cardFormat === 'thumb' || cardFormat === 'series thumb' || cardFormat === 'logo' || cardFormat === 'clear art') {
+            if (
+                cardFormat === 'backdrop' ||
+                cardFormat === 'thumb' ||
+                cardFormat === 'series thumb' ||
+                cardFormat === 'logo' ||
+                cardFormat === 'clear art'
+            ) {
                 cardClass = overflowCard ? 'overflowBackdropCard' : 'backdropCard';
                 padderClass = 'cardPadder-backdrop';
                 imageParams = 'fillHeight=267&fillWidth=474';
@@ -3168,21 +4114,23 @@
             }
         }
 
-        const cardLinkId = useParentCard && (item.SeriesId || item.ParentId) ? (item.SeriesId || item.ParentId) : itemId;
-        
+        const cardLinkId = useParentCard && (item.SeriesId || item.ParentId) ? item.SeriesId || item.ParentId : itemId;
+
         // Create the main card container
         const card = document.createElement('div');
-        card.className = `card ${cardClass} card-hoverable card-withuserdata`;
+        card.className = `card ${cardClass}${!isMobileLayout() ? " card-hoverable" : ""} card-withuserdata`;
         card.setAttribute('data-index', '0');
         card.setAttribute('data-isfolder', itemType === 'MusicAlbum' || itemType === 'Artist' || item.IsFolder ? 'true' : 'false');
         card.setAttribute('data-serverid', serverId);
         if (!isCustomCard) card.setAttribute('data-id', cardLinkId);
         if (isCustomCard) card.setAttribute('data-custom-card', 'true');
         card.setAttribute('data-type', itemType);
-        card.setAttribute('data-retro-marquee', getRetroPosterMarqueeLabel(item));
+        if (normalizeCardBorderStyle(borderStyle) === 'retro-poster') {
+            card.setAttribute('data-retro-marquee', getRetroPosterMarqueeLabel(item));
+        }
         const mediaType = item.MediaType === 'Unknown' && item.ChannelId ? 'Video' : item.MediaType;
         card.setAttribute('data-mediatype', mediaType || 'Video');
-        
+
         if (item.CollectionType) {
             card.setAttribute('data-collectiontype', item.CollectionType);
         }
@@ -3211,7 +4159,7 @@
 
         // Card box container
         const cardBox = document.createElement('div');
-        cardBox.className = `cardBox cardBox-bottompadded ${cardFormat === 'button' ? 'emby-button emby-button-foreground raised' : ''}`;
+        cardBox.className = `cardBox cardBox-bottompadded ${cardFormat === "button" ? "emby-button emby-button-foreground raised" : ""}`;
 
         // Card scalable container
         const cardScalable = document.createElement('div');
@@ -3220,14 +4168,14 @@
         // Card padder with icon
         const cardPadder = document.createElement('div');
         cardPadder.className = `cardPadder ${padderClass} lazy-hidden-children`;
-        
+
         const cardIcon = document.createElement('span');
         cardIcon.className = 'cardImageIcon material-icons';
         cardIcon.setAttribute('aria-hidden', 'true');
-        
+
         // Set icon based on item type
         cardIcon.textContent = getItemMaterialIcon(item);
-        
+
         cardPadder.appendChild(cardIcon);
 
         // Blurhash canvas (placeholder) – will be filled and shown when we have a blurhash
@@ -3252,8 +4200,8 @@
 
         let imageUrl = '';
 
-        const hasCustomImages = item.posterUrl || item.thumbUrl || item.squareUrl || item.imageUrl
-            || item.backdropUrl || item.bannerUrl || item.logoUrl;
+        const hasCustomImages =
+            item.posterUrl || item.thumbUrl || item.squareUrl || item.imageUrl || item.backdropUrl || item.bannerUrl || item.logoUrl;
 
         const imageItem = item.Type === 'Timer' ? item.ProgramInfo : item;
 
@@ -3294,10 +4242,15 @@
             } else if (useParentCard && item.SeriesPrimaryImageTag) {
                 imageUrl = `${serverAddress}/Items/${item.SeriesId}/Images/Primary?${imageParams}&quality=96&tag=${item.SeriesPrimaryImageTag}`;
             } else if (item.Type === 'Season' || item.Type === 'Series' || item.Type === 'Movie') {
-                imageUrl = item.BackdropImageTags && item.BackdropImageTags[0] ? `${serverAddress}/Items/${item.Id}/Images/Backdrop?${imageParams}&quality=96&tag=${item.BackdropImageTags[0]}` : item.ImageTags?.Primary ? `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.ImageTags?.Primary}` : '';
+                imageUrl =
+                    item.BackdropImageTags && item.BackdropImageTags[0]
+                        ? `${serverAddress}/Items/${item.Id}/Images/Backdrop?${imageParams}&quality=96&tag=${item.BackdropImageTags[0]}`
+                        : item.ImageTags?.Primary
+                            ? `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.ImageTags?.Primary}`
+                            : '';
             } else if (item.ImageTags?.Primary) {
                 imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.ImageTags?.Primary}`;
-            } else if (item.PrimaryImageTag && item.Type === 'Episode') { 
+            } else if (item.PrimaryImageTag && item.Type === 'Episode') {
                 imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.PrimaryImageTag}`;
             } else if (item.BackdropImageTags && item.BackdropImageTags[0]) {
                 imageUrl = `${serverAddress}/Items/${item.Id}/Images/Backdrop?${imageParams}&quality=96&tag=${item.BackdropImageTags[0]}`;
@@ -3309,12 +4262,12 @@
                 imageUrl = `${serverAddress}/Items/${item.ParentThumbItemId}/Images/Thumb?${imageParams}&quality=96&tag=${item.ParentThumbImageTag}`;
             } else if (item.SeriesPrimaryImageTag) {
                 imageUrl = `${serverAddress}/Items/${item.SeriesId}/Images/Primary?${imageParams}&quality=96&tag=${item.SeriesPrimaryImageTag}`;
-            } else if (item.PrimaryImageTag) { 
+            } else if (item.PrimaryImageTag) {
                 imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.PrimaryImageTag}`;
-            } 
+            }
         } else if (cardFormat === 'portrait' || cardFormat === 'poster') {
             if ((useParentCard || item.Type === 'Episode') && item.SeriesPrimaryImageTag) {
-                imageUrl = `${serverAddress}/Items/${item.SeriesId}/Images/Primary?${imageParams}&quality=96&tag=${item.SeriesPrimaryImageTag}`;                
+                imageUrl = `${serverAddress}/Items/${item.SeriesId}/Images/Primary?${imageParams}&quality=96&tag=${item.SeriesPrimaryImageTag}`;
             } else if (item.ImageTags?.Primary) {
                 imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.ImageTags?.Primary}`;
             } else if (item.PrimaryImageTag) {
@@ -3394,19 +4347,15 @@
             imageUrl = `${serverAddress}/Items/${itemId}/Images/Logo?${imageParams}&quality=96&tag=${logoTag}`;
         } else if (cardFormat === 'clear art' && item.ImageTags?.Art) {
             imageUrl = `${serverAddress}/Items/${item.Id}/Images/Art?${imageParams}&quality=96&tag=${item.ImageTags.Art}`;
-        } else if (cardFormat === 'banner') {
-            if (item.ImageTags?.Banner) {
-                imageUrl = `${serverAddress}/Items/${item.Id}/Images/Banner?${imageParams}&quality=96&tag=${item.ImageTags.Banner}`;
-            } else {
-                imageUrl = `${serverAddress}/Items/${item.SeriesId || item.ParentId}/Images/Banner?${imageParams}&quality=96`;
-            }
+        } else if (cardFormat === 'banner' && item.ImageTags?.Banner) {
+            imageUrl = `${serverAddress}/Items/${item.Id}/Images/Banner?${imageParams}&quality=96&tag=${item.ImageTags.Banner}`;
         } else if (cardFormat === 'disc' && item.ImageTags?.Disc) {
             imageUrl = `${serverAddress}/Items/${item.Id}/Images/Disc?${imageParams}&quality=96&tag=${item.ImageTags.Disc}`;
         } else if (item.ImageTags?.Primary) {
             if (item.IsJellyseerr) {
                 // Jellyseerr items use external image URLs
-                imageUrl = item.ImageTags.Primary.startsWith('http') 
-                    ? item.ImageTags.Primary 
+                imageUrl = item.ImageTags.Primary.startsWith('http')
+                    ? item.ImageTags.Primary
                     : `https://image.tmdb.org/t/p/w500${item.ImageTags.Primary}`;
             } else {
                 // Regular Jellyfin items
@@ -3414,9 +4363,9 @@
             }
         } else if (item.ImageTags?.Thumb) {
             imageUrl = `${serverAddress}/Items/${item.Id}/Images/Thumb?${imageParams}&quality=96&tag=${item.ImageTags.Thumb}`;
-        } else if ((item.Type === 'Season') && item.SeriesPrimaryImageTag) {
+        } else if (item.Type === 'Season' && item.SeriesPrimaryImageTag) {
             imageUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?${imageParams}&quality=96&tag=${item.SeriesPrimaryImageTag}`;
-        } else if ((item.Type === 'Episode') && item.ParentThumbImageTag) {
+        } else if (item.Type === 'Episode' && item.ParentThumbImageTag) {
             imageUrl = `${serverAddress}/Items/${item.ParentThumbItemId}/Images/Thumb?${imageParams}&quality=96&tag=${item.ParentThumbImageTag}`;
         } else if (item.BackdropImageTags && item.BackdropImageTags.length > 0) {
             imageUrl = `${serverAddress}/Items/${item.Id}/Images/Backdrop?${imageParams}&quality=96&tag=${item.BackdropImageTags[0]}`;
@@ -3425,28 +4374,36 @@
         }
 
         // Card image container
-        const cardImageContainer = document.createElement('a');
-        cardImageContainer.href = cardUrl;
-        cardImageContainer.className = `cardImageContainer ${!imageUrl ? 'defaultCardBackground' + state.defaultCardBackgroundNumber++ : ''} coveredImage cardContent itemAction lazy blurhashed lazy-image-fadein-fast`;
-        cardImageContainer.setAttribute('data-action', 'link');
+        const cardImageContainer = isCustomCard ? document.createElement('div') : document.createElement('a');
+        if (!isCustomCard) {
+            cardImageContainer.href = cardUrl;
+            cardImageContainer.setAttribute('data-action', 'link');
+        }
+
+        const defaultBgClass = !imageUrl ? `defaultCardBackground${state.defaultCardBackgroundNumber++} ` : '';
+        cardImageContainer.className =
+            `cardImageContainer ${!imageUrl || imageUrl.length === 0 ? "defaultCardBackground " : ""}${defaultBgClass}coveredImage cardContent itemAction lazy blurhashed lazy-image-fadein-fast`
+                .replace(/\s+/g, ' ')
+                .trim();
         cardImageContainer.setAttribute('aria-label', item.Name || 'Unknown');
 
         if (state.defaultCardBackgroundNumber > 5) {
             state.defaultCardBackgroundNumber = 1;
         }
-        
+
         // No image - add icon as inner element
         if (!imageUrl) {
             const iconSpan = document.createElement('span');
             iconSpan.className = 'cardImageIcon material-icons';
             iconSpan.setAttribute('aria-hidden', 'true');
-        
+
             // Set icon based on item type
-            iconSpan.textContent = getItemMaterialIcon(item);            
+            iconSpan.textContent = getItemMaterialIcon(item);
             cardImageContainer.appendChild(iconSpan);
         }
 
         const blurhashStr = !item.imageUrl ? getBlurhashForCard(item, cardFormat) : null;
+        let includeKefinBlurhashCanvas = true;
         if (!blurhashStr || cardFormat === 'logo' || cardFormat === 'clear art' || cardFormat === 'disc') {
             blurhashCanvas.classList.add('lazy-hidden');
         } else if (shouldSkipBlurhashDecode()) {
@@ -3461,11 +4418,7 @@
         if (imageUrl) {
             // Use data-src for lazy loading instead of immediate backgroundImage
             cardImageContainer.setAttribute('data-src', imageUrl);
-            if (blurhashStr
-                && state.useBlurhash
-                && cardFormat !== 'logo'
-                && cardFormat !== 'clear art'
-                && cardFormat !== 'disc') {
+            if (blurhashStr && state.useBlurhash && cardFormat !== 'logo' && cardFormat !== 'clear art' && cardFormat !== 'disc') {
                 cardImageContainer.setAttribute('data-blurhash', blurhashStr);
             }
             // Add lazy class for styling/selection
@@ -3538,43 +4491,85 @@
                 itemProgressBar.appendChild(itemProgressBarForeground);
                 innerCardFooter.appendChild(itemProgressBar);
                 cardImageContainer.appendChild(innerCardFooter);
-            }
-
-            if (item.ChannelId && item.StartDate && item.RunTimeTicks && (Date.now() >= new Date(item.StartDate).getTime() && Date.now() <= new Date(item.EndDate).getTime())) {
-                // Get current progress based on current time and StartDate + EndDate
-                const progress = (new Date().getTime() - new Date(item.StartDate).getTime()) / (new Date(item.EndDate).getTime() - new Date(item.StartDate).getTime());
-                const progressPercentage = progress * 100;
-
-                const innerCardFooter = document.createElement('div');
-                innerCardFooter.className = 'innerCardFooter fullInnerCardFooter innerCardFooterClear';
-                cardBox.appendChild(innerCardFooter);
-                const itemProgressBar = document.createElement('div');
-                itemProgressBar.className = 'itemProgressBar';
-                const itemProgressBarForeground = document.createElement('div');
-                itemProgressBarForeground.className = 'itemProgressBarForeground';
-                itemProgressBarForeground.style.width = `${progressPercentage}%`;
-                itemProgressBar.appendChild(itemProgressBarForeground);
-                innerCardFooter.appendChild(itemProgressBar);
-                cardImageContainer.appendChild(innerCardFooter);
+            } else if (item.Type === 'Program') {
+                const isOnNow = Date.now() >= new Date(item.StartDate).getTime() && Date.now() <= new Date(item.EndDate).getTime()
+                if (isOnNow) {
+                    const progress = (Date.now() - new Date(item.StartDate).getTime()) / (new Date(item.EndDate).getTime() - new Date(item.StartDate).getTime());
+                    const progressPercentage = Math.round(progress * 100);
+                    const innerCardFooter = document.createElement('div');
+                    innerCardFooter.className = 'innerCardFooter fullInnerCardFooter innerCardFooterClear';
+                    cardBox.appendChild(innerCardFooter);
+                    const itemProgressBar = document.createElement('div');
+                    itemProgressBar.className = 'itemProgressBar';
+                    const itemProgressBarForeground = document.createElement('div');
+                    itemProgressBarForeground.className = 'itemProgressBarForeground';
+                    itemProgressBarForeground.style.width = `${progressPercentage}%`;
+                    itemProgressBar.appendChild(itemProgressBarForeground);
+                    innerCardFooter.appendChild(itemProgressBar);
+                    cardImageContainer.appendChild(innerCardFooter);
+                }
             }
         }
 
-        // Card overlay container
-        const cardOverlayContainer = document.createElement('div');
-        cardOverlayContainer.className = 'cardOverlayContainer itemAction';
-        cardOverlayContainer.setAttribute('data-action', 'link');
+        // Overlays: desktop = hover FAB + br actions; mobile = native bottom-right play only
+        const NON_PLAYABLE_TYPES = ['CollectionFolder', 'Folder', 'UserView', 'Virtual', 'Studio', 'Genre', 'Person'];
+        const NO_RATE_TYPES = ['UserView', 'CollectionFolder', 'Folder', 'Program', 'Timer', 'SeriesTimer', 'Channel'];
+        const canShowPlayOverlay =
+            !isCustomCard
+            && !NON_PLAYABLE_TYPES.includes(item.Type)
+            && item.LocationType !== 'Virtual'
+            && item.Type !== 'Person';
+        // Match jellyfin-web itemHelper.canMarkPlayed (cards: no Folder/CollectionFolder/UserView)
+        const canMarkPlayed =
+            item.Type !== 'Program'
+            && (
+                (item.MediaType === 'Video' && item.Type !== 'TvChannel')
+                || (item.MediaType === 'Audio' && item.Type === 'AudioBook')
+                || item.Type === 'Series'
+                || item.Type === 'Season'
+                || item.Type === 'BoxSet'
+                || item.MediaType === 'Book'
+            )
+            && !NON_PLAYABLE_TYPES.includes(item.Type);
+        // Match jellyfin-web itemHelper.canRate type denylist (do not gate on missing UserData)
+        const canRate = !NO_RATE_TYPES.includes(item.Type);
 
-        // Overlay link (first so it sits under buttons)
-        const overlayLink = document.createElement('a');
-        overlayLink.href = cardUrl;
-        overlayLink.className = 'cardImageContainer';
-        cardOverlayContainer.appendChild(overlayLink);
+        let cardOverlayContainer = null;
+        let mobileOverlayPlayButton = null;
 
-        if (!isCustomCard) {
-            // Play button
+        if (isCustomCard) {
+            cardOverlayContainer = document.createElement('div');
+            cardOverlayContainer.className = 'cardOverlayContainer';
+            const overlayLink = document.createElement('a');
+            overlayLink.href = cardUrl;
+            overlayLink.className = 'button-link';
+            overlayLink.setAttribute('is', 'emby-linkbutton');
+            if (!cardUrl.startsWith('/') && !cardUrl.startsWith('#')) {
+                overlayLink.setAttribute('target', '_blank');
+            }
+            cardOverlayContainer.appendChild(overlayLink);
+        } else if (isMobileLayout()) {
+            // Match jellyfin-web layoutManager.mobile: play button with cardOverlayButton-br on the button
+            if (canShowPlayOverlay) {
+                mobileOverlayPlayButton = document.createElement('button');
+                mobileOverlayPlayButton.type = 'button';
+                mobileOverlayPlayButton.className =
+                    'cardOverlayButton cardOverlayButton-br itemAction paper-icon-button-light';
+                mobileOverlayPlayButton.setAttribute('data-action', 'play');
+                mobileOverlayPlayButton.title = 'Play';
+                const playIcon = document.createElement('span');
+                playIcon.className = 'material-icons cardOverlayButtonIcon play_arrow';
+                playIcon.setAttribute('aria-hidden', 'true');
+                mobileOverlayPlayButton.appendChild(playIcon);
+            }
+        } else {
+            cardOverlayContainer = document.createElement('div');
+            cardOverlayContainer.className = 'cardOverlayContainer itemAction';
+            cardOverlayContainer.setAttribute('data-action', 'link');
+
             const playButton = document.createElement('button');
-            playButton.setAttribute('is', 'paper-icon-button-light');
-            playButton.className = 'cardOverlayButton cardOverlayButton-hover itemAction paper-icon-button-light cardOverlayFab-primary';
+            playButton.className =
+                'cardOverlayButton cardOverlayButton-hover itemAction paper-icon-button-light cardOverlayFab-primary';
             playButton.setAttribute('data-action', 'resume');
 
             const playIcon = document.createElement('span');
@@ -3582,17 +4577,16 @@
             playIcon.setAttribute('aria-hidden', 'true');
             playButton.appendChild(playIcon);
 
-            // Button container for additional overlay buttons (watchlist, etc.)
             const buttonContainer = document.createElement('div');
             buttonContainer.className = 'cardOverlayButton-br flex';
 
-            // Watchlist button (active state from UserData.Likes; click bound by watchlist.js)
             const watchlistSupportedTypes = ['Movie', 'Series', 'Season', 'Episode', 'BoxSet', 'Playlist', 'Video'];
-            if (watchlistSupportedTypes.includes(itemType)) {
+            if (state.watchlist && watchlistSupportedTypes.includes(itemType)) {
                 const isLiked = item.UserData?.Likes === true;
                 const watchlistButton = document.createElement('button');
                 watchlistButton.type = 'button';
-                watchlistButton.className = 'watchlist-button cardOverlayButton cardOverlayButton-hover itemAction paper-icon-button-light emby-button button-flat';
+                watchlistButton.className =
+                    'watchlist-button cardOverlayButton cardOverlayButton-hover itemAction paper-icon-button-light emby-button button-flat';
                 watchlistButton.setAttribute('data-action', 'none');
                 watchlistButton.setAttribute('data-id', itemId);
                 watchlistButton.setAttribute('data-active', isLiked ? 'true' : 'false');
@@ -3605,45 +4599,46 @@
                 buttonContainer.appendChild(watchlistButton);
             }
 
-            // Watched button
-            const watchedButton = document.createElement('button');
-            watchedButton.setAttribute('is', 'emby-playstatebutton');
-            watchedButton.type = 'button';
-            watchedButton.setAttribute('data-action', 'none');
-            watchedButton.className = 'cardOverlayButton cardOverlayButton-hover itemAction paper-icon-button-light emby-button';
-            watchedButton.setAttribute('data-id', itemId);
-            watchedButton.setAttribute('data-serverid', serverId);
-            watchedButton.setAttribute('data-itemtype', itemType);
-            watchedButton.setAttribute('data-played', item.UserData?.Played || 'false');
-            watchedButton.title = 'Mark played';
+            if (canMarkPlayed) {
+                const watchedButton = document.createElement('button');
+                watchedButton.setAttribute('is', 'emby-playstatebutton');
+                watchedButton.type = 'button';
+                watchedButton.setAttribute('data-action', 'none');
+                watchedButton.className = 'cardOverlayButton cardOverlayButton-hover itemAction paper-icon-button-light emby-button';
+                watchedButton.setAttribute('data-id', itemId);
+                watchedButton.setAttribute('data-serverid', serverId);
+                watchedButton.setAttribute('data-itemtype', itemType);
+                watchedButton.setAttribute('data-played', item.UserData?.Played || 'false');
+                watchedButton.title = 'Mark played';
 
-            const watchedIcon = document.createElement('span');
-            watchedIcon.className = 'material-icons cardOverlayButtonIcon cardOverlayButtonIcon-hover check playstatebutton-icon-unplayed';
-            watchedIcon.setAttribute('aria-hidden', 'true');
-            watchedButton.appendChild(watchedIcon);
-            buttonContainer.appendChild(watchedButton);
+                const watchedIcon = document.createElement('span');
+                watchedIcon.className = 'material-icons cardOverlayButtonIcon cardOverlayButtonIcon-hover check playstatebutton-icon-unplayed';
+                watchedIcon.setAttribute('aria-hidden', 'true');
+                watchedButton.appendChild(watchedIcon);
+                buttonContainer.appendChild(watchedButton);
+            }
 
-            // Favorite button
-            const favoriteButton = document.createElement('button');
-            favoriteButton.setAttribute('is', 'emby-ratingbutton');
-            favoriteButton.type = 'button';
-            favoriteButton.setAttribute('data-action', 'none');
-            favoriteButton.className = 'cardOverlayButton cardOverlayButton-hover itemAction paper-icon-button-light emby-button';
-            favoriteButton.setAttribute('data-id', itemId);
-            favoriteButton.setAttribute('data-serverid', serverId);
-            favoriteButton.setAttribute('data-itemtype', itemType);
-            favoriteButton.setAttribute('data-likes', '');
-            favoriteButton.setAttribute('data-isfavorite', item.UserData?.IsFavorite || 'false');
-            favoriteButton.title = 'Add to favorites';
+            if (canRate) {
+                const favoriteButton = document.createElement('button');
+                favoriteButton.setAttribute('is', 'emby-ratingbutton');
+                favoriteButton.type = 'button';
+                favoriteButton.setAttribute('data-action', 'none');
+                favoriteButton.className = 'cardOverlayButton cardOverlayButton-hover itemAction paper-icon-button-light emby-button';
+                favoriteButton.setAttribute('data-id', itemId);
+                favoriteButton.setAttribute('data-serverid', serverId);
+                favoriteButton.setAttribute('data-itemtype', itemType);
+                favoriteButton.setAttribute('data-likes', '');
+                favoriteButton.setAttribute('data-isfavorite', item.UserData?.IsFavorite || 'false');
+                favoriteButton.title = 'Add to favorites';
 
-            const favoriteIcon = document.createElement('span');
-            favoriteIcon.className = 'material-icons cardOverlayButtonIcon cardOverlayButtonIcon-hover favorite';
-            favoriteIcon.setAttribute('aria-hidden', 'true');
-            favoriteButton.appendChild(favoriteIcon);
-            buttonContainer.appendChild(favoriteButton);
+                const favoriteIcon = document.createElement('span');
+                favoriteIcon.className = 'material-icons cardOverlayButtonIcon cardOverlayButtonIcon-hover favorite';
+                favoriteIcon.setAttribute('aria-hidden', 'true');
+                favoriteButton.appendChild(favoriteIcon);
+                buttonContainer.appendChild(favoriteButton);
+            }
 
             const moreButton = document.createElement('button');
-            moreButton.setAttribute('is', 'paper-icon-button-light');
             moreButton.className = 'cardOverlayButton cardOverlayButton-hover itemAction paper-icon-button-light';
             moreButton.setAttribute('data-action', 'menu');
             moreButton.title = 'More';
@@ -3651,10 +4646,9 @@
             moreIcon.className = 'material-icons cardOverlayButtonIcon cardOverlayButtonIcon-hover more_vert';
             moreIcon.setAttribute('aria-hidden', 'true');
             moreButton.appendChild(moreIcon);
-
             buttonContainer.appendChild(moreButton);
 
-            if (item.Type !== 'CollectionFolder' && item.Type !== 'Folder' && item.Type !== 'UserView') {
+            if (canShowPlayOverlay) {
                 cardOverlayContainer.appendChild(playButton);
             }
             cardOverlayContainer.appendChild(buttonContainer);
@@ -3683,7 +4677,11 @@
             const cardFooterSecondaryText = document.createElement('div');
             cardFooterSecondaryText.className = 'cardText cardText-secondary';
             // format the start and end time to 12:21 AM - 2:39 AM
-            const startTime = new Date(parentItem.StartDate).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+            const startTime = new Date(parentItem.StartDate).toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true,
+            });
             const endTime = new Date(parentItem.EndDate).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
             cardFooterSecondaryText.textContent = startTime + ' - ' + endTime;
             cardFooter.appendChild(cardFooterSecondaryText);
@@ -3713,7 +4711,8 @@
             const secondaryText = document.createElement('div');
             secondaryText.className = 'cardText cardTextCentered cardText-secondary';
             const episodeLink = document.createElement('a');
-            const episodeName = item.IndexNumber && item.ParentIndexNumber ? `S${item.ParentIndexNumber}:E${item.IndexNumber} - ${item.Name}` : item.Name;
+            const episodeName =
+                item.IndexNumber && item.ParentIndexNumber ? `S${item.ParentIndexNumber}:E${item.IndexNumber} - ${item.Name}` : item.Name;
             episodeLink.href = `${ApiClient._serverAddress}/web/#/details?id=${itemId}&serverId=${serverId}`;
             episodeLink.className = 'itemAction textActionButton';
             if (!isCustomCard) episodeLink.setAttribute('data-id', itemId);
@@ -3730,7 +4729,7 @@
             episodeBdi.appendChild(episodeLink);
             secondaryText.appendChild(episodeBdi);
             cardTextFragment.appendChild(secondaryText);
-            
+
             // Add custom footer text if provided (e.g., air date)
             if (customFooterText) {
                 const footerText = document.createElement('div');
@@ -3800,8 +4799,11 @@
             titleLink.setAttribute('data-type', itemType);
             titleLink.setAttribute('data-mediatype', 'undefined');
             titleLink.setAttribute('data-channelid', 'undefined');
-            titleLink.setAttribute('data-isfolder', itemType === 'MusicAlbum' || itemType === 'Artist' || itemType === 'MusicArtist' || item.IsFolder ? 'true' : 'false');
-            
+            titleLink.setAttribute(
+                'data-isfolder',
+                itemType === 'MusicAlbum' || itemType === 'Artist' || itemType === 'MusicArtist' || item.IsFolder ? 'true' : 'false',
+            );
+
             if (item.CollectionType) {
                 titleLink.setAttribute('data-collectiontype', item.CollectionType);
             }
@@ -3821,8 +4823,10 @@
 
             if (itemType === 'Series' && item.Status === 'Continuing') {
                 secondaryTextContent = item.ProductionYear + ' - Present';
-            } else if (itemType === 'Series' && item.EndDate) {
+            } else if (itemType === 'Series' && item.EndDate && item.ProductionYear && item.EndDate.substring(0, 4) !== String(item.ProductionYear)) {
                 secondaryTextContent = item.ProductionYear + ' - ' + item.EndDate.substring(0, 4);
+            } else if (item.Type === 'Program') {
+                secondaryTextContent = new Date(item.StartDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
             }
 
             const secondaryText = document.createElement('div');
@@ -3839,14 +4843,38 @@
                 footerBdi.textContent = item.CustomFooterText;
                 footerText.appendChild(footerBdi);
                 cardTextFragment.appendChild(footerText);
+            } else if (item.Type === 'Program') {
+                // Format the HH:mm - HH:mm based on local time
+                const timeOptions = { hour: '2-digit', minute: '2-digit', hour12: true };
+                let startTime = new Date(item.StartDate).toLocaleTimeString('en-US', timeOptions).replace('AM', 'a.m.').replace('PM', 'p.m.').toLowerCase();
+                let endTime = new Date(item.EndDate).toLocaleTimeString('en-US', timeOptions).replace('AM', 'a.m.').replace('PM', 'p.m.').toLowerCase();
+
+                // Strip leading zero from hour (e.g., 01:00 a.m. -> 1:00 a.m.)
+                startTime = startTime.replace(/^0(\d:)/, '$1');
+                endTime = endTime.replace(/^0(\d:)/, '$1');
+
+                secondaryTextContent = startTime + ' - ' + endTime;
+
+                const footerText = document.createElement('div');
+                footerText.className = 'cardText cardTextCentered cardText-secondary';
+                const footerBdi = document.createElement('bdi');
+                footerBdi.textContent = secondaryTextContent;
+                footerText.appendChild(footerBdi);
+                cardTextFragment.appendChild(footerText);
             }
         }
 
         // Assemble card (blurhash already drawn above when blurhashStr was set)
         cardScalable.appendChild(cardPadder);
-        cardScalable.appendChild(blurhashCanvas);
+        if (includeKefinBlurhashCanvas) {
+            cardScalable.appendChild(blurhashCanvas);
+        }
         cardScalable.appendChild(cardImageContainer);
-        cardScalable.appendChild(cardOverlayContainer);
+        if (mobileOverlayPlayButton) {
+            cardScalable.appendChild(mobileOverlayPlayButton);
+        } else if (cardOverlayContainer) {
+            cardScalable.appendChild(cardOverlayContainer);
+        }
         cardScalable.appendChild(createCardBorderHost());
 
         cardBox.appendChild(cardScalable);
@@ -3858,32 +4886,290 @@
         } else {
             cardBox.appendChild(cardTextFragment);
         }
-        
+
         card.appendChild(cardBox);
 
-        ensureCardRadiusCssVar();
+        /* ensureCardRadiusCssVar();
         if (cachedCardRadius == null) {
             requestAnimationFrame(() => ensureCardRadiusCssVar());
-        }
+        } */
 
         return card;
     }
 
     /**
-     * Renders a spotlight section (Netflix-style slim banner carousel)
-     * @param {Array} items - Array of Jellyfin item objects
+     * TV layout detection (Jellyfin sets layout-tv on <html>).
+     * Evaluated at call time so Display Mode changes are respected after re-render.
+     */
+    function isTvLayout() {
+        return document.documentElement.classList.contains('layout-tv');
+    }
+
+    /** Feature-detect flex gap once; JMP/Qt WebEngine often lacks it. */
+    function ensureNoFlexGapClass() {
+        const root = document.documentElement;
+        if (root.dataset.kefinFlexGapChecked === 'true') return;
+        root.dataset.kefinFlexGapChecked = 'true';
+        try {
+            const probe = document.createElement('div');
+            probe.style.cssText =
+                'display:flex;gap:1px;position:absolute;left:-9999px;top:0;width:auto;height:auto;visibility:hidden';
+            const a = document.createElement('div');
+            const b = document.createElement('div');
+            a.style.cssText = 'width:1px;height:1px';
+            b.style.cssText = 'width:1px;height:1px';
+            probe.appendChild(a);
+            probe.appendChild(b);
+            document.body.appendChild(probe);
+            const supported = probe.scrollWidth >= 3;
+            probe.remove();
+            root.classList.toggle('no-flex-gap', !supported);
+        } catch (_) {
+            root.classList.add('no-flex-gap');
+        }
+    }
+
+    function isFocusableTvEl(el) {
+        if (!el || el.nodeType !== 1) return false;
+        if (el.getAttribute('tabindex') === '-1') return false;
+        if (el.disabled || el.getAttribute('aria-hidden') === 'true') return false;
+        const tag = el.tagName;
+        if (tag === 'A' && el.hasAttribute('href')) return true;
+        if (tag === 'BUTTON' || tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return true;
+        const ti = el.getAttribute('tabindex');
+        return ti != null && ti !== '' && Number(ti) >= 0;
+    }
+
+    function getTvFocusables(root) {
+        if (!root?.querySelectorAll) return [];
+        return Array.from(root.querySelectorAll('a[href], button, [tabindex]')).filter(isFocusableTvEl);
+    }
+
+    /** Leftmost TV focus stop in spotlight header (skips plain section labels). */
+    function getFirstSpotlightHeaderFocusable(headerCluster) {
+        if (!headerCluster) return null;
+        return getTvFocusables(headerCluster)[0] || null;
+    }
+
+    function focusTvEl(el) {
+        if (!el || typeof el.focus !== 'function') return false;
+        try {
+            el.focus({ preventScroll: true });
+        } catch (_) {
+            el.focus();
+        }
+        return document.activeElement === el;
+    }
+
+    function getMetadataLinkFocusables(metaContainer) {
+        if (!metaContainer) return [];
+        return Array.from(
+            metaContainer.querySelectorAll(
+                'a.spotlight-genre-link, a.spotlight-person-link, a.spotlight-studio-link',
+            ),
+        ).filter((el) => el.getAttribute('tabindex') !== '-1' || metaContainer.dataset.metadataDrilled === 'true');
+    }
+
+    function getMetadataRows(metaContainer) {
+        if (!metaContainer) return [];
+        return Array.from(metaContainer.querySelectorAll(':scope > .spotlight-metadata-row'));
+    }
+
+    function setMetadataDrilled(metaContainer, drilled) {
+        if (!metaContainer) return;
+        metaContainer.dataset.metadataDrilled = drilled ? 'true' : 'false';
+        const links = metaContainer.querySelectorAll(
+            'a.spotlight-genre-link, a.spotlight-person-link, a.spotlight-studio-link',
+        );
+        links.forEach((link) => {
+            if (drilled) {
+                link.classList.add('show-focus');
+                if (link.getAttribute('tabindex') === '-1') link.removeAttribute('tabindex');
+            } else {
+                link.setAttribute('tabindex', '-1');
+            }
+        });
+        if (drilled) {
+            metaContainer.setAttribute('tabindex', '-1');
+        } else {
+            metaContainer.setAttribute('tabindex', '0');
+            metaContainer.classList.add('show-focus');
+        }
+    }
+
+    function collapseAllMetadataDrillIn(root) {
+        root?.querySelectorAll?.('.metadata-container').forEach((meta) => {
+            setMetadataDrilled(meta, false);
+        });
+    }
+
+    /**
+     * Prefer TV button cards when layout-tv is active; otherwise desktop cards.
+     */
+    function createCardElement(
+        item,
+        overflowCard = false,
+        cardFormat = null,
+        customFooterText = null,
+        useParentCard = false,
+        borderStyle = null,
+    ) {
+        if (isTvLayout()) {
+            return buildTvCardElement(item, overflowCard, cardFormat, customFooterText, useParentCard, borderStyle);
+        }
+        return createJellyfinCardElement(item, overflowCard, cardFormat, customFooterText, useParentCard, borderStyle);
+    }
+
+    /**
+     * Convert a desktop card DOM tree into a Jellyfin TV focusable button card.
+     * Reuses desktop image/footer construction, then strips hover overlays and linked titles.
+     */
+    function convertDesktopCardToTvButton(sourceCard, item) {
+        const button = document.createElement('button');
+        button.type = 'button';
+
+        Array.from(sourceCard.attributes).forEach((attr) => {
+            if (attr.name === 'class') return;
+            button.setAttribute(attr.name, attr.value);
+        });
+
+        const classes = String(sourceCard.className || '')
+            .split(/\s+/)
+            .filter((c) => c && c !== 'card-hoverable');
+        if (!classes.includes('show-focus')) classes.push('show-focus');
+        if (!classes.includes('show-animation')) classes.push('show-animation');
+        if (!classes.includes('itemAction')) classes.push('itemAction');
+        button.className = classes.join(' ');
+        button.setAttribute('data-action', 'link');
+        button.setAttribute('aria-label', item?.Name || sourceCard.getAttribute('aria-label') || 'Unknown');
+
+        while (sourceCard.firstChild) {
+            button.appendChild(sourceCard.firstChild);
+        }
+
+        const imageLink = button.querySelector('a.cardImageContainer');
+        if (imageLink) {
+            const imageDiv = document.createElement('div');
+            Array.from(imageLink.attributes).forEach((attr) => {
+                if (attr.name === 'href') return;
+                imageDiv.setAttribute(attr.name, attr.value);
+            });
+            while (imageLink.firstChild) {
+                imageDiv.appendChild(imageLink.firstChild);
+            }
+            imageLink.replaceWith(imageDiv);
+        }
+
+        button.querySelectorAll('.cardOverlayContainer').forEach((el) => el.remove());
+
+        button.querySelectorAll('a.textActionButton').forEach((link) => {
+            const text = link.textContent || '';
+            const bdi = link.closest('bdi');
+            if (bdi) {
+                bdi.textContent = text;
+            } else {
+                link.replaceWith(document.createTextNode(text));
+            }
+        });
+
+        // Match Jellyfin TV backdrop image request size when easy
+        const imageEl = button.querySelector('.cardImageContainer[data-src]');
+        if (imageEl) {
+            const src = imageEl.getAttribute('data-src') || '';
+            if (src.includes('fillHeight=267') && src.includes('fillWidth=474')) {
+                imageEl.setAttribute(
+                    'data-src',
+                    src
+                        .replace('fillHeight=267', 'fillHeight=335')
+                        .replace('fillWidth=474', 'fillWidth=596'),
+                );
+            }
+        }
+
+        // Custom / external cards: overlay link was removed — navigate on activate
+        const customUrl = item?.cardUrl;
+        if (customUrl) {
+            button.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (customUrl.startsWith('#') || customUrl.startsWith('/')) {
+                    window.location.href = customUrl;
+                } else {
+                    window.open(customUrl, '_blank', 'noopener,noreferrer');
+                }
+            });
+        }
+
+        return button;
+    }
+
+    /**
+     * Dedicated TV card builder (button root, no overlays, plain titles).
+     * Same argument shape as createJellyfinCardElement.
+     */
+    function buildTvCardElement(
+        item,
+        overflowCard = false,
+        cardFormat = null,
+        customFooterText = null,
+        useParentCard = false,
+        borderStyle = null,
+    ) {
+        const normalizedFormat = (cardFormat || '').toLowerCase() || null;
+        if (normalizedFormat === 'button') {
+            const libraryButton = createLibraryButtonElement(item);
+            libraryButton.classList.add('show-focus', 'show-animation', 'itemAction');
+            if (!libraryButton.getAttribute('data-action')) {
+                libraryButton.setAttribute('data-action', 'link');
+            }
+            return libraryButton;
+        }
+
+        const desktopCard = createJellyfinCardElement(
+            item,
+            overflowCard,
+            cardFormat,
+            customFooterText,
+            useParentCard,
+            borderStyle,
+        );
+        return convertDesktopCardToTvButton(desktopCard, item);
+    }
+
+    /**
+     * Resolve spotlight layout/size/tileCount from options (incl. legacy fullScreen).
+     * Shared by live create, skeleton create, and configure/defaults callers.
+     * @param {Object} [options]
+     * @param {boolean} [options.capForViewport=true] - Cap tileCount by viewport width
+     * @returns {{ layout: string, size: string, tileCount: number }}
+     */
+    function resolveSpotlightPresentation(options = {}) {
+        const fullScreen = options.fullScreen === true;
+        const layout = options.spotlightLayout ?? (fullScreen ? 'Borderless' : 'Border');
+        const size = options.spotlightSize ?? (fullScreen ? 'full' : 'normal');
+        let tileCount = options.tileCount;
+        if (tileCount == null || tileCount < 1 || tileCount > 3) {
+            tileCount = size === 'full' ? 1 : size === 'large' ? 2 : 3;
+        }
+        tileCount = Math.max(1, Math.min(3, Math.floor(tileCount)));
+        if (options.capForViewport !== false) {
+            const vw = window.innerWidth || 0;
+            if (vw < 900) tileCount = Math.min(tileCount, 1);
+            else if (vw < 1600) tileCount = Math.min(tileCount, 2);
+        }
+        return { layout, size, tileCount };
+    }
+
+    /**
+     * Creates a Netflix-style slim banner carousel (spotlight)
+     * @param {Array} itemsInput - Array of Jellyfin item objects
      * @param {string} title - Title for the spotlight section
      * @param {Object} options - Options for the spotlight carousel
-     * @param {boolean} options.autoPlay - Auto-cycle through items (default: true)
-     * @param {number} options.interval - Auto-play interval in ms (default: 10000)
-     * @param {boolean} options.showSlideState - Show slide state container (dots or numeric) (default: true)
-     * @param {boolean} options.showDots - When showSlideState is true: true = dots (max 5), false = numeric "N / X" (default: true)
-     * @param {boolean} options.showNavButtons - Show prev/next buttons (default: true)
-     * @param {boolean} options.pauseOnHover - Pause auto-cycle when cursor is over spotlight (default: true, false when fullScreen)
      * @returns {HTMLElement} - The constructed spotlight container
      */
-    function createSpotlightSection(items, title, options = {}) {
-        if (!items || items.length === 0) {
+    function createSpotlightSection(itemsInput, title, options = {}) {
+        let items = Array.isArray(itemsInput) ? itemsInput.slice() : [];
+        if (!items.length) {
             return document.createElement('div');
         }
 
@@ -3895,8 +5181,6 @@
             showNavButtons = true,
             showClearArt = false,
             panAnimation = true,
-            spotlightLayout,
-            spotlightSize,
             tileCount: tileCountOpt,
             cycleBackdrops = false,
             cycleBackdropsTime,
@@ -3908,17 +5192,14 @@
             slideAnimationSecond = 'kenBurnsZoomIn',
             slideAnimationThird = 'kenBurnsZoomIn',
             viewMoreUrl = null,
-            initialIndex = 0
+            initialIndex = 0,
+            /** Build DOM only — no timers/observers (for harvesting slides during in-place refresh). */
+            inert = false,
         } = options;
-        // Backward compat: derive layout/size from fullScreen if new keys missing
-        const fullScreen = options.fullScreen === true;
-        const layout = spotlightLayout ?? (fullScreen ? 'Borderless' : 'Border');
-        const size = spotlightSize ?? (fullScreen ? 'full' : 'normal');
-        let tileCount = tileCountOpt;
-        if (tileCount == null || tileCount < 1 || tileCount > 3) {
-            tileCount = size === 'full' ? 1 : size === 'large' ? 2 : 3;
-        }
-        tileCount = Math.max(1, Math.min(3, Math.floor(tileCount)));
+        const { layout, size, tileCount } = resolveSpotlightPresentation({
+            ...options,
+            tileCount: tileCountOpt,
+        });
         let backdropsCount = backdropsCountOpt;
         if (backdropsCount == null && cycleBackdropsTime > 0 && interval > 0) {
             backdropsCount = Math.max(1, Math.round(interval / cycleBackdropsTime));
@@ -3949,14 +5230,19 @@
         // Create main container
         const container = document.createElement('div');
         container.className = 'spotlight-section padded-left';
-        
+
         // Create banner container
         const bannerContainer = document.createElement('div');
         bannerContainer.className = 'spotlight-banner-container';
-        
+
+        // Header wraps title + nav so TV Left/Right stays in-family (one focuscontainer-x).
         // Title container hosts section name + refresh/configure controls.
         // Always create it so controls can attach even when the section has no name.
         {
+            const headerContainer = document.createElement('div');
+            headerContainer.className = 'spotlight-header-container';
+            if (isTvLayout()) headerContainer.classList.add('focuscontainer-x');
+
             const sectionTitleContainer = document.createElement('div');
             sectionTitleContainer.className = 'spotlight-section-title-container';
 
@@ -3965,12 +5251,14 @@
 
                 if (viewMoreUrl) {
                     const titleLink = document.createElement('a');
-                    titleLink.className = 'emby-tab-button emby-tab-button-active';
+                    titleLink.className = 'emby-tab-button emby-tab-button-active emby-button-foreground emby-button';
                     titleLink.textContent = title;
                     titleLink.title = 'See All';
                     titleLink.style.textDecoration = 'none';
+                    if (isTvLayout()) titleLink.classList.add('show-focus');
 
                     if (typeof viewMoreUrl === 'function') {
+                        if (isTvLayout()) titleLink.setAttribute('tabindex', '0');
                         titleLink.addEventListener('click', (e) => {
                             e.preventDefault();
                             e.stopPropagation();
@@ -3985,20 +5273,22 @@
 
                     sectionTitleEl = titleLink;
                 } else {
+                    // Label only — not a focus stop; section-controls / nav are first when entering header
                     sectionTitleEl = document.createElement('div');
-                    sectionTitleEl.className = 'emby-tab-button emby-tab-button-active emby-button-foreground';
+                    sectionTitleEl.className = 'emby-tab-button emby-tab-button-active emby-button-foreground emby-button';
                     sectionTitleEl.textContent = title;
                 }
 
                 const sectionTitleWrapper = document.createElement('div');
-                sectionTitleWrapper.className = `spotlight-section-title ${viewMoreUrl ? '' : 'spotlight-title-link '}headerTabs sectionTabs`;
+                sectionTitleWrapper.className = `spotlight-section-title ${viewMoreUrl ? "" : "spotlight-title-link "}headerTabs sectionTabs`;
                 sectionTitleWrapper.appendChild(sectionTitleEl);
                 sectionTitleContainer.appendChild(sectionTitleWrapper);
             }
 
-            bannerContainer.appendChild(sectionTitleContainer);
+            headerContainer.appendChild(sectionTitleContainer);
+            bannerContainer.appendChild(headerContainer);
         }
-        
+
         // Create items container (for fade transitions)
         const itemsContainer = document.createElement('div');
         itemsContainer.className = 'spotlight-items-container';
@@ -4015,7 +5305,7 @@
 
         function createAndAppendSlide(item, index, eagerLoadImages) {
             const itemType = item.Type || 'Movie';
-            
+
             const itemDiv = document.createElement('div');
             itemDiv.className = 'spotlight-item';
             itemDiv.setAttribute('data-id', item.Id);
@@ -4028,25 +5318,49 @@
             let backdropSources = [];
 
             if (item.Type === 'Episode' && Array.isArray(item.ParentBackdropImageTags) && item.ParentBackdropImageTags.length) {
-                backdropSources = item.ParentBackdropImageTags.map(tag => ({
+                backdropSources = item.ParentBackdropImageTags.map((tag) => ({
                     itemId: item.ParentBackdropItemId,
-                    tag
+                    tag,
                 }));
             } else if (Array.isArray(item.BackdropImageTags) && item.BackdropImageTags.length) {
-                backdropSources = item.BackdropImageTags.map(tag => ({
+                backdropSources = item.BackdropImageTags.map((tag) => ({
                     itemId: item.Id,
-                    tag
+                    tag,
                 }));
-            }
+            } else {
+				// Handle Custom items with static images
+				const customImageOrder = [
+					"backdropUrl",
+					"thumbUrl",
+					"bannerUrl",
+					"squareUrl",
+					"posterUrl",
+					"imageUrl",
+					"logoUrl"
+				];
+				for (const key of customImageOrder) {
+					const url = item[key];
+					if (typeof url === "string" && url.trim()) {
+						// Use custom URL as only 'backdrop' for static slides
+						backdropSources = [{
+							itemId: null,
+							tag: null,
+							url: url.trim(),
+							key
+						}];
+						break;
+					}
+				}
+			}
 
             // Set backdrop width based on layout-mobile presence
-            let backdropWidth = 0;
+            let backdropWidth = 2560;
             if (document.querySelector('.layout-mobile')) {
-                backdropWidth = 640;
+                backdropWidth = 1920;
             }
 
-            const buildBackdropUrl = (src, idx) =>
-                `${serverAddress}/Items/${src.itemId}/Images/Backdrop/${idx}?fillWidth=${backdropWidth}&quality=96&tag=${src.tag}`;
+            const buildBackdropUrl = (src, idx) => src.url ? src.url :
+                `${serverAddress}/Items/${src.itemId}/Images/Backdrop/${idx}?maxWidth=${backdropWidth}&quality=96&tag=${src.tag}`;
 
             /* Cap layers by available backdrops so we never build dual/triple with undefined sources. */
             const effectiveTileCount = Math.min(tileCount, Math.max(1, backdropSources.length));
@@ -4097,7 +5411,11 @@
                 rightImg.setAttribute('data-src', rightUrl);
                 rightImg.alt = '';
                 rightImg.draggable = false;
-                applyAnimationToImg(rightImg, effectiveTileCount >= 3 ? entranceAnimationThird : entranceAnimationSecond, effectiveTileCount >= 3 ? slideAnimationThird : slideAnimationSecond);
+                applyAnimationToImg(
+                    rightImg,
+                    effectiveTileCount >= 3 ? entranceAnimationThird : entranceAnimationSecond,
+                    effectiveTileCount >= 3 ? slideAnimationThird : slideAnimationSecond,
+                );
                 if (eagerLoadImages) {
                     rightImg.src = rightUrl;
                     rightImg.loading = 'eager';
@@ -4107,21 +5425,28 @@
                 itemDiv.appendChild(dualBackgroundContainer);
             } else {
                 let singleUrl = '';
-                if (cycleBackdrops && tileCount === 1 && backdropSources.length > 0) {
-                    const shuffled = shuffleArray(backdropSources.map((s, i) => ({ src: s, idx: i })));
-                    const urls = shuffled.map(({ src, idx }) => `${serverAddress}/Items/${src.itemId}/Images/Backdrop/${idx}?fillWidth=${backdropWidth}&quality=96&tag=${src.tag}`);
+				const shuffled = shuffleArray(backdropSources.map((s, i) => ({ src: s, idx: i })));
+				if (shuffled.length > 0 && shuffled.some(s => s.src.url)) {
+					singleUrl = shuffled.find(s => s.src.url).src.url;
+				} else if (cycleBackdrops && tileCount === 1 && backdropSources.length > 0) {
+                    const urls = shuffled.map(
+                        ({ src, idx }) =>
+                            `${serverAddress}/Items/${src.itemId}/Images/Backdrop/${idx}?maxWidth=${backdropWidth}&quality=96&tag=${src.tag}`,
+                    );
                     const mapKey = sectionKey + '_' + item.Id;
                     cycleBackdropMap.set(mapKey, { shuffledUrls: urls, currentIndex: 0 });
                     singleUrl = urls[0];
                 } else if (backdropSources.length) {
                     const first = backdropSources[0];
-                    singleUrl = `${serverAddress}/Items/${first.itemId}/Images/Backdrop?fillWidth=${backdropWidth}&quality=96&tag=${first.tag}`;
+                    singleUrl = `${serverAddress}/Items/${first.itemId}/Images/Backdrop?maxWidth=${backdropWidth}&quality=96&tag=${first.tag}`;
                 } else if (item.ImageTags?.Primary) {
-                    singleUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?fillWidth=${backdropWidth}&quality=96&tag=${item.ImageTags.Primary}`;
+                    singleUrl = `${serverAddress}/Items/${item.Id}/Images/Primary?maxWidth=${backdropWidth}&quality=96&tag=${item.ImageTags.Primary}`;
                 }
                 if (singleUrl) {
                     const singleBackdropContainer = document.createElement('div');
-                    singleBackdropContainer.className = 'spotlight-background-single' + (cycleBackdrops && tileCount === 1 && backdropSources.length > 0 ? ' cycle-backdrops' : '');
+                    singleBackdropContainer.className =
+                        'spotlight-background-single' +
+                        (cycleBackdrops && tileCount === 1 && backdropSources.length > 0 ? ' cycle-backdrops' : '');
                     const singleImg = document.createElement('img');
                     singleImg.setAttribute('data-src', singleUrl);
                     singleImg.alt = '';
@@ -4144,20 +5469,20 @@
                     itemDiv.appendChild(singleBackdropContainer);
                 }
             }
-            
+
             // Create left overlay (40-50% width, dark semi-transparent)
             // Add top padding to prevent content from overlapping with section title
             const overlay = document.createElement('div');
             overlay.className = 'spotlight-overlay' + (title ? ' has-title' : '');
-            
+
             // Item title or logo
             let titleEl = null;
             const hasLogo = item.ImageTags?.Logo;
-            
+
             if (hasLogo) {
                 // Use logo image instead of text title
-                const logoHeight = size === 'full' ? '300' : (size === 'large' ? '250' : '200');
-                const logoUrl = `${serverAddress}/Items/${item.Id}/Images/Logo?fillHeight=${logoHeight}&quality=96&tag=${item.ImageTags.Logo}`;
+                const logoHeight = size === 'full' ? '300' : size === 'large' ? '250' : '200';
+                const logoUrl = `${serverAddress}/Items/${item.Id}/Images/Logo?maxHeight=${logoHeight}&quality=96&tag=${item.ImageTags.Logo}`;
                 titleEl = document.createElement('div');
                 titleEl.className = 'spotlight-item-logo';
                 titleEl.setAttribute('data-background-url', logoUrl);
@@ -4169,7 +5494,7 @@
                 titleEl.className = 'spotlight-item-title';
                 titleEl.textContent = item.Name || 'Unknown';
             }
-            
+
             // Helper: wrap content in native Jellyfin itemDetailsGroup > detailsGroupItem structure
             // icon: optional Material Icons name (e.g. 'schedule') - same pattern as genres/director/writer
             function createMetadataItem(content, tag = 'span', extraClasses = '', icon = null) {
@@ -4190,13 +5515,13 @@
             // Combined: Year + Time + Ends At + Genres (all on one line)
             const metadataRow = document.createElement('div');
             metadataRow.className = 'spotlight-metadata-row';
-            
+
             // Year
             const year = item.ProductionYear || (item.PremiereDate ? new Date(item.PremiereDate).getFullYear() : null);
             if (year) {
                 metadataRow.appendChild(createMetadataItem(String(year)));
             }
-            
+
             // Runtime and estimated end time (Movies only - not for Series/Season/Episode)
             const isSeriesType = itemType === 'Series' || itemType === 'Season' || itemType === 'Episode';
             if (!isSeriesType && item.RunTimeTicks) {
@@ -4205,21 +5530,26 @@
                 const minutes = runtimeMinutes % 60;
                 let runtimeText = '';
                 if (hours > 0) {
-                    runtimeText = `${hours}h ${minutes > 0 ? minutes + 'm' : ''}`.trim();
+                    runtimeText = `${hours}h ${minutes > 0 ? minutes + "m" : ""}`.trim();
                 } else {
                     runtimeText = `${minutes}m`;
                 }
-                
+
                 metadataRow.appendChild(createMetadataItem(runtimeText));
-                
+
                 // End time (when it would end if started now)
                 const now = new Date();
                 const runtimeMs = item.RunTimeTicks / 10000;
                 const endTime = new Date(now.getTime() + runtimeMs);
-                const endTimeItem = createMetadataItem(endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 'span', 'spotlight-end-time', 'schedule');
+                const endTimeItem = createMetadataItem(
+                    endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    'span',
+                    'spotlight-end-time',
+                    'schedule',
+                );
                 metadataRow.appendChild(endTimeItem);
             }
-            
+
             // Genres - merged into single container, max 3 visible, tooltip shows full list on hover
             if (item.Genres && item.Genres.length > 0 && item.GenreItems && item.GenreItems.length > 0) {
                 const genreContainer = createTruncatedList('', item.GenreItems, 3, false, 'theater_comedy', 'genre');
@@ -4227,12 +5557,12 @@
                     metadataRow.appendChild(genreContainer);
                 }
             }
-            
+
             // Helper function to create truncated list with tooltip for overflow items
             // items can be array of strings (names) or array of objects with Name and Id
             // icon: optional Material Icons name for full-screen display (e.g. 'movie', 'edit')
             // linkType: 'person' | 'genre' | 'studio' | null - when set, create links
-            function createTruncatedList(label, items, maxItems = 3, isPeople = false, icon = null, linkType = null) {                
+            function createTruncatedList(label, items, maxItems = 3, isPeople = false, icon = null, linkType = null) {
                 const container = document.createElement('div');
                 container.className = 'spotlight-truncated-list headerTabs sectionTabs emby-tabs-slider';
                 container.setAttribute('data-label', label);
@@ -4241,7 +5571,7 @@
                 if (!items || items.length === 0) {
                     return container;
                 }
-                
+
                 const displayContainer = document.createElement('span');
                 displayContainer.className = 'emby-tab-button emby-button-foreground';
                 if (icon) displayContainer.setAttribute('data-icon', icon);
@@ -4251,39 +5581,42 @@
                     labelSpan.textContent = `${label} `;
                     displayContainer.appendChild(labelSpan);
                 }
-                
+
                 // Extract names and IDs from items (handle both strings and objects)
-                const itemsData = items.map(item => {
-                    if (typeof item === 'string') {
-                        return { name: item, id: null };
-                    } else if (item && typeof item === 'object') {
-                        return { 
-                            name: item.Name || item.name || null, 
-                            id: item.Id || item.id || null 
-                        };
-                    }
-                    return container;
-                }).filter(item => item && item.name);
-                
+                const itemsData = items
+                    .map((item) => {
+                        if (typeof item === 'string') {
+                            return { name: item, id: null };
+                        } else if (item && typeof item === 'object') {
+                            return {
+                                name: item.Name || item.name || null,
+                                id: item.Id || item.id || null,
+                            };
+                        }
+                        return container;
+                    })
+                    .filter((item) => item && item.name);
+
                 if (itemsData.length === 0) return null;
-                
+
                 const hasMore = itemsData.length > maxItems;
-                
+
                 // Resolve link type: explicit linkType, or fall back to isPeople for person links
                 const usePersonLinks = linkType === 'person' || (linkType !== 'genre' && linkType !== 'studio' && isPeople);
                 const useGenreLinks = linkType === 'genre';
                 const useStudioLinks = linkType === 'studio';
-                
+
                 // Create spans for visible names only (no layout-shifting expand)
                 itemsData.forEach((itemData, index) => {
                     if (index >= maxItems) return;
                     let nameElement;
-                    
+
                     if (usePersonLinks && itemData.id) {
                         nameElement = document.createElement('a');
                         nameElement.className = 'spotlight-person-link';
                         nameElement.href = `${serverAddress}/web/#/details?id=${itemData.id}&serverId=${serverId}`;
                         nameElement.textContent = itemData.name;
+                        if (isTvLayout()) nameElement.classList.add('show-focus');
                         nameElement.addEventListener('click', (e) => {
                             e.stopPropagation();
                         });
@@ -4292,22 +5625,24 @@
                         nameElement.className = 'spotlight-genre-link';
                         nameElement.href = `${serverAddress}/web/#/list.html?genreId=${itemData.id}&serverId=${serverId}`;
                         nameElement.textContent = itemData.name;
+                        if (isTvLayout()) nameElement.classList.add('show-focus');
                         nameElement.addEventListener('click', (e) => e.stopPropagation());
                     } else if (useStudioLinks && itemData.id) {
                         nameElement = document.createElement('a');
                         nameElement.className = 'spotlight-studio-link';
                         nameElement.href = `${serverAddress}/web/#/list.html?studioId=${itemData.id}&serverId=${serverId}`;
                         nameElement.textContent = itemData.name;
+                        if (isTvLayout()) nameElement.classList.add('show-focus');
                         nameElement.addEventListener('click', (e) => e.stopPropagation());
                     } else {
                         nameElement = document.createElement('span');
                         nameElement.textContent = itemData.name;
                     }
-                    
+
                     nameElement.setAttribute('data-name-index', index);
-                    
+
                     displayContainer.appendChild(nameElement);
-                    
+
                     // Bullet separator (except for last visible item - use actual count when fewer than maxItems)
                     const lastVisibleIndex = Math.min(maxItems, itemsData.length) - 1;
                     if (index < lastVisibleIndex) {
@@ -4317,9 +5652,9 @@
                         displayContainer.appendChild(separator);
                     }
                 });
-                
-                // Tooltip when more items exist (full list on hover)
-                if (hasMore) {
+
+                // Tooltip when more items exist (full list on hover) — skip on TV (no hover; links steal focus)
+                if (hasMore && !isTvLayout()) {
                     // Tooltip: full list as vertical stack with clickable links (no layout shift)
                     const tooltip = document.createElement('div');
                     tooltip.className = 'spotlight-truncated-list-tooltip';
@@ -4363,12 +5698,12 @@
                     tooltip.appendChild(listWrapper);
                     container.appendChild(tooltip);
                     container.style.position = 'relative';
-                    
+
                     const TOOLTIP_DELAY_MS = 600;
                     const HIDE_DELAY_MS = 150;
                     let tooltipTimer = null;
                     let hideTimer = null;
-                    
+
                     const showTooltip = () => {
                         tooltip.classList.add('visible');
                         tooltipTimer = null;
@@ -4388,7 +5723,7 @@
                         if (hideTimer) clearTimeout(hideTimer);
                         hideTimer = setTimeout(hideTooltip, HIDE_DELAY_MS);
                     };
-                    
+
                     container.addEventListener('mouseenter', () => {
                         if (hideTimer) {
                             clearTimeout(hideTimer);
@@ -4409,59 +5744,62 @@
                         hideTooltip();
                     });
                 }
-                
+
                 container.appendChild(displayContainer);
                 return container;
             }
-            
+
             // Studios - show 1 visible, rest in tooltip with links (like directors/writers)
-            const studiosData = Array.isArray(item.Studios) && item.Studios.length > 0
-                ? item.Studios
-                : (typeof item.Studio === 'string' && item.Studio)
-                    ? item.Studio.split('|').map(s => ({ Name: s.trim(), Id: null })).filter(x => x.Name)
-                    : [];
-            const studioContainer = studiosData.length > 0
-                ? createTruncatedList('Produced by', studiosData, 1, false, 'apartment', 'studio')
-                : null;
+            const studiosData =
+                Array.isArray(item.Studios) && item.Studios.length > 0
+                    ? item.Studios
+                    : typeof item.Studio === 'string' && item.Studio
+                        ? item.Studio.split('|')
+                                .map((s) => ({ Name: s.trim(), Id: null }))
+                                .filter((x) => x.Name)
+                        : [];
+            const studioContainer =
+                studiosData.length > 0 ? createTruncatedList('Produced by', studiosData, 1, false, 'apartment', 'studio') : null;
 
             // For Series: show seasons/episodes. For Movies: show director/writer
             let directorContainer = null;
             let writerContainer = null;
             let combinedContainer = null;
-                
+
             // Create series info container (seasons/episodes count)
             const seriesInfoContainer = document.createElement('div');
             seriesInfoContainer.className = 'spotlight-metadata-row spotlight-series-info';
-            
+
             if (itemType === 'Series') {
                 // Studio first (before seasons/episodes)
                 if (studioContainer) seriesInfoContainer.appendChild(studioContainer);
                 // For Series, show seasons and episodes count
                 const seasonsCount = item.ChildCount || 0;
                 if (seasonsCount > 1) {
-                    const seasonsText = `${seasonsCount} ${seasonsCount === 1 ? 'season' : 'seasons'}`;
+                    const seasonsText = `${seasonsCount} ${seasonsCount === 1 ? "season" : "seasons"}`;
                     seriesInfoContainer.appendChild(createMetadataItem(seasonsText));
                 }
                 const episodesCount = item.RecursiveItemCount || 0;
                 if (episodesCount > 0) {
-                    const episodesText = `${episodesCount} ${episodesCount === 1 ? 'episode' : 'episodes'}`;
+                    const episodesText = `${episodesCount} ${episodesCount === 1 ? "episode" : "episodes"}`;
                     seriesInfoContainer.appendChild(createMetadataItem(episodesText));
                 }
             } else if (itemType === 'Movie') {
                 // For Movies, show director/writer (existing logic)
                 if (item.People && Array.isArray(item.People)) {
-                    const directors = item.People.filter(p => p.Type === 'Director');
-                    const writers = item.People.filter(p => p.Type === 'Writer');
-                    
+                    const directors = item.People.filter((p) => p.Type === 'Director');
+                    const writers = item.People.filter((p) => p.Type === 'Writer');
+
                     // Extract names for comparison
-                    const directorNames = directors.map(p => p.Name);
-                    const writerNames = writers.map(p => p.Name);
-                    
+                    const directorNames = directors.map((p) => p.Name);
+                    const writerNames = writers.map((p) => p.Name);
+
                     // Check if directors and writers are identical (same length and same names)
-                    const areIdentical = directorNames.length === writerNames.length && 
-                                        directorNames.length > 0 &&
-                                        directorNames.every((name, index) => name === writerNames[index]);
-                    
+                    const areIdentical =
+                        directorNames.length === writerNames.length &&
+                        directorNames.length > 0 &&
+                        directorNames.every((name, index) => name === writerNames[index]);
+
                     if (areIdentical) {
                         // Combine into single "Directed and Written by" row (with person objects for links)
                         combinedContainer = createTruncatedList('Directed and Written by', directors, 1, true, 'movie');
@@ -4483,7 +5821,7 @@
                 if (studioContainer) seriesInfoContainer.appendChild(studioContainer);
                 // For Seasons, show episodes count
                 const episodesCount = item.RecursiveItemCount || 0;
-                const episodesText = `${episodesCount} ${episodesCount === 1 ? 'episode' : 'episodes'}`;
+                const episodesText = `${episodesCount} ${episodesCount === 1 ? "episode" : "episodes"}`;
                 seriesInfoContainer.appendChild(createMetadataItem(episodesText));
             } else if (itemType === 'Episode') {
                 // Studio first (before season/episode)
@@ -4495,26 +5833,27 @@
                 const episodeText = `Episode ${episodeNumber}`;
                 seriesInfoContainer.appendChild(createMetadataItem(`${seasonText} - ${episodeText}`));
             }
-            
+
             // Tagline (tagline only) and Overview (separate element) - show/hide via CSS based on spotlight type
             const taglineEl = document.createElement('p');
             taglineEl.className = 'emby-tab-button emby-tab-button-active';
-            const tagline = (item.Taglines && Array.isArray(item.Taglines) && item.Taglines.length > 0)
-                ? item.Taglines[0] : '';
+            const tagline = item.Taglines && Array.isArray(item.Taglines) && item.Taglines.length > 0 ? item.Taglines[0] : '';
             if (tagline) taglineEl.textContent = tagline;
 
             const overviewEl = document.createElement('p');
             overviewEl.className = 'spotlight-overview';
             if (item.Overview) overviewEl.textContent = item.Overview;
-            
+
             // Buttons container
             const buttonsContainer = document.createElement('div');
             buttonsContainer.className = 'spotlight-buttons-container mainDetailButtons';
-            
+            if (isTvLayout()) buttonsContainer.classList.add('focuscontainer-x');
+
             // Play button (material icon span button)
             const playButton = document.createElement('button');
             playButton.className = 'emby-button raised button-flat btnPlay detailButton';
             playButton.title = 'Play';
+            if (isTvLayout()) playButton.classList.add('show-focus');
             const playIcon = document.createElement('span');
             playIcon.className = 'material-icons';
             playIcon.textContent = 'play_arrow';
@@ -4537,109 +5876,104 @@
                     console.error('[KefinTweaks CardBuilder] Error playing item:', error);
                 }
             });
-            
-            // Watchlist button (material icon span button with bookmark icon)
-            const watchlistButton = document.createElement('button');
-            watchlistButton.className = 'emby-button button-flat btnWatchlist';
-            
-            // Check watchlist status - try to get from cache or API
-            let isInWatchlist = false;
-            const sectionName = itemType === 'Movie' ? 'movies' : 
-                               itemType === 'Series' ? 'series' : 
-                               itemType === 'Season' ? 'seasons' : 
-                               itemType === 'Episode' ? 'episodes' : null;
-            
-            // Check watchlist cache if available
-            if (sectionName && typeof window.watchlistCache !== 'undefined' && window.watchlistCache[sectionName]?.data) {
-                isInWatchlist = window.watchlistCache[sectionName].data.some(watchlistItem => watchlistItem.Id === item.Id);
-            }
-            
-            const watchlistIcon = document.createElement('span');
-            watchlistIcon.className = 'material-icons';
-            watchlistIcon.textContent = 'bookmark';
-            watchlistIcon.title = isInWatchlist ? 'Remove from Watchlist' : 'Add to Watchlist';
-            watchlistButton.appendChild(watchlistIcon);
-            if (isInWatchlist) {
-                watchlistButton.classList.add('watchlisted');
-            }
-            watchlistButton.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                const userId = ApiClient.getCurrentUserId();
-                const newStatus = !isInWatchlist;
-                
-                try {
-                    // Update watchlist status using proper API
-                    await ApiClient.updateUserItemRating(userId, item.Id, newStatus ? 'true' : 'false');
-                    
-                    // Update local state
-                    isInWatchlist = newStatus;
-                    
-                    // Update button class
-                    if (isInWatchlist) {
-                        watchlistButton.classList.add('watchlisted');
-                    } else {
-                        watchlistButton.classList.remove('watchlisted');
-                    }
-                    
-                    // Update watchlist cache if available
-                    if (sectionName && typeof window.updateWatchlistCacheOnToggle === 'function') {
-                        await window.updateWatchlistCacheOnToggle(item.Id, itemType, isInWatchlist);
-                    }
-                } catch (err) {
-                    console.error('Failed to update watchlist status:', err);
+
+            // Watchlist button (same Likes / watchlist-button pattern as cards; clicks via watchlist.js)
+            const spotlightWatchlistSupportedTypes = ['Movie', 'Series', 'Season', 'Episode', 'BoxSet', 'Playlist', 'Video'];
+            let watchlistButton = null;
+            if (state.watchlist && spotlightWatchlistSupportedTypes.includes(itemType)) {
+                const isLiked = item.UserData?.Likes === true;
+                watchlistButton = document.createElement('button');
+                watchlistButton.type = 'button';
+                watchlistButton.className = 'watchlist-button spotlight-watchlist-button emby-button button-flat paper-icon-button-light';
+                if (isTvLayout()) watchlistButton.classList.add('show-focus');
+                watchlistButton.setAttribute('data-action', 'none');
+                watchlistButton.setAttribute('data-id', item.Id);
+                watchlistButton.setAttribute('data-active', isLiked ? 'true' : 'false');
+                watchlistButton.title = isLiked ? 'Remove from Watchlist' : 'Add to Watchlist';
+
+                const watchlistIcon = document.createElement('span');
+                watchlistIcon.className = 'material-icons watchlist';
+                watchlistIcon.setAttribute('aria-hidden', 'true');
+                watchlistButton.appendChild(watchlistIcon);
+
+                if (typeof window.KefinWatchlistLikedIds?.bindWatchlistButton === 'function') {
+                    window.KefinWatchlistLikedIds.bindWatchlistButton(watchlistButton, item.Id, itemType);
                 }
-            });
-            
+            }
+
             // Info button (shows overview on hover)
             const infoButton = document.createElement('button');
-            infoButton.className = 'emby-button button-flat spotlight-info-button';
+            infoButton.className = 'emby-button button-flat spotlight-info-button paper-icon-button-light';
+            if (isTvLayout()) infoButton.classList.add('show-focus');
             const infoIcon = document.createElement('span');
             infoIcon.className = 'material-icons';
             infoIcon.textContent = 'info';
             infoIcon.title = 'Go To Item';
             infoButton.appendChild(infoIcon);
-            
-            // Overview tooltip (hidden by default, shown on hover)
-            if (item.Overview) {
+
+            // Overview tooltip (hover only) — skip on TV
+            if (item.Overview && !isTvLayout()) {
                 const overviewTooltip = document.createElement('div');
                 overviewTooltip.className = 'spotlight-overview-tooltip';
                 overviewTooltip.textContent = item.Overview;
                 infoButton.appendChild(overviewTooltip);
             }
-            
+
             buttonsContainer.appendChild(playButton);
-            buttonsContainer.appendChild(watchlistButton);
+            if (watchlistButton) {
+                buttonsContainer.appendChild(watchlistButton);
+            }
             buttonsContainer.appendChild(infoButton);
-            
+
             // Rating with star icon
             const rating = item.CommunityRating || item.CriticRating;
 
             if (rating && typeof rating === 'number') {
                 const ratingContainer = document.createElement('div');
                 ratingContainer.className = 'emby-button button-flat starRatingContainer mediaInfoItem spotlight-rating-container';
-                
+
                 const starIcon = document.createElement('span');
                 starIcon.className = 'material-icons starIcon star spotlight-rating-star';
 
-                if (rating && typeof rating === 'number') {   
+                if (rating && typeof rating === 'number') {
                     ratingContainer.innerText = rating.toFixed(1);
                     ratingContainer.prepend(starIcon);
                     buttonsContainer.appendChild(ratingContainer);
                 }
             }
-            
+
             // Build overlay content in order: Name, Rating, Year+Time+EndsAt+Genres, Directed by, Written by, Taglines, Buttons
             overlay.appendChild(titleEl);
 
-            const metadataContainer = document.createElement('div');
-            metadataContainer.className = 'metadata-container';
+            // TV: real emby-button so Jellyfin spatial nav lands on metadata (plain div is Tab-only)
+            const metadataContainer = isTvLayout()
+                ? document.createElement('button')
+                : document.createElement('div');
+            metadataContainer.className = isTvLayout()
+                ? 'metadata-container emby-button show-focus'
+                : 'metadata-container';
+            if (isTvLayout()) {
+                metadataContainer.type = 'button';
+                metadataContainer.setAttribute('tabindex', '0');
+                metadataContainer.setAttribute('aria-label', 'Item metadata');
+                metadataContainer.dataset.metadataDrilled = 'false';
+                // Collapsed click must not navigate; drill-in is Right/Enter only
+                metadataContainer.addEventListener('click', (e) => {
+                    if (metadataContainer.dataset.metadataDrilled !== 'true') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }
+                });
+            }
 
+            if (isTvLayout()) metadataRow.classList.add('focuscontainer-x');
             if (metadataRow.children.length > 0) {
                 metadataContainer.appendChild(metadataRow);
             }
             // For Series, show seasons/episodes. For Movies, show director/writer
             if (itemType === 'Series' || itemType === 'Season' || itemType === 'Episode') {
                 if (seriesInfoContainer) {
+                    if (isTvLayout()) seriesInfoContainer.classList.add('focuscontainer-x');
                     metadataContainer.appendChild(seriesInfoContainer);
                 }
             } else {
@@ -4652,12 +5986,14 @@
                 if (combinedContainer) {
                     const creditsRow = document.createElement('div');
                     creditsRow.className = 'spotlight-metadata-row spotlight-credits-row';
+                    if (isTvLayout()) creditsRow.classList.add('focuscontainer-x');
                     if (studioContainer) creditsRow.appendChild(studioContainer);
                     creditsRow.appendChild(combinedContainer);
                     metadataContainer.appendChild(creditsRow);
                 } else if (directorContainer || writerContainer) {
                     const creditsRow = document.createElement('div');
                     creditsRow.className = 'spotlight-metadata-row spotlight-credits-row';
+                    if (isTvLayout()) creditsRow.classList.add('focuscontainer-x');
                     if (studioContainer) creditsRow.appendChild(studioContainer);
                     if (directorContainer) creditsRow.appendChild(directorContainer);
                     if (writerContainer) creditsRow.appendChild(writerContainer);
@@ -4665,9 +6001,14 @@
                 } else if (studioContainer) {
                     const studioRow = document.createElement('div');
                     studioRow.className = 'spotlight-metadata-row spotlight-credits-row';
+                    if (isTvLayout()) studioRow.classList.add('focuscontainer-x');
                     studioRow.appendChild(studioContainer);
                     metadataContainer.appendChild(studioRow);
                 }
+            }
+            if (isTvLayout()) {
+                // Collapsed by default: links not in vertical focus path until Right/OK drill-in
+                setMetadataDrilled(metadataContainer, false);
             }
             // Fixed 4-section grid: Logo, Metadata, Overview, Buttons (always render all to prevent layout shift)
             const logoSection = document.createElement('div');
@@ -4698,7 +6039,7 @@
                 taglineContainer.appendChild(taglineEl);
                 itemDiv.appendChild(taglineContainer);
             }
-            
+
             // ClearArt image (bottom right corner, if enabled and available)
             if (showClearArt && item.ImageTags?.Art) {
                 const clearArtUrl = `${serverAddress}/Items/${item.Id}/Images/Art?fillHeight=300&quality=96&tag=${item.ImageTags.Art}`;
@@ -4709,7 +6050,7 @@
                 clearArtEl.alt = item.Name || 'Unknown';
                 itemDiv.appendChild(clearArtEl);
             }
-            
+
             itemsContainer.appendChild(itemDiv);
             return itemDiv;
         }
@@ -4718,7 +6059,7 @@
         currentWindowIndices.forEach((idx) => {
             createAndAppendSlide(items[idx], idx, idx === currentIndex);
         });
-        
+
         bannerContainer.appendChild(itemsContainer);
 
         // Mark the initially visible slide as active so only it is shown
@@ -4727,507 +6068,981 @@
             firstItemActive.setAttribute('data-active', 'true');
         }
 
-        // Delegated handler: info button click -> navigate to item details for the current slide
-        bannerContainer.addEventListener('click', (e) => {
-            const infoBtn = e.target.closest('.spotlight-info-button');
-            if (!infoBtn || !bannerContainer.contains(infoBtn)) return;
+        function syncSpotlightTvFocus() {
+            if (!isTvLayout()) return;
+            const isTooltipFocusable = (el) =>
+                !!el.closest?.('.spotlight-truncated-list-tooltip, .spotlight-overview-tooltip');
+            const isMetaLink = (el) =>
+                el.classList?.contains('spotlight-genre-link') ||
+                el.classList?.contains('spotlight-person-link') ||
+                el.classList?.contains('spotlight-studio-link');
+            bannerContainer.querySelectorAll('.spotlight-item').forEach((slide) => {
+                const active = slide.getAttribute('data-active') === 'true';
+                const meta = slide.querySelector('.metadata-container');
+                const drilled = meta?.dataset?.metadataDrilled === 'true';
 
-            e.preventDefault();
-            e.stopPropagation();
-
-            const slide = infoBtn.closest('.spotlight-item');
-            if (!slide) return;
-
-            const itemId = slide.getAttribute('data-id');
-            if (!itemId) return;
-
-            const detailsUrl = `#/details?id=${itemId}&serverId=${serverId}`;
-            if (typeof Dashboard !== 'undefined' && Dashboard && typeof Dashboard.navigate === 'function') {
-                Dashboard.navigate(detailsUrl);
-            } else {
-                const fullDetailsUrl = `${serverAddress}/web/#${detailsUrl}`;
-                window.location.href = fullDetailsUrl;
-            }
-        });
-
-        // Apply initial pan animation to the starting slide (helper also sets up completion tracking)
-        if (panAnimation && items.length > 0) {
-            const firstItemPan = bannerContainer.querySelector(`.spotlight-item[data-index="${currentIndex}"]`);
-            if (firstItemPan) {
-                applyPanAnimationToSlide(firstItemPan);
-                startCycleBackdropTimer(firstItemPan, items[currentIndex].Id);
-            }
-        }
-        
-        // Navigation buttons (top right)
-        if (showNavButtons && items.length > 1) {
-            const navButtonsContainer = document.createElement('div');
-            navButtonsContainer.className = 'spotlight-nav-buttons-container emby-tab-button emby-tab-button-active';
-            
-            const prevButton = document.createElement('button');
-            prevButton.className = 'spotlight-nav-button spotlight-nav-prev emby-button';
-            const prevIcon = document.createElement('span');
-            prevIcon.className = 'material-icons';
-            prevIcon.textContent = 'chevron_left';
-            prevButton.appendChild(prevIcon);
-            prevButton.addEventListener('click', (e) => {
-                e.stopPropagation();
-                // Reset timer when manually navigating
-                goToItem((currentIndex - 1 + items.length) % items.length, true);
-            });
-            
-            const nextButton = document.createElement('button');
-            nextButton.className = 'spotlight-nav-button spotlight-nav-next emby-button';
-            const nextIcon = document.createElement('span');
-            nextIcon.className = 'material-icons';
-            nextIcon.textContent = 'chevron_right';
-            nextButton.appendChild(nextIcon);
-            nextButton.addEventListener('click', (e) => {
-                e.stopPropagation();
-                // Reset timer when manually navigating
-                goToItem((currentIndex + 1) % items.length, true);
-            });
-            
-            navButtonsContainer.appendChild(prevButton);
-            navButtonsContainer.appendChild(nextButton);
-
-            const navContainer = document.createElement('div');
-            navContainer.className = 'spotlight-nav-container headerTabs sectionTabs';
-            navContainer.appendChild(navButtonsContainer);
-
-            bannerContainer.appendChild(navContainer);
-        }
-        
-        // Pause button (bottom right) — only when nav chrome exists (showNavButtons)
-        if (autoPlay && items.length > 1) {
-            const navButtonsContainer = bannerContainer.querySelector('.spotlight-nav-container .spotlight-nav-buttons-container');
-            if (navButtonsContainer) {
-                const pauseButton = document.createElement('button');
-                pauseButton.className = 'spotlight-pause-button spotlight-nav-button emby-button';
-                const pauseIcon = document.createElement('span');
-                pauseIcon.className = 'material-icons';
-                pauseIcon.textContent = 'pause';
-                pauseButton.appendChild(pauseIcon);
-                pauseButton.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    isPaused = !isPaused;
-                    if (isPaused) {
-                        if (autoPlayTimer) {
-                            clearTimeout(autoPlayTimer);
-                            autoPlayTimer = null;
-                        }
-                        pauseIcon.textContent = 'play_arrow';
-                    } else {
-                        startAutoPlay();
-                        pauseIcon.textContent = 'pause';
-                    }
-                });
-
-                navButtonsContainer.insertBefore(pauseButton, navButtonsContainer.firstChild);
-            }
-        }
-        
-        // Slide state container (dots or numeric "N / X")
-        const MAX_DOTS = 5;
-        if (showSlideState && items.length > 1) {
-            const dotsContainer = document.createElement('div');
-            dotsContainer.className = 'spotlight-dots' + (showDots ? '' : ' spotlight-dots-numeric');
-            dotsContainer.setAttribute('data-index', String(currentIndex + 1)); /* 1-based for "N / X" display */
-            dotsContainer.setAttribute('data-total-items', String(items.length));
-            
-            if (showDots) {
-                const numDots = Math.min(items.length, MAX_DOTS);
-                const activeDotIndex = currentIndex % numDots;
-                for (let i = 0; i < numDots; i++) {
-                    const dot = document.createElement('button');
-                    dot.className = 'spotlight-dot' + (i === activeDotIndex ? ' active' : '');
-                    dot.setAttribute('data-dot-index', i);
-                    dot.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        const windowStart = Math.floor(currentIndex / numDots) * numDots;
-                        const targetIndex = Math.min(windowStart + i, items.length - 1);
-                        goToItem(targetIndex, true);
-                    });
-                    dotsContainer.appendChild(dot);
-                }
-            }
-            
-            bannerContainer.appendChild(dotsContainer);
-        }
-        
-        // Load images for a slide (and optionally preload next). Only sets src/backgroundImage from data-* so browser loads on demand.
-        function ensureSlideImagesLoaded(slideIndex) {
-            if (slideIndex < 0 || slideIndex >= items.length) return;
-            const itemEl = bannerContainer.querySelector(`.spotlight-item[data-index="${slideIndex}"]`);
-            if (!itemEl) return;
-            itemEl.querySelectorAll('img[data-src]').forEach(img => {
-                const url = img.getAttribute('data-src');
-                if (url && !img.src) img.src = url;
-            });
-            const bgUrl = itemEl.getAttribute('data-background-url');
-            if (bgUrl && !itemEl.style.backgroundImage) itemEl.style.backgroundImage = `url("${bgUrl}")`;
-            const logoEl = itemEl.querySelector('.spotlight-item-logo[data-background-url]');
-            if (logoEl) {
-                const logoUrl = logoEl.getAttribute('data-background-url');
-                if (logoUrl && !logoEl.style.backgroundImage) logoEl.style.backgroundImage = `url("${logoUrl}")`;
-            }
-        }
-
-        // Apply pan animation to a slide and track when it completes (for re-trigger on viewport re-entry)
-        const SLIDE_ANIMATION_NAMES = new Set([
-            'kenBurnsZoomOut', 'kenBurnsZoomIn', 'kenBurnsZoomOutFullscreen', 'kenBurnsZoomInFullscreen',
-            'kenBurnsPanRight', 'kenBurnsPanLeft', 'kenBurnsPanUp', 'kenBurnsDiagonal', 'fadeInScale',
-            'parallaxFloat', 'depthPulse', 'slowRotate', 'breathe', 'heatHaze', 'colorWash', 'vignetteIn'
-        ]);
-        const SLIDE_ANIMATION_FINAL_TRANSFORM = {
-            kenBurnsZoomIn: 'scale3d(1.12, 1.12, 1)',
-            kenBurnsZoomOut: 'scale3d(1.02, 1.02, 1)',
-            kenBurnsZoomInFullscreen: 'scale3d(1.12, 1.12, 1)',
-            kenBurnsZoomOutFullscreen: 'scale3d(1.08, 1.08, 1)',
-            kenBurnsPanRight: 'scale3d(1.1, 1.1, 1) translateX(5%)',
-            kenBurnsPanLeft: 'scale3d(1.1, 1.1, 1) translateX(-5%)',
-            kenBurnsPanUp: 'scale3d(1.1, 1.1, 1) translateY(-5%)',
-            kenBurnsDiagonal: 'scale3d(1.13, 1.13, 1) translate(5%, -5%)',
-            fadeInScale: 'scale3d(1, 1, 1)',
-            parallaxFloat: 'scale3d(1, 1, 1) translateY(0)',
-            depthPulse: 'scale3d(1, 1, 1)',
-            slowRotate: 'scale3d(1.15, 1.15, 1) rotate(3deg)',
-            breathe: 'scale3d(1, 1, 1)',
-            heatHaze: 'scale3d(1.05, 1.05, 1) skewX(0deg)'
-        };
-        function applyPanAnimationToSlide(slideElement) {
-            if (!slideElement || !panAnimation) return;
-            const imgs = slideElement.querySelectorAll('.spotlight-background-layer img, .spotlight-background-single img');
-            if (!imgs.length) return;
-            currentSlideAnimationComplete = false;
-            let finishedCount = 0;
-            const checkAllDone = () => {
-                finishedCount++;
-                if (finishedCount >= imgs.length) currentSlideAnimationComplete = true;
-            };
-            imgs.forEach(img => {
-                img.style.transform = '';
-                img.classList.remove('animate');
-                img.classList.add('animate');
-                const slideName = img.getAttribute('data-slide-animation') || '';
-                const handler = (e) => {
-                    if (e.animationName === slideName || SLIDE_ANIMATION_NAMES.has(e.animationName)) {
-                        img.removeEventListener('animationend', handler);
-                        checkAllDone();
-                        var finalTransform = SLIDE_ANIMATION_FINAL_TRANSFORM[e.animationName];
-                        if (finalTransform) {
-                            requestAnimationFrame(() => { img.style.transform = finalTransform; });
-                        }
-                    }
-                };
-                img.addEventListener('animationend', handler);
-            });
-        }
-
-        function startCycleBackdropTimer(slideElement, itemId) {
-            if (cycleBackdropTimer) {
-                clearInterval(cycleBackdropTimer);
-                cycleBackdropTimer = null;
-            }
-            if (!cycleBackdrops || tileCount !== 1 || !isVisible) return;
-            const container = slideElement.querySelector('.spotlight-background-single.cycle-backdrops');
-            const imgs = container ? container.querySelectorAll('img') : [];
-            const mapKey = sectionKey + '_' + itemId;
-            const entry = cycleBackdropMap.get(mapKey);
-            if (!entry || !entry.shuffledUrls.length) return;
-            var cycleCount = 0;
-            var maxCycles = Math.max(0, backdropsCount - 1);
-            if (imgs.length >= 2) {
-                const bottomImg = imgs[0];
-                const topImg = imgs[1];
-                const crossfadeDuration = '0.8s';
-                cycleBackdropTimer = setInterval(() => {
-                    if (!isVisible) return;
-                    if (cycleCount >= maxCycles) {
-                        if (cycleBackdropTimer) {
-                            clearInterval(cycleBackdropTimer);
-                            cycleBackdropTimer = null;
-                        }
+                slide.querySelectorAll('a[href], button').forEach((el) => {
+                    if (el.classList.contains('spotlight-dot') || isTooltipFocusable(el)) {
+                        el.setAttribute('tabindex', '-1');
                         return;
                     }
-                    cycleCount++;
-                    entry.currentIndex = (entry.currentIndex + 1) % entry.shuffledUrls.length;
-                    const nextUrl = entry.shuffledUrls[entry.currentIndex];
-                    const preload = new Image();
-                    preload.onload = () => {
-                        topImg.src = nextUrl;
-                        topImg.setAttribute('data-src', nextUrl);
-                        topImg.style.transition = 'opacity ' + crossfadeDuration + ' ease-in-out';
-                        topImg.style.opacity = '0';
-                        requestAnimationFrame(() => {
-                            requestAnimationFrame(() => { topImg.style.opacity = '1'; });
-                        });
-                        const handler = (e) => {
-                            if (e.propertyName !== 'opacity') return;
-                            topImg.removeEventListener('transitionend', handler);
-                            bottomImg.src = nextUrl;
-                            bottomImg.setAttribute('data-src', nextUrl);
-                            topImg.style.opacity = '0';
-                        };
-                        topImg.addEventListener('transitionend', handler);
-                    };
-                    preload.src = nextUrl;
-                }, perBackdropMs);
-            } else {
-                const img = slideElement.querySelector('.spotlight-background-single img');
-                if (!img) return;
-                cycleBackdropTimer = setInterval(() => {
-                    if (!isVisible) return;
-                    if (cycleCount >= maxCycles) {
-                        if (cycleBackdropTimer) {
-                            clearInterval(cycleBackdropTimer);
-                            cycleBackdropTimer = null;
-                        }
+                    if (!active) {
+                        el.setAttribute('tabindex', '-1');
                         return;
                     }
-                    cycleCount++;
-                    entry.currentIndex = (entry.currentIndex + 1) % entry.shuffledUrls.length;
-                    const nextUrl = entry.shuffledUrls[entry.currentIndex];
-                    const preload = new Image();
-                    preload.onload = () => {
-                        img.style.opacity = '0';
-                        img.style.transition = 'opacity 0.8s ease-in-out';
-                        requestAnimationFrame(() => {
-                            img.src = nextUrl;
-                            img.setAttribute('data-src', nextUrl);
-                            requestAnimationFrame(() => { img.style.opacity = '1'; });
-                        });
-                    };
-                    preload.src = nextUrl;
-                }, perBackdropMs);
-            }
-        }
-
-        // Go to item function (crossfade transition, then only active slide is visible)
-        function goToItem(index, resetTimer = true) {
-            if (index === currentIndex) return;
-            if (cycleBackdropTimer) {
-                clearInterval(cycleBackdropTimer);
-                cycleBackdropTimer = null;
-            }
-            const newWindowIndices = getSpotlightWindowIndices(index, items.length);
-            const indexToRemove = currentWindowIndices.find(i => !newWindowIndices.includes(i));
-            const indexToAdd = newWindowIndices.find(i => !currentWindowIndices.includes(i));
-            
-            var slideToRemove = undefined;
-            if (indexToRemove !== undefined) {
-                slideToRemove = bannerContainer.querySelector(`.spotlight-item[data-index="${indexToRemove}"]`);
-            }
-            if (indexToAdd !== undefined) {
-                createAndAppendSlide(items[indexToAdd], indexToAdd, false);
-            }
-            currentWindowIndices = newWindowIndices;
-            
-            ensureSlideImagesLoaded(index);
-            ensureSlideImagesLoaded((index + 1) % items.length);
-            
-            const currentItem = bannerContainer.querySelector(`.spotlight-item[data-index="${currentIndex}"]`);
-            const nextItem = bannerContainer.querySelector(`.spotlight-item[data-index="${index}"]`);
-
-            // Prune the slide that left the window so the container never exceeds 9 items.
-            // If it's not the one we're fading out, remove it now; otherwise remove it in onFadeOutEnd.
-            if (slideToRemove && slideToRemove.parentNode && slideToRemove !== currentItem) {
-                slideToRemove.remove();
-            }
-            
-            if (currentItem && nextItem) {
-                // Start crossfade: outgoing stays visible but fades out; incoming becomes visible and fades in
-                currentItem.removeAttribute('data-active');
-                currentItem.setAttribute('data-fade-out', 'true');
-                nextItem.setAttribute('data-active', 'true');
-                nextItem.setAttribute('data-entering', 'true');
-                applyPanAnimationToSlide(nextItem);
-                startCycleBackdropTimer(nextItem, items[index].Id);
-
-                // After next frame, remove data-entering so incoming slide transitions from 0 to 1
-                requestAnimationFrame(() => {
-                    requestAnimationFrame(() => {
-                        nextItem.removeAttribute('data-entering');
-                    });
-                });
-
-                // When outgoing slide opacity transition ends, clear its fade-out state and prune if it left the window
-                const onFadeOutEnd = (e) => {
-                    if (e.propertyName !== 'opacity') return;
-                    currentItem.removeEventListener('transitionend', onFadeOutEnd);
-                    currentItem.removeAttribute('data-fade-out');
-                    if (slideToRemove && slideToRemove.parentNode) {
-                        slideToRemove.remove();
-                    }
-                };
-                currentItem.addEventListener('transitionend', onFadeOutEnd);
-            } else if (slideToRemove && slideToRemove.parentNode) {
-                slideToRemove.remove();
-            }
-            currentIndex = index;
-            
-            // Update slide state (dots or data attrs for numeric)
-            if (showSlideState) {
-                const dotsContainer = bannerContainer.querySelector('.spotlight-dots');
-                if (dotsContainer) {
-                    dotsContainer.setAttribute('data-index', String(index + 1)); // 1-based for display
-                }
-                if (showDots) {
-                    const dots = bannerContainer.querySelectorAll('.spotlight-dot');
-                    const numDots = dots.length;
-                    const activeDotIndex = numDots > 0 ? (index % numDots) : 0;
-                    dots.forEach((dot, i) => {
-                        if (i === activeDotIndex) {
-                            dot.classList.add('active');
+                    // Active slide: metadata links gated by drill-in
+                    if (isMetaLink(el)) {
+                        if (drilled) {
+                            if (el.getAttribute('tabindex') === '-1') el.removeAttribute('tabindex');
                         } else {
-                            dot.classList.remove('active');
+                            el.setAttribute('tabindex', '-1');
                         }
-                    });
+                        return;
+                    }
+                    if (el.getAttribute('tabindex') === '-1') el.removeAttribute('tabindex');
+                });
+
+                if (meta) {
+                    if (!active) {
+                        meta.setAttribute('tabindex', '-1');
+                    } else if (drilled) {
+                        meta.setAttribute('tabindex', '-1');
+                    } else {
+                        meta.setAttribute('tabindex', '0');
+                        meta.classList.add('show-focus');
+                    }
                 }
-            }
-            
-            // Reset auto-play timer when manually navigating (always reset delay)
-            if (resetTimer && autoPlay && !isPaused) {
-                if (autoPlayTimer) {
-                    clearTimeout(autoPlayTimer);
-                    autoPlayTimer = null;
-                }
-                advanceDue = false;
-                startAutoPlay();
-            }
-        }
-        
-        // Auto-play: single-timeout per slide, controlled only by pause/visibility (hover is ignored)
-        function startAutoPlay() {
-            if (autoPlayTimer) {
-                clearTimeout(autoPlayTimer);
-                autoPlayTimer = null;
-            }
-            if (!autoPlay || items.length <= 1 || isPaused || !isVisible) return;
-            autoPlayTimer = setTimeout(onAutoPlayTimerFired, interval);
+            });
+            bannerContainer.querySelectorAll('.spotlight-dot').forEach((dot) => {
+                dot.setAttribute('tabindex', '-1');
+            });
         }
 
-        function onAutoPlayTimerFired() {
-            autoPlayTimer = null;
-            if (isPaused) {
-                advanceDue = true;
+        function captureSpotlightFocusSlot() {
+            if (!isTvLayout()) return null;
+            const ae = document.activeElement;
+            if (!ae || !container.contains(ae)) return null;
+            if (ae.closest('.spotlight-section-title-container')) return { slot: 'title' };
+            if (ae.closest('.spotlight-nav-container')) return { slot: 'nav' };
+            const meta = ae.closest('.metadata-container');
+            if (meta && container.contains(meta)) {
+                if (meta.dataset.metadataDrilled === 'true') {
+                    const links = Array.from(
+                        meta.querySelectorAll(
+                            'a.spotlight-genre-link, a.spotlight-person-link, a.spotlight-studio-link',
+                        ),
+                    );
+                    return { slot: 'metadata-drilled', linkIndex: Math.max(0, links.indexOf(ae)) };
+                }
+                return { slot: 'metadata' };
+            }
+            const btn = ae.closest('.spotlight-buttons-container');
+            if (btn && container.contains(btn)) {
+                let role = 'play';
+                if (ae.classList.contains('watchlist-button') || ae.closest('.watchlist-button')) role = 'watchlist';
+                else if (ae.classList.contains('spotlight-info-button') || ae.closest('.spotlight-info-button'))
+                    role = 'info';
+                else if (ae.classList.contains('btnPlay') || ae.closest('.btnPlay')) role = 'play';
+                return { slot: 'buttons', role };
+            }
+            return null;
+        }
+
+        function restoreSpotlightFocusSlot(slot) {
+            if (!slot || !isTvLayout()) return;
+            const activeSlide = bannerContainer.querySelector('.spotlight-item[data-active="true"]');
+            if (slot.slot === 'title') {
+                const headerCluster = bannerContainer.querySelector('.spotlight-header-container');
+                const first = getFirstSpotlightHeaderFocusable(headerCluster);
+                if (first) focusTvEl(first);
                 return;
             }
-            if (!autoPlay || !isVisible || items.length <= 1) return;
-            goToItem((currentIndex + 1) % items.length, false);
-            advanceDue = false;
-            // Schedule next slide timer for the new current slide
-            if (autoPlay && !isPaused && isVisible && items.length > 1) {
-                autoPlayTimer = setTimeout(onAutoPlayTimerFired, interval);
+            if (slot.slot === 'nav') {
+                const nav = bannerContainer.querySelector('.spotlight-nav-buttons-container');
+                const first = getTvFocusables(nav)[0];
+                if (first) focusTvEl(first);
+                return;
+            }
+            if (!activeSlide) return;
+            if (slot.slot === 'metadata') {
+                collapseAllMetadataDrillIn(activeSlide);
+                const meta = activeSlide.querySelector('.metadata-container');
+                if (meta) {
+                    setMetadataDrilled(meta, false);
+                    focusTvEl(meta);
+                }
+                return;
+            }
+            if (slot.slot === 'metadata-drilled') {
+                const meta = activeSlide.querySelector('.metadata-container');
+                if (!meta) return;
+                setMetadataDrilled(meta, true);
+                const links = Array.from(
+                    meta.querySelectorAll(
+                        'a.spotlight-genre-link, a.spotlight-person-link, a.spotlight-studio-link',
+                    ),
+                );
+                const idx = Math.min(slot.linkIndex || 0, Math.max(0, links.length - 1));
+                if (links[idx]) focusTvEl(links[idx]);
+                else if (links[0]) focusTvEl(links[0]);
+                else {
+                    setMetadataDrilled(meta, false);
+                    focusTvEl(meta);
+                }
+                return;
+            }
+            if (slot.slot === 'buttons') {
+                const buttons = activeSlide.querySelector('.spotlight-buttons-container');
+                if (!buttons) return;
+                let target = null;
+                if (slot.role === 'watchlist') target = buttons.querySelector('.watchlist-button');
+                else if (slot.role === 'info') target = buttons.querySelector('.spotlight-info-button');
+                else target = buttons.querySelector('.btnPlay');
+                focusTvEl(target || getTvFocusables(buttons)[0]);
             }
         }
-        
-        // Only cycle when spotlight is in view: stop when off-screen to avoid loading images unnecessarily
-        const visibilityObserver = new IntersectionObserver(
-            (entries) => {
-                const entry = entries[0];
-                if (!entry) return;
-                const wasVisible = isVisible;
-                isVisible = entry.isIntersecting;
-                if (!isVisible) {
+
+        if (!inert) {
+            // Delegated handler: info button click -> navigate to item details for the current slide
+            bannerContainer.addEventListener('click', (e) => {
+                const infoBtn = e.target.closest('.spotlight-info-button');
+                if (!infoBtn || !bannerContainer.contains(infoBtn)) return;
+
+                e.preventDefault();
+                e.stopPropagation();
+
+                const slide = infoBtn.closest('.spotlight-item');
+                if (!slide) return;
+
+                const itemId = slide.getAttribute('data-id');
+                if (!itemId) return;
+
+                const detailsUrl = `#/details?id=${itemId}&serverId=${serverId}`;
+                if (typeof Dashboard !== 'undefined' && Dashboard && typeof Dashboard.navigate === 'function') {
+                    Dashboard.navigate(detailsUrl);
+                } else {
+                    const fullDetailsUrl = `${serverAddress}/web/#${detailsUrl}`;
+                    window.location.href = fullDetailsUrl;
+                }
+            });
+
+            // Initial Ken Burns (.animate) is deferred until first visibilityObserver intersect + one rAF
+            // (see visibilityObserver below). Navigation/timer still applies sync via goToItem.
+
+            // Navigation buttons (top right)
+            if (showNavButtons && items.length > 1) {
+                const navButtonsContainer = document.createElement('div');
+                navButtonsContainer.className = 'spotlight-nav-buttons-container emby-tab-button emby-tab-button-active emby-button-foreground';
+
+                const prevButton = document.createElement('button');
+                prevButton.className = 'spotlight-nav-button spotlight-nav-prev emby-button';
+                if (isTvLayout()) prevButton.classList.add('show-focus');
+                const prevIcon = document.createElement('span');
+                prevIcon.className = 'material-icons';
+                prevIcon.textContent = 'chevron_left';
+                prevButton.appendChild(prevIcon);
+                prevButton.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    // Reset timer when manually navigating
+                    goToItem((currentIndex - 1 + items.length) % items.length, true);
+                });
+
+                const nextButton = document.createElement('button');
+                nextButton.className = 'spotlight-nav-button spotlight-nav-next emby-button';
+                if (isTvLayout()) nextButton.classList.add('show-focus');
+                const nextIcon = document.createElement('span');
+                nextIcon.className = 'material-icons';
+                nextIcon.textContent = 'chevron_right';
+                nextButton.appendChild(nextIcon);
+                nextButton.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    // Reset timer when manually navigating
+                    goToItem((currentIndex + 1) % items.length, true);
+                });
+
+                navButtonsContainer.appendChild(prevButton);
+                navButtonsContainer.appendChild(nextButton);
+
+                const navContainer = document.createElement('div');
+                navContainer.className = 'spotlight-nav-container headerTabs sectionTabs';
+                navContainer.appendChild(navButtonsContainer);
+
+                const headerContainer =
+                    bannerContainer.querySelector('.spotlight-header-container') || bannerContainer;
+                headerContainer.appendChild(navContainer);
+            }
+
+            // Pause button (bottom right) — only when nav chrome exists (showNavButtons)
+            if (autoPlay && items.length > 1) {
+                const navButtonsContainer = bannerContainer.querySelector('.spotlight-nav-container .spotlight-nav-buttons-container');
+                if (navButtonsContainer) {
+                    const pauseButton = document.createElement('button');
+                    pauseButton.className = 'spotlight-pause-button spotlight-nav-button emby-button';
+                    if (isTvLayout()) pauseButton.classList.add('show-focus');
+                    const pauseIcon = document.createElement('span');
+                    pauseIcon.className = 'material-icons';
+                    pauseIcon.textContent = 'pause';
+                    pauseButton.appendChild(pauseIcon);
+                    pauseButton.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        isPaused = !isPaused;
+                        if (isPaused) {
+                            if (autoPlayTimer) {
+                                clearTimeout(autoPlayTimer);
+                                autoPlayTimer = null;
+                            }
+                            pauseIcon.textContent = 'play_arrow';
+                        } else {
+                            startAutoPlay();
+                            pauseIcon.textContent = 'pause';
+                        }
+                    });
+
+                    navButtonsContainer.insertBefore(pauseButton, navButtonsContainer.firstChild);
+                }
+            }
+
+            // Slide state container (dots or numeric "N / X")
+            const MAX_DOTS = 5;
+            if (showSlideState && items.length > 1) {
+                const dotsContainer = document.createElement('div');
+                dotsContainer.className = 'spotlight-dots' + (showDots ? '' : ' spotlight-dots-numeric');
+                dotsContainer.setAttribute('data-index', String(currentIndex + 1)); /* 1-based for "N / X" display */
+                dotsContainer.setAttribute('data-total-items', String(items.length));
+
+                if (showDots) {
+                    const numDots = Math.min(items.length, MAX_DOTS);
+                    const activeDotIndex = currentIndex % numDots;
+                    for (let i = 0; i < numDots; i++) {
+                        const dot = document.createElement('button');
+                        dot.className = 'spotlight-dot' + (i === activeDotIndex ? ' active' : '');
+                        dot.setAttribute('data-dot-index', i);
+                        dot.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            const windowStart = Math.floor(currentIndex / numDots) * numDots;
+                            const targetIndex = Math.min(windowStart + i, items.length - 1);
+                            goToItem(targetIndex, true);
+                        });
+                        dotsContainer.appendChild(dot);
+                    }
+                }
+
+                bannerContainer.appendChild(dotsContainer);
+            }
+
+            // Load images for a slide (and optionally preload next). Only sets src/backgroundImage from data-* so browser loads on demand.
+            function ensureSlideImagesLoaded(slideIndex) {
+                if (slideIndex < 0 || slideIndex >= items.length) return;
+                const itemEl = bannerContainer.querySelector(`.spotlight-item[data-index="${slideIndex}"]`);
+                if (!itemEl) return;
+                itemEl.querySelectorAll('img[data-src]').forEach((img) => {
+                    const url = img.getAttribute('data-src');
+                    // Use content attribute — img.src IDL resolves '' to the document URL and would skip reload
+                    if (url && img.getAttribute('src') !== url) img.setAttribute('src', url);
+                });
+                const bgUrl = itemEl.getAttribute('data-background-url');
+                if (bgUrl && !itemEl.style.backgroundImage) itemEl.style.backgroundImage = `url("${bgUrl}")`;
+                const logoEl = itemEl.querySelector('.spotlight-item-logo[data-background-url]');
+                if (logoEl) {
+                    const logoUrl = logoEl.getAttribute('data-background-url');
+                    if (logoUrl && !logoEl.style.backgroundImage) logoEl.style.backgroundImage = `url("${logoUrl}")`;
+                }
+            }
+
+            // Apply pan animation to a slide and track when it completes (for re-trigger on viewport re-entry)
+            const SLIDE_ANIMATION_NAMES = new Set([
+                'kenBurnsZoomOut',
+                'kenBurnsZoomIn',
+                'kenBurnsZoomOutFullscreen',
+                'kenBurnsZoomInFullscreen',
+                'kenBurnsPanRight',
+                'kenBurnsPanLeft',
+                'kenBurnsPanUp',
+                'kenBurnsDiagonal',
+                'fadeInScale',
+                'parallaxFloat',
+                'depthPulse',
+                'slowRotate',
+                'breathe',
+                'heatHaze',
+                'colorWash',
+                'vignetteIn',
+            ]);
+            const SLIDE_ANIMATION_FINAL_TRANSFORM = {
+                kenBurnsZoomIn: 'scale3d(1.12, 1.12, 1)',
+                kenBurnsZoomOut: 'scale3d(1.02, 1.02, 1)',
+                kenBurnsZoomInFullscreen: 'scale3d(1.12, 1.12, 1)',
+                kenBurnsZoomOutFullscreen: 'scale3d(1.08, 1.08, 1)',
+                kenBurnsPanRight: 'scale3d(1.1, 1.1, 1) translateX(5%)',
+                kenBurnsPanLeft: 'scale3d(1.1, 1.1, 1) translateX(-5%)',
+                kenBurnsPanUp: 'scale3d(1.1, 1.1, 1) translateY(-5%)',
+                kenBurnsDiagonal: 'scale3d(1.13, 1.13, 1) translate(5%, -5%)',
+                fadeInScale: 'scale3d(1, 1, 1)',
+                parallaxFloat: 'scale3d(1, 1, 1) translateY(0)',
+                depthPulse: 'scale3d(1, 1, 1)',
+                slowRotate: 'scale3d(1.15, 1.15, 1) rotate(3deg)',
+                breathe: 'scale3d(1, 1, 1)',
+                heatHaze: 'scale3d(1.05, 1.05, 1) skewX(0deg)',
+            };
+            function applyPanAnimationToSlide(slideElement) {
+                if (!slideElement || !panAnimation) return;
+                const imgs = slideElement.querySelectorAll('.spotlight-background-layer img, .spotlight-background-single img');
+                if (!imgs.length) return;
+                currentSlideAnimationComplete = false;
+                let finishedCount = 0;
+                const checkAllDone = () => {
+                    finishedCount++;
+                    if (finishedCount >= imgs.length) currentSlideAnimationComplete = true;
+                };
+                imgs.forEach((img) => {
+                    img.style.transform = '';
+                    img.style.animationPlayState = '';
+                    img.classList.remove('animate');
+                    img.classList.add('animate');
+                    const slideName = img.getAttribute('data-slide-animation') || '';
+                    const handler = (e) => {
+                        if (e.animationName === slideName || SLIDE_ANIMATION_NAMES.has(e.animationName)) {
+                            img.removeEventListener('animationend', handler);
+                            checkAllDone();
+                            var finalTransform = SLIDE_ANIMATION_FINAL_TRANSFORM[e.animationName];
+                            if (finalTransform) {
+                                requestAnimationFrame(() => {
+                                    img.style.transform = finalTransform;
+                                });
+                            }
+                        }
+                    };
+                    img.addEventListener('animationend', handler);
+                });
+            }
+
+            function setSlideAnimationPlayState(slideElement, playState) {
+                if (!slideElement || !panAnimation) return;
+                slideElement
+                    .querySelectorAll('.spotlight-background-layer img, .spotlight-background-single img')
+                    .forEach((img) => {
+                        img.style.animationPlayState = playState;
+                    });
+            }
+
+            function getCurrentSpotlightSlide() {
+                return bannerContainer.querySelector(`.spotlight-item[data-index="${currentIndex}"]`);
+            }
+
+            function startCycleBackdropTimer(slideElement, itemId) {
+                if (cycleBackdropTimer) {
+                    clearInterval(cycleBackdropTimer);
+                    cycleBackdropTimer = null;
+                }
+                if (!cycleBackdrops || tileCount !== 1 || !isVisible) return;
+                const container = slideElement.querySelector('.spotlight-background-single.cycle-backdrops');
+                const imgs = container ? container.querySelectorAll('img') : [];
+                const mapKey = sectionKey + '_' + itemId;
+                const entry = cycleBackdropMap.get(mapKey);
+                if (!entry || !entry.shuffledUrls.length) return;
+                var cycleCount = 0;
+                var maxCycles = Math.max(0, backdropsCount - 1);
+                if (imgs.length >= 2) {
+                    const bottomImg = imgs[0];
+                    const topImg = imgs[1];
+                    const crossfadeDuration = '0.8s';
+                    cycleBackdropTimer = setInterval(() => {
+                        if (!isVisible) return;
+                        if (cycleCount >= maxCycles) {
+                            if (cycleBackdropTimer) {
+                                clearInterval(cycleBackdropTimer);
+                                cycleBackdropTimer = null;
+                            }
+                            return;
+                        }
+                        cycleCount++;
+                        entry.currentIndex = (entry.currentIndex + 1) % entry.shuffledUrls.length;
+                        const nextUrl = entry.shuffledUrls[entry.currentIndex];
+                        const preload = new Image();
+                        preload.onload = () => {
+                            topImg.src = nextUrl;
+                            topImg.setAttribute('data-src', nextUrl);
+                            topImg.style.transition = 'opacity ' + crossfadeDuration + ' ease-in-out';
+                            topImg.style.opacity = '0';
+                            requestAnimationFrame(() => {
+                                requestAnimationFrame(() => {
+                                    topImg.style.opacity = '1';
+                                });
+                            });
+                            const handler = (e) => {
+                                if (e.propertyName !== 'opacity') return;
+                                topImg.removeEventListener('transitionend', handler);
+                                bottomImg.src = nextUrl;
+                                bottomImg.setAttribute('data-src', nextUrl);
+                                topImg.style.opacity = '0';
+                            };
+                            topImg.addEventListener('transitionend', handler);
+                        };
+                        preload.src = nextUrl;
+                    }, perBackdropMs);
+                } else {
+                    const img = slideElement.querySelector('.spotlight-background-single img');
+                    if (!img) return;
+                    cycleBackdropTimer = setInterval(() => {
+                        if (!isVisible) return;
+                        if (cycleCount >= maxCycles) {
+                            if (cycleBackdropTimer) {
+                                clearInterval(cycleBackdropTimer);
+                                cycleBackdropTimer = null;
+                            }
+                            return;
+                        }
+                        cycleCount++;
+                        entry.currentIndex = (entry.currentIndex + 1) % entry.shuffledUrls.length;
+                        const nextUrl = entry.shuffledUrls[entry.currentIndex];
+                        const preload = new Image();
+                        preload.onload = () => {
+                            img.style.opacity = '0';
+                            img.style.transition = 'opacity 0.8s ease-in-out';
+                            requestAnimationFrame(() => {
+                                img.src = nextUrl;
+                                img.setAttribute('data-src', nextUrl);
+                                requestAnimationFrame(() => {
+                                    img.style.opacity = '1';
+                                });
+                            });
+                        };
+                        preload.src = nextUrl;
+                    }, perBackdropMs);
+                }
+            }
+
+            // Go to item function (crossfade transition, then only active slide is visible)
+            function goToItem(index, resetTimer = true) {
+                if (index === currentIndex) return;
+                const focusSlot = captureSpotlightFocusSlot();
+                if (cycleBackdropTimer) {
+                    clearInterval(cycleBackdropTimer);
+                    cycleBackdropTimer = null;
+                }
+                const newWindowIndices = getSpotlightWindowIndices(index, items.length);
+                const indexToRemove = currentWindowIndices.find((i) => !newWindowIndices.includes(i));
+                const indexToAdd = newWindowIndices.find((i) => !currentWindowIndices.includes(i));
+
+                var slideToRemove = undefined;
+                if (indexToRemove !== undefined) {
+                    slideToRemove = bannerContainer.querySelector(`.spotlight-item[data-index="${indexToRemove}"]`);
+                }
+                if (indexToAdd !== undefined) {
+                    createAndAppendSlide(items[indexToAdd], indexToAdd, false);
+                }
+                currentWindowIndices = newWindowIndices;
+
+                ensureSlideImagesLoaded(index);
+                ensureSlideImagesLoaded((index + 1) % items.length);
+
+                const currentItem = bannerContainer.querySelector(`.spotlight-item[data-index="${currentIndex}"]`);
+                const nextItem = bannerContainer.querySelector(`.spotlight-item[data-index="${index}"]`);
+
+                // Prune the slide that left the window so the container never exceeds 9 items.
+                // If it's not the one we're fading out, remove it now; otherwise remove it in onFadeOutEnd.
+                if (slideToRemove && slideToRemove.parentNode && slideToRemove !== currentItem) {
+                    slideToRemove.remove();
+                }
+
+                if (currentItem && nextItem) {
+                    // Start crossfade: outgoing stays visible but fades out; incoming becomes visible and fades in
+                    currentItem.removeAttribute('data-active');
+                    currentItem.setAttribute('data-fade-out', 'true');
+                    nextItem.setAttribute('data-active', 'true');
+                    nextItem.setAttribute('data-entering', 'true');
+                    applyPanAnimationToSlide(nextItem);
+                    startCycleBackdropTimer(nextItem, items[index].Id);
+
+                    // After next frame, remove data-entering so incoming slide transitions from 0 to 1
+                    requestAnimationFrame(() => {
+                        requestAnimationFrame(() => {
+                            nextItem.removeAttribute('data-entering');
+                        });
+                    });
+
+                    // When outgoing slide opacity transition ends, clear its fade-out state and prune if it left the window
+                    const onFadeOutEnd = (e) => {
+                        if (e.propertyName !== 'opacity') return;
+                        currentItem.removeEventListener('transitionend', onFadeOutEnd);
+                        currentItem.removeAttribute('data-fade-out');
+                        if (slideToRemove && slideToRemove.parentNode) {
+                            slideToRemove.remove();
+                        }
+                    };
+                    currentItem.addEventListener('transitionend', onFadeOutEnd);
+                } else if (slideToRemove && slideToRemove.parentNode) {
+                    slideToRemove.remove();
+                }
+                currentIndex = index;
+
+                // Update slide state (dots or data attrs for numeric)
+                if (showSlideState) {
+                    const dotsContainer = bannerContainer.querySelector('.spotlight-dots');
+                    if (dotsContainer) {
+                        dotsContainer.setAttribute('data-index', String(index + 1)); // 1-based for display
+                    }
+                    if (showDots) {
+                        const dots = bannerContainer.querySelectorAll('.spotlight-dot');
+                        const numDots = dots.length;
+                        const activeDotIndex = numDots > 0 ? index % numDots : 0;
+                        dots.forEach((dot, i) => {
+                            if (i === activeDotIndex) {
+                                dot.classList.add('active');
+                            } else {
+                                dot.classList.remove('active');
+                            }
+                        });
+                    }
+                }
+
+                // Reset auto-play timer when manually navigating (always reset delay)
+                if (resetTimer && autoPlay && !isPaused) {
                     if (autoPlayTimer) {
                         clearTimeout(autoPlayTimer);
                         autoPlayTimer = null;
                     }
-                    if (cycleBackdropTimer) {
-                        clearInterval(cycleBackdropTimer);
-                        cycleBackdropTimer = null;
-                    }
-                } else {
-                    // Re-entering viewport: schedule a fresh timer for the current slide
-                    if (autoPlay && !isPaused) {
-                        startAutoPlay();
-                    }
+                    advanceDue = false;
+                    startAutoPlay();
                 }
-            },
-            { root: null, rootMargin: '0px', threshold: 0 }
-        );
-        visibilityObserver.observe(container);
-        
-        document.addEventListener('visibilitychange', () => {
-            if (document.hidden) {
+
+                syncSpotlightTvFocus();
+                if (focusSlot) {
+                    requestAnimationFrame(() => restoreSpotlightFocusSlot(focusSlot));
+                }
+            }
+
+            // Auto-play: single-timeout per slide, controlled only by pause/visibility (hover is ignored)
+            function startAutoPlay() {
                 if (autoPlayTimer) {
                     clearTimeout(autoPlayTimer);
                     autoPlayTimer = null;
                 }
-            } else {
-                if (autoPlay && !isPaused && isVisible) {
-                    startAutoPlay();
+                if (!autoPlay || items.length <= 1 || isPaused || !isVisible) return;
+                autoPlayTimer = setTimeout(onAutoPlayTimerFired, interval);
+            }
+
+            function onAutoPlayTimerFired() {
+                autoPlayTimer = null;
+                if (isPaused) {
+                    advanceDue = true;
+                    return;
+                }
+                if (!autoPlay || !isVisible || items.length <= 1) return;
+                goToItem((currentIndex + 1) % items.length, false);
+                advanceDue = false;
+                // Schedule next slide timer for the new current slide
+                if (autoPlay && !isPaused && isVisible && items.length > 1) {
+                    autoPlayTimer = setTimeout(onAutoPlayTimerFired, interval);
                 }
             }
-        });
-        
-        // Start auto-play (will no-op if container not yet in DOM or not visible once observer runs)
-        if (autoPlay) {
-            startAutoPlay();
-        }
 
-        // Preload next slide soon after mount so transition has no pop
-        if (items.length > 1) {
-            requestAnimationFrame(() => ensureSlideImagesLoaded(1));
-        }
+            // Only cycle when spotlight is in view: pause CSS pan + stop timers when off-screen.
+            // First intersect also gates initial .animate (post one rAF so IO + animate don't stack).
+            let initialPanScheduled = false;
+            const visibilityObserver = new IntersectionObserver(
+                (entries) => {
+                    const entry = entries[0];
+                    if (!entry) return;
+                    isVisible = entry.isIntersecting;
+                    const currentSlide = getCurrentSpotlightSlide();
+                    if (!isVisible) {
+                        if (autoPlayTimer) {
+                            clearTimeout(autoPlayTimer);
+                            autoPlayTimer = null;
+                        }
+                        if (cycleBackdropTimer) {
+                            clearInterval(cycleBackdropTimer);
+                            cycleBackdropTimer = null;
+                        }
+                        setSlideAnimationPlayState(currentSlide, 'paused');
+                    } else {
+                        ensureSlideImagesLoaded(currentIndex);
+                        if (items.length > 1) {
+                            ensureSlideImagesLoaded((currentIndex + 1) % items.length);
+                        }
 
-        // Touch swipe handling
-        let touchStartX = 0;
-        let touchStartY = 0;
-        
-        bannerContainer.addEventListener('touchstart', (e) => {
-            touchStartX = e.touches[0].clientX;
-            touchStartY = e.touches[0].clientY;
-        }, { passive: true });
-        
-        bannerContainer.addEventListener('touchmove', (e) => {
-            if (!e.touches[0]) return;
-            
-            const touchX = e.touches[0].clientX;
-            const touchY = e.touches[0].clientY;
-            
-            const deltaX = touchX - touchStartX;
-            const deltaY = touchY - touchStartY;
-            
-            // If horizontal movement is dominant, prevent vertical scrolling and propagation
-            if (Math.abs(deltaX) > Math.abs(deltaY)) {
-                if (e.cancelable) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                }
-            }
-        }, { passive: false });
-        
-        bannerContainer.addEventListener('touchend', (e) => {
-            if (!e.changedTouches[0]) return;
-            
-            const touchEndX = e.changedTouches[0].clientX;
-            const touchEndY = e.changedTouches[0].clientY;
-            
-            const deltaX = touchEndX - touchStartX;
-            const deltaY = touchEndY - touchStartY;
-            
-            // Threshold for swipe (50px)
-            if (Math.abs(deltaX) > 50 && Math.abs(deltaX) > Math.abs(deltaY)) {
-                // Stop propagation to prevent parent handlers (like tab switching)
-                e.stopPropagation();
-                
-                if (deltaX > 0) {
-                    // Swipe right (previous)
-                    goToItem((currentIndex - 1 + items.length) % items.length, true);
+                        const needsInitialPan =
+                            panAnimation &&
+                            currentSlide &&
+                            !initialPanScheduled &&
+                            !currentSlide.querySelector(
+                                '.spotlight-background-layer img.animate, .spotlight-background-single img.animate',
+                            );
+
+                        if (needsInitialPan) {
+                            initialPanScheduled = true;
+                            requestAnimationFrame(() => {
+                                if (!container.isConnected || !panAnimation || !isVisible) return;
+                                const slide = getCurrentSpotlightSlide();
+                                if (!slide) return;
+                                if (
+                                    !slide.querySelector(
+                                        '.spotlight-background-layer img.animate, .spotlight-background-single img.animate',
+                                    )
+                                ) {
+                                    applyPanAnimationToSlide(slide);
+                                }
+                                if (items[currentIndex]) {
+                                    startCycleBackdropTimer(slide, items[currentIndex].Id);
+                                }
+                            });
+                        } else {
+                            // Re-entering viewport: resume pan, restart timers
+                            setSlideAnimationPlayState(currentSlide, 'running');
+                            if (currentSlide && items[currentIndex]) {
+                                startCycleBackdropTimer(currentSlide, items[currentIndex].Id);
+                            }
+                        }
+
+                        if (autoPlay && !isPaused) {
+                            startAutoPlay();
+                        }
+                    }
+                },
+                { root: null, rootMargin: '0px', threshold: 0 },
+            );
+            visibilityObserver.observe(container);
+
+            document.addEventListener('visibilitychange', () => {
+                const currentSlide = getCurrentSpotlightSlide();
+                if (document.hidden) {
+                    if (autoPlayTimer) {
+                        clearTimeout(autoPlayTimer);
+                        autoPlayTimer = null;
+                    }
+                    setSlideAnimationPlayState(currentSlide, 'paused');
                 } else {
-                    // Swipe left (next)
-                    goToItem((currentIndex + 1) % items.length, true);
+                    if (isVisible) {
+                        setSlideAnimationPlayState(currentSlide, 'running');
+                    }
+                    if (autoPlay && !isPaused && isVisible) {
+                        startAutoPlay();
+                    }
                 }
+            });
+
+            // Start auto-play (will no-op if container not yet in DOM or not visible once observer runs)
+            if (autoPlay) {
+                startAutoPlay();
             }
-        }, { passive: true });
-        
+
+            // Preload next slide soon after mount so transition has no pop
+            if (items.length > 1) {
+                requestAnimationFrame(() => ensureSlideImagesLoaded(1));
+            }
+
+            // TV D-pad: metadata drill-in, row-scoped seams (header L/R is native focuscontainer-x)
+            if (isTvLayout()) {
+                const ARROW = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']);
+
+                function getHeaderCluster() {
+                    return bannerContainer.querySelector('.spotlight-header-container');
+                }
+                function getActiveMeta() {
+                    return bannerContainer.querySelector(
+                        '.spotlight-item[data-active="true"] .metadata-container',
+                    );
+                }
+                function getActiveButtons() {
+                    return bannerContainer.querySelector(
+                        '.spotlight-item[data-active="true"] .spotlight-buttons-container',
+                    );
+                }
+
+                function exitMetadataTo(direction) {
+                    const meta = getActiveMeta();
+                    if (meta) setMetadataDrilled(meta, false);
+                    if (direction === 'up') {
+                        focusTvEl(getFirstSpotlightHeaderFocusable(getHeaderCluster()));
+                    } else {
+                        const buttons = getActiveButtons();
+                        focusTvEl(getTvFocusables(buttons)[0]);
+                    }
+                }
+
+                function enterMetadataDrillIn() {
+                    const meta = getActiveMeta();
+                    if (!meta) return false;
+                    setMetadataDrilled(meta, true);
+                    const rows = getMetadataRows(meta);
+                    for (const row of rows) {
+                        const links = Array.from(
+                            row.querySelectorAll(
+                                'a.spotlight-genre-link, a.spotlight-person-link, a.spotlight-studio-link',
+                            ),
+                        );
+                        if (links[0]) {
+                            focusTvEl(links[0]);
+                            return true;
+                        }
+                    }
+                    setMetadataDrilled(meta, false);
+                    return false;
+                }
+
+                bannerContainer.addEventListener(
+                    'keydown',
+                    (e) => {
+                        if (!ARROW.has(e.key) && e.key !== 'Enter' && e.key !== ' ') return;
+                        const ae = document.activeElement;
+                        if (!ae || !bannerContainer.contains(ae)) return;
+
+                        const meta = getActiveMeta();
+                        const inMeta = !!(meta && meta.contains(ae));
+                        const drilled = meta?.dataset?.metadataDrilled === 'true';
+
+                        // Metadata container: Right/Enter drills in; Up/Down leave to neighbors
+                        if (inMeta && ae === meta && !drilled) {
+                            if (e.key === 'ArrowRight' || e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                enterMetadataDrillIn();
+                                return;
+                            }
+                            if (e.key === 'ArrowUp') {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                exitMetadataTo('up');
+                                return;
+                            }
+                            if (e.key === 'ArrowDown') {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                exitMetadataTo('down');
+                                return;
+                            }
+                        }
+
+                        // Metadata drilled: row-scoped L/R + Up/Down exit
+                        if (inMeta && drilled && meta) {
+                            const rows = getMetadataRows(meta).filter((row) =>
+                                row.querySelector(
+                                    'a.spotlight-genre-link, a.spotlight-person-link, a.spotlight-studio-link',
+                                ),
+                            );
+                            const row = ae.closest('.spotlight-metadata-row');
+                            const rowIndex = rows.indexOf(row);
+                            const rowLinks = row
+                                ? Array.from(
+                                      row.querySelectorAll(
+                                          'a.spotlight-genre-link, a.spotlight-person-link, a.spotlight-studio-link',
+                                      ),
+                                  )
+                                : [];
+                            const linkIndex = rowLinks.indexOf(ae);
+
+                            if (e.key === 'ArrowUp') {
+                                if (rowIndex <= 0) {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    exitMetadataTo('up');
+                                    return;
+                                }
+                                // Move to previous row rightmost for predictability when using Up between rows
+                                const prevLinks = Array.from(
+                                    rows[rowIndex - 1].querySelectorAll(
+                                        'a.spotlight-genre-link, a.spotlight-person-link, a.spotlight-studio-link',
+                                    ),
+                                );
+                                if (prevLinks.length) {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    focusTvEl(prevLinks[prevLinks.length - 1]);
+                                }
+                                return;
+                            }
+                            if (e.key === 'ArrowDown') {
+                                if (rowIndex < 0 || rowIndex >= rows.length - 1) {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    exitMetadataTo('down');
+                                    return;
+                                }
+                                const nextLinks = Array.from(
+                                    rows[rowIndex + 1].querySelectorAll(
+                                        'a.spotlight-genre-link, a.spotlight-person-link, a.spotlight-studio-link',
+                                    ),
+                                );
+                                if (nextLinks[0]) {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    focusTvEl(nextLinks[0]);
+                                }
+                                return;
+                            }
+                            if (e.key === 'ArrowLeft' && linkIndex === 0) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                if (rowIndex > 0) {
+                                    // Bottom/mid row first link → previous row (not category rail)
+                                    const prevLinks = Array.from(
+                                        rows[rowIndex - 1].querySelectorAll(
+                                            'a.spotlight-genre-link, a.spotlight-person-link, a.spotlight-studio-link',
+                                        ),
+                                    );
+                                    focusTvEl(prevLinks[prevLinks.length - 1] || meta);
+                                } else {
+                                    // Top row first link → title / header
+                                    exitMetadataTo('up');
+                                }
+                                return;
+                            }
+                            if (e.key === 'ArrowRight' && linkIndex === rowLinks.length - 1) {
+                                if (rowIndex >= 0 && rowIndex < rows.length - 1) {
+                                    const nextLinks = Array.from(
+                                        rows[rowIndex + 1].querySelectorAll(
+                                            'a.spotlight-genre-link, a.spotlight-person-link, a.spotlight-studio-link',
+                                        ),
+                                    );
+                                    if (nextLinks[0]) {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        focusTvEl(nextLinks[0]);
+                                    }
+                                } else {
+                                    // Right on last bottom link → buttons row
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    exitMetadataTo('down');
+                                }
+                                return;
+                            }
+                            // Left/Right mid-row: let focuscontainer-x / browser handle
+                        }
+                    },
+                    true,
+                );
+
+                // Vertical entry into header / buttons → snap leftmost
+                bannerContainer.addEventListener(
+                    'focusin',
+                    (e) => {
+                        const target = e.target;
+                        if (!target || !bannerContainer.contains(target)) return;
+                        const related = e.relatedTarget;
+
+                        const headerCluster = getHeaderCluster();
+                        const buttons = getActiveButtons();
+
+                        const enteredHeader =
+                            headerCluster?.contains(target) &&
+                            (!related || !headerCluster.contains(related));
+                        const enteredButtons =
+                            buttons?.contains(target) && (!related || !buttons.contains(related));
+
+                        if (enteredHeader) {
+                            const first = getFirstSpotlightHeaderFocusable(headerCluster);
+                            if (first && target !== first) focusTvEl(first);
+                        } else if (enteredButtons) {
+                            const fs = getTvFocusables(buttons);
+                            if (fs[0] && target !== fs[0]) focusTvEl(fs[0]);
+                        }
+                    },
+                    true,
+                );
+            }
+
+            // Touch swipe handling
+            let touchStartX = 0;
+            let touchStartY = 0;
+
+            bannerContainer.addEventListener(
+                'touchstart',
+                (e) => {
+                    touchStartX = e.touches[0].clientX;
+                    touchStartY = e.touches[0].clientY;
+                },
+                { passive: true },
+            );
+
+            bannerContainer.addEventListener(
+                'touchmove',
+                (e) => {
+                    if (!e.touches[0]) return;
+
+                    const touchX = e.touches[0].clientX;
+                    const touchY = e.touches[0].clientY;
+
+                    const deltaX = touchX - touchStartX;
+                    const deltaY = touchY - touchStartY;
+
+                    // If horizontal movement is dominant, prevent vertical scrolling and propagation
+                    if (Math.abs(deltaX) > Math.abs(deltaY)) {
+                        if (e.cancelable) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                        }
+                    }
+                },
+                { passive: false },
+            );
+
+            bannerContainer.addEventListener(
+                'touchend',
+                (e) => {
+                    if (!e.changedTouches[0]) return;
+
+                    const touchEndX = e.changedTouches[0].clientX;
+                    const touchEndY = e.changedTouches[0].clientY;
+
+                    const deltaX = touchEndX - touchStartX;
+                    const deltaY = touchEndY - touchStartY;
+
+                    // Threshold for swipe (50px)
+                    if (Math.abs(deltaX) > 50 && Math.abs(deltaX) > Math.abs(deltaY)) {
+                        // Stop propagation to prevent parent handlers (like tab switching)
+                        e.stopPropagation();
+
+                        if (deltaX > 0) {
+                            // Swipe right (previous)
+                            goToItem((currentIndex - 1 + items.length) % items.length, true);
+                        } else {
+                            // Swipe left (next)
+                            goToItem((currentIndex + 1) % items.length, true);
+                        }
+                    }
+                },
+                { passive: true },
+            );
+        } // end !inert wiring
+
         container.appendChild(bannerContainer);
 
         container.dataset.layout = layout;
         container.dataset.size = size;
         container.dataset.tileCount = String(tileCount);
+
+        // Allow in-place SWR to update the closed-over items list used by goToItem / windowing
+        container._kefinSpotlightApplyItems = (nextItems, opts = {}) => {
+            items = Array.isArray(nextItems) ? nextItems.slice() : [];
+            if (typeof opts.currentIndex === 'number' && items.length) {
+                currentIndex = Math.max(0, Math.min(items.length - 1, opts.currentIndex));
+            } else if (currentIndex >= items.length) {
+                currentIndex = Math.max(0, items.length - 1);
+            }
+            currentWindowIndices = getSpotlightWindowIndices(currentIndex, items.length);
+        };
+
+        container._kefinSpotlightPruneWindow = () => {
+            if (!items.length) return;
+            currentWindowIndices = getSpotlightWindowIndices(currentIndex, items.length);
+            const keep = new Set(currentWindowIndices.map(String));
+            itemsContainer.querySelectorAll(':scope > .spotlight-item').forEach((slide) => {
+                const idx = slide.getAttribute('data-index');
+                if (keep.has(idx)) return;
+                if (slide.getAttribute('data-active') === 'true') return;
+                slide.remove();
+            });
+            currentWindowIndices.forEach((idx) => {
+                if (itemsContainer.querySelector(`.spotlight-item[data-index="${idx}"]`)) return;
+                if (!items[idx]) return;
+                createAndAppendSlide(items[idx], idx, idx === currentIndex);
+            });
+            syncSpotlightTvFocus();
+        };
+
+        syncSpotlightTvFocus();
 
         return container;
     }
@@ -5235,11 +7050,11 @@
     const ITEMS_LAYOUT_CYCLE = ['row', 'grid'];
     const ITEMS_LAYOUT_ICONS = {
         row: 'view_array',
-        grid: 'grid_view'
+        grid: 'grid_view',
     };
     const ITEMS_LAYOUT_NEXT_TITLE = {
         row: 'Grid layout',
-        grid: 'Row layout'
+        grid: 'Row layout',
     };
 
     function resolveItemsLayout(sectionConfig) {
@@ -5261,8 +7076,12 @@
 
     function setShowAllIcon(button, layout) {
         if (!button) return;
+        const iconName = ITEMS_LAYOUT_ICONS[layout] || 'view_array';
+        const icon = button.querySelector('.material-icons') || button;
+        icon.classList.remove('view_array', 'grid_view', 'grid_on');
+        icon.classList.add(iconName);
+        // Keep glyph classes off the paper-icon button itself
         button.classList.remove('view_array', 'grid_view', 'grid_on');
-        button.classList.add(ITEMS_LAYOUT_ICONS[layout] || 'view_array');
     }
 
     function isButtonCardFormat(cardFormat) {
@@ -5274,200 +7093,12 @@
         if (isButtonCardFormat(cardFormat)) {
             return Array.from(itemsContainer.querySelectorAll(':scope > .homeLibraryButton'));
         }
-        return Array.from(itemsContainer.querySelectorAll(':scope > .card:not(.card-layout-dummy)'));
+        return Array.from(itemsContainer.querySelectorAll(':scope > .card'));
     }
 
     function getRealLayoutCards(itemsContainer) {
         if (!itemsContainer) return [];
-        return Array.from(itemsContainer.querySelectorAll(':scope > .card:not(.card-layout-dummy)'));
-    }
-
-    function removeLayoutDummies(itemsContainer) {
-        if (!itemsContainer) return;
-        itemsContainer.querySelectorAll(':scope > .card-layout-dummy').forEach((el) => el.remove());
-    }
-
-    function invalidateLastRowPadding(itemsContainer) {
-        if (!itemsContainer) return;
-        removeLayoutDummies(itemsContainer);
-        itemsContainer.removeAttribute('data-last-row-padding');
-        itemsContainer.removeAttribute('data-last-row-padding-layout');
-        itemsContainer.removeAttribute('data-measuring');
-    }
-
-    function canMeasureLastRowPadding(itemsContainer) {
-        return !!(itemsContainer?.isConnected && itemsContainer.clientWidth >= 1);
-    }
-
-    function createLayoutDummyCard(templateCard, layout) {
-        const dummy = document.createElement('div');
-        dummy.className = templateCard?.className || 'card';
-        dummy.classList.add('card', 'card-layout-dummy');
-        dummy.classList.remove('card-hoverable');
-        dummy.setAttribute('aria-hidden', 'true');
-        dummy.setAttribute('tabindex', '-1');
-
-        // cardBox
-        const cardBox = document.createElement('div');
-        cardBox.className = 'cardBox';
-        dummy.appendChild(cardBox);
-
-        // cardScalable
-        const cardScalable = document.createElement('div');
-        cardScalable.className = 'cardScalable';
-        cardBox.appendChild(cardScalable);
-
-        if (layout === 'grid') {
-            const templatePadder = templateCard?.querySelector('.cardPadder');
-            const padder = document.createElement('div');
-            padder.className = templatePadder?.className
-                || 'cardPadder cardPadder-portrait lazy-hidden-children';
-            const cardIcon = document.createElement('span');
-            cardIcon.className = 'cardImageIcon material-icons';
-            cardIcon.setAttribute('aria-hidden', 'true');
-            cardIcon.textContent = 'folder';
-            padder.appendChild(cardIcon);
-            cardScalable.appendChild(padder);
-
-            const border = createCardBorderHost();
-            const section = templateCard?.closest('[data-border],[data-border-style]');
-            const raw = section?.dataset?.border
-                || section?.dataset?.borderStyle
-                || templateCard?.querySelector('.cardBorder')?.dataset?.style
-                || '';
-            const style = normalizeCardBorderStyle(raw);
-            if (style) fillCardBorder(border, style);
-            cardScalable.appendChild(border);
-        }
-
-        return dummy;
-    }
-
-    /**
-     * Count how many real cards fit on the first row at natural (non-growing) width.
-     * @param {HTMLElement} itemsContainer
-     * @returns {number}
-     */
-    function countItemsPerRow(itemsContainer) {
-        if (!canMeasureLastRowPadding(itemsContainer)) return 0;
-        const cards = getRealLayoutCards(itemsContainer);
-        if (!cards.length) return 0;
-        itemsContainer.setAttribute('data-measuring', 'true');
-        void itemsContainer.offsetWidth;
-        const firstTop = cards[0].offsetTop;
-        let count = 0;
-        for (const card of cards) {
-            if (card.offsetTop !== firstTop) break;
-            count++;
-        }
-        itemsContainer.removeAttribute('data-measuring');
-        return count;
-    }
-
-    /**
-     * Pad the last flex row with invisible dummy cards so grow distribution matches full rows.
-     * Reuses data-last-row-padding when cached for the same layout.
-     * @param {HTMLElement} itemsContainer
-     * @param {'grid'} layout
-     */
-    function syncLastRowPadding(itemsContainer, layout) {
-        if (!itemsContainer || layout !== 'grid') return;
-
-        const cachedPad = itemsContainer.getAttribute('data-last-row-padding');
-        const cachedLayout = itemsContainer.getAttribute('data-last-row-padding-layout');
-        const hasCache = cachedPad != null
-            && cachedPad !== ''
-            && cachedLayout === layout
-            && /^\d+$/.test(cachedPad);
-
-        // Disconnected / zero-width: do not measure or cache (retry when laid out).
-        if (!hasCache && !canMeasureLastRowPadding(itemsContainer)) return;
-
-        removeLayoutDummies(itemsContainer);
-
-        let padding;
-        if (hasCache) {
-            padding = parseInt(cachedPad, 10);
-        } else {
-            itemsContainer.removeAttribute('data-last-row-padding');
-            itemsContainer.removeAttribute('data-last-row-padding-layout');
-            const cards = getRealLayoutCards(itemsContainer);
-            if (!cards.length) return;
-            const perRow = countItemsPerRow(itemsContainer);
-            if (perRow <= 0) return;
-            const rem = cards.length % perRow;
-            padding = rem === 0 ? 0 : perRow - rem;
-            itemsContainer.setAttribute('data-last-row-padding', String(padding));
-            itemsContainer.setAttribute('data-last-row-padding-layout', layout);
-        }
-
-        if (padding <= 0) return;
-        if (!itemsContainer.isConnected) return;
-        const template = getRealLayoutCards(itemsContainer)[0];
-        if (!template) return;
-        const frag = document.createDocumentFragment();
-        for (let i = 0; i < padding; i++) {
-            frag.appendChild(createLayoutDummyCard(template, layout));
-        }
-        itemsContainer.appendChild(frag);
-    }
-
-    let lastRowPaddingResizeTimer = null;
-    function handleLastRowPaddingWindowResize() {
-        clearTimeout(lastRowPaddingResizeTimer);
-        lastRowPaddingResizeTimer = setTimeout(() => {
-            document.querySelectorAll(
-                '.itemsContainer[data-layout="grid"]'
-            ).forEach((container) => {
-                const layout = container.getAttribute('data-layout');
-                invalidateLastRowPadding(container);
-                syncLastRowPadding(container, layout);
-            });
-        }, 150);
-    }
-    if (!window.__kefinLastRowPaddingResizeBound) {
-        window.__kefinLastRowPaddingResizeBound = true;
-        window.addEventListener('resize', handleLastRowPaddingWindowResize);
-    }
-
-    let lastRowPaddingRo = null;
-    let lastRowPaddingRoTimer = null;
-    const lastRowPaddingRoPending = new Set();
-
-    function ensureLastRowPaddingResizeObserver() {
-        if (lastRowPaddingRo || typeof ResizeObserver === 'undefined') return lastRowPaddingRo;
-        lastRowPaddingRo = new ResizeObserver((entries) => {
-            entries.forEach((entry) => {
-                if (entry?.target) lastRowPaddingRoPending.add(entry.target);
-            });
-            clearTimeout(lastRowPaddingRoTimer);
-            lastRowPaddingRoTimer = setTimeout(() => {
-                const targets = [...lastRowPaddingRoPending];
-                lastRowPaddingRoPending.clear();
-                targets.forEach((el) => {
-                    const layout = el.getAttribute?.('data-layout');
-                    if (layout !== 'grid') return;
-                    invalidateLastRowPadding(el);
-                    syncLastRowPadding(el, layout);
-                });
-            }, 80);
-        });
-        return lastRowPaddingRo;
-    }
-
-    function observeLastRowPadding(itemsContainer) {
-        const ro = ensureLastRowPaddingResizeObserver();
-        if (!ro || !itemsContainer) return;
-        try {
-            ro.observe(itemsContainer);
-        } catch (_) { /* ignore */ }
-    }
-
-    function unobserveLastRowPadding(itemsContainer) {
-        if (!lastRowPaddingRo || !itemsContainer) return;
-        try {
-            lastRowPaddingRo.unobserve(itemsContainer);
-        } catch (_) { /* ignore */ }
+        return Array.from(itemsContainer.querySelectorAll(':scope > .card'));
     }
 
     /**
@@ -5492,8 +7123,6 @@
             itemsContainer.removeAttribute('data-gapless');
         }
         if (resolved === 'row') {
-            unobserveLastRowPadding(itemsContainer);
-            removeLayoutDummies(itemsContainer);
             if (scrollButtons) scrollButtons.style.display = '';
         } else if (scrollButtons) {
             scrollButtons.style.display = 'none';
@@ -5504,34 +7133,6 @@
             showAllButton.setAttribute('aria-label', showAllButton.title);
             setShowAllIcon(showAllButton, nextLayout);
         }
-        if (resolved === 'grid') {
-            observeLastRowPadding(itemsContainer);
-            // Two frames so wrap layout is settled before measuring / padding
-            requestAnimationFrame(() => {
-                requestAnimationFrame(() => {
-                    if (itemsContainer.getAttribute('data-layout') !== resolved) return;
-                    syncLastRowPadding(itemsContainer, resolved);
-                });
-            });
-        }
-    }
-
-    function syncAttachedGridTilesLayouts(root) {
-        if (!root?.querySelectorAll) return;
-        root.querySelectorAll(
-            '.itemsContainer[data-layout="grid"]'
-        ).forEach((itemsContainer) => {
-            const layout = itemsContainer.getAttribute('data-layout');
-            const gapless = itemsContainer.getAttribute('data-gapless') === 'true';
-            const section = itemsContainer.closest('.verticalSection, .emby-scroller-container')
-                || itemsContainer.parentElement;
-            if (section) applyItemsLayoutState(section, layout, gapless);
-            else {
-                observeLastRowPadding(itemsContainer);
-                invalidateLastRowPadding(itemsContainer);
-                syncLastRowPadding(itemsContainer, layout);
-            }
-        });
     }
 
     /** @deprecated Use applyItemsLayoutState */
@@ -5577,6 +7178,13 @@
         return ITEMS_LAYOUT_NEXT_TITLE[resolved] || ITEMS_LAYOUT_NEXT_TITLE.row;
     }
 
+    function getShowAllControlIcon(sectionElement) {
+        const itemsContainer = sectionElement?.querySelector('.itemsContainer');
+        const currentLayout = itemsContainer?.getAttribute('data-layout') || 'row';
+        const resolved = currentLayout === 'grid' ? currentLayout : 'row';
+        return ITEMS_LAYOUT_ICONS[nextItemsLayout(resolved)] || 'grid_view';
+    }
+
     function handleShowAllLayoutToggle(sectionElement) {
         const verticalSection = sectionElement.closest('.emby-scroller-container') || sectionElement;
         const itemsContainer = verticalSection.querySelector('.itemsContainer');
@@ -5620,13 +7228,14 @@
                 e.preventDefault();
                 e.stopPropagation();
                 await executeSectionRefresh(sectionConfig, sectionElement);
-            }
+            },
         });
 
         if (isCardScrollerSection(sectionElement)) {
             definitions.push({
                 id: 'showAll',
                 icon: 'grid_view',
+                getIcon: () => getShowAllControlIcon(sectionElement),
                 getLabel: () => getShowAllControlLabel(sectionElement),
                 label: 'Grid layout',
                 className: 'show-all-button',
@@ -5635,14 +7244,14 @@
                     e.preventDefault();
                     e.stopPropagation();
                     handleShowAllLayoutToggle(sectionElement);
-                }
+                },
             });
         }
 
         const configureDef = window.KefinHomeScreenSectionConfigure?.getConfigureSectionControl?.(
             sectionConfig,
             sectionElement,
-            cachedItems
+            cachedItems,
         );
         if (configureDef) {
             definitions.push(configureDef);
@@ -5660,11 +7269,13 @@
 
         visibleDefinitions.forEach((def) => {
             const label = typeof def.getLabel === 'function' ? def.getLabel() : def.label;
-            const button = document.createElement('button');
-            button.type = 'button';
-            button.className = `${def.className} material-icons ${def.icon}`;
-            button.title = label;
-            button.setAttribute('aria-label', label);
+            const icon = typeof def.getIcon === 'function' ? def.getIcon() : def.icon;
+            const button = createPaperIconButton({
+                className: def.className || '',
+                icon: icon || '',
+                title: label,
+                showFocus: isTvLayout(),
+            });
             button.dataset.sectionControlId = def.id;
             button.addEventListener('click', (e) => {
                 def.onClick(e, button);
@@ -5676,6 +7287,16 @@
         });
 
         const newMoreButton = moreButton.cloneNode(true);
+        newMoreButton.classList.add('paper-icon-button-light');
+        if (isTvLayout()) newMoreButton.classList.add('show-focus');
+        if (!newMoreButton.querySelector('.material-icons')) {
+            const iconSpan = document.createElement('span');
+            iconSpan.className = 'material-icons more_vert';
+            iconSpan.setAttribute('aria-hidden', 'true');
+            newMoreButton.appendChild(iconSpan);
+        }
+        // Ensure legacy more buttons no longer carry icon font classes on the button itself
+        newMoreButton.classList.remove('material-icons', 'more_vert');
         moreButton.replaceWith(newMoreButton);
 
         const MORE_CONTROLS_MODAL_ID = 'kefin-section-controls-more';
@@ -5697,13 +7318,14 @@
                 : 'kefinTweaks-popover section-controls-more-popover';
             visibleDefinitions.forEach((def) => {
                 const label = typeof def.getLabel === 'function' ? def.getLabel() : def.label;
+                const icon = typeof def.getIcon === 'function' ? def.getIcon() : def.icon;
                 const item = document.createElement('div');
                 item.className = 'kefinTweaks-popover-item detailsGroupItem section-controls-more-item';
                 item.setAttribute('role', 'button');
                 item.setAttribute('tabindex', '0');
 
                 const iconSpan = document.createElement('span');
-                iconSpan.className = `material-icons section-controls-more-item-icon ${def.icon}`;
+                iconSpan.className = `material-icons section-controls-more-item-icon ${icon || ''}`.trim();
                 iconSpan.setAttribute('aria-hidden', 'true');
 
                 const labelSpan = document.createElement('span');
@@ -5741,7 +7363,11 @@
             modal.dialog.style.minWidth = '12rem';
             modal.dialog.style.width = 'auto';
             modal.dialog.style.padding = '0.25em 0';
-            modal.dialog.style.animation = '160ms ease-out 0s 1 normal both running scaleup';
+            if (typeof window.ModalSystem?.applyOpenAnimation === 'function') {
+                window.ModalSystem.applyOpenAnimation(modal.dialog);
+            } else {
+                modal.dialog.style.animation = '160ms ease-out 0s 1 normal both running scaleup';
+            }
             if (modal.dialogContent) {
                 modal.dialogContent.style.padding = '0';
                 modal.dialogContent.style.overflow = 'visible';
@@ -5797,7 +7423,7 @@
                         if (modal?.dialogHeader) modal.dialogHeader.style.display = 'none';
                         if (modal?.dialogFooter) modal.dialogFooter.style.display = 'none';
                         positionMoreModal(modal, newMoreButton);
-                    }
+                    },
                 });
                 return;
             }
@@ -5834,25 +7460,38 @@
         return document.documentElement.classList.contains('layout-mobile') || window.innerWidth < 900;
     }
 
-    function getSectionSkeletonCount(sectionConfig) {
+    function getSectionSkeletonCount(sectionConfig, cardFormat = null, itemsLayout = null) {
         const raw = sectionConfig?.itemLimit || sectionConfig?.queries?.[0]?.queryOptions?.Limit || 0;
-        return raw > 0 ? raw : 16;
+        const fullLimit = raw > 0 ? raw : 16;
+        const layout = itemsLayout || resolveItemsLayout(sectionConfig);
+        if (layout === 'grid') return fullLimit;
+
+        const format = String(cardFormat || '').toLowerCase();
+        // Default/empty format resolves to portrait in createSkeletonCard
+        let rowCap = 6;
+        if (format === 'banner') {
+            rowCap = 3;
+        } else if (
+            !format ||
+            format === 'portrait' ||
+            format === 'poster' ||
+            format === 'series poster' ||
+            format === 'square' ||
+            format === 'disc'
+        ) {
+            rowCap = 8;
+        }
+        return Math.min(fullLimit, rowCap);
     }
 
-    const SKELETON_ONE_LINE_ITEM_TYPES = new Set([
-        'Book', 'Genre', 'CollectionFolder', 'BoxSet', 'Playlist', 'Folder', 'Studio'
-    ]);
+    const SKELETON_ONE_LINE_ITEM_TYPES = new Set(['Book', 'Genre', 'CollectionFolder', 'BoxSet', 'Playlist', 'Folder', 'Studio']);
 
-    const SKELETON_CUSTOM_FOOTER_SECTION_IDS = new Set([
-        'upcoming', 'recentlyReleased.movies', 'recentlyReleased.episodes'
-    ]);
+    const SKELETON_CUSTOM_FOOTER_SECTION_IDS = new Set(['upcoming', 'recentlyReleased.movies', 'recentlyReleased.episodes']);
 
     function sectionUsesCustomFooterText(sectionConfig) {
         if (!sectionConfig) return false;
         if (SKELETON_CUSTOM_FOOTER_SECTION_IDS.has(sectionConfig.id)) return true;
-        if (Array.isArray(sectionConfig.items) && sectionConfig.items.some(
-            (item) => item?.CustomFooterText || item?.cardFooter
-        )) {
+        if (Array.isArray(sectionConfig.items) && sectionConfig.items.some((item) => item?.CustomFooterText || item?.cardFooter)) {
             return true;
         }
         return false;
@@ -5869,7 +7508,10 @@
 
         let includeTypes = query?.queryOptions?.IncludeItemTypes;
         if (typeof includeTypes === 'string') {
-            includeTypes = includeTypes.split(',').map((t) => t.trim()).filter(Boolean);
+            includeTypes = includeTypes
+                .split(',')
+                .map((t) => t.trim())
+                .filter(Boolean);
         }
         if (!Array.isArray(includeTypes) || includeTypes.length === 0) return null;
         if (includeTypes.length === 1) return includeTypes[0];
@@ -5889,75 +7531,198 @@
 
     function readScrollerPadding(scroller) {
         if (!scroller) return { left: 0, right: 0 };
+        const metrics = getScrollerMetrics(scroller);
+        if (metrics.pad) return metrics.pad;
 
-        // Return --scroller-padding if it exists, otherwise set it and return it
-        if (scroller.style.getPropertyValue('--scroller-padding-left') && scroller.style.getPropertyValue('--scroller-padding-right')) {
-            return {
-                left: parseFloat(scroller.style.getPropertyValue('--scroller-padding-left')),
-                right: parseFloat(scroller.style.getPropertyValue('--scroller-padding-right'))
-            };
+        // Reuse first measured pad for sibling scrollers in the same sections container
+        const host = scroller.closest?.('.homeSectionsContainer, .sections');
+        if (host && host._kefinSharedScrollerPad) {
+            metrics.pad = host._kefinSharedScrollerPad;
+            return metrics.pad;
         }
 
         const style = window.getComputedStyle(scroller);
-
-        const paddingLeft = parseFloat(style.paddingLeft) || 0;
-        const paddingRight = parseFloat(style.paddingRight) || 0;
-        scroller.style.setProperty('--scroller-padding-left', paddingLeft);
-        scroller.style.setProperty('--scroller-padding-right', paddingRight);
-
-        return {
-            left: paddingLeft,
-            right: paddingRight
+        const pad = {
+            left: parseFloat(style.paddingLeft) || 0,
+            right: parseFloat(style.paddingRight) || 0,
         };
+        metrics.pad = pad;
+        if (host) host._kefinSharedScrollerPad = pad;
+        return pad;
+    }
+
+    /** Frame content-box width (clientWidth minus horizontal padding) — viewport for slidee math. */
+    function getScrollerViewportWidth(scroller, pad) {
+        const p = pad || readScrollerPadding(scroller);
+        return Math.max(0, (scroller?.clientWidth || 0) - (p.left || 0) - (p.right || 0));
     }
 
     function readCardPadding(card) {
         if (!card) return { left: 0, right: 0 };
+        const cached = cardPaddingByEl.get(card);
+        if (cached) return cached;
 
-        // Return --card-padding if it exists, otherwise set it and return it
-        if (card.style.getPropertyValue('--card-padding-left') && card.style.getPropertyValue('--card-padding-right')) {
-            return {
-                left: parseFloat(card.style.getPropertyValue('--card-padding-left')),
-                right: parseFloat(card.style.getPropertyValue('--card-padding-right'))
-            };
-        }
         const style = window.getComputedStyle(card);
-        const paddingLeft = parseFloat(style.paddingLeft) || 0;
-        const paddingRight = parseFloat(style.paddingRight) || 0;
-        card.style.setProperty('--card-padding-left', paddingLeft);
-        card.style.setProperty('--card-padding-right', paddingRight);
-
-        return {
-            left: paddingLeft,
-            right: paddingRight
+        const pad = {
+            left: parseFloat(style.paddingLeft) || 0,
+            right: parseFloat(style.paddingRight) || 0,
         };
+        cardPaddingByEl.set(card, pad);
+        return pad;
     }
 
     function readSampleCardPadding(scroller) {
-        const sampleCard = scroller?.querySelector?.(
-            '.itemsContainer > .card:not(.card-layout-dummy):not(.skeleton-card)'
+        if (!scroller) return { left: 0, right: 0 };
+        const metrics = getScrollerMetrics(scroller);
+        if (metrics.cardPad) return metrics.cardPad;
+
+        const sampleCard = scroller.querySelector?.('.itemsContainer > .card:not(.skeleton-card)');
+        const pad = readCardPadding(sampleCard);
+        metrics.cardPad = pad;
+        return pad;
+    }
+
+    /** Inner slidee that receives translateX (Jellyfin .scrollSlider), not the outer frame. */
+    function getScrollSlidee(scroller) {
+        if (!scroller) return null;
+        return scroller.querySelector('.scrollSlider') || scroller.querySelector('.itemsContainer');
+    }
+
+    function getCurrentPosition(scroller) {
+        if (!scroller) return 0;
+        const metrics = getScrollerMetrics(scroller);
+        if (metrics && Number.isFinite(metrics.scrollX)) return metrics.scrollX;
+        return 0;
+    }
+
+    function setStoredScrollPosition(scroller, scrollX) {
+        const metrics = getScrollerMetrics(scroller);
+        if (metrics) metrics.scrollX = scrollX;
+    }
+
+    function setMaxScrollPosition(scroller, maxScroll) {
+        const metrics = getScrollerMetrics(scroller);
+        if (metrics) metrics.maxScroll = maxScroll;
+    }
+
+    /**
+     * Apply row scroll as translateX on the slidee (itemsContainer), matching Jellyfin.
+     * Clears any leftover transform on the outer scroller frame.
+     */
+    function setSlideePosition(scroller, position, options = {}) {
+        if (!scroller) return 0;
+        const opts = options || {};
+        const slidee = getScrollSlidee(scroller);
+
+        if (opts.freshMax) {
+            const metrics = getScrollerMetrics(scroller);
+            if (metrics) {
+                metrics.maxScroll = null;
+                metrics.pad = null;
+                metrics.cardPad = null;
+            }
+        }
+
+        const max = Math.max(
+            0,
+            getMaxPositionFromPadding(scroller, readScrollerPadding(scroller), readSampleCardPadding(scroller)),
         );
-        return readCardPadding(sampleCard);
+        const scrollPosition = Math.min(Math.max(position, 0), max);
+        const clampedPosition = scrollPosition > 20 ? scrollPosition : 0;
+
+        if (scroller.style.transform) scroller.style.transform = '';
+        if (scroller.style.transition) scroller.style.transition = '';
+
+        if (slidee) {
+            if (opts.animate) {
+                slidee.style.transition = 'transform 270ms ease-out';
+                slidee.style.willChange = 'transform';
+            } else {
+                slidee.style.transition = 'none';
+            }
+            slidee.style.transform = `translateX(-${clampedPosition}px)`;
+        }
+
+        setStoredScrollPosition(scroller, clampedPosition);
+        return clampedPosition;
+    }
+
+    /**
+     * Content-space X of a card relative to the scroller frame (undoes slidee translate).
+     */
+    function getCardContentOffsetX(scroller, card) {
+        if (!scroller || !card) return 0;
+        const current = getCurrentPosition(scroller);
+        const scrollerRect = scroller.getBoundingClientRect();
+        const cardRect = card.getBoundingClientRect();
+        return cardRect.left - scrollerRect.left + current;
+    }
+
+    /**
+     * JF-style toCenter: put card center on frame center, clamped to [0, max].
+     * Early cards stay left-aligned (desired < 0 → 0); mid/late track center.
+     */
+    function toCenterCard(scroller, card, options = {}) {
+        if (!scroller || !card || !scroller.contains(card)) return;
+        if (card.classList.contains('skeleton-card')) return;
+
+        const animate = options.animate !== false;
+        const metrics = getScrollerMetrics(scroller);
+        if (metrics) metrics.maxScroll = null;
+
+        const pad = readScrollerPadding(scroller);
+        const cardPad = readSampleCardPadding(scroller);
+        const contentOffset = getCardContentOffsetX(scroller, card);
+        const cardWidth = card.offsetWidth || card.getBoundingClientRect().width || 0;
+        // Center within the frame content box (same viewport as max-scroll)
+        const frameInnerWidth = getScrollerViewportWidth(scroller, pad);
+        const cardCenterInContent = contentOffset + cardWidth / 2 - pad.left;
+        const desired = cardCenterInContent - frameInnerWidth / 2;
+        const max = getMaxPositionFromPadding(scroller, pad, cardPad);
+        setSlideePosition(scroller, Math.min(Math.max(desired, 0), max), { animate: animate });
+    }
+
+    function attachTvFocusScroll(scroller) {
+        if (!scroller || scroller.dataset.tvFocusScroll === '1') return;
+        scroller.dataset.tvFocusScroll = '1';
+
+        let rafId = 0;
+        let pendingCard = null;
+
+        scroller.addEventListener(
+            'focusin',
+            (e) => {
+                const card = e.target?.closest?.('.card');
+                if (!card || !scroller.contains(card)) return;
+                if (card.classList.contains('skeleton-card')) return;
+                pendingCard = card;
+                if (rafId) return;
+                rafId = requestAnimationFrame(() => {
+                    rafId = 0;
+                    const target = pendingCard;
+                    pendingCard = null;
+                    if (target && scroller.contains(target)) {
+                        toCenterCard(scroller, target, { animate: true });
+                    }
+                });
+            },
+            true,
+        );
     }
 
     function getFullyVisibleCardCount(scroller, cards) {
         const epsilon = 1;
         const pad = readScrollerPadding(scroller);
         const cardPad = readSampleCardPadding(scroller);
-        const endInset = Math.max(pad.right, pad.left);
         const scrollerRect = scroller.getBoundingClientRect();
-        const currentPosition = getCurrentPosition(scroller);
-        const contentWidth = Math.max(
-            0,
-            scroller.clientWidth - pad.left - endInset
-        );
-        const visibleLeft = scrollerRect.left + currentPosition + pad.left;
+        // Slidee is translated; frame is fixed — visible window is the content box
+        const contentWidth = getScrollerViewportWidth(scroller, pad);
+        const visibleLeft = scrollerRect.left + pad.left;
         const visibleRight = visibleLeft + contentWidth;
         let count = 0;
-        cards.forEach((card, index) => {
+        cards.forEach((card) => {
             const cardRect = card.getBoundingClientRect();
             if (cardRect.width <= 0) return;
-            // Use content box (inside card padding) for visibility
             const cardContentLeft = cardRect.left + cardPad.left;
             const cardContentRight = cardRect.right - cardPad.right;
             if (cardContentLeft >= visibleLeft - epsilon && cardContentRight <= visibleRight + epsilon) {
@@ -5965,45 +7730,36 @@
             }
         });
         return count;
-
-    }
-
-    function getCurrentPosition(scroller) {
-        const v = scroller.style.getPropertyValue('--scroll-x');
-        if (v !== '' && !isNaN(parseFloat(v))) return parseFloat(v);
-        const matrix = new DOMMatrixReadOnly(window.getComputedStyle(scroller).transform);
-        const translateX = matrix.m41 || 0;
-        return Math.abs(translateX);
     }
 
     /**
-     * Max transform/scroll offset so the trailing content edge matches the leading
-     * gutter when the skin only pads the left (e.g. Fin --sidePadding), plus the
-     * sample card's horizontal padding so the last card's right padding clears the clip.
+     * Max translateX so slidee content flushes to the frame content-box right edge.
+     * Pairs slidee.scrollWidth with viewport = clientWidth - padL - padR (not clientWidth + endInset hacks).
+     * @param {HTMLElement} scroller
+     * @param {{left:number,right:number}} [pad]
+     * @param {{left:number,right:number}} [_cardPad] unused; kept for call-site compatibility
      */
-    function getMaxPositionFromPadding(scroller, pad, cardPad) {
+    function getMaxPositionFromPadding(scroller, pad, _cardPad) {
         if (!scroller) return 0;
 
-        // Return --max-scroll if it exists, otherwise set it and return it
-        if (scroller.style.getPropertyValue('--max-scroll')) {
-            return parseFloat(scroller.style.getPropertyValue('--max-scroll'));
+        const metrics = getScrollerMetrics(scroller);
+        if (metrics && metrics.maxScroll != null && Number.isFinite(metrics.maxScroll)) {
+            return metrics.maxScroll;
         }
 
-        // Check if all cards are visible
-        const cards = scroller.querySelectorAll('.itemsContainer > .card:not(.card-layout-dummy):not(.skeleton-card)');
+        const cards = scroller.querySelectorAll('.itemsContainer > .card:not(.skeleton-card)');
         const fullyVisible = getFullyVisibleCardCount(scroller, cards);
         if (fullyVisible === cards.length) {
+            setMaxScrollPosition(scroller, 0);
             return 0;
         }
 
-
-        const { left, right } = pad || { left: 0, right: 0 };
-        const cp = cardPad || { left: 0, right: 0 };
-        const endInset = Math.max(right, left);
-        const base = Math.max(0, (scroller.scrollWidth - scroller.clientWidth) + endInset);
-        // Last-card right scroll: include card L+R padding in the end stop
-        const maxScroll = base + (cp.left || 0) + (cp.right || 0);
-        scroller.style.setProperty('--max-scroll', String(maxScroll));
+        const resolvedPad = pad || readScrollerPadding(scroller);
+        const slidee = getScrollSlidee(scroller);
+        const contentWidth = slidee ? slidee.scrollWidth : scroller.scrollWidth;
+        const viewport = getScrollerViewportWidth(scroller, resolvedPad);
+        const maxScroll = Math.max(0, contentWidth - viewport);
+        setMaxScrollPosition(scroller, maxScroll);
         return maxScroll;
     }
 
@@ -6012,24 +7768,31 @@
         const isMobile = isMobileLayout();
 
         scroller.setAttribute('data-horizontal', 'true');
-        scroller.setAttribute('data-centerfocus', 'card');
-        scroller.className = `padded-top-focusscale padded-bottom-focusscale emby-scroller padded-left custom-scroller${isMobile ? ' scrollX hiddenScrollX' : ''}`;
-        scroller.setAttribute('data-scroll-mode-x', 'custom');
+        scroller.setAttribute('data-centerfocus', 'true');
+        scroller.className = `padded-top-focusscale padded-bottom-focusscale emby-scroller padded-left custom-scroller${isMobile ? " scrollX hiddenScrollX" : ""}`;
+        scroller.setAttribute('data-scroll-mode-x', isMobile ? 'native' : 'custom');
         scroller.style.scrollSnapType = 'none';
         scroller.style.touchAction = 'auto';
         scroller.style.overscrollBehaviorX = 'contain';
         scroller.style.overscrollBehaviorY = 'auto';
         scroller.style.webkitOverflowScrolling = 'touch';
-        scroller.style.setProperty('--scroll-x', '0');
+        // Desktop custom path: clip frame + translateX slidee. Mobile scrollX: native overflow swipe.
+        if (!isMobile) {
+            scroller.style.overflow = 'hidden';
+        }
+        setStoredScrollPosition(scroller, 0);
 
         return scroller;
     }
 
-    function createItemsSliderElement() {
+    function createItemsSliderElement(isEmbyItemscontainer = true) {
         const isMobile = isMobileLayout();
         const itemsContainer = document.createElement('div');
-        itemsContainer.setAttribute('is', 'emby-itemscontainer');
-        itemsContainer.className = `focuscontainer-x itemsContainer scrollSlider${!isMobile ? ' animatedScrollX' : ''}`;
+        if (isEmbyItemscontainer) {
+            itemsContainer.setAttribute('is', 'emby-itemscontainer');
+        }
+        const tvClass = isTvLayout() ? ' itemsContainer-tv' : '';
+        itemsContainer.className = `focuscontainer-x itemsContainer scrollSlider${!isMobile ? " animatedScrollX" : ""}${tvClass}`;
         itemsContainer.style.whiteSpace = 'nowrap';
         return itemsContainer;
     }
@@ -6058,11 +7821,7 @@
         leftButton.appendChild(leftSpan);
 
         function getCurrentPosition() {
-            const v = scroller.style.getPropertyValue('--scroll-x');
-            if (v !== '' && !isNaN(parseFloat(v))) return parseFloat(v);
-            const matrix = new DOMMatrixReadOnly(window.getComputedStyle(scroller).transform);
-            const translateX = matrix.m41 || 0;
-            return Math.abs(translateX);
+            return getScrollerPosition(scroller);
         }
 
         // Gesture-local padding: captured once per drag/wheel burst, cleared on end/idle
@@ -6086,75 +7845,65 @@
         }
 
         function getMaxPositionFresh() {
-            return getMaxPositionFromPadding(
-                scroller,
-                readScrollerPadding(scroller),
-                readSampleCardPadding(scroller)
-            );
+            const metrics = getScrollerMetrics(scroller);
+            if (metrics) {
+                metrics.maxScroll = null;
+                metrics.pad = null;
+                metrics.cardPad = null;
+            }
+            return getMaxPositionFromPadding(scroller, readScrollerPadding(scroller), readSampleCardPadding(scroller));
         }
 
         function setPosition(newPosition, options) {
             const opts = options || {};
-            const maxPosition = Math.max(0, opts.freshMax ? getMaxPositionFresh() : getMaxPosition());
-            const clampedPosition = Math.min(Math.max(newPosition, 0), maxPosition);
-
-            if (opts.animate) {
-                scroller.style.transition = 'transform 270ms ease-out';
-            } else {
-                scroller.style.transition = 'none';
-            }
-
-            scroller.style.transform = `translateX(-${clampedPosition}px)`;
-            scroller.style.setProperty('--scroll-x', String(clampedPosition));
+            const slidee = getScrollSlidee(scroller);
+            const clampedPosition = setSlideePosition(scroller, newPosition, {
+                animate: !!opts.animate,
+                freshMax: !!opts.freshMax,
+            });
 
             const section = scroller.closest('.emby-scroller-container');
             if (section && typeof applyScrollButtonState === 'function') {
-                if (opts.animate) {
-                    const onTransitionEnd = () => {
-                        scroller.removeEventListener('transitionend', onTransitionEnd);
+                if (opts.animate && slidee) {
+                    const onTransitionEnd = (e) => {
+                        if (e && e.target !== slidee) return;
+                        slidee.removeEventListener('transitionend', onTransitionEnd);
                         applyScrollButtonState(section);
                     };
-                    scroller.addEventListener('transitionend', onTransitionEnd);
+                    slidee.addEventListener('transitionend', onTransitionEnd);
                 } else {
                     requestAnimationFrame(() => applyScrollButtonState(section));
                 }
             }
+            return clampedPosition;
         }
 
         function getScrollCards() {
             const itemsContainer = scroller.querySelector('.itemsContainer');
             if (!itemsContainer) return [];
-            return Array.from(itemsContainer.querySelectorAll(':scope > .card:not(.card-layout-dummy):not(.skeleton-card)'));
+            return Array.from(itemsContainer.querySelectorAll(':scope > .card:not(.skeleton-card)'));
         }
 
         function getCardScrollLeft(card) {
             // Align card content edge (border-box left + card paddingLeft) to the
-            // scroller's padded content gutter.
+            // scroller's padded content gutter. Content-space (undoes slidee translate).
             const pad = readScrollerPadding(scroller);
             const cardPad = readSampleCardPadding(scroller);
-            const scrollerRect = scroller.getBoundingClientRect();
-            const cardRect = card.getBoundingClientRect();
-            return cardRect.left - scrollerRect.left - pad.left + cardPad.left;
+            return getCardContentOffsetX(scroller, card) - pad.left + cardPad.left;
         }
 
         /**
-         * Cards fully inside the padded content clip (not the browser viewport / border box).
-         * Undo translateX, then inset by scroller + card padding so visibility matches snap targets.
-         * When the skin only pads the left, treat trailing inset as max(left, right).
+         * Cards fully inside the frame content-box clip.
+         * Frame is fixed; slidee translate moves cards — use live rects vs content-box edges.
          */
         function getFullyVisibleCardIndices(cards) {
             const fullyVisible = [];
             const epsilon = 1;
             const pad = readScrollerPadding(scroller);
             const cardPad = readSampleCardPadding(scroller);
-            const endInset = Math.max(pad.right, pad.left);
             const scrollerRect = scroller.getBoundingClientRect();
-            const currentPosition = getCurrentPosition();
-            const contentWidth = Math.max(
-                0,
-                scroller.clientWidth - pad.left - endInset
-            );
-            const visibleLeft = scrollerRect.left + currentPosition + pad.left;
+            const contentWidth = getScrollerViewportWidth(scroller, pad);
+            const visibleLeft = scrollerRect.left + pad.left;
             const visibleRight = visibleLeft + contentWidth;
             cards.forEach((card, index) => {
                 const cardRect = card.getBoundingClientRect();
@@ -6172,7 +7921,7 @@
         function snapScrollToCardIndex(cards, targetIndex) {
             if (!cards.length) return;
             const clampedIndex = Math.max(0, Math.min(targetIndex, cards.length - 1));
-            // Last card: use max (scroller end inset + card L+R padding), not left-align snap
+            // Last card: flush to frame content-box end (getMaxPositionFresh)
             if (clampedIndex === cards.length - 1) {
                 setPosition(getMaxPositionFresh(), { animate: true, freshMax: true });
                 return;
@@ -6230,7 +7979,7 @@
             lastX: 0,
             lastTime: 0,
             velocity: 0,
-            momentumId: null
+            momentumId: null,
         };
 
         if (!isMobile) {
@@ -6368,7 +8117,7 @@
                     let lastTimestamp = 0;
 
                     const step = (timestamp) => {
-                        const frameTime = lastTimestamp ? (timestamp - lastTimestamp) : 16;
+                        const frameTime = lastTimestamp ? timestamp - lastTimestamp : 16;
                         lastTimestamp = timestamp;
 
                         if (Math.abs(dragState.velocity) > velocityThreshold) {
@@ -6401,41 +8150,64 @@
             }
 
             scroller.addEventListener('mousedown', onPointerDown);
+            scroller.addEventListener('touchstart', onPointerDown, { passive: true });
 
-            // Trackpad / mouse wheel → custom transform scroll (native overflow scrollers handle this themselves)
+            // Trackpad / mouse wheel → custom transform scroll (native overflow scrollers handle this themselves).
+            // Keep passive:false so we can preventDefault on horizontal gestures, but coalesce apply work
+            // into one rAF so the event callback stays cheap under high-frequency trackpad input.
             const WHEEL_DELTA_MIN = 1;
             const WHEEL_IDLE_MS = 150;
-            scroller.addEventListener('wheel', (e) => {
-                if (scroller.classList.contains('scrollX')) return;
-
-                let dx = e.deltaX;
-                let dy = e.deltaY;
-                if (e.deltaMode === 1) {
-                    dx *= 16;
-                    dy *= 16;
-                } else if (e.deltaMode === 2) {
-                    dx *= scroller.clientWidth;
-                    dy *= scroller.clientHeight;
-                }
-
-                const shiftHorizontal = e.shiftKey && Math.abs(dy) >= WHEEL_DELTA_MIN && Math.abs(dx) < WHEEL_DELTA_MIN;
-                if (shiftHorizontal) {
-                    dx = dy;
-                    dy = 0;
-                }
-
-                if (Math.abs(dx) < WHEEL_DELTA_MIN) return;
-                if (Math.abs(dx) < Math.abs(dy)) return;
-
-                e.preventDefault();
+            let pendingWheelDx = 0;
+            let wheelRafId = null;
+            const flushPendingWheel = () => {
+                wheelRafId = null;
+                const dx = pendingWheelDx;
+                pendingWheelDx = 0;
+                if (!dx) return;
                 ensureGestureInsets();
-                if (wheelIdleTimer) clearTimeout(wheelIdleTimer);
-                wheelIdleTimer = setTimeout(() => {
-                    wheelIdleTimer = null;
-                    clearGestureInsets();
-                }, WHEEL_IDLE_MS);
                 setPosition(getCurrentPosition() + dx, { animate: false });
-            }, { passive: false });
+            };
+            scroller.addEventListener(
+                'wheel',
+                (e) => {
+                    if (scroller.classList.contains('scrollX')) return;
+
+                    let dx = e.deltaX;
+                    let dy = e.deltaY;
+                    // Line mode: normalize without layout. Page mode: defer clientWidth until apply frame.
+                    if (e.deltaMode === 1) {
+                        dx *= 16;
+                        dy *= 16;
+                    }
+
+                    const shiftHorizontal = e.shiftKey && Math.abs(dy) >= WHEEL_DELTA_MIN && Math.abs(dx) < WHEEL_DELTA_MIN;
+                    if (shiftHorizontal) {
+                        dx = dy;
+                        dy = 0;
+                    }
+
+                    if (Math.abs(dx) < WHEEL_DELTA_MIN) return;
+                    if (Math.abs(dx) < Math.abs(dy)) return;
+
+                    e.preventDefault();
+
+                    if (e.deltaMode === 2) {
+                        dx *= scroller.clientWidth || 1;
+                    }
+
+                    pendingWheelDx += dx;
+                    if (wheelIdleTimer) clearTimeout(wheelIdleTimer);
+                    wheelIdleTimer = setTimeout(() => {
+                        wheelIdleTimer = null;
+                        clearGestureInsets();
+                    }, WHEEL_IDLE_MS);
+
+                    if (wheelRafId == null) {
+                        wheelRafId = requestAnimationFrame(flushPendingWheel);
+                    }
+                },
+                { passive: false },
+            );
         }
 
         return scrollButtons;
@@ -6488,6 +8260,7 @@
         } else if (viewMoreUrl) {
             const titleLink = document.createElement('a');
             titleLink.className = 'sectionTitle-link button-flat button-flat-mini sectionTitleTextButton emby-button';
+            if (isTvLayout()) titleLink.classList.add('show-focus');
             titleLink.style.cssText = 'text-decoration: none; cursor: pointer; display: flex; align-items: center;';
 
             if (typeof viewMoreUrl === 'function') {
@@ -6529,6 +8302,7 @@
             } else if (captionUrl) {
                 captionEl = document.createElement('a');
                 captionEl.className = 'sectionTitle sectionCaption button-flat button-flat-mini sectionTitleTextButton emby-button';
+                if (isTvLayout()) captionEl.classList.add('show-focus');
                 if (typeof captionUrl === 'function') {
                     captionEl.addEventListener('click', (e) => {
                         e.preventDefault();
@@ -6547,9 +8321,16 @@
         }
     }
 
-    function createScrollableContainer(items, title, viewMoreUrl = null, overflowCard = false, cardFormat = null, sectionConfig = null) {
+    function createScrollableContainer(
+        items,
+        title,
+        viewMoreUrl = null,
+        overflowCard = false,
+        cardFormat = null,
+        sectionConfig = null,
+        registerScrollButtons = true,
+    ) {
         const normalizedFormat = (cardFormat || '').toLowerCase();
-        const isButtonLayout = normalizedFormat === 'button';
 
         // Create the main vertical section container
         const verticalSection = document.createElement('div');
@@ -6559,7 +8340,7 @@
             verticalSection.style.setProperty('--row-hue', `${Math.floor(Math.random() * 360)}deg`);
             verticalSection.dataset.facetRowType = facetRowType;
         }
-        
+
         // Persist the card format if provided (ensures consistency for random/updates)
         if (cardFormat) {
             verticalSection.setAttribute('data-card-format', cardFormat);
@@ -6573,50 +8354,55 @@
             title,
             caption: getSectionCaption(sectionConfig),
             captionUrl: getSectionCaptionUrl(sectionConfig),
-            viewMoreUrl
+            viewMoreUrl,
         });
 
         ensureSectionControlsMount(sectionTitleContainer);
-
-        if (isButtonLayout) {
-            const itemsContainer = document.createElement('div');
-            itemsContainer.setAttribute('is', 'emby-itemscontainer');
-            itemsContainer.className = 'itemsContainer padded-left padded-right focuscontainer-x';
-
-            items.forEach((item, index) => {
-                const button = createLibraryButtonElement(item);
-                button.setAttribute('data-index', index);
-                itemsContainer.appendChild(button);
-            });
-
-            /* verticalSection.appendChild(sectionTitleContainer);
-            verticalSection.appendChild(itemsContainer);
-            return verticalSection; */
-        }
 
         // Create scroller container
         const scroller = createScrollerElement();
         const itemsContainer = createItemsSliderElement();
 
-        // Add items to container
+        // Add items to container (TV → button cards via createCardElement)
         const useParentCard = !!sectionConfig?.useParentCard;
+        const borderStyle = sectionConfig?.borderStyle || null;
         items.forEach((item, index) => {
-            const card = createJellyfinCardElement(item, overflowCard, cardFormat, item.cardFooter, useParentCard);
+            const card = createCardElement(item, overflowCard, cardFormat, item.cardFooter, useParentCard, borderStyle);
             card.setAttribute('data-index', index);
             itemsContainer.appendChild(card);
         });
 
         scroller.appendChild(itemsContainer);
 
-        const scrollButtons = attachScrollableSectionChrome(verticalSection, scroller);
+        let scrollButtons = null;
+        if (isTvLayout()) {
+            attachTvFocusScroll(scroller);
+        } else {
+            scrollButtons = attachScrollableSectionChrome(verticalSection, scroller);
+        }
 
         // Assemble the section
         verticalSection.appendChild(sectionTitleContainer);
-        verticalSection.appendChild(scrollButtons);
+        if (scrollButtons) {
+            verticalSection.appendChild(scrollButtons);
+        }
         verticalSection.appendChild(scroller);
 
-        registerScrollSectionScrollButtons(verticalSection);
+        if (registerScrollButtons && scrollButtons) {
+            registerScrollSectionScrollButtons(verticalSection);
+        }
         return verticalSection;
+    }
+
+    function createSectionScrollableContainer(
+        items,
+        title,
+        viewMoreUrl = null,
+        overflowCard = false,
+        cardFormat = null,
+        sectionConfig = null,
+    ) {
+        return createScrollableContainer(items, title, viewMoreUrl, overflowCard, cardFormat, sectionConfig);
     }
 
     /**
@@ -6628,13 +8414,18 @@
      */
     function createSkeletonCard(cardFormat = null, overflowCard = false, sectionConfig = null) {
         const card = document.createElement('div');
-        
+
         // Determine card classes based on format (must match createJellyfinCardElement)
         let cardClass, padderClass;
         cardFormat = cardFormat?.toLowerCase() || 'portrait';
-        
-        if (cardFormat === 'backdrop' || cardFormat === 'thumb' || cardFormat === 'series thumb'
-            || cardFormat === 'logo' || cardFormat === 'clear art') {
+
+        if (
+            cardFormat === 'backdrop' ||
+            cardFormat === 'thumb' ||
+            cardFormat === 'series thumb' ||
+            cardFormat === 'logo' ||
+            cardFormat === 'clear art'
+        ) {
             cardClass = overflowCard ? 'overflowBackdropCard' : 'backdropCard';
             padderClass = 'cardPadder-backdrop';
         } else if (cardFormat === 'square' || cardFormat === 'disc') {
@@ -6648,20 +8439,20 @@
             cardClass = overflowCard ? 'overflowPortraitCard' : 'portraitCard';
             padderClass = 'cardPadder-portrait';
         }
-        
+
         card.className = `card ${cardClass} skeleton-card`;
         card.setAttribute('data-skeleton', 'true');
-        
+
         const cardBox = document.createElement('div');
         cardBox.className = `cardBox cardBox-bottompadded`;
-        
+
         const cardScalable = document.createElement('div');
         cardScalable.className = 'cardScalable';
-        
+
         const cardPadder = document.createElement('div');
         cardPadder.className = `cardPadder ${padderClass} skeleton-padder`;
-        cardPadder.style.cssText = 'background: rgba(255,255,255,0.12); animation: skeleton-pulse 1.5s ease-in-out infinite;';
-        
+        cardPadder.style.cssText = 'background: rgba(255,255,255,0.12);';
+
         cardScalable.appendChild(cardPadder);
         cardBox.appendChild(cardScalable);
 
@@ -6674,9 +8465,7 @@
             for (let lineIndex = 0; lineIndex < footerLineCount; lineIndex++) {
                 const isFirst = lineIndex === 0;
                 const cardText = document.createElement('div');
-                cardText.className = isFirst
-                    ? 'cardText cardTextCentered cardText-first'
-                    : 'cardText cardTextCentered cardText-secondary';
+                cardText.className = isFirst ? 'cardText cardTextCentered cardText-first' : 'cardText cardTextCentered cardText-secondary';
 
                 const bdi = document.createElement('bdi');
                 const skeletonLine = document.createElement('span');
@@ -6691,7 +8480,7 @@
         }
 
         card.appendChild(cardBox);
-        
+
         return card;
     }
 
@@ -6703,16 +8492,8 @@
      * @returns {HTMLElement} - Skeleton spotlight container
      */
     function createSkeletonSpotlightSection(title, options = {}) {
-        const {
-            viewMoreUrl = null,
-            spotlightLayout,
-            spotlightSize,
-            fullScreen,
-            discoveryPending = false,
-            caption = null
-        } = options;
-        const layout = spotlightLayout ?? (fullScreen === true ? 'Borderless' : 'Border');
-        const size = spotlightSize ?? (fullScreen === true ? 'full' : 'normal');
+        const { viewMoreUrl = null, discoveryPending = false, caption = null } = options;
+        const { layout, size } = resolveSpotlightPresentation(options);
         const captionText = caption && String(caption).trim();
         const useSkeletonTitle = discoveryPending === true;
 
@@ -6726,9 +8507,13 @@
         const bannerContainer = document.createElement('div');
         bannerContainer.className = 'spotlight-banner-container';
 
+        // Header wraps title (+ nav when present) to match live spotlight DOM.
         // Title container hosts section name + refresh/configure controls.
         // Always create it so controls can attach even when the section has no name.
         {
+            const headerContainer = document.createElement('div');
+            headerContainer.className = 'spotlight-header-container';
+
             const sectionTitleContainer = document.createElement('div');
             sectionTitleContainer.className = 'spotlight-section-title-container';
             if (useSkeletonTitle || title) {
@@ -6765,7 +8550,7 @@
                     sectionTitleEl.textContent = title;
                 }
                 const sectionTitleWrapper = document.createElement('div');
-                sectionTitleWrapper.className = `spotlight-section-title ${(!useSkeletonTitle && viewMoreUrl) ? '' : 'spotlight-title-link '}headerTabs sectionTabs`;
+                sectionTitleWrapper.className = `spotlight-section-title ${!useSkeletonTitle && viewMoreUrl ? "" : "spotlight-title-link "}headerTabs sectionTabs`;
                 sectionTitleWrapper.appendChild(sectionTitleEl);
                 sectionTitleContainer.appendChild(sectionTitleWrapper);
 
@@ -6779,7 +8564,8 @@
                     sectionTitleContainer.appendChild(captionEl);
                 }
             }
-            bannerContainer.appendChild(sectionTitleContainer);
+            headerContainer.appendChild(sectionTitleContainer);
+            bannerContainer.appendChild(headerContainer);
         }
 
         // Create skeleton item (single full-container placeholder)
@@ -6790,11 +8576,15 @@
         skeletonItem.className = 'spotlight-item skeleton-spotlight-item';
         skeletonItem.setAttribute('data-index', '0');
         skeletonItem.setAttribute('data-active', 'true');
-        skeletonItem.style.cssText = 'background: rgba(255,255,255,0.12); animation: skeleton-pulse 1.5s ease-in-out infinite;';
+        skeletonItem.style.cssText = 'background: rgba(255,255,255,0.12);';
 
         itemsContainer.appendChild(skeletonItem);
         bannerContainer.appendChild(itemsContainer);
+        ensureSkeletonShimmerSibling(itemsContainer);
         container.appendChild(bannerContainer);
+
+        container.classList.add('skeleton-section');
+        observeSkeletonShimmer(container);
 
         return container;
     }
@@ -6807,18 +8597,30 @@
      * @param {boolean} overflowCard - Use overflow card classes
      * @returns {HTMLElement} - Container with skeleton cards
      */
-    function createProgressivelyEnhancedScrollableContainer(title, viewMoreUrl = null, cardFormat = null, overflowCard = false, sectionConfig = null) {
+    function createProgressivelyEnhancedScrollableContainer(
+        title,
+        viewMoreUrl = null,
+        cardFormat = null,
+        overflowCard = false,
+        sectionConfig = null,
+    ) {
+        const tvLayout = isTvLayout();
+
         // Create the main vertical section container (same structure as createScrollableContainer)
         const verticalSection = document.createElement('div');
         verticalSection.className = 'verticalSection emby-scroller-container custom-scroller-container';
-        
+
         // Persist the card format if provided (ensures consistency for random/updates)
         if (cardFormat) {
             verticalSection.setAttribute('data-card-format', cardFormat);
         }
 
         // If the query is using the /Genres or /Studios paths, set the row hue to a random color
-        if (sectionConfig?.queries?.some(query => typeof query.path === 'string' && (query.path.includes('/Genres') || query.path.includes('/Studios')))) {
+        if (
+            sectionConfig?.queries?.some(
+                (query) => typeof query.path === 'string' && (query.path.includes('/Genres') || query.path.includes('/Studios')),
+            )
+        ) {
             verticalSection.style.setProperty('--row-hue', `${Math.floor(Math.random() * 360)}deg`);
         }
 
@@ -6832,15 +8634,16 @@
             caption: getSectionCaption(sectionConfig),
             captionUrl: getSectionCaptionUrl(sectionConfig),
             viewMoreUrl: discoveryPending ? null : viewMoreUrl,
-            discoveryPending
+            discoveryPending,
         });
 
         ensureSectionControlsMount(sectionTitleContainer);
 
         const scroller = createScrollerElement();
-        const itemsContainer = createItemsSliderElement();
+        const itemsContainer = createItemsSliderElement(true);
 
-        const skeletonCount = getSectionSkeletonCount(sectionConfig);
+        const itemsLayout = resolveItemsLayout(sectionConfig);
+        const skeletonCount = getSectionSkeletonCount(sectionConfig, cardFormat, itemsLayout);
         for (let i = 0; i < skeletonCount; i++) {
             const skeletonCard = createSkeletonCard(cardFormat, overflowCard, sectionConfig);
             skeletonCard.setAttribute('data-index', i);
@@ -6848,17 +8651,24 @@
         }
 
         scroller.appendChild(itemsContainer);
-
-        const scrollButtons = attachScrollableSectionChrome(verticalSection, scroller);
+        ensureSkeletonShimmerSibling(itemsContainer);
 
         verticalSection.appendChild(sectionTitleContainer);
-        verticalSection.appendChild(scrollButtons);
+        if (tvLayout) {
+            attachTvFocusScroll(scroller);
+        } else {
+            const scrollButtons = attachScrollableSectionChrome(verticalSection, scroller);
+            if (scrollButtons) {
+                verticalSection.appendChild(scrollButtons);
+            }
+        }
         verticalSection.appendChild(scroller);
 
+        verticalSection.classList.add('skeleton-section');
+        observeSkeletonShimmer(verticalSection);
 
         return verticalSection;
     }
-
 
     /**
      * Measures the width of an element
@@ -6870,12 +8680,12 @@
             return 0;
         }
 
-
         let measureRoot = document.querySelector('#measure-root');
         if (!measureRoot) {
             measureRoot = document.createElement('div');
-            measureRoot.id = 'measure-root';        
-            measureRoot.style.cssText = 'position: absolute; visibility: hidden; contain: layout style paint; white-space: nowrap; pointer-events: none;';
+            measureRoot.id = 'measure-root';
+            measureRoot.style.cssText =
+                'position: absolute; visibility: hidden; contain: layout style paint; white-space: nowrap; pointer-events: none;';
             document.body.appendChild(measureRoot);
         }
 
@@ -6884,7 +8694,7 @@
         const width = clonedEl.getBoundingClientRect().width;
         measureRoot.removeChild(clonedEl);
         return width;
-      }
+    }
 
     /**
      * Checks the state of a promise
@@ -6893,18 +8703,127 @@
      */
     function promiseState(p) {
         const t = {};
-        return Promise.race([p, t])
-          .then(v => (v === t)? "pending" : "fulfilled", () => "rejected");
-      }
+        return Promise.race([p, t]).then(
+            (v) => (v === t ? 'pending' : 'fulfilled'),
+            () => 'rejected',
+        );
+    }
+
+    // Section-level skeleton shimmer (keyframes live in cardBuilder.css)
+    let skeletonShimmerObserver = null;
+    /** @type {WeakMap<Element, number>} */
+    const skeletonShimmerRafBySection = new WeakMap();
+
+    function prefersReducedSkeletonMotion() {
+        return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    }
+
+    function ensureSkeletonShimmerObserver() {
+        if (skeletonShimmerObserver || typeof IntersectionObserver === 'undefined') return skeletonShimmerObserver;
+        skeletonShimmerObserver = new IntersectionObserver(
+            (entries) => {
+                entries.forEach((entry) => {
+                    const el = entry.target;
+                    if (!el?.classList?.contains('skeleton-section')) {
+                        unobserveSkeletonShimmer(el);
+                        return;
+                    }
+                    const pendingRaf = skeletonShimmerRafBySection.get(el);
+                    if (pendingRaf) {
+                        cancelAnimationFrame(pendingRaf);
+                        skeletonShimmerRafBySection.delete(el);
+                    }
+                    if (entry.isIntersecting && !prefersReducedSkeletonMotion()) {
+                        const raf = requestAnimationFrame(() => {
+                            skeletonShimmerRafBySection.delete(el);
+                            if (el.isConnected && el.classList.contains('skeleton-section')) {
+                                el.classList.add('skeleton-shimmer-active');
+                            }
+                        });
+                        skeletonShimmerRafBySection.set(el, raf);
+                    } else {
+                        el.classList.remove('skeleton-shimmer-active');
+                    }
+                });
+            },
+            { root: null, rootMargin: '100px 0px', threshold: 0.01 },
+        );
+        return skeletonShimmerObserver;
+    }
+
+    /**
+     * Insert a .skeleton-shimmer sibling after the items host (inside scroller / banner).
+     * @param {HTMLElement|null|undefined} itemsHost .itemsContainer or .spotlight-items-container
+     * @returns {HTMLElement|null}
+     */
+    function ensureSkeletonShimmerSibling(itemsHost) {
+        if (!itemsHost?.parentElement) return null;
+        const parent = itemsHost.parentElement;
+        let shimmer = null;
+        if (itemsHost.nextElementSibling?.classList?.contains('skeleton-shimmer')) {
+            shimmer = itemsHost.nextElementSibling;
+        } else {
+            shimmer = parent.querySelector(':scope > .skeleton-shimmer');
+        }
+        if (!shimmer) {
+            shimmer = document.createElement('div');
+            shimmer.className = 'skeleton-shimmer';
+            shimmer.setAttribute('aria-hidden', 'true');
+            itemsHost.insertAdjacentElement('afterend', shimmer);
+        } else if (shimmer.previousElementSibling !== itemsHost) {
+            itemsHost.insertAdjacentElement('afterend', shimmer);
+        }
+        return shimmer;
+    }
+
+    function removeSkeletonShimmerOverlays(root) {
+        if (!root?.querySelectorAll) return;
+        root.querySelectorAll('.skeleton-shimmer').forEach((el) => el.remove());
+    }
+
+    function observeSkeletonShimmer(sectionElement) {
+        if (!sectionElement?.classList) return;
+        sectionElement.classList.add('skeleton-section');
+        sectionElement.classList.remove('skeleton-shimmer-active');
+        const itemsHost =
+            sectionElement.querySelector('.spotlight-items-container') ||
+            sectionElement.querySelector('.itemsContainer');
+        ensureSkeletonShimmerSibling(itemsHost);
+        const observer = ensureSkeletonShimmerObserver();
+        if (observer) observer.observe(sectionElement);
+    }
+
+    function unobserveSkeletonShimmer(sectionElement) {
+        if (!sectionElement) return;
+        const pendingRaf = skeletonShimmerRafBySection.get(sectionElement);
+        if (pendingRaf) {
+            cancelAnimationFrame(pendingRaf);
+            skeletonShimmerRafBySection.delete(sectionElement);
+        }
+        sectionElement.classList?.remove('skeleton-shimmer-active', 'skeleton-section');
+        removeSkeletonShimmerOverlays(sectionElement);
+        if (skeletonShimmerObserver) {
+            try {
+                skeletonShimmerObserver.unobserve(sectionElement);
+            } catch (_) {
+                /* ignore */
+            }
+        }
+    }
+
+    function stripCopiedSkeletonSectionClasses(el) {
+        el?.classList?.remove('skeleton-section', 'skeleton-shimmer-active');
+        removeSkeletonShimmerOverlays(el);
+    }
 
     // Add skeleton loading animation CSS if not already present
     if (!document.getElementById('skeleton-animation-style')) {
         const style = document.createElement('style');
         style.id = 'skeleton-animation-style';
         style.textContent = `
-            @keyframes skeleton-pulse {
-                0%, 100% { opacity: 0.5; }
-                50% { opacity: 1; }
+            @keyframes skeleton-shimmer-sweep {
+                0% { transform: translateX(-100%); }
+                100% { transform: translateX(100%); }
             }
         `;
         document.head.appendChild(style);
@@ -6912,13 +8831,8 @@
 
     // Smart Lazy Image Loading with Global Observers
     let lazyImageObserver = null;
-    let lazyMutationObserver = null;
     /** @type {WeakMap<Element, IntersectionObserver>} */
     const lazyObserversByScroller = new WeakMap();
-    const lazyImageApplyQueue = [];
-    let lazyImageApplyRaf = null;
-    const LAZY_IMAGE_APPLY_PER_FRAME = 3;
-
     // Run updateScrollButtonStateForSection once when a section becomes visible (so --max-scroll is computed after layout)
     let scrollSectionVisibilityObserver = null;
 
@@ -6943,26 +8857,16 @@
 
     function ensureLazyUnloadPlaceholder(cardImageContainer) {
         const canvas = cardImageContainer.previousElementSibling;
-        const hasBlurhashCanvas = canvas
-            && canvas.tagName === 'CANVAS'
-            && canvas.classList.contains('blurhash-canvas');
+        const hasBlurhashCanvas = canvas && canvas.tagName === 'CANVAS' && canvas.classList.contains('blurhash-canvas');
         const blurhash = cardImageContainer.getAttribute('data-blurhash');
 
         if (state.useBlurhash && hasBlurhashCanvas && blurhash) {
             // Unload restore: always prefer blurhash when available (ignore reduced-motion / saveData)
             if (!canvas.hasAttribute('data-blurhash-pending') && canvas.classList.contains('lazy-hidden')) {
                 // Re-show existing painted blurhash, or re-queue decode
-                const hasPixels = (() => {
-                    try {
-                        const ctx = canvas.getContext('2d');
-                        if (!ctx) return false;
-                        const sample = ctx.getImageData(0, 0, 1, 1).data;
-                        return sample[3] > 0;
-                    } catch (e) {
-                        return false;
-                    }
-                })();
+                const hasPixels = canvas.hasAttribute('data-blurhash-painted');
                 if (!hasPixels) {
+                    canvas.removeAttribute('data-blurhash-painted');
                     canvas.setAttribute('data-blurhash-pending', blurhash);
                     observeBlurhashCanvas(canvas);
                 }
@@ -6994,6 +8898,7 @@
         if (cardImageContainer.getAttribute('data-src') !== imageUrl) return;
         // Cancelled / unloaded before apply drained
         if (!cardImageContainer.hasAttribute('data-loading')) return;
+        // Style writes first, then one class/attr batch so paint absorbs a single invalidation.
         if (isSvg) {
             const maskUrl = `url("${imageUrl}")`;
             cardImageContainer.style.webkitMaskImage = maskUrl;
@@ -7005,41 +8910,22 @@
             cardImageContainer.style.webkitMaskSize = 'contain';
             cardImageContainer.style.maskSize = 'contain';
             cardImageContainer.style.backgroundColor = 'white';
-            cardImageContainer.classList.add('lazy-masked-svg');
         } else {
             cardImageContainer.style.backgroundImage = `url("${imageUrl}")`;
         }
-        cardImageContainer.classList.remove('lazy');
-        cardImageContainer.classList.add('lazy-loaded');
+        cardImageContainer.classList.remove('lazy', 'lazy-hidden');
+        if (isSvg) {
+            cardImageContainer.classList.add('lazy-loaded', 'lazy-masked-svg');
+        } else {
+            cardImageContainer.classList.add('lazy-loaded');
+        }
         cardImageContainer.removeAttribute('data-loading');
-        cardImageContainer.classList.remove('lazy-hidden');
         const icon = cardImageContainer.querySelector('.cardImageIcon');
         if (icon) icon.remove();
         const canvas = cardImageContainer.previousElementSibling;
         if (canvas && canvas.tagName === 'CANVAS' && canvas.classList.contains('blurhash-canvas')) {
             canvas.classList.add('lazy-hidden');
             canvas.removeAttribute('data-blurhash-pending');
-        }
-    }
-
-    function drainLazyImageApplyQueue() {
-        lazyImageApplyRaf = null;
-        let n = 0;
-        while (n < LAZY_IMAGE_APPLY_PER_FRAME && lazyImageApplyQueue.length) {
-            const job = lazyImageApplyQueue.shift();
-            if (!job) continue;
-            applyLazyImageToContainer(job.container, job.url, job.isSvg);
-            n++;
-        }
-        if (lazyImageApplyQueue.length) {
-            lazyImageApplyRaf = requestAnimationFrame(drainLazyImageApplyQueue);
-        }
-    }
-
-    function enqueueLazyImageApply(container, url, isSvg) {
-        lazyImageApplyQueue.push({ container, url, isSvg });
-        if (lazyImageApplyRaf == null) {
-            lazyImageApplyRaf = requestAnimationFrame(drainLazyImageApplyQueue);
         }
     }
 
@@ -7072,20 +8958,17 @@
                 canvas.removeAttribute('data-blurhash-pending');
             }
         };
-        img.onload = async () => {
+        img.onload = () => {
             if (cardImageContainer.getAttribute('data-src') !== imageUrl) return;
             if (!cardImageContainer.isConnected) return;
-            try {
-                if (typeof img.decode === 'function') {
-                    await img.decode();
-                }
-            } catch (e) { /* apply anyway */ }
-            if (cardImageContainer.getAttribute('data-src') !== imageUrl) return;
-            if (!cardImageContainer.isConnected) return;
-            // Unloaded or cancelled while decoding
             if (!cardImageContainer.hasAttribute('data-loading')) return;
             const isSvg = /\.svg(?:[?#]|$)/i.test(imageUrl);
-            enqueueLazyImageApply(cardImageContainer, imageUrl, isSvg);
+            requestAnimationFrame(() => {
+                if (cardImageContainer.getAttribute('data-src') !== imageUrl) return;
+                if (!cardImageContainer.isConnected) return;
+                if (!cardImageContainer.hasAttribute('data-loading')) return;
+                applyLazyImageToContainer(cardImageContainer, imageUrl, isSvg);
+            });
         };
         img.onerror = finishError;
         img.src = imageUrl;
@@ -7093,7 +8976,7 @@
 
     function handleLazyImageIntersection(entries, observer) {
         const mobile = isMobileLayout();
-        entries.forEach(entry => {
+        entries.forEach((entry) => {
             const cardImageContainer = entry.target;
             if (entry.isIntersecting) {
                 startLazyImageLoad(cardImageContainer);
@@ -7109,11 +8992,10 @@
     }
 
     function createLazyImageObserver(root) {
-        const mobile = isMobileLayout();
         return new IntersectionObserver(handleLazyImageIntersection, {
             root: root || null,
-            threshold: mobile ? 0 : 0.1,
-            rootMargin: mobile ? '0px' : '800px'
+            threshold: 0,
+            rootMargin: '50%',
         });
     }
 
@@ -7122,13 +9004,14 @@
      * Watches when elements enter the viewport and loads their images
      */
     function initLazyImageObserver() {
-        if (lazyImageObserver) return; // Already initialized
+            if (lazyImageObserver) return; // Already initialized
         lazyImageObserver = createLazyImageObserver(null);
     }
 
     function observeLazyImage(cardImageContainer) {
-        if (!cardImageContainer || !cardImageContainer.hasAttribute('data-src')) return;
+            if (!cardImageContainer || !cardImageContainer.hasAttribute('data-src')) return;
         initLazyImageObserver();
+        if (!lazyImageObserver) return;
 
         if (isMobileLayout()) {
             const scroller = getLazyScrollerRoot(cardImageContainer);
@@ -7145,45 +9028,113 @@
 
         lazyImageObserver.observe(cardImageContainer);
     }
-    
-    /**
-     * Initialize the global MutationObserver to detect new elements
-     * Automatically adds new cardImageContainer elements with data-src to the IntersectionObserver
-     */
-    function initLazyMutationObserver() {
-        if (lazyMutationObserver) return; // Already initialized
-        
-        if (!lazyImageObserver) {
-            initLazyImageObserver();
-        }
-        
-        lazyMutationObserver = new MutationObserver((mutations) => {
-            mutations.forEach(mutation => {
-                mutation.addedNodes.forEach(node => {
-                    // Check if the added node itself is a cardImageContainer with data-src
-                    if (node.nodeType === 1 && // Element node
-                        node.classList && 
-                        node.classList.contains('cardImageContainer') &&
-                        node.hasAttribute('data-src')) {
-                        observeLazyImage(node);
-                    }
-                    
-                    // Check for cardImageContainer descendants
-                    if (node.nodeType === 1 && node.querySelectorAll) {
-                        const lazyImages = node.querySelectorAll('.cardImageContainer[data-src]');
-                        lazyImages.forEach(img => {
-                            observeLazyImage(img);
-                        });
-                    }
 
-                    observePendingBlurhashInNode(node);
+    // --- Push lazy path (parallel native sections) — independent of progressive MO/kill-switch ---
+    let pushLazyImageObserver = null;
+    /** @type {WeakMap<Element, IntersectionObserver>} */
+    const pushLazyObserversByScroller = new WeakMap();
+    let pushBlurhashFillObserver = null;
+
+    function initPushLazyImageObserver() {
+        if (pushLazyImageObserver) return;
+        if (typeof IntersectionObserver === 'undefined') return;
+        pushLazyImageObserver = createLazyImageObserver(null);
+    }
+
+    function observeLazyImagePush(cardImageContainer) {
+        if (!cardImageContainer || !cardImageContainer.hasAttribute('data-src')) return;
+        initPushLazyImageObserver();
+        if (!pushLazyImageObserver) {
+            // No IO: load immediately
+            startLazyImageLoad(cardImageContainer);
+            return;
+        }
+
+        if (isMobileLayout()) {
+            const scroller = getLazyScrollerRoot(cardImageContainer);
+            if (scroller) {
+                let observer = pushLazyObserversByScroller.get(scroller);
+                if (!observer) {
+                    observer = createLazyImageObserver(scroller);
+                    pushLazyObserversByScroller.set(scroller, observer);
+                }
+                observer.observe(cardImageContainer);
+                return;
+            }
+        }
+
+        pushLazyImageObserver.observe(cardImageContainer);
+    }
+
+    function initPushBlurhashFillObserver() {
+        if (pushBlurhashFillObserver) return;
+        if (typeof IntersectionObserver === 'undefined') return;
+        pushBlurhashFillObserver = new IntersectionObserver(
+            (entries) => {
+                entries.forEach((entry) => {
+                    if (!entry.isIntersecting) return;
+                    const canvas = entry.target;
+                    pushBlurhashFillObserver.unobserve(canvas);
+                    fillBlurhashCanvas(canvas);
                 });
-            });
-        });
+            },
+            {
+                threshold: 0,
+                rootMargin: getBlurhashFillRootMargin(),
+            },
+        );
+    }
+
+    function observeBlurhashCanvasPush(canvas) {
+        if (!canvas || !canvas.hasAttribute('data-blurhash-pending')) return;
+        if (shouldSkipBlurhashDecode()) {
+            canvas.removeAttribute('data-blurhash-pending');
+            canvas.classList.add('lazy-hidden');
+            return;
+        }
+        initPushBlurhashFillObserver();
+        if (pushBlurhashFillObserver) {
+            pushBlurhashFillObserver.observe(canvas);
+        } else {
+            fillBlurhashCanvas(canvas);
+        }
+    }
+
+    function observePendingBlurhashInNodePush(node) {
+        if (!node || node.nodeType !== 1) return;
+        if (node.matches && node.matches('canvas.blurhash-canvas[data-blurhash-pending]')) {
+            observeBlurhashCanvasPush(node);
+        }
+        if (node.querySelectorAll) {
+            node.querySelectorAll('canvas.blurhash-canvas[data-blurhash-pending]').forEach(observeBlurhashCanvasPush);
+        }
     }
 
     /**
-     * Apply scroll button state for a section from --scroll-x and --max-scroll on the scroller.
+     * Push-register lazy images + blurhash under an attached root.
+     * Call sites should pass each section's .itemsContainer (never .homeSectionsContainer).
+     * @param {ParentNode|Element|null|undefined} root
+     */
+    function registerLazyImagesIn(root) {
+        if (!root) return;
+        if (root.nodeType === 1 && root.matches?.('.cardImageContainer[data-src]')) {
+            observeLazyImagePush(root);
+        }
+        if (root.querySelectorAll) {
+            root.querySelectorAll('.cardImageContainer[data-src]').forEach(observeLazyImagePush);
+        }
+        observePendingBlurhashInNodePush(root);
+    }
+
+    /** Register lazy images for a section via its .itemsContainer only. */
+    function registerLazyImagesInSection(sectionElement) {
+        if (!sectionElement?.querySelector) return;
+        const itemsContainer = sectionElement.querySelector('.itemsContainer');
+        if (itemsContainer) registerLazyImagesIn(itemsContainer);
+    }
+
+    /**
+     * Apply scroll button state for a section from in-memory scrollX / maxScroll.
      */
     function applyScrollButtonState(verticalSection) {
         const scroller = verticalSection.querySelector('.emby-scroller');
@@ -7191,36 +9142,29 @@
         const leftButton = scrollButtons && scrollButtons.querySelector('button[data-direction="left"]');
         const rightButton = scrollButtons && scrollButtons.querySelector('button[data-direction="right"]');
         if (!scroller || !scrollButtons || !leftButton || !rightButton) return;
-        const scrollX = parseFloat(scroller.style.getPropertyValue('--scroll-x')) || 0;
+        const scrollX = getScrollerPosition(scroller);
 
         let maxScroll = 0;
-
-        // Check if max-scroll is already set, if not then set it
-        if (scroller.style.getPropertyValue('--max-scroll')) {
-            maxScroll = parseFloat(scroller.style.getPropertyValue('--max-scroll')) || 0;
+        const metrics = getScrollerMetrics(scroller);
+        if (metrics && metrics.maxScroll != null && Number.isFinite(metrics.maxScroll)) {
+            maxScroll = metrics.maxScroll;
         } else {
-            maxScroll = getMaxPositionFromPadding(
-                scroller,
-                readScrollerPadding(scroller),
-                readSampleCardPadding(scroller)
-            );
+            maxScroll = getMaxPositionFromPadding(scroller, readScrollerPadding(scroller), readSampleCardPadding(scroller));
         }
-        leftButton.disabled = scrollX <= 0;
+        leftButton.disabled = scrollX <= 20;
         rightButton.disabled = scrollX >= maxScroll - 1;
+        scrollButtons.classList.toggle('hide', leftButton.disabled && rightButton.disabled);
     }
 
     /**
-     * Set --max-scroll on the scroller from dimensions and apply button state. Called once when section is visible so layout is ready.
+     * Compute max scroll from dimensions and apply button state. Called once when section is visible so layout is ready.
      */
     function updateScrollButtonStateForSection(verticalSection) {
         const scroller = verticalSection.querySelector('.emby-scroller');
         if (!scroller) return;
-        const maxScroll = getMaxPositionFromPadding(
-            scroller,
-            readScrollerPadding(scroller),
-            readSampleCardPadding(scroller)
-        );
-        scroller.style.setProperty('--max-scroll', String(maxScroll));
+        const metrics = getScrollerMetrics(scroller);
+        if (metrics) metrics.maxScroll = null;
+        getMaxPositionFromPadding(scroller, readScrollerPadding(scroller), readSampleCardPadding(scroller));
         applyScrollButtonState(verticalSection);
     }
 
@@ -7229,28 +9173,36 @@
      */
     function getScrollSectionVisibilityObserver() {
         if (scrollSectionVisibilityObserver) return scrollSectionVisibilityObserver;
-        scrollSectionVisibilityObserver = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (!entry.isIntersecting) return;
-                const verticalSection = entry.target;
-                scrollSectionVisibilityObserver.unobserve(verticalSection);
-                updateScrollButtonStateForSection(verticalSection);
-            });
-        }, { root: null, threshold: 0.01 });
+        scrollSectionVisibilityObserver = new IntersectionObserver(
+            (entries) => {
+                entries.forEach((entry) => {
+                    if (!entry.isIntersecting) return;
+                    const verticalSection = entry.target;
+                    scrollSectionVisibilityObserver.unobserve(verticalSection);
+                    const run = () => updateScrollButtonStateForSection(verticalSection);
+                    if (typeof requestIdleCallback === 'function') {
+                        requestIdleCallback(run, { timeout: 200 });
+                    } else {
+                        requestAnimationFrame(() => requestAnimationFrame(run));
+                    }
+                });
+            },
+            { root: null, threshold: 0.01 },
+        );
         return scrollSectionVisibilityObserver;
     }
 
     /**
-     * Register a scrollable section: when it becomes visible, set --max-scroll once and apply initial button state.
+     * Register a scrollable section: when it becomes visible, set max scroll once and apply initial button state.
      */
     function registerScrollSectionScrollButtons(verticalSection) {
-        const itemsContainer = verticalSection.querySelector('.itemsContainer');
+            const itemsContainer = verticalSection.querySelector('.itemsContainer');
         const scroller = verticalSection.querySelector('.emby-scroller');
         const first = itemsContainer && itemsContainer.firstElementChild;
         const last = itemsContainer && itemsContainer.lastElementChild;
         if (!first || !last) {
             if (scroller) {
-                scroller.style.setProperty('--max-scroll', '0');
+                setMaxScrollPosition(scroller, 0);
                 applyScrollButtonState(verticalSection);
             }
             return;
@@ -7259,42 +9211,23 @@
     }
 
     /**
-     * Initialize the smart lazy loading system
-     * Scans existing elements and starts both observers
+     * Initialize push lazy loading (IntersectionObserver only — no body MutationObserver).
      */
     function initSmartLazyLoading() {
-        if (typeof IntersectionObserver === 'undefined' || typeof MutationObserver === 'undefined') {
-            return; // Browser doesn't support observers
+            if (typeof IntersectionObserver === 'undefined') {
+            return;
         }
-        
-        initLazyImageObserver();
-        initLazyMutationObserver();
-        initBlurhashFillObserver();
-        
-        const existingLazyImages = document.querySelectorAll('.cardImageContainer[data-src]');
-        existingLazyImages.forEach(img => {
-            observeLazyImage(img);
-        });
 
-        document.querySelectorAll('canvas.blurhash-canvas[data-blurhash-pending]').forEach(observeBlurhashCanvas);
-        
-        if (document.body) {
-            lazyMutationObserver.observe(document.body, {
-                childList: true,
-                subtree: true
-            });
-        } else {
-            document.addEventListener('DOMContentLoaded', () => {
-                if (lazyMutationObserver && document.body) {
-                    lazyMutationObserver.observe(document.body, {
-                        childList: true,
-                        subtree: true
-                    });
-                }
-            });
-        }
+        initLazyImageObserver();
+        initBlurhashFillObserver();
+        initPushLazyImageObserver();
+        initPushBlurhashFillObserver();
+
+        // One-time scan for nodes already present before first push register
+        document.querySelectorAll('.cardImageContainer[data-src]').forEach(observeLazyImagePush);
+        document.querySelectorAll('canvas.blurhash-canvas[data-blurhash-pending]').forEach(observeBlurhashCanvasPush);
     }
-    
+
     // Initialize smart lazy loading on module load
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', initSmartLazyLoading);
@@ -7306,6 +9239,40 @@
     let sectionEnhanceObserver = null;
     let sectionEnhanceObserverRootMargin = null;
     const sectionEnhancePending = new WeakMap();
+
+    /** FIFO: at most one section enhance apply per animation frame. */
+    const enhanceFifoQueue = [];
+    let enhanceFifoRafScheduled = false;
+
+    function enqueueSectionEnhance(task) {
+        if (typeof task !== 'function') return;
+        enhanceFifoQueue.push(task);
+        if (enhanceFifoRafScheduled) return;
+        enhanceFifoRafScheduled = true;
+        const drain = () => {
+            const next = enhanceFifoQueue.shift();
+            if (next) {
+                try {
+                    next();
+                } catch (err) {
+                    console.warn('[KefinTweaks CardBuilder] enhance FIFO task failed:', err);
+                }
+            }
+            if (enhanceFifoQueue.length) {
+                requestAnimationFrame(drain);
+            } else {
+                enhanceFifoRafScheduled = false;
+            }
+        };
+        requestAnimationFrame(drain);
+    }
+
+    function applyProgressiveEnhancementQueued(sectionElement, section, result, options) {
+        enqueueSectionEnhance(() => {
+            if (!sectionElement?.isConnected) return;
+            applyProgressiveEnhancement(sectionElement, section, result, options);
+        });
+    }
 
     /**
      * Read the currently active spotlight slide from a live section.
@@ -7342,7 +9309,7 @@
             return {
                 items: source,
                 preserveIndex: Math.min(i, Math.max(0, N - 1)),
-                canPreserve: false
+                canPreserve: false,
             };
         }
 
@@ -7350,9 +9317,7 @@
         activeItem = findById(dataItems) || activeItem;
 
         const wasInResults = source.some((d) => d && String(d.Id) === activeId);
-        let working = wasInResults
-            ? source.filter((d) => !(d && String(d.Id) === activeId))
-            : source;
+        let working = wasInResults ? source.filter((d) => !(d && String(d.Id) === activeId)) : source;
 
         if (wasInResults) {
             if (i <= working.length) {
@@ -7408,22 +9373,25 @@
      * @param {Object} [options.sectionConfig]
      * @returns {{ content: HTMLElement, items: Array }}
      */
+    /**
+     * Rebuild a spotlight section from fresh items in-place (keeps section shell).
+     * Enhance/SWR (keepCurrentSlide): leave active slide DOM alone; swap inactive only.
+     * Manual refresh (!keepCurrentSlide): overwrite active + inactive slides.
+     * Skeleton sections still get a full createSpotlightSection + replaceWith for wiring.
+     * @returns {{ content: HTMLElement, items: Array }}
+     */
     function refreshSpotlight(sectionElement, items, options = {}) {
-        const {
-            name,
-            viewMoreUrl = null,
-            spotlightConfig = {},
-            dataItems = [],
-            keepCurrentSlide = false,
-            sectionConfig = null
-        } = options;
+        const { name, viewMoreUrl = null, spotlightConfig = {}, dataItems = [], keepCurrentSlide = false, sectionConfig = null } = options;
 
         let itemsForBuild = Array.isArray(items) ? items.slice() : [];
         let preserveIndex = 0;
         let activeSlide = null;
         let doPreserve = false;
 
-        if (keepCurrentSlide) {
+        const isSkeleton = !!sectionElement?.querySelector?.('.skeleton-spotlight-item');
+        const liveItemsContainer = sectionElement?.querySelector?.('.spotlight-items-container');
+
+        if (keepCurrentSlide && !isSkeleton) {
             const activeMeta = getActiveSpotlightSlide(sectionElement);
             if (activeMeta) {
                 const built = buildSpotlightRefreshItems(itemsForBuild, activeMeta, dataItems);
@@ -7432,43 +9400,99 @@
                     preserveIndex = built.preserveIndex;
                     activeSlide = activeMeta.slide;
                     doPreserve = true;
-                    // Detach before the old section is discarded so we can transplant it
-                    activeSlide.remove();
                 }
             }
         }
 
-        const content = createSpotlightSection(itemsForBuild, name, {
+        // Skeleton or missing live container: full rebuild + replaceWith (needs interactive wiring)
+        if (isSkeleton || !liveItemsContainer) {
+            const content = createSpotlightSection(itemsForBuild, name, {
+                viewMoreUrl,
+                ...spotlightConfig,
+                ...(doPreserve ? { initialIndex: preserveIndex } : {}),
+            });
+
+            content.style.cssText = sectionElement.style.cssText;
+            content.className = sectionElement.className;
+            Array.from(sectionElement.attributes).forEach((attr) => {
+                content.setAttribute(attr.name, attr.value);
+            });
+
+            if (sectionConfig) {
+                attachSectionControlButtons(sectionConfig, content, itemsForBuild);
+            }
+
+            stripCopiedSkeletonSectionClasses(content);
+            unobserveSkeletonShimmer(sectionElement);
+            sectionElement.replaceWith(content);
+            ensureSectionRevealObservation(content);
+            return { content, items: itemsForBuild };
+        }
+
+        // In-place: harvest slides from an inert build; never transplant the active slide
+        const temp = createSpotlightSection(itemsForBuild, name, {
             viewMoreUrl,
             ...spotlightConfig,
-            ...(doPreserve ? { initialIndex: preserveIndex } : {})
+            initialIndex: doPreserve
+                ? preserveIndex
+                : parseInt(liveItemsContainer.querySelector('.spotlight-item[data-active]')?.getAttribute('data-index'), 10) || 0,
+            inert: true,
         });
+        const tempItems = temp.querySelector('.spotlight-items-container');
 
-        if (doPreserve && activeSlide) {
-            transplantActiveSpotlightSlide(content, activeSlide, preserveIndex);
+        if (doPreserve && activeSlide && tempItems) {
+            const keepId = activeSlide.getAttribute('data-id');
+            Array.from(liveItemsContainer.children).forEach((slide) => {
+                if (slide !== activeSlide) slide.remove();
+            });
+            Array.from(tempItems.children).forEach((slide) => {
+                if (keepId && slide.getAttribute('data-id') === keepId) {
+                    slide.remove();
+                    return;
+                }
+                liveItemsContainer.appendChild(slide);
+            });
+            activeSlide.setAttribute('data-index', String(preserveIndex));
+            activeSlide.setAttribute('data-active', 'true');
+            activeSlide.removeAttribute('data-fade-out');
+            activeSlide.removeAttribute('data-entering');
+        } else if (tempItems) {
+            liveItemsContainer.replaceChildren(...Array.from(tempItems.children));
         }
 
-        content.style.cssText = sectionElement.style.cssText;
-        content.className = sectionElement.className;
-        Array.from(sectionElement.attributes).forEach((attr) => {
-            content.setAttribute(attr.name, attr.value);
-        });
+        // Update title text/link on the same root (spotlight title lives under banner)
+        const titleEl = sectionElement.querySelector('.spotlight-section-title .emby-tab-button');
+        if (titleEl && name != null) titleEl.textContent = name;
+        updateSectionViewMoreLink(sectionElement, viewMoreUrl);
+
+        if (typeof sectionElement._kefinSpotlightApplyItems === 'function') {
+            sectionElement._kefinSpotlightApplyItems(itemsForBuild, {
+                currentIndex: doPreserve ? preserveIndex : undefined,
+            });
+        }
+        if (typeof sectionElement._kefinSpotlightPruneWindow === 'function') {
+            sectionElement._kefinSpotlightPruneWindow();
+        }
 
         if (sectionConfig) {
-            attachSectionControlButtons(sectionConfig, content, itemsForBuild);
+            attachSectionControlButtons(sectionConfig, sectionElement, itemsForBuild);
         }
 
-        sectionElement.replaceWith(content);
-        return { content, items: itemsForBuild };
+        ensureSectionRevealObservation(sectionElement);
+        return { content: sectionElement, items: itemsForBuild };
     }
 
     function getPaintedCardIds(sectionElement) {
-        const cards = sectionElement.querySelectorAll('.itemsContainer > .card[data-id]:not(.card-layout-dummy):not(.skeleton-card)');
+        const cards = sectionElement.querySelectorAll('.itemsContainer > .card[data-id]:not(.skeleton-card)');
         if (cards.length) {
-            return Array.from(cards).map((card) => card.getAttribute('data-id')).filter(Boolean);
+            return Array.from(cards)
+                .map((card) => card.getAttribute('data-id'))
+                .filter(Boolean);
         }
         const buttons = sectionElement.querySelectorAll('.itemsContainer > .homeLibraryButton[data-id]');
-        return Array.from(buttons).map((button) => button.getAttribute('data-id')).filter(Boolean);
+        return Array.from(buttons)
+            .map((button) => button.getAttribute('data-id'))
+            .filter(Boolean);
     }
 
     function classifyIdSequence(staleIds, freshIds) {
@@ -7502,17 +9526,34 @@
         setTimeout(finish, durationMs);
     }
 
+    function getItemProgress(item) {
+        if (item.Type === 'Program') {
+            const isOnNow = Date.now() >= new Date(item.StartDate).getTime() && Date.now() <= new Date(item.EndDate).getTime()
+            if (isOnNow) {
+                const progress = (Date.now() - new Date(item.StartDate).getTime()) / (new Date(item.EndDate).getTime() - new Date(item.StartDate).getTime());
+                const progressPercentage = Math.round(progress * 100);
+                return progressPercentage;
+            }
+        }
+        if (item.UserData?.PlayedPercentage) {
+            return item.UserData?.PlayedPercentage;
+        }
+        return 0;
+    }
+
     function patchCardProgressBar(card, item) {
         const imageContainer = card.querySelector('.cardImageContainer');
         if (!imageContainer) return;
 
-        const percent = item.UserData?.PlayedPercentage;
+        const percent = getItemProgress(item);
         const existingBar = imageContainer.querySelector('.itemProgressBarForeground');
         const existingFooter = existingBar?.closest('.innerCardFooter');
 
         if (percent && percent > 0) {
             if (existingBar) {
-                existingBar.style.width = `${percent}%`;
+                if (existingBar.style.width !== `${percent}%`) {
+                    existingBar.style.width = `${percent}%`;
+                }
                 return;
             }
             const innerCardFooter = document.createElement('div');
@@ -7537,9 +9578,7 @@
         items.forEach((item) => {
             if (!item?.Id) return;
             updateCardResumeAttributes(item.Id, item.UserData || {});
-            const escapedId = typeof CSS !== 'undefined' && CSS.escape
-                ? CSS.escape(item.Id)
-                : String(item.Id).replace(/["\\]/g, '\\$&');
+            const escapedId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(item.Id) : String(item.Id).replace(/["\\]/g, '\\$&');
             const card = sectionElement.querySelector(`.itemsContainer > .card[data-id="${escapedId}"]`);
             if (card) patchCardProgressBar(card, item);
         });
@@ -7548,34 +9587,106 @@
     function getCardOuterWidth(card) {
         if (!card) return 0;
         const style = window.getComputedStyle(card);
-        return card.getBoundingClientRect().width
-            + (parseFloat(style.marginLeft) || 0)
-            + (parseFloat(style.marginRight) || 0);
+        return card.getBoundingClientRect().width + (parseFloat(style.marginLeft) || 0) + (parseFloat(style.marginRight) || 0);
     }
 
     function getScrollerPosition(scroller) {
         if (!scroller) return 0;
         if (scroller.classList.contains('scrollX')) return scroller.scrollLeft || 0;
-        const v = scroller.style.getPropertyValue('--scroll-x');
-        if (v !== '' && !isNaN(parseFloat(v))) return parseFloat(v);
-        return 0;
+        return getCurrentPosition(scroller);
     }
 
     function setScrollerPosition(scroller, position, animate) {
         if (!scroller) return;
-        const maxPosition = getMaxPositionFromPadding(
-            scroller,
-            readScrollerPadding(scroller),
-            readSampleCardPadding(scroller)
-        );
-        const clamped = Math.min(Math.max(position, 0), maxPosition);
+        const metrics = getScrollerMetrics(scroller);
+        if (metrics) metrics.maxScroll = null;
+
         if (scroller.classList.contains('scrollX')) {
+            const maxPosition = getMaxPositionFromPadding(
+                scroller,
+                readScrollerPadding(scroller),
+                readSampleCardPadding(scroller),
+            );
+            const scrollPosition = Math.min(Math.max(position, 0), maxPosition);
+            const clamped = scrollPosition > 20 ? scrollPosition : 0;
+            // Clear any desktop slidee transform so it cannot fight native scrollLeft
+            const slidee = getScrollSlidee(scroller);
+            if (slidee) {
+                if (slidee.style.transform) slidee.style.transform = '';
+                if (slidee.style.transition) slidee.style.transition = '';
+            }
+            if (scroller.style.transform) scroller.style.transform = '';
             scroller.scrollTo({ left: clamped, behavior: animate ? 'smooth' : 'auto' });
+            setStoredScrollPosition(scroller, clamped);
+        } else {
+            const slidee = getScrollSlidee(scroller);
+            setSlideePosition(scroller, position, { animate: !!animate, freshMax: true });
+
+            const section = scroller.closest('.emby-scroller-container');
+            if (section) {
+                if (animate && slidee) {
+                    const onTransitionEnd = (e) => {
+                        if (e && e.target !== slidee) return;
+                        slidee.removeEventListener('transitionend', onTransitionEnd);
+                        applyScrollButtonState(section);
+                    };
+                    slidee.addEventListener('transitionend', onTransitionEnd);
+                    requestAnimationFrame(() => applyScrollButtonState(section));
+                } else {
+                    applyScrollButtonState(section);
+                }
+            }
             return;
         }
-        scroller.style.transition = animate ? 'transform 400ms ease-out' : 'none';
-        scroller.style.transform = `translateX(-${clamped}px)`;
-        scroller.style.setProperty('--scroll-x', String(clamped));
+
+        const section = scroller.closest('.emby-scroller-container');
+        if (section) {
+            if (animate) {
+                requestAnimationFrame(() => applyScrollButtonState(section));
+            } else {
+                applyScrollButtonState(section);
+            }
+        }
+    }
+
+    /**
+     * Scroll a Kefin custom scroller so card at index is left-aligned (last card → max).
+     * @param {HTMLElement} scroller
+     * @param {number} index
+     * @param {{ animate?: boolean }} [options]
+     */
+    function scrollToCardIndex(scroller, index, options = {}) {
+        if (!scroller) return;
+        const animate = options.animate === true;
+        const itemsContainer = scroller.querySelector('.itemsContainer');
+        if (!itemsContainer) return;
+        const cards = Array.from(itemsContainer.querySelectorAll(':scope > .card:not(.skeleton-card)'));
+        if (!cards.length) return;
+
+        const clampedIndex = Math.max(0, Math.min(index, cards.length - 1));
+        const metrics = getScrollerMetrics(scroller);
+        if (metrics) {
+            metrics.maxScroll = null;
+            metrics.pad = null;
+            metrics.cardPad = null;
+        }
+
+        if (clampedIndex === cards.length - 1) {
+            setScrollerPosition(
+                scroller,
+                getMaxPositionFromPadding(scroller, readScrollerPadding(scroller), readSampleCardPadding(scroller)),
+                animate,
+            );
+            return;
+        }
+
+        const pad = readScrollerPadding(scroller);
+        const cardPad = readSampleCardPadding(scroller);
+        const targetLeft = getCardContentOffsetX(scroller, cards[clampedIndex]) - pad.left + cardPad.left;
+        setScrollerPosition(scroller, targetLeft, animate);
+
+        const section = scroller.closest('.emby-scroller-container');
+        if (section) applyScrollButtonState(section);
     }
 
     function reindexSectionCards(itemsContainer) {
@@ -7584,10 +9695,18 @@
         });
     }
 
-    function appendCardsForItems(itemsContainer, items, overflowCard, cardFormat, startIndex = 0, useParentCard = false) {
+    function appendCardsForItems(
+        itemsContainer,
+        items,
+        overflowCard,
+        cardFormat,
+        startIndex = 0,
+        useParentCard = false,
+        borderStyle = null,
+    ) {
         const cards = [];
         items.forEach((item, offset) => {
-            const card = createJellyfinCardElement(item, overflowCard, cardFormat, item.cardFooter, useParentCard);
+            const card = createCardElement(item, overflowCard, cardFormat, item.cardFooter, useParentCard, borderStyle);
             card.setAttribute('data-index', String(startIndex + offset));
             itemsContainer.appendChild(card);
             cards.push(card);
@@ -7614,7 +9733,7 @@
             card,
             width: card.getBoundingClientRect().width,
             marginLeft: style.marginLeft,
-            marginRight: style.marginRight
+            marginRight: style.marginRight,
         };
     }
 
@@ -7640,6 +9759,7 @@
     }
 
     function reconcileRowItems(sectionElement, items, sectionConfig, onComplete) {
+		console.log(`[KefinTweaks CardBuilder] Reconciling row items for section: ${sectionConfig.name} with ${items.length} items`);
         const itemsContainer = sectionElement.querySelector('.itemsContainer');
         const scroller = sectionElement.querySelector('.emby-scroller');
         if (!itemsContainer) return false;
@@ -7656,7 +9776,9 @@
             if (id && !cardById.has(id)) cardById.set(id, card);
         });
 
-        const freshIds = sectionConfig?.useParentCard ? items.map((item) => item?.ParentId || item?.SeriesId || item?.Id).filter(Boolean) : items.map((item) => item?.Id).filter(Boolean);
+        const freshIds = sectionConfig?.useParentCard
+            ? items.map((item) => item?.ParentId || item?.SeriesId || item?.Id).filter(Boolean)
+            : items.map((item) => item?.Id).filter(Boolean);
         const freshSet = new Set(freshIds);
         const outgoing = paintedCards.filter((card) => !freshSet.has(card.getAttribute('data-id')));
         const inserted = [];
@@ -7671,13 +9793,20 @@
             if (existing) {
                 seenKept = true;
                 nextNode = existing.nextElementSibling;
-                while (nextNode && (nextNode.classList.contains('card-layout-dummy') || nextNode.classList.contains('skeleton-card'))) {
+                while (nextNode && nextNode.classList.contains('skeleton-card')) {
                     nextNode = nextNode.nextElementSibling;
                 }
                 return;
             }
 
-            const card = createJellyfinCardElement(item, overflowCard, cardFormat, item.cardFooter, !!sectionConfig?.useParentCard);
+            const card = createCardElement(
+                item,
+                overflowCard,
+                cardFormat,
+                item.cardFooter,
+                !!sectionConfig?.useParentCard,
+                sectionConfig?.borderStyle || null,
+            );
             if (nextNode) itemsContainer.insertBefore(card, nextNode);
             else itemsContainer.appendChild(card);
             inserted.push(card);
@@ -7685,6 +9814,7 @@
         });
 
         ensureCardBorders(sectionElement);
+        registerLazyImagesIn(itemsContainer);
 
         const previousPosition = getScrollerPosition(scroller);
         let prefixWidth = 0;
@@ -7745,12 +9875,14 @@
                     outgoing.forEach((card) => card.remove());
                     inserted.forEach(clearCardReconcileStyles);
                     itemsContainer.classList.remove('cardbuilder-row-animating');
-                    if (scroller) scroller.style.transition = '';
+                    if (scroller) {
+                        scroller.style.transition = '';
+                        const slidee = getScrollSlidee(scroller);
+                        if (slidee) slidee.style.transition = '';
+                    }
                     reindexSectionCards(itemsContainer);
-                    invalidateLastRowPadding(itemsContainer);
                     patchCardsUserData(sectionElement, items);
                     ensureCardBorders(sectionElement);
-                    //updateScrollButtonStateForSection(sectionElement);
                     if (typeof onComplete === 'function') {
                         onComplete();
                     }
@@ -7769,13 +9901,11 @@
         const cardFormat = sectionElement.getAttribute('data-card-format') || sectionConfig.cardFormat;
         const normalizedFormat = (cardFormat || '').toLowerCase();
         const layoutFromDom = itemsContainer.getAttribute('data-layout');
-        const layout = (layoutFromDom === 'grid' || layoutFromDom === 'row')
-            ? layoutFromDom
-            : resolveItemsLayout(sectionConfig);
-        const gapless = itemsContainer.getAttribute('data-gapless') === 'true'
-            || resolveUseGaplessCards(sectionConfig);
-
-        invalidateLastRowPadding(itemsContainer);
+        const layout =
+            layoutFromDom === 'grid' || layoutFromDom === 'row'
+                ? layoutFromDom
+                : resolveItemsLayout(sectionConfig);
+        const gapless = itemsContainer.getAttribute('data-gapless') === 'true' || resolveUseGaplessCards(sectionConfig);
 
         const fragment = document.createDocumentFragment();
         if (normalizedFormat === 'button' || isButtonCardFormat(cardFormat)) {
@@ -7786,8 +9916,9 @@
             });
         } else {
             const useParentCard = !!sectionConfig?.useParentCard;
+            const borderStyle = sectionConfig?.borderStyle || null;
             items.forEach((item, index) => {
-                const card = createJellyfinCardElement(item, overflowCard, cardFormat, item.cardFooter, useParentCard);
+                const card = createCardElement(item, overflowCard, cardFormat, item.cardFooter, useParentCard, borderStyle);
                 card.setAttribute('data-index', String(index));
                 fragment.appendChild(card);
             });
@@ -7798,7 +9929,17 @@
         applyItemsLayoutState(sectionElement, layout, gapless);
         ensureCardBorders(sectionElement);
         attachSectionControlButtons(sectionConfig, sectionElement, items);
-        //requestAnimationFrame(() => updateScrollButtonStateForSection(sectionElement));
+        registerLazyImagesIn(itemsContainer);
+
+        const scroller = sectionElement.querySelector('.emby-scroller');
+        invalidateScrollerMetrics(scroller);
+        if (scroller && isTvLayout()) {
+            attachTvFocusScroll(scroller);
+            const focusedCard = document.activeElement?.closest?.('.card');
+            if (focusedCard && scroller.contains(focusedCard)) {
+                requestAnimationFrame(() => toCenterCard(scroller, focusedCard, { animate: false }));
+            }
+        }
 
         return sectionElement;
     }
@@ -7821,7 +9962,6 @@
         }
 
         itemsContainer.classList.add('cardbuilder-items-fade');
-        itemsContainer.offsetHeight;
         itemsContainer.classList.add('is-hidden');
         runAfterTransition(itemsContainer, 320, finish);
         return true;
@@ -7836,21 +9976,38 @@
 
         if (sectionConfig.spotlight || sectionConfig.renderMode === 'Spotlight') {
             const refreshed = refreshSpotlight(sectionElement, items, {
-                name: sectionConfig.name,
-                viewMoreUrl: sectionConfig.viewMoreUrl,
+                name: getSectionTitleForMultiQuery(sectionConfig) || sectionConfig.name,
+                viewMoreUrl: getActiveViewMoreUrl(sectionConfig) || sectionConfig.viewMoreUrl,
                 spotlightConfig: sectionConfig.spotlightConfig,
                 dataItems: Array.isArray(dataItems) ? dataItems : [],
                 keepCurrentSlide: true,
-                sectionConfig
+                sectionConfig,
             });
             ensureCardBorders(refreshed.content);
-            if (revealSectionsSequentially && refreshed.content.classList.contains('cardbuilder-section-reveal') && !refreshed.content.classList.contains('in-viewport')) {
-                observeSectionForReveal(refreshed.content);
-            }
+            ensureSectionRevealObservation(refreshed.content);
             return refreshed.content;
         }
 
-        const content = createScrollableContainer(items, sectionConfig.name, sectionConfig.viewMoreUrl, sectionConfig.overflowCard, finalCardFormat, sectionConfig);
+        // Prefer in-place itemsContainer swap (sticky is=emby-itemscontainer)
+        if (sectionElement.querySelector('.itemsContainer')) {
+            rebuildSectionTitleInPlace(sectionElement, sectionConfig);
+            replaceItemsContainerContents(sectionElement, items, {
+                ...sectionConfig,
+                cardFormat: finalCardFormat,
+            });
+            ensureSectionRevealObservation(sectionElement);
+            return sectionElement;
+        }
+
+        const content = createScrollableContainer(
+            items,
+            sectionConfig.name,
+            sectionConfig.viewMoreUrl,
+            sectionConfig.overflowCard,
+            finalCardFormat,
+            sectionConfig,
+            false,
+        );
         content.style.cssText = sectionElement.style.cssText;
         content.className = sectionElement.className;
         Array.from(sectionElement.attributes).forEach((attr) => {
@@ -7859,26 +10016,23 @@
 
         const oldItemsContainer = sectionElement.querySelector('.itemsContainer');
         const layoutFromDom = oldItemsContainer?.getAttribute('data-layout');
-        const layout = (layoutFromDom === 'grid' || layoutFromDom === 'row')
-            ? layoutFromDom
-            : resolveItemsLayout(sectionConfig);
+        const layout = layoutFromDom === 'grid' || layoutFromDom === 'row' ? layoutFromDom : resolveItemsLayout(sectionConfig);
         const gapless = oldItemsContainer
             ? oldItemsContainer.getAttribute('data-gapless') === 'true'
             : resolveUseGaplessCards(sectionConfig);
-        invalidateLastRowPadding(content.querySelector('.itemsContainer'));
         attachSectionControlButtons(sectionConfig, content, items);
+        invalidateScrollerMetrics(sectionElement.querySelector('.emby-scroller'));
+        stripCopiedSkeletonSectionClasses(content);
+        unobserveSkeletonShimmer(sectionElement);
         sectionElement.replaceWith(content);
         applyItemsLayoutState(content, layout, gapless);
         ensureCardBorders(content);
-        if (revealSectionsSequentially && content.classList.contains('cardbuilder-section-reveal') && !content.classList.contains('in-viewport')) {
-            observeSectionForReveal(content);
-        }
+        ensureSectionRevealObservation(content);
         return content;
     }
 
     function fadeReplaceSpotlight(sectionElement, items, sectionConfig, dataItems, revealSectionsSequentially) {
         sectionElement.classList.add('cardbuilder-items-fade');
-        sectionElement.offsetHeight;
         sectionElement.classList.add('is-hidden');
         runAfterTransition(sectionElement, 320, () => {
             const content = replaceSectionWithFreshCards(sectionElement, items, sectionConfig, dataItems, revealSectionsSequentially);
@@ -7888,18 +10042,35 @@
         });
     }
 
-    function markSectionEnhanced(sectionElement, sectionConfig) {
+    function markSectionEnhanced(sectionElement, sectionConfig, { updateScrollButtons = false } = {}) {
         if (!sectionElement) return;
+        unobserveSkeletonShimmer(sectionElement);
         sectionElement.dataset.enhanced = 'true';
         if (typeof sectionConfig?._onSectionEnhanced === 'function') {
             sectionConfig._onSectionEnhanced(sectionElement, sectionConfig);
         }
+        if (updateScrollButtons) {
+            const scroller = sectionElement.querySelector?.('.emby-scroller');
+            if (scroller) invalidateScrollerMetrics(scroller);
+            if (isTvLayout()) {
+                if (scroller) {
+                    attachTvFocusScroll(scroller);
+                    const focusedCard = document.activeElement?.closest?.('.card');
+                    if (focusedCard && scroller.contains(focusedCard)) {
+                        requestAnimationFrame(() => toCenterCard(scroller, focusedCard, { animate: false }));
+                    }
+                }
+            } else {
+                registerScrollSectionScrollButtons(sectionElement);
+            }
+        }
     }
 
     function getDismissEmptySectionTimerMs() {
-        const raw = window.KefinTweaksConfig?.homeScreenConfig?.HOME_SETTINGS?.dismissEmptySectionTimer
-            ?? window.KefinHomeConfig2?.HOME_SETTINGS?.dismissEmptySectionTimer
-            ?? 0;
+        const raw =
+            window.KefinTweaksConfig?.homeScreenConfig?.HOME_SETTINGS?.dismissEmptySectionTimer ??
+            window.KefinHomeConfig2?.HOME_SETTINGS?.dismissEmptySectionTimer ??
+            0;
         const n = Number(raw);
         return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
     }
@@ -7918,8 +10089,9 @@
             sectionElement.style.minHeight = `${lockedHeight}px`;
         }
 
-        const isSpotlight = sectionElement.classList.contains('spotlight-section')
-            || !!sectionElement.querySelector('.spotlight-items-container, .skeleton-spotlight-item');
+        const isSpotlight =
+            sectionElement.classList.contains('spotlight-section') ||
+            !!sectionElement.querySelector('.spotlight-items-container, .skeleton-spotlight-item');
 
         const message = document.createElement('div');
         message.className = 'cardbuilder-empty-message';
@@ -7933,8 +10105,11 @@
             } else {
                 const body = sectionElement.querySelector('.spotlight-banner-container') || sectionElement;
                 Array.from(body.children).forEach((child) => {
-                    if (!child.classList.contains('spotlight-section-title-container')
-                        && !child.classList.contains('sectionTitleContainer')) {
+                    if (
+                        !child.classList.contains('spotlight-header-container') &&
+                        !child.classList.contains('spotlight-section-title-container') &&
+                        !child.classList.contains('sectionTitleContainer')
+                    ) {
                         child.remove();
                     }
                 });
@@ -7954,7 +10129,6 @@
         setTimeout(() => {
             if (!sectionElement.isConnected) return;
             sectionElement.classList.add('cardbuilder-items-fade');
-            sectionElement.offsetHeight;
             sectionElement.classList.add('is-hidden');
             runAfterTransition(sectionElement, 320, () => {
                 sectionElement.remove();
@@ -7977,10 +10151,15 @@
         return result.dataPromise || null;
     }
 
-    function applyProgressiveEnhancement(sectionElement, section, result, { revealSectionsSequentially = false } = {}) {
+    function applyProgressiveEnhancement(
+        sectionElement,
+        section,
+        result,
+        { revealSectionsSequentially = false, updateScrollButtons = false } = {},
+    ) {
         if (!sectionElement?.isConnected || !section?.config) return;
 
-        sectionElement.dataset.refreshing = 'false';
+        setSectionRefreshing(sectionElement, false);
         sectionElement.dataset.enhanceApplied = 'true';
 
         const sectionConfig = section.config;
@@ -7989,8 +10168,9 @@
 
         const dataItems = section.result?.data?.Items ?? section.result?.data ?? [];
         const isSpotlight = sectionConfig.spotlight || sectionConfig.renderMode === 'Spotlight';
-        const isSkeleton = !!(sectionElement.querySelector('.skeleton-card, .skeleton-spotlight-item'));
+        const isSkeleton = !!sectionElement.querySelector('.skeleton-card, .skeleton-spotlight-item');
         const hasSkeletonTitle = !!sectionElement.querySelector('.skeleton-section-title');
+        const enhanceMarkOpts = { updateScrollButtons: !!updateScrollButtons };
 
         if (items.length === 0) {
             const holdMs = getDismissEmptySectionTimerMs();
@@ -8002,54 +10182,68 @@
             return;
         }
 
-        // Discovery pending (and any skeleton with placeholder title) needs a full rebuild for title/viewMore/caption
-        if (isSkeleton && (isSpotlight || hasSkeletonTitle)) {
+        // Skeleton spotlight needs full createSpotlightSection wiring via replaceWith
+        if (isSkeleton && isSpotlight) {
             const content = replaceSectionWithFreshCards(sectionElement, items, sectionConfig, dataItems, revealSectionsSequentially);
-            markSectionEnhanced(content, sectionConfig);
+            markSectionEnhanced(content, sectionConfig, enhanceMarkOpts);
+            return;
+        }
+
+        // Pending→resolved title (skeleton title text) + cards: rebuild title in place, swap cards
+        if (isSkeleton && hasSkeletonTitle && !isSpotlight) {
+            rebuildSectionTitleInPlace(sectionElement, sectionConfig);
+            replaceItemsContainerContents(sectionElement, items, sectionConfig);
+            markSectionEnhanced(sectionElement, sectionConfig, enhanceMarkOpts);
             return;
         }
 
         if (!isSkeleton && isSpotlight) {
-            const staleIds = (Array.isArray(dataItems) ? dataItems : [])
-                .map((item) => item?.Id)
-                .filter(Boolean);
+            const staleIds = (Array.isArray(dataItems) ? dataItems : []).map((item) => item?.Id).filter(Boolean);
             const paintedIds = staleIds.length
                 ? staleIds
                 : Array.from(sectionElement.querySelectorAll('.spotlight-item[data-id]:not(.skeleton-spotlight-item)'))
-                    .map((el) => el.getAttribute('data-id'))
-                    .filter(Boolean);
-            const freshIds = sectionConfig?.useParentCard ? items.map((item) => item?.ParentId || item?.SeriesId || item?.Id).filter(Boolean) : items.map((item) => item?.Id).filter(Boolean);
+                        .map((el) => el.getAttribute('data-id'))
+                        .filter(Boolean);
+            const freshIds = sectionConfig?.useParentCard
+                ? items.map((item) => item?.ParentId || item?.SeriesId || item?.Id).filter(Boolean)
+                : items.map((item) => item?.Id).filter(Boolean);
             const match = classifyIdSequence(paintedIds, freshIds);
             if (match.type === 'perfect') {
-                markSectionEnhanced(sectionElement, sectionConfig);
+                markSectionEnhanced(sectionElement, sectionConfig, enhanceMarkOpts);
                 return;
             }
-            // Soft-replace without fading the section to black (avoids visible→black→image blink on load)
-            const spotlightContent = replaceSectionWithFreshCards(sectionElement, items, sectionConfig, dataItems, revealSectionsSequentially);
-            markSectionEnhanced(spotlightContent, sectionConfig);
+            // In-place inactive slides only (keepCurrentSlide); no full-section replaceWith
+            const spotlightContent = replaceSectionWithFreshCards(
+                sectionElement,
+                items,
+                sectionConfig,
+                dataItems,
+                revealSectionsSequentially,
+            );
+            markSectionEnhanced(spotlightContent, sectionConfig, enhanceMarkOpts);
             return;
         }
 
         if (!isSkeleton && !isSpotlight) {
             const paintedIds = getPaintedCardIds(sectionElement);
-            const freshIds = sectionConfig?.useParentCard ? items.map((item) => item?.ParentId || item?.SeriesId || item?.Id).filter(Boolean) : items.map((item) => item?.Id).filter(Boolean);
+            const freshIds = sectionConfig?.useParentCard
+                ? items.map((item) => item?.ParentId || item?.SeriesId || item?.Id).filter(Boolean)
+                : items.map((item) => item?.Id).filter(Boolean);
             const match = classifyIdSequence(paintedIds, freshIds);
 
             if (match.type === 'perfect') {
                 patchCardsUserData(sectionElement, items);
-                markSectionEnhanced(sectionElement, sectionConfig);
+                markSectionEnhanced(sectionElement, sectionConfig, enhanceMarkOpts);
                 return;
             }
 
             const itemsContainer = sectionElement.querySelector('.itemsContainer');
             const layoutFromDom = itemsContainer?.getAttribute('data-layout');
-            const layout = (layoutFromDom === 'grid' || layoutFromDom === 'row')
-                ? layoutFromDom
-                : resolveItemsLayout(sectionConfig);
+            const layout = layoutFromDom === 'grid' || layoutFromDom === 'row' ? layoutFromDom : resolveItemsLayout(sectionConfig);
 
             if (match.type === 'reconcile' && layout === 'row') {
                 reconcileRowItems(sectionElement, items, sectionConfig, () => {
-                    markSectionEnhanced(sectionElement, sectionConfig);
+                    markSectionEnhanced(sectionElement, sectionConfig, enhanceMarkOpts);
                 });
                 return;
             }
@@ -8057,28 +10251,25 @@
             const cardFormat = sectionElement.getAttribute('data-card-format') || sectionConfig.cardFormat;
             if (isButtonCardFormat(cardFormat) && match.type === 'replace') {
                 replaceItemsContainerContents(sectionElement, items, sectionConfig);
-                markSectionEnhanced(sectionElement, sectionConfig);
+                markSectionEnhanced(sectionElement, sectionConfig, enhanceMarkOpts);
                 return;
             }
 
             fadeReplaceRowItems(sectionElement, items, sectionConfig, () => {
-                markSectionEnhanced(sectionElement, sectionConfig);
+                markSectionEnhanced(sectionElement, sectionConfig, enhanceMarkOpts);
             });
             return;
         }
 
-        if (isSkeleton && isSpotlight) {
-            const spotlightContent = replaceSectionWithFreshCards(sectionElement, items, sectionConfig, dataItems, revealSectionsSequentially);
-            markSectionEnhanced(spotlightContent, sectionConfig);
-            return;
-        }
-
+        // Skeleton cards without skeleton title: swap itemsContainer contents in place
         replaceItemsContainerContents(sectionElement, items, sectionConfig);
-        markSectionEnhanced(sectionElement, sectionConfig);
+        markSectionEnhanced(sectionElement, sectionConfig, enhanceMarkOpts);
     }
 
     function parseEnhanceRootMargin(rootMargin) {
-        const raw = String(rootMargin || '30% 0px 30% 0px').trim().split(/\s+/);
+        const raw = String(rootMargin || '30% 0px 30% 0px')
+            .trim()
+            .split(/\s+/);
         const top = raw[0] || '0px';
         const right = raw[1] || top;
         const bottom = raw[2] || top;
@@ -8095,7 +10286,7 @@
             top: toPx(top, window.innerHeight || 0),
             right: toPx(right, window.innerWidth || 0),
             bottom: toPx(bottom, window.innerHeight || 0),
-            left: toPx(left, window.innerWidth || 0)
+            left: toPx(left, window.innerWidth || 0),
         };
     }
 
@@ -8105,17 +10296,11 @@
         const m = parseEnhanceRootMargin(rootMargin || sectionEnhanceObserverRootMargin || '30% 0px 30% 0px');
         const vw = window.innerWidth || 0;
         const vh = window.innerHeight || 0;
-        return rect.bottom >= -m.top
-            && rect.top <= vh + m.bottom
-            && rect.right >= -m.left
-            && rect.left <= vw + m.right;
+        return rect.bottom >= -m.top && rect.top <= vh + m.bottom && rect.right >= -m.left && rect.left <= vw + m.right;
     }
 
     function setupSectionProgressiveEnhancement(sectionElement, section, options = {}) {
-        const {
-            revealSectionsSequentially = false,
-            deferUntilVisible = false
-        } = options;
+        const { revealSectionsSequentially = false, deferUntilVisible = false } = options;
         if (!sectionElement || !section?.result) return;
         if (!hasSectionDeferredData(section.result)) return;
         if (sectionElement.dataset.enhanceApplied === 'true') return;
@@ -8128,72 +10313,100 @@
 
         const enhanceOptions = { revealSectionsSequentially, deferUntilVisible };
 
-        section.result.isStalePromise?.then(isStale => {
-            if (isStale) {
-                sectionElement.dataset.refreshing = 'true';
-            }
-        });
-
-        dataPromise.then(result => {
-            if (!sectionElement.isConnected) return;
-
-            const refreshPromise = section.result?.refreshPromise;
-            const hasPendingRefresh = !!refreshPromise;
-
-            // Keep refreshing indicator while a background revalidate is in flight
-            sectionElement.dataset.refreshing = hasPendingRefresh ? 'true' : 'false';
-
-            let items = result?.Items ?? result ?? [];
-            if (!Array.isArray(items)) items = [];
-
-            // Empty sections: dismiss immediately even if scrolled away
-            if (items.length === 0) {
-                applyProgressiveEnhancement(sectionElement, section, result, enhanceOptions);
-                return;
-            }
-
-            const margin = sectionEnhanceObserverRootMargin || '30% 0px 30% 0px';
-            if (!deferUntilVisible || isSectionWithinEnhanceMargin(sectionElement, margin)) {
-                applyProgressiveEnhancement(sectionElement, section, result, enhanceOptions);
-            } else {
-                // Data ready but section left the enhance margin — wait until it re-enters
-                delete sectionElement.dataset.enhanceScheduled;
-                sectionEnhancePending.set(sectionElement, {
-                    section,
-                    options: enhanceOptions,
-                    pendingResult: result
-                });
-                observeSectionForEnhance(sectionElement);
-            }
-
-            if (!hasPendingRefresh) return;
-
-            refreshPromise.then((fresh) => {
+        dataPromise
+            .then((result) => {
                 if (!sectionElement.isConnected) return;
-                sectionElement.dataset.refreshing = 'false';
-                // Prefer live DOM apply; if still pending observe, update pending snapshot
-                const pending = sectionEnhancePending.get(sectionElement);
-                if (pending && pending.pendingResult !== undefined) {
-                    pending.pendingResult = fresh;
-                    return;
+
+                const refreshPromise = section.result?.refreshPromise;
+                const hasPendingRefresh = !!refreshPromise;
+                const sectionConfig = section.config;
+                const isSpotlight = !!(sectionConfig?.spotlight || sectionConfig?.renderMode === 'Spotlight');
+                // Non-spotlight Random: keep skeleton until fresh refresh — avoid stale paint → fadeReplace
+                const skipStalePaint = hasPendingRefresh && sectionHasRandomQuerySort(sectionConfig) && !isSpotlight;
+
+                let items = result?.Items ?? result ?? [];
+                if (!Array.isArray(items)) items = [];
+
+                const applyOrDefer = (payload, { updateScrollButtons = false } = {}) => {
+                    const applyOpts = {
+                        ...enhanceOptions,
+                        updateScrollButtons: !!updateScrollButtons,
+                    };
+                    if (!deferUntilVisible) {
+                        applyProgressiveEnhancementQueued(sectionElement, section, payload, applyOpts);
+                        return;
+                    }
+                    const margin = sectionEnhanceObserverRootMargin || '30% 0px 30% 0px';
+                    const inMargin = isSectionWithinEnhanceMargin(sectionElement, margin);
+                    if (inMargin) {
+                        applyProgressiveEnhancementQueued(sectionElement, section, payload, applyOpts);
+                    } else {
+                        // Data ready but section left the enhance margin — wait until it re-enters
+                        delete sectionElement.dataset.enhanceScheduled;
+                        sectionEnhancePending.set(sectionElement, {
+                            section,
+                            options: applyOpts,
+                            pendingResult: payload,
+                        });
+                        observeSectionForEnhance(sectionElement);
+                    }
+                };
+
+                if (!skipStalePaint) {
+                    if (items.length === 0) {
+                        // Empty sections: dismiss immediately even if scrolled away
+                        applyProgressiveEnhancementQueued(sectionElement, section, result, {
+                            ...enhanceOptions,
+                            updateScrollButtons: !hasPendingRefresh,
+                        });
+                        return;
+                    }
+                    applyOrDefer(result, { updateScrollButtons: !hasPendingRefresh });
                 }
-                applyProgressiveEnhancement(sectionElement, section, fresh, enhanceOptions);
-            }).catch((err) => {
-                console.warn('[KefinTweaks CardBuilder] Background refresh failed:', section?.config?.id, err);
+                // skipStalePaint: do not paint stale Random cache — wait for refreshPromise below
+
+                if (!hasPendingRefresh) return;
+
+                refreshPromise
+                    .then((fresh) => {
+                        if (!sectionElement.isConnected) return;
+                        // Prefer live DOM apply; if still pending observe, update pending snapshot
+                        const pending = sectionEnhancePending.get(sectionElement);
+                        if (pending && pending.pendingResult !== undefined) {
+                            pending.pendingResult = fresh;
+                            pending.options = {
+                                ...(pending.options || enhanceOptions),
+                                updateScrollButtons: true,
+                            };
+                            return;
+                        }
+                        if (skipStalePaint) {
+                            applyOrDefer(fresh, { updateScrollButtons: true });
+                            return;
+                        }
+                        // Refresh through same FIFO + margin gate as initial enhance
+                        applyOrDefer(fresh, { updateScrollButtons: true });
+                    })
+                    .catch((err) => {
+                        console.warn('[KefinTweaks CardBuilder] Background refresh failed:', section?.config?.id, err);
+                        if (!sectionElement.isConnected) return;
+                        // Random non-spotlight skipped stale paint — fall back so we are not stuck on skeletons
+                        if (skipStalePaint) {
+                            applyOrDefer(result, { updateScrollButtons: true });
+                        }
+                    });
+            })
+            .catch((err) => {
+                console.error('[KefinTweaks CardBuilder] Progressive enhance failed:', section?.config?.id, err);
                 if (!sectionElement.isConnected) return;
-                sectionElement.dataset.refreshing = 'false';
+                setSectionRefreshing(sectionElement, false);
+                delete sectionElement.dataset.enhanceScheduled;
+                applyProgressiveEnhancementQueued(sectionElement, section, { Items: [] }, enhanceOptions);
             });
-        }).catch((err) => {
-            console.error('[KefinTweaks CardBuilder] Progressive enhance failed:', section?.config?.id, err);
-            if (!sectionElement.isConnected) return;
-            sectionElement.dataset.refreshing = 'false';
-            delete sectionElement.dataset.enhanceScheduled;
-            applyProgressiveEnhancement(sectionElement, section, { Items: [] }, enhanceOptions);
-        });
     }
 
     function initializeSectionEnhanceObserver(rootMargin = '30% 0px 30% 0px') {
-        if (typeof IntersectionObserver === 'undefined') {
+            if (typeof IntersectionObserver === 'undefined') {
             return;
         }
 
@@ -8206,44 +10419,61 @@
         }
 
         sectionEnhanceObserverRootMargin = rootMargin;
-        sectionEnhanceObserver = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (!entry.isIntersecting) return;
+        sectionEnhanceObserver = new IntersectionObserver(
+            (entries) => {
+                entries.forEach((entry) => {
+                    if (!entry.isIntersecting) return;
 
-                const target = entry.target;
-                sectionEnhanceObserver.unobserve(target);
+                    const target = entry.target;
+                    sectionEnhanceObserver.unobserve(target);
 
-                const pending = sectionEnhancePending.get(target);
-                if (!pending) return;
+                    const pending = sectionEnhancePending.get(target);
+                    if (!pending) return;
 
-                sectionEnhancePending.delete(target);
+                    sectionEnhancePending.delete(target);
 
-                if (pending.pendingResult !== undefined) {
-                    applyProgressiveEnhancement(target, pending.section, pending.pendingResult, pending.options || {});
-                    return;
-                }
+                    if (pending.pendingResult !== undefined) {
+                        applyProgressiveEnhancementQueued(target, pending.section, pending.pendingResult, pending.options || {});
+                        return;
+                    }
 
-                setupSectionProgressiveEnhancement(target, pending.section, pending.options);
-            });
-        }, {
-            threshold: 0,
-            rootMargin
-        });
+                    setupSectionProgressiveEnhancement(target, pending.section, pending.options);
+                });
+            },
+            {
+                threshold: 0,
+                rootMargin,
+            },
+        );
     }
 
     function observeSectionForEnhance(sectionElement) {
         if (!sectionElement || !sectionEnhancePending.has(sectionElement)) return;
 
+        const sectionId = sectionElement.getAttribute('data-section-id');
+        console.log('[KefinTweaks CardBuilder] observeSectionForEnhance', {
+            sectionId,
+                hasObserver: !!sectionEnhanceObserver,
+            pendingCount: sectionEnhancePending.has(sectionElement) ? 1 : 0,
+        });
+
         initializeSectionEnhanceObserver(sectionEnhanceObserverRootMargin || '30% 0px 30% 0px');
 
         if (sectionEnhanceObserver) {
             sectionEnhanceObserver.observe(sectionElement);
+            return;
+        }
+
+        // No IO (unsupported): apply pending immediately — do NOT call
+        // setupSectionProgressiveEnhancement again (that re-enters applyOrDefer → infinite loop).
+        const pending = sectionEnhancePending.get(sectionElement);
+        sectionEnhancePending.delete(sectionElement);
+        if (!pending) return;
+        console.warn('[KefinTweaks CardBuilder] enhance observer unavailable; applying pending immediately', sectionId);
+        if (pending.pendingResult !== undefined) {
+            applyProgressiveEnhancementQueued(sectionElement, pending.section, pending.pendingResult, pending.options || {});
         } else {
-            const pending = sectionEnhancePending.get(sectionElement);
-            sectionEnhancePending.delete(sectionElement);
-            if (pending) {
-                setupSectionProgressiveEnhancement(sectionElement, pending.section, pending.options);
-            }
+            applyProgressiveEnhancementQueued(sectionElement, pending.section, { Items: [] }, pending.options || {});
         }
     }
 
@@ -8256,7 +10486,7 @@
 
         const enhanceOptions = {
             revealSectionsSequentially,
-            deferUntilVisible: !!enhanceOnVisible
+            deferUntilVisible: !!enhanceOnVisible,
         };
 
         if (!enhanceOnVisible) {
@@ -8276,25 +10506,25 @@
 
     // Progressive Section Reveal with IntersectionObserver
     let sectionRevealObserver = null;
-    
+
     /**
      * Initialize the global IntersectionObserver for section reveal animations
      * Watches when sections enter the viewport and triggers fade-in animations
      */
     function initializeSectionRevealObserver() {
         if (sectionRevealObserver) return; // Already initialized
-        
+
         if (typeof IntersectionObserver === 'undefined') {
             return; // Browser doesn't support IntersectionObserver
         }
-        
+
         const observerOptions = {
             threshold: 0.1, // Trigger when 10% of section is visible
-            rootMargin: '0px 0px -50px 0px' // Trigger slightly before fully in view
+            rootMargin: '0px 0px -50px 0px', // Trigger slightly before fully in view
         };
-        
+
         sectionRevealObserver = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
+            entries.forEach((entry) => {
                 if (entry.isIntersecting) {
                     // Add in-viewport class to trigger animation
                     entry.target.classList.add('in-viewport');
@@ -8304,19 +10534,29 @@
             });
         }, observerOptions);
     }
-    
+
+    /**
+     * After replaceWith, the new node keeps cardbuilder-section-reveal but is no longer
+     * observed — re-attach so in-viewport can still be applied (or stays if already set).
+     */
+    function ensureSectionRevealObservation(sectionElement) {
+        if (!sectionElement?.classList?.contains('cardbuilder-section-reveal')) return;
+        if (sectionElement.classList.contains('in-viewport')) return;
+        observeSectionForReveal(sectionElement);
+    }
+
     /**
      * Observe a section element for viewport entry to trigger reveal animation
      * @param {HTMLElement} sectionElement - The section element to observe
      */
     function observeSectionForReveal(sectionElement) {
         if (!sectionElement) return;
-        
+
         // Initialize observer if not already done
         if (!sectionRevealObserver) {
             initializeSectionRevealObserver();
         }
-        
+
         // Only observe if observer was successfully created
         if (sectionRevealObserver) {
             sectionRevealObserver.observe(sectionElement);
@@ -8324,14 +10564,18 @@
     }
 
     async function initialize() {
+        // Match loader default: watchlist enabled unless scripts.watchlist === false
+        const scripts = window.KefinTweaksConfig?.scripts || {};
+        state.watchlist = scripts.watchlist !== false;
+
         if (window.userHelper?.waitForLogin) {
             await window.userHelper.waitForLogin();
         }
         startCardUserDataListener();
+        startCardLibraryChangedListener();
+        startCardEditorCloseLiveSync();
         try {
-            const userId = typeof ApiClient !== 'undefined' && ApiClient.getCurrentUserId
-                ? ApiClient.getCurrentUserId()
-                : null;
+            const userId = typeof ApiClient !== 'undefined' && ApiClient.getCurrentUserId ? ApiClient.getCurrentUserId() : null;
             if (userId) {
                 const raw = localStorage.getItem(`${userId}-blurhash`);
                 // Jellyfin enableBlurhash: default on when unset; only explicit 'false' disables
@@ -8348,6 +10592,6 @@
 
     // Expose the cardBuilder to the global window object
     window.cardBuilder = cardBuilder;
-    
+
     console.log('[KefinTweaks CardBuilder] Module loaded and available at window.cardBuilder');
 })();

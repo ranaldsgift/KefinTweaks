@@ -68,6 +68,24 @@
         return season?.IndexNumber ?? season?.indexNumber;
     }
 
+    /** Prefer lowest IndexNumber >= 1 (Season 1); fall back to seasons[0] (e.g. Specials-only). */
+    function pickDefaultSeason(seasons) {
+        const list = Array.isArray(seasons) ? seasons : [];
+        if (!list.length) return null;
+        let best = null;
+        let bestIdx = Infinity;
+        for (const season of list) {
+            const n = seasonIndex(season);
+            if (n == null || !Number.isFinite(Number(n))) continue;
+            const num = Number(n);
+            if (num >= 1 && num < bestIdx) {
+                bestIdx = num;
+                best = season;
+            }
+        }
+        return best || list[0];
+    }
+
     function buildEpisodesQueryDef(seriesId, seasonIdValue) {
         return {
             path: `/Shows/${seriesId}/Episodes`,
@@ -80,13 +98,6 @@
                 EnableTotalRecordCount: false
             }
         };
-    }
-
-    function postProcessEpisodes(data) {
-        const items = Array.isArray(data)
-            ? data.slice()
-            : (Array.isArray(data?.Items) ? data.Items.slice() : []);
-        return items.sort((a, b) => (a.IndexNumber || 0) - (b.IndexNumber || 0));
     }
 
     function formatSeasonName(seasonNameValue, seasonNumber) {
@@ -104,9 +115,8 @@
     }
 
     async function buildSeriesEpisodesSection(seriesId, seasons, initialSeason, onMultiQueryChange) {
-        const apiHelper = window.apiHelper;
-        if (!apiHelper?.getQuery || !apiHelper?.buildQueryFromSection) {
-            throw new Error('apiHelper.getQuery / buildQueryFromSection unavailable');
+        if (!window.sectionHelper?.loadSectionForRendering) {
+            throw new Error('sectionHelper.loadSectionForRendering unavailable');
         }
 
         const initialIndex = Math.max(0, seasons.findIndex((season) => seasonId(season) === seasonId(initialSeason)));
@@ -158,50 +168,11 @@
             sectionConfig._onMultiQueryChange = onMultiQueryChange;
         }
 
-        const initialQuery = queries[initialIndex];
-        const userId = ApiClient.getCurrentUserId();
-        const serverUrl = ApiClient.serverAddress();
-        const url = apiHelper.buildQueryFromSection(initialQuery, userId, serverUrl);
-        if (typeof url !== 'string') {
-            throw new Error(`Invalid episodes query URL for season ${seasonId(initialSeasonObj)}`);
+        const loaded = await window.sectionHelper.loadSectionForRendering(sectionConfig);
+        if (!loaded?.config || !loaded?.result) {
+            throw new Error(`Failed to load series-episodes section for ${seriesId}`);
         }
-
-        const queryResult = await apiHelper.getQuery(url, {
-            useCache: true,
-            ttl: EPISODES_CACHE_TTL
-        });
-
-        let mappedDataPromise = null;
-        const ensureData = () => {
-            if (!mappedDataPromise) {
-                const raw = typeof queryResult.ensureData === 'function'
-                    ? queryResult.ensureData()
-                    : queryResult.dataPromise;
-                mappedDataPromise = Promise.resolve(raw)
-                    .then((data) => postProcessEpisodes(data))
-                    .catch((err) => {
-                        WARN('episodes ensureData failed for season', seasonId(initialSeasonObj), err);
-                        return [];
-                    });
-            }
-            return mappedDataPromise;
-        };
-
-        const result = {
-            data: postProcessEpisodes(queryResult.data),
-            isStale: queryResult.isStale === true,
-            isStalePromise: queryResult.isStalePromise,
-            ensureData
-        };
-        Object.defineProperty(result, 'dataPromise', {
-            configurable: true,
-            enumerable: true,
-            get() {
-                return ensureData();
-            }
-        });
-
-        return { config: sectionConfig, result };
+        return loaded;
     }
 
     function getSectionTitleContainer(host) {
@@ -335,6 +306,54 @@
         }
 
         return host;
+    }
+
+    /**
+     * Infer Next Up episode from the native .nextUpSection card title (S#:E#).
+     * @param {HTMLElement} activePage
+     * @returns {Object|null}
+     */
+    function inferNextUpFromDom(activePage) {
+        if (!activePage) return null;
+
+        const card = activePage.querySelector('.nextUpSection .itemsContainer .card');
+        if (!card) return null;
+
+        const titleLink = card.querySelector('.cardText-first a[title]');
+        if (!titleLink) return null;
+
+        const title = titleLink.getAttribute('title') || '';
+        const match = title.match(/S(\d+)\s*:\s*E(\d+)/i);
+        if (!match) return null;
+
+        const season = parseInt(match[1], 10);
+        const episode = parseInt(match[2], 10);
+        if (!Number.isFinite(season) || !Number.isFinite(episode)) return null;
+
+        let id = null;
+        const href = titleLink.getAttribute('href') || '';
+        const idMatch = href.match(/[?&]id=([^&]+)/i);
+        if (idMatch) {
+            try {
+                id = decodeURIComponent(idMatch[1]);
+            } catch (_) {
+                id = idMatch[1];
+            }
+        }
+        if (!id) {
+            id = card.getAttribute('data-id') || card.dataset?.id || null;
+        }
+
+        const nameRemainder = title.replace(/S\d+\s*:\s*E\d+\s*-?\s*/i, '').trim();
+
+        LOG(`Inferred Next Up from DOM: S${season}:E${episode}${id ? ` (${id})` : ''}`);
+        return {
+            ParentIndexNumber: season,
+            IndexNumber: episode,
+            Id: id,
+            SeasonId: null,
+            Name: nameRemainder || title
+        };
     }
 
     /**
@@ -507,14 +526,24 @@
     }
 
     function performEpisodeScroll(scrollerContainer, targetCard, targetEpisodeNumber) {
-        const scrollerPadding = parseInt(window.getComputedStyle(scrollerContainer).paddingLeft, 10) || 0;
-        const translateX = targetCard.offsetLeft - scrollerPadding;
-        window.cardBuilder.setScrollerPosition(scrollerContainer, translateX, false);
+        const itemsContainer = scrollerContainer.querySelector('.itemsContainer') || scrollerContainer;
+        const cards = Array.from(itemsContainer.querySelectorAll(
+            ':scope > .card:not(.skeleton-card)'
+        ));
+        const index = cards.indexOf(targetCard);
+        if (index < 0) {
+            WARN(`Target episode card not in scroller card list S${targetEpisodeNumber.season}:E${targetEpisodeNumber.episode}`);
+            return;
+        }
+
+        if (window.cardBuilder?.scrollToCardIndex) {
+            window.cardBuilder.scrollToCardIndex(scrollerContainer, index, { animate: false });
+        }
 
         const scrollButtons = scrollerContainer.closest('.emby-scroller-container')?.querySelector('.emby-scrollbuttons');
         if (scrollButtons) {
             const leftButton = scrollButtons.querySelector('button[data-direction="left"]');
-            if (leftButton) {
+            if (leftButton && index > 0) {
                 leftButton.removeAttribute('disabled');
             }
         }
@@ -596,7 +625,7 @@
             }
         }
         if (!targetSeason) {
-            targetSeason = seasons[0];
+            targetSeason = pickDefaultSeason(seasons);
         }
         if (!targetSeason) {
             WARN('No seasons available to render');
@@ -748,8 +777,12 @@
             return;
         }
 
-        // Get NextUp episode
-        let targetEpisode = await fetchNextUpEpisode(seriesId);
+        // Prefer Next Up from native DOM (already painted); API only if missing
+        const pageForUi = document.querySelector('.libraryPage:not(.hide)') || activePage;
+        let targetEpisode = inferNextUpFromDom(pageForUi);
+        if (!targetEpisode) {
+            targetEpisode = await fetchNextUpEpisode(seriesId);
+        }
         let targetEpisodeNumber = null;
         
         // Determine target season
@@ -773,22 +806,21 @@
             }
         }
         
-        // Fallback to first season if NextUp not found or season not in list
+        // Fallback to Season 1 (lowest IndexNumber >= 1) if NextUp not found or season not in list
         if (!targetSeason) {
-            targetSeason = seasons[0];
-            // If we have NextUp but season not found, use first episode of first season
+            targetSeason = pickDefaultSeason(seasons);
+            // If we have NextUp but season not found, use first episode of default season
             if (targetEpisodeNumber && !seasons.find(s => s.IndexNumber === targetEpisodeNumber.season)) {
                 targetEpisodeNumber = { season: targetSeason.IndexNumber, episode: 1 };
-                LOG(`NextUp season not in seasons list, defaulting to first episode of first season`);
+                LOG(`NextUp season not in seasons list, defaulting to first episode of season ${targetSeason.IndexNumber}`);
             } else if (!targetEpisodeNumber) {
                 targetEpisodeNumber = { season: targetSeason.IndexNumber, episode: 1 };
-                LOG(`No NextUp found, defaulting to first episode of first season`);
+                LOG(`No NextUp found, defaulting to first episode of season ${targetSeason.IndexNumber}`);
             }
         }
 
         // Extract NextUp header text
         let nextUpHeaderText = 'Next Up';
-        const pageForUi = document.querySelector('.libraryPage:not(.hide)') || activePage;
         const nextUpSection = pageForUi.querySelector('.nextUpSection');
         if (nextUpSection) {
             const nextUpHeader = nextUpSection.querySelector('.sectionTitle, h2, h3');
@@ -800,6 +832,8 @@
 
         // Render episodes section
         await renderEpisodesSection(seriesId, seasons, targetEpisode, nextUpHeaderText);
+
+        const childrenCollapsible = activePage.querySelector('.detailSection #listChildrenCollapsible');
 
         // Hide season container if option is enabled and there's only one season
         if (hideSingleSeasonContainer && isSingleSeason && childrenCollapsible) {
@@ -894,10 +928,7 @@
 
                 LOG(`Found series: ${item.Id} (${item.Name})`);
 
-                // Small delay to ensure page is ready (Emby may still be swapping pages)
-                setTimeout(async () => {
-                    await processSeriesPage(item);
-                }, 100);
+                await processSeriesPage(item);
             },
             {
                 pages: ['details']
