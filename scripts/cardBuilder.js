@@ -4638,15 +4638,18 @@
                 buttonContainer.appendChild(favoriteButton);
             }
 
-            const moreButton = document.createElement('button');
-            moreButton.className = 'cardOverlayButton cardOverlayButton-hover itemAction paper-icon-button-light';
-            moreButton.setAttribute('data-action', 'menu');
-            moreButton.title = 'More';
-            const moreIcon = document.createElement('span');
-            moreIcon.className = 'material-icons cardOverlayButtonIcon cardOverlayButtonIcon-hover more_vert';
-            moreIcon.setAttribute('aria-hidden', 'true');
-            moreButton.appendChild(moreIcon);
-            buttonContainer.appendChild(moreButton);
+            // Library cards navigate into a view without an item action menu.
+            if (itemType !== 'CollectionFolder' && itemType !== 'UserView') {
+                const moreButton = document.createElement('button');
+                moreButton.className = 'cardOverlayButton cardOverlayButton-hover itemAction paper-icon-button-light';
+                moreButton.setAttribute('data-action', 'menu');
+                moreButton.title = 'More';
+                const moreIcon = document.createElement('span');
+                moreIcon.className = 'material-icons cardOverlayButtonIcon cardOverlayButtonIcon-hover more_vert';
+                moreIcon.setAttribute('aria-hidden', 'true');
+                moreButton.appendChild(moreIcon);
+                buttonContainer.appendChild(moreButton);
+            }
 
             if (canShowPlayOverlay) {
                 cardOverlayContainer.appendChild(playButton);
