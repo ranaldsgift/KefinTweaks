@@ -4629,7 +4629,7 @@ html.layout-tv .spotlight-section .spotlight-tagline {
 /* --- Variant Row Layouts --- */
 
 .rows-2.focus-1 {
-	--r2-gap: 1em;
+	--r2-gap: 1.2em;
 	--r2-small: 16.5vw;
 	--r2-focus: calc(var(--r2-small) * 2 + var(--r2-gap) * 2);
 }
@@ -4665,8 +4665,12 @@ html.layout-tv .spotlight-section .spotlight-tagline {
 	grid-auto-columns: var(--r2-small);
 	grid-template-columns: var(--r2-focus);
 	gap: var(--r2-gap) !important;
-	align-items: start;
+	align-items: end;
 	white-space: normal;
+}
+
+.rows-2.focus-1 .sectionTitleContainer {
+	margin-bottom: 0.6em;
 }
 
 .rows-2.focus-1 .itemsContainer > .card {
@@ -4680,7 +4684,7 @@ html.layout-tv .spotlight-section .spotlight-tagline {
 
 .rows-2.focus-1 .itemsContainer > .card:first-child {
 	grid-row: 1 / span 2;
-	width: var(--r2-small) !important; /* outer track; box grows via --r2-focus */
+	width: auto !important; /* outer track; box grows via --r2-focus */
 	overflow: visible;
 	height: 100%;
 }
@@ -4704,7 +4708,7 @@ html.layout-tv .spotlight-section .spotlight-tagline {
 	min-height: 0;
 }
 .rows-2.focus-1 .itemsContainer > .card:first-child .cardPadder {
-	padding-bottom: 0 !important;
+	/* padding-bottom: 0 !important; */
 	height: 100%;
 }
 .rows-2.focus-1 .itemsContainer > .card:first-child .cardImageContainer,
@@ -4729,4 +4733,44 @@ html.layout-tv .spotlight-section .spotlight-tagline {
 	width: calc(100% - var(--r2-gap));
 }
 
+.rows-2.focus-1.text-overlay-1 .itemsContainer > .card:first-child .cardText {
+    position: static;
+    margin: 0;
+    padding: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+    color: inherit;
+    overflow: visible;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    background: none;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75), 0 0 10px rgba(0, 0, 0, 0.45);
+    font-size: 1.5rem;
+    line-height: 1.5rem;
+    white-space: pre-line;
+    border-radius: 0 !important;
+}
+
+.rows-2.focus-1.text-overlay-1 .itemsContainer > .card:first-child .cardTextStack {
+    position: absolute;
+    z-index: 2;
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-width: none;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25em;
+    margin: 0;
+    padding: 1.35em 0.85em;
+    box-sizing: border-box;
+    pointer-events: none;
+    color: var(--kefin-card-title-color, #fff);
+    overflow: hidden;
+    bottom: 0;
+}
+
   /* --- End Variant Row Layouts --- */
+
+
