@@ -175,7 +175,7 @@
         // Each skin should have an author field indicating who created the skin
         skins: [
             {
-                name: 'Default',
+                name: 'Jellyfin Default',
                 author: 'Jellyfin',
                 url: null,  // null means no additional CSS (default Jellyfin theme)
                 colorSchemes: []
