@@ -1283,6 +1283,44 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         return changed;
     }
 
+    /** Identity for static section items — cardUrl only (no Name fallback). */
+    function itemIdentity(item) {
+        const cardUrl = item?.cardUrl;
+        if (cardUrl == null || cardUrl === '') return null;
+        return String(cardUrl);
+    }
+
+    /**
+     * Ensure saved section has at least the canonical default items (append-only).
+     * @returns {boolean} whether section.items changed
+     */
+    function syncItemsFromCanonical(savedSection, canonicalItems) {
+        if (!savedSection || !Array.isArray(canonicalItems) || !canonicalItems.length) return false;
+
+        if (!Array.isArray(savedSection.items) || savedSection.items.length === 0) {
+            savedSection.items = JSON.parse(JSON.stringify(canonicalItems));
+            return true;
+        }
+
+        const existingIds = new Set();
+        for (const item of savedSection.items) {
+            const id = itemIdentity(item);
+            if (id) existingIds.add(id);
+        }
+
+        const toAppend = [];
+        for (const canonicalItem of canonicalItems) {
+            const id = itemIdentity(canonicalItem);
+            if (!id || existingIds.has(id)) continue;
+            toAppend.push(JSON.parse(JSON.stringify(canonicalItem)));
+            existingIds.add(id);
+        }
+
+        if (!toAppend.length) return false;
+        savedSection.items = savedSection.items.concat(toAppend);
+        return true;
+    }
+
     function syncKefinTweaksDefaultSections(config) {
         const recentlyAddedTemplate = getRecentlyAddedCanonicalQuery();
         let hasChanges = false;
@@ -1298,17 +1336,27 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                     if (!canonical && section.id.startsWith('recently-added-')) {
                         canonical = { queries: [recentlyAddedTemplate] };
                     }
-                    if (!canonical?.queries?.length) continue;
+                    if (!canonical) continue;
 
-                    if (!Array.isArray(section.queries)) section.queries = [];
+                    const hasCanonicalQueries = !!canonical.queries?.length;
+                    const hasCanonicalItems = Array.isArray(canonical.items) && canonical.items.length > 0;
+                    if (!hasCanonicalQueries && !hasCanonicalItems) continue;
 
-                    for (let i = 0; i < canonical.queries.length; i++) {
-                        if (!section.queries[i]) {
-                            section.queries[i] = { queryOptions: {} };
+                    if (hasCanonicalQueries) {
+                        if (!Array.isArray(section.queries)) section.queries = [];
+
+                        for (let i = 0; i < canonical.queries.length; i++) {
+                            if (!section.queries[i]) {
+                                section.queries[i] = { queryOptions: {} };
+                            }
+                            if (syncQueryFromCanonical(section.queries[i], canonical.queries[i])) {
+                                hasChanges = true;
+                            }
                         }
-                        if (syncQueryFromCanonical(section.queries[i], canonical.queries[i])) {
-                            hasChanges = true;
-                        }
+                    }
+
+                    if (hasCanonicalItems && syncItemsFromCanonical(section, canonical.items)) {
+                        hasChanges = true;
                     }
                 }
             }
@@ -1361,16 +1409,16 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                 prunedOrphans = pruneOrphanKefinDefaultSections(config);
             }
 
-            const queryChanges = syncKefinTweaksDefaultSections(config);
+            const defaultSyncChanges = syncKefinTweaksDefaultSections(config);
             const seasonalThemeChanges = syncSeasonalThemesFromDefaults(config);
 
-            if (libraryChanges || addedDefaults || prunedOrphans || queryChanges || seasonalThemeChanges) {
+            if (libraryChanges || addedDefaults || prunedOrphans || defaultSyncChanges || seasonalThemeChanges) {
                 await saveConfig(config);
                 LOG('KefinTweaks default home sections synced on startup', {
                     libraryChanges,
                     addedDefaults,
                     prunedOrphans,
-                    queryChanges,
+                    defaultSyncChanges,
                     seasonalThemeChanges
                 });
             }
