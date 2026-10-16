@@ -33,6 +33,9 @@
 
     // Check if user is admin
     async function isAdmin() {
+        // Wait for user to be logged in
+        await waitForLoginForInjectorWrite();
+
         try {
             if (window.ApiClient && window.ApiClient.getCurrentUser) {
                 const user = await window.ApiClient.getCurrentUser();
