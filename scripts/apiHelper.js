@@ -617,7 +617,8 @@
                             return fresh;
                         });
 
-                        if (hasUsableCachedPayload(result.data)) {
+                        // Explicit refreshes must resolve with the server response.
+                        if (!forceRefresh && hasUsableCachedPayload(result.data)) {
                             result._refreshPromise = refreshPromise;
                             LOG(`[Fetch] Returning stale cache; refreshing in background: ${url}...`);
                             return result.data;
