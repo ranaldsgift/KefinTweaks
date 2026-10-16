@@ -7890,42 +7890,9 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 
 	/************ Item Detail Page Observer ************/
 
-	function getVisiblePlayButton() {
-		return document.querySelector('.itemDetailPage:not(.hide) .mainDetailButtons .btnPlay:not(.hide)');
-	}
-
-	function syncWatchlistDetailVisibility(watchlistIcon) {
-		if (!watchlistIcon?.isConnected) return;
-		const playBtn = getVisiblePlayButton();
-		if (playBtn) {
-			watchlistIcon.classList.remove('hide');
-		} else {
-			watchlistIcon.classList.add('hide');
-		}
-	}
-
-	function observeWatchlistRevealWithPlay(watchlistIcon) {
-		const mainDetailButtons = document.querySelector('.itemDetailPage:not(.hide) .mainDetailButtons');
-		if (!mainDetailButtons || !watchlistIcon) return;
-
-		syncWatchlistDetailVisibility(watchlistIcon);
-
-		const observer = new MutationObserver(() => {
-			syncWatchlistDetailVisibility(watchlistIcon);
-			if (!watchlistIcon.classList.contains('hide')) {
-				observer.disconnect();
-			}
-		});
-		observer.observe(mainDetailButtons, {
-			attributes: true,
-			attributeFilter: ['class'],
-			subtree: true,
-			childList: true
-		});
-	}
-
-	// Function to add watchlist button to item detail page
-	async function addDetailPageWatchlistButton(item = null) {
+	// Function to add watchlist button to item detail page.
+	// Visibility vs native Play is gated in watchlist.css via :has(.btnPlay:not(.hide)).
+	function addDetailPageWatchlistButton(item = null) {
 		const trailerButton = document.querySelector('.itemDetailPage:not(.hide) .btnPlayTrailer');
 		if (!trailerButton) {
 			return;
@@ -7937,32 +7904,11 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			return;
 		}
 
-		// Wait until native Play is revealed so we do not show ahead of the row
-		const pollUntil = window.KefinTweaksUtils?.pollUntil;
-		if (typeof pollUntil === 'function') {
-			const ready = await pollUntil(() => !!getVisiblePlayButton() || !!document.querySelector('.itemDetailPage:not(.hide) .mainDetailButtons .btnPlay'), {
-				timeoutMs: 8000,
-				intervalMs: 50
-			});
-			if (!ready && !document.querySelector('.itemDetailPage:not(.hide) .btnPlayTrailer')) {
-				return;
-			}
-		}
-
-		// Trailer may have been replaced during paint — re-query
-		const trailerAnchor = document.querySelector('.itemDetailPage:not(.hide) .btnPlayTrailer');
-		if (!trailerAnchor) {
-			return;
-		}
-		if (document.querySelector('.itemDetailPage:not(.hide) .watchlist-icon')) {
-			return;
-		}
-
 		const isTVLayout = document.getRootNode().documentElement.className.includes('layout-tv');
 
 		const watchlistIcon = document.createElement('button');
 		watchlistIcon.setAttribute('is', 'emby-button');
-		watchlistIcon.className = `watchlist-icon detailButton emby-button button-flat hide${isTVLayout ? ' show-focus' : ''}`;
+		watchlistIcon.className = `watchlist-icon detailButton emby-button button-flat${isTVLayout ? ' show-focus' : ''}`;
 		watchlistIcon.title = 'Add to Watchlist';
 		watchlistIcon.dataset.active = 'false';
 
@@ -8019,8 +7965,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			});
 		}
 
-		trailerAnchor.after(watchlistIcon);
-		observeWatchlistRevealWithPlay(watchlistIcon);
+		trailerButton.after(watchlistIcon);
 	}
 
 	// Function to monitor item detail pages using onViewPage
