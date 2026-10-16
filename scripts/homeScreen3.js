@@ -648,6 +648,13 @@
         // keep homeScreenConfigResult until a newer resolve replaces it (stale-ok for chrome/paint)
     }
 
+    /** After User > Home prefs save/restore: drop cached filtered sections so next home rebuild re-reads prefs. */
+    function notifyUserHomePreferencesChanged(reason) {
+        invalidateHomeScreenConfig(reason || 'userHomePreferencesChanged');
+        sectionCache.renderedSections = [];
+        sectionCache.fragmentCache = null;
+    }
+
     function ensureHomeScreenConfig() {
         if (homeScreenConfigPromise) return homeScreenConfigPromise;
         if (homeScreenConfigResult && homeScreenConfigResultGeneration === homeScreenConfigGeneration) {
@@ -2978,6 +2985,7 @@
         init: () => enqueueHomeViewJob({ type: 'home', hash: window.location.hash || '' }),
         refreshHomeSections,
         refreshHomeSectionById,
+        notifyUserHomePreferencesChanged,
         resolveDiscoverySection: buildDiscoverySectionInstance,
         sectionHelper: () => window.sectionHelper,
         getActiveHomeCategory: () => homeChromeActiveCategory || 'none',

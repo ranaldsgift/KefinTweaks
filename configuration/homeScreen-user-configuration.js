@@ -2334,6 +2334,7 @@
             const success = await saveEditorDisplayPreferences(displayPrefs);
             if (success) {
                 LOG('User preferences saved successfully');
+                window.homeScreen3?.notifyUserHomePreferencesChanged?.('userHomePrefsSaved');
             } else {
                 ERR('Failed to save user preferences');
             }
@@ -2583,6 +2584,7 @@
                                         displayPrefs.CustomPrefs.kefinHomeScreen = '[]';
                                         const ok = await saveEditorDisplayPreferences(displayPrefs);
                                         if (ok) {
+                                            window.homeScreen3?.notifyUserHomePreferencesChanged?.('userHomePrefsRestoreDefaults');
                                             window.ModalSystem.close(modalId);
                                             await renderUserHomeSectionsEditor(container);
                                             if (window.KefinTweaksToaster && window.KefinTweaksToaster.toast) {
