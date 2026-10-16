@@ -3015,7 +3015,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             page = 'favorites';
         } else if (watchlistUrl && hash.includes(watchlistUrl)) {
             page = 'watchlist';
-        } else if (hash === '#/' || hash === '#' || hash === '' || (hash.includes('#/home') && (tabIndex === 0 || tabIndex === null))) {
+        } else if (hash === '#/' || hash === '#' || hash === '' || (hash.includes('#/home') && (tabIndex === '0' || tabIndex === null))) {
             page = 'home';
         } else if (hash.includes('#/tv')) {
             page = 'tv';
