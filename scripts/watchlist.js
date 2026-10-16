@@ -7897,11 +7897,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	function syncWatchlistDetailVisibility(watchlistIcon) {
 		if (!watchlistIcon?.isConnected) return;
 		const playBtn = getVisiblePlayButton();
-		if (playBtn) {
-			watchlistIcon.classList.remove('hide');
-		} else {
-			watchlistIcon.classList.add('hide');
-		}
+		watchlistIcon.classList.toggle('hide', !playBtn);
 	}
 
 	function observeWatchlistRevealWithPlay(watchlistIcon) {
