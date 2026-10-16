@@ -1226,10 +1226,14 @@
 
         if (discoveryKind === 'Similar' || discoveryKind === 'Watchlist') {
             const similarId = dynamicResult.similarSourceId || resolvedSource;
+            // Preserve template options (e.g. IsUnplayed / Hide Watched, SortBy) — only overlay Similar-required fields
             const similarQueryOptions = applyExcludeItemIdsToQueryOptions({
-                Limit: instanceConfig.itemLimit || 20,
+                ...queryOptions,
+                Limit: queryOptions.Limit || instanceConfig.itemLimit || 20,
                 Fields: queryOptions.Fields || 'PrimaryImageAspectRatio,DateCreated,Overview,Taglines,ProductionYear,RecursiveItemCount,ChildCount,UserData',
-                IncludeItemTypes: queryOptions.IncludeItemTypes || contentTypes
+                IncludeItemTypes: queryOptions.IncludeItemTypes?.length
+                    ? queryOptions.IncludeItemTypes
+                    : contentTypes
             });
             instanceConfig.queries = [{
                 ...(hasTemplateQueries ? instanceConfig.queries[0] : {}),
