@@ -59,6 +59,11 @@
                 }
             });
 
+            // Non-admins cannot list plugins (HTTP 403) — treat as no access, not a hard failure
+            if (response.status === 403 || response.status === 401) {
+                return null;
+            }
+
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
@@ -84,7 +89,7 @@
     // Get current JavaScript Injector configuration
     async function getJavaScriptInjectorConfig(pluginId) {
         try {
-            if (!window.ApiClient || !window.ApiClient._serverAddress || !window.ApiClient.accessToken) {
+            if (!pluginId || !window.ApiClient || !window.ApiClient._serverAddress || !window.ApiClient.accessToken) {
                 return null;
             }
 
@@ -95,6 +100,10 @@
                     'Authorization': getAuthHeader()
                 }
             });
+
+            if (response.status === 403 || response.status === 401) {
+                return null;
+            }
 
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -190,7 +199,15 @@
     async function saveConfigToJavaScriptInjector(config) {
         try {
             const pluginId = await findJavaScriptInjectorPlugin();
+            if (!pluginId) {
+                console.warn('[KefinTweaks Installer] Cannot save config: JavaScript Injector plugin unavailable (non-admin or missing)');
+                return false;
+            }
             const injectorConfig = await getJavaScriptInjectorConfig(pluginId);
+            if (!injectorConfig) {
+                console.warn('[KefinTweaks Installer] Cannot save config: could not read JS Injector configuration');
+                return false;
+            }
                 
             if (!injectorConfig.CustomJavaScripts) {
                 injectorConfig.CustomJavaScripts = [];
@@ -2065,7 +2082,8 @@ main.MuiBox-root .customPage.libraryPage:not(.noSecondaryNavPage)[data-kefin-cus
             if (expected && expected !== current) {
                 window.KefinTweaksConfig.kefinTweaksRootResolved = expected;
                 console.log('[KefinTweaks Installer] Updated kefinTweaksRootResolved:', current || '(none)', '->', expected);
-                if (isLoggedInForInjectorWrite()) {
+                // Only admins can GET/POST /Plugins — never attempt persist for non-admins
+                if (isLoggedInForInjectorWrite() && await isAdmin()) {
                     await saveConfigToJavaScriptInjector(window.KefinTweaksConfig);
                     maybeQueueResolvedRootUpdateToast({
                         symbolicRoot,
@@ -2073,7 +2091,7 @@ main.MuiBox-root .customPage.libraryPage:not(.noSecondaryNavPage)[data-kefin-cus
                         nextResolved: expected,
                         persisted: true
                     });
-                } else {
+                } else if (!isLoggedInForInjectorWrite()) {
                     console.warn('[KefinTweaks Installer] kefinTweaksRootResolved updated in memory; not logged in to persist');
                 }
             }
