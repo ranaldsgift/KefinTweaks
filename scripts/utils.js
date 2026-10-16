@@ -3000,13 +3000,6 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         const hash = String(window.location.hash || '');
         let watchlistUrl = activePageWatchlistUrl || window.KefinTweaksUtils?._watchlistUrl || null;
 
-        if (!watchlistUrl) {
-            getWatchlistUrl().then((url) => {
-                activePageWatchlistUrl = url;
-                updateActivePage();
-            }).catch(() => { /* ignore */ });
-        }
-
         let page = '';
         const tabMatch = hash.match(/[?&]tab=(\d+)/);
         const tabIndex = tabMatch ? tabMatch[1] : null;

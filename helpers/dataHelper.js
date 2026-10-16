@@ -267,6 +267,11 @@
 
     async function initialize() {
         ensureApiClient();
+
+        // Wait for login
+        if (window.userHelper?.waitForLogin) {
+            await window.userHelper.waitForLogin();
+        }
         
         if (__libraries) {
             return;

@@ -7637,6 +7637,10 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		};
 
 		const run = async () => {
+			if (window.userHelper?.waitForLogin) {
+				await window.userHelper.waitForLogin();
+			}
+			
 			await addCustomWatchlistPage();
 			await addCustomMenuLink();
 			await addWatchlistPageHandler();
