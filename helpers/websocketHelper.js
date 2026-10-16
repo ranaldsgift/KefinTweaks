@@ -62,6 +62,8 @@
             subscribeAttached[messageType] = true;
             subscribeUnsubs[messageType] = typeof unsub === 'function' ? unsub : null;
             deliveryMode = 'subscribe';
+            // Drop any legacy onmessage hook immediately — do not wait for the poll tick
+            unhookSocket();
             LOG(`Subscribed via ApiClient.subscribe for ${messageType}`);
             return true;
         } catch (err) {
@@ -95,8 +97,11 @@
 
     /**
      * Legacy path: wrap socket.onmessage, re-bind when the socket instance changes.
+     * Only used when ApiClient.subscribe is unavailable.
      */
     function hookSocketIfNeeded() {
+        if (canSubscribe()) return false;
+
         const socket = getSocket();
         if (!socket) return false;
 
@@ -143,15 +148,19 @@
     }
 
     function tryInitializeDelivery() {
-        // Prefer JF-web style subscribe (reconnect-safe)
+        // Prefer JF-web style subscribe (reconnect-safe). Never wrap onmessage when subscribe exists.
         if (canSubscribe()) {
-            if (ensureSubscribeForAllRegisteredTypes()) {
-                return true;
-            }
+            return ensureSubscribeForAllRegisteredTypes();
         }
 
         // Fallback: raw socket onmessage with rebind support
         return hookSocketIfNeeded();
+    }
+
+    function stopPolling() {
+        if (pollingIntervalId == null) return;
+        clearInterval(pollingIntervalId);
+        pollingIntervalId = null;
     }
 
     function startPolling() {
@@ -163,15 +172,14 @@
 
         pollingIntervalId = setInterval(() => {
             if (canSubscribe()) {
-                ensureSubscribeForAllRegisteredTypes();
-                if (deliveryMode === 'subscribe') {
-                    // Subscribe path owns delivery; drop legacy hook if any
+                if (ensureSubscribeForAllRegisteredTypes() && deliveryMode === 'subscribe') {
                     unhookSocket();
-                    clearInterval(pollingIntervalId);
-                    pollingIntervalId = null;
+                    stopPolling();
                     LOG('Delivery mode: ApiClient.subscribe');
                     return;
                 }
+                // subscribe exists but types not attached yet — keep polling, never hook onmessage
+                return;
             }
 
             const socket = getSocket();
@@ -252,5 +260,6 @@
         },
     };
 
-    startPolling();
+    // Do not startPolling() here — wait until the first listen() so we never
+    // wrap JF's socket before any consumer needs delivery.
 })();

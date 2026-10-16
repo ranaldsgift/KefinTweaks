@@ -2141,10 +2141,29 @@
     let cardLibraryChangedListenerStarted = false;
     let pendingLibraryUpdatedIds = new Set();
     let libraryUpdatedFlushTimer = null;
-    const LIBRARY_UPDATED_DEBOUNCE_MS = 400;
+    let libraryUpdatedFlushRunning = false;
+    const LIBRARY_UPDATED_DEBOUNCE_MS = 750;
+    const LIVE_SYNC_REBUILD_BATCH_SIZE = 8;
     // Match apiHelper DEFAULT_ITEM_FIELDS so rebuilt cards keep aspect/overlays/indicators.
     const LIVE_SYNC_ITEM_FIELDS =
         'PrimaryImageAspectRatio,DateCreated,Overview,Taglines,ProductionYear,RecursiveItemCount,ChildCount,UserData,ProviderIds,MediaSourceCount';
+
+    function scheduleLibraryUpdatedFlush() {
+        if (libraryUpdatedFlushTimer) clearTimeout(libraryUpdatedFlushTimer);
+        libraryUpdatedFlushTimer = setTimeout(() => {
+            void flushVisibleCardLibraryUpdates();
+        }, LIBRARY_UPDATED_DEBOUNCE_MS);
+    }
+
+    function yieldToMainThread() {
+        return new Promise((resolve) => {
+            if (typeof requestAnimationFrame === 'function') {
+                requestAnimationFrame(() => resolve());
+            } else {
+                setTimeout(resolve, 0);
+            }
+        });
+    }
 
     function escapeCssIdentForCardSync(value) {
         return typeof CSS !== 'undefined' && CSS.escape
@@ -2447,33 +2466,45 @@
 
     async function flushVisibleCardLibraryUpdates() {
         libraryUpdatedFlushTimer = null;
+        if (libraryUpdatedFlushRunning) {
+            // Keep pending ids; schedule one follow-up after the in-flight flush
+            if (pendingLibraryUpdatedIds.size) {
+                liveSyncLog('Flush already running — deferring follow-up', {
+                    pendingSize: pendingLibraryUpdatedIds.size,
+                });
+                scheduleLibraryUpdatedFlush();
+            }
+            return;
+        }
+
         const ids = Array.from(pendingLibraryUpdatedIds);
         pendingLibraryUpdatedIds.clear();
         liveSyncLog('Flush start', { pendingIds: ids });
         if (!ids.length) return;
 
-        const matchCounts = {};
-        const idsToFetch = ids.filter((id) => {
-            const count = findVisibleCardsForItemId(id).length;
-            matchCounts[id] = count;
-            return count > 0;
-        });
-        liveSyncLog('Visible card matches', matchCounts);
-
-        if (!idsToFetch.length) {
-            liveSyncLog('No on-page cards for updated ids — skipping fetch');
-            return;
-        }
-
-        if (typeof ApiClient === 'undefined' || typeof ApiClient.getItems !== 'function') {
-            liveSyncWarn('ApiClient.getItems unavailable — cannot refresh cards');
-            return;
-        }
-
-        const userId = ApiClient.getCurrentUserId?.();
-        liveSyncLog('Fetching items', { userId, idsToFetch, fields: LIVE_SYNC_ITEM_FIELDS });
-
+        libraryUpdatedFlushRunning = true;
         try {
+            const matchCounts = {};
+            const idsToFetch = ids.filter((id) => {
+                const count = findVisibleCardsForItemId(id).length;
+                matchCounts[id] = count;
+                return count > 0;
+            });
+            liveSyncLog('Visible card matches', matchCounts);
+
+            if (!idsToFetch.length) {
+                liveSyncLog('No on-page cards for updated ids — skipping fetch');
+                return;
+            }
+
+            if (typeof ApiClient === 'undefined' || typeof ApiClient.getItems !== 'function') {
+                liveSyncWarn('ApiClient.getItems unavailable — cannot refresh cards');
+                return;
+            }
+
+            const userId = ApiClient.getCurrentUserId?.();
+            liveSyncLog('Fetching items', { userId, idsToFetch, fields: LIVE_SYNC_ITEM_FIELDS });
+
             const response = await ApiClient.getItems(userId, {
                 Ids: idsToFetch.join(','),
                 Recursive: false,
@@ -2494,8 +2525,8 @@
                 })),
             });
 
-            let rebuilt = 0;
-            let skipped = 0;
+            // Flatten id → cards into a rebuild work list, then process in rAF batches
+            const work = [];
             idsToFetch.forEach((id) => {
                 const freshItem = itemsById.get(normalizeItemIdKey(id));
                 if (!freshItem) {
@@ -2505,13 +2536,29 @@
                 const cards = findVisibleCardsForItemId(id);
                 liveSyncLog('Replacing cards for item', { id, cardCount: cards.length });
                 cards.forEach((card) => {
+                    work.push({ card, freshItem });
+                });
+            });
+
+            let rebuilt = 0;
+            let skipped = 0;
+            for (let i = 0; i < work.length; i += LIVE_SYNC_REBUILD_BATCH_SIZE) {
+                if (i > 0) await yieldToMainThread();
+                const batch = work.slice(i, i + LIVE_SYNC_REBUILD_BATCH_SIZE);
+                batch.forEach(({ card, freshItem }) => {
                     if (replaceVisibleCardWithFreshItem(card, freshItem)) rebuilt += 1;
                     else skipped += 1;
                 });
-            });
-            liveSyncLog('Flush complete', { rebuilt, skipped });
+            }
+            liveSyncLog('Flush complete', { rebuilt, skipped, workItems: work.length });
         } catch (err) {
             console.error('[KefinTweaks CardBuilder][LiveSync] Visible card live sync failed:', err);
+        } finally {
+            libraryUpdatedFlushRunning = false;
+            // Ids queued during this flush — schedule another pass
+            if (pendingLibraryUpdatedIds.size) {
+                scheduleLibraryUpdatedFlush();
+            }
         }
     }
 
@@ -2528,9 +2575,9 @@
             pendingSizeBefore: before,
             pendingSizeAfter: pendingLibraryUpdatedIds.size,
             debounceMs: LIBRARY_UPDATED_DEBOUNCE_MS,
+            flushRunning: libraryUpdatedFlushRunning,
         });
-        if (libraryUpdatedFlushTimer) clearTimeout(libraryUpdatedFlushTimer);
-        libraryUpdatedFlushTimer = setTimeout(flushVisibleCardLibraryUpdates, LIBRARY_UPDATED_DEBOUNCE_MS);
+        scheduleLibraryUpdatedFlush();
     }
 
     function handleLibraryChangedMessage(msg) {
