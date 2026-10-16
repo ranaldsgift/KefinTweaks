@@ -19,6 +19,27 @@
     const STORAGE_KEY = 'kefinTweaks_selectedSkin';
     const THEME_STORAGE_KEY = 'kefinTweaks_selectedTheme';
     const COLOR_SCHEMES_STORAGE_KEY = 'kefinTweaks_selectedColorScheme';
+    /** Built-in no-CSS skin in skinConfig.js (was formerly named "Default"). */
+    const BUILTIN_DEFAULT_SKIN_NAME = 'Jellyfin Default';
+    const LEGACY_DEFAULT_SKIN_NAME = 'Default';
+
+    function normalizeSkinName(name) {
+        if (!name) return name;
+        return name === LEGACY_DEFAULT_SKIN_NAME ? BUILTIN_DEFAULT_SKIN_NAME : name;
+    }
+
+    /** localStorage selection, migrating legacy "Default" → "Jellyfin Default". */
+    function getStoredOrDefaultSkinName() {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return getDefaultSkinName();
+        const normalized = normalizeSkinName(raw);
+        if (normalized !== raw) {
+            try {
+                localStorage.setItem(STORAGE_KEY, normalized);
+            } catch (_) { /* ignore */ }
+        }
+        return normalized;
+    }
     
     // Cached server version for synchronous access — prefer window.KefinTweaks
     let cachedServerVersion = null;
@@ -499,7 +520,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         if (SKINS_CONFIG.length === 0) {
             SKINS_CONFIG = [
                 {
-                    name: 'Default',
+                    name: BUILTIN_DEFAULT_SKIN_NAME,
                     url: null
                 }
             ];
@@ -1089,7 +1110,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
      * @returns {boolean} True if verification passes, false otherwise
      */
     function verifySkinApplication() {
-        const selectedSkinName = localStorage.getItem(STORAGE_KEY) || getDefaultSkinName();
+        const selectedSkinName = getStoredOrDefaultSkinName();
         const selectedSkin = SKINS_CONFIG.find(skin => skin.name === selectedSkinName);
         
         if (!selectedSkin) {
@@ -1395,7 +1416,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         const colorSchemesSelect = document.getElementById('selectColorSchemesPopover');
         
         if (skinSelect) {
-            const currentSkin = localStorage.getItem(STORAGE_KEY) || getDefaultSkinName();
+            const currentSkin = getStoredOrDefaultSkinName();
             skinSelect.value = currentSkin;
         }
         
@@ -1593,7 +1614,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         }
         
         const skinSelect = document.getElementById('selectSkin');
-        const selectedSkinName = skinSelect?.value || localStorage.getItem(STORAGE_KEY) || getDefaultSkinName();
+        const selectedSkinName = skinSelect?.value || getStoredOrDefaultSkinName();
         const selectedSkin = SKINS_CONFIG.find(skin => skin.name === selectedSkinName);
         
         // Find existing gear icon and remove it
@@ -1648,7 +1669,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         const colorSchemesSelect = document.getElementById('selectColorSchemesPopover');
         if (!colorSchemesSelect) return;
         
-        const selectedSkinName = localStorage.getItem(STORAGE_KEY) || getDefaultSkinName();
+        const selectedSkinName = getStoredOrDefaultSkinName();
         const selectedSkin = SKINS_CONFIG.find(skin => skin.name === selectedSkinName);
         
         // Get the color schemes container to show/hide it
@@ -1981,7 +2002,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                             saveOptionalIncludeState(key, enabled);
                             
                             // Apply changes immediately
-                            const currentSkinName = localStorage.getItem(STORAGE_KEY) || getDefaultSkinName();
+                            const currentSkinName = getStoredOrDefaultSkinName();
                             const currentSkin = SKINS_CONFIG.find(s => s.name === currentSkinName);
                             
                             if (currentSkin) {
@@ -2003,7 +2024,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                             saveOptionalIncludeState(key, enabled);
                             
                             // Check if this is the currently active skin
-                            const currentSkinName = localStorage.getItem(STORAGE_KEY) || getDefaultSkinName();
+                            const currentSkinName = getStoredOrDefaultSkinName();
                             if (currentSkinName === skin.name) {
                                 // Reload skin-specific optional includes based on updated userConfig
                                 // First, unload current skin-specific optional includes
@@ -2031,7 +2052,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         }
         
         const skinSelect = document.getElementById('selectSkinPopover');
-        const selectedSkinName = skinSelect?.value || localStorage.getItem(STORAGE_KEY) || getDefaultSkinName();
+        const selectedSkinName = skinSelect?.value || getStoredOrDefaultSkinName();
         const selectedSkin = SKINS_CONFIG.find(skin => skin.name === selectedSkinName);
         
         labelElement.innerHTML = '';
@@ -2195,7 +2216,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         displayModeField.parentNode.insertBefore(skinContainer, displayModeField.nextSibling);
         
         // Set the current selection
-        const selectedSkinName = localStorage.getItem(STORAGE_KEY) || getDefaultSkinName();
+        const selectedSkinName = getStoredOrDefaultSkinName();
         const select = document.getElementById('selectSkin');
         if (select) {
             select.value = selectedSkinName;
@@ -2300,7 +2321,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
      * This ensures both popover and display page dropdowns stay in sync
      */
     function syncAllColorSchemeDropdowns() {
-        const selectedSkinName = localStorage.getItem(STORAGE_KEY) || getDefaultSkinName();
+        const selectedSkinName = getStoredOrDefaultSkinName();
         const selectedSkin = SKINS_CONFIG.find(skin => skin.name === selectedSkinName);
         
         // Get all color scheme dropdowns
@@ -2626,7 +2647,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         }
         
         // Find the scheme by URL and update localStorage
-        const selectedSkinName = localStorage.getItem(STORAGE_KEY) || getDefaultSkinName();
+        const selectedSkinName = getStoredOrDefaultSkinName();
         const selectedSkin = SKINS_CONFIG.find(skin => skin.name === selectedSkinName);
         
         if (selectedSkin && selectedSkin.colorSchemes) {
@@ -2669,7 +2690,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         
         if (selectedColorSchemeName) {
             // Get the currently selected skin
-            const selectedSkinName = localStorage.getItem(STORAGE_KEY) || getDefaultSkinName();
+            const selectedSkinName = getStoredOrDefaultSkinName();
             const selectedSkin = SKINS_CONFIG.find(skin => skin.name === selectedSkinName);
             
             if (selectedSkin && selectedSkin.colorSchemes) {
@@ -2696,7 +2717,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             }
         } else {
             // No color scheme stored, use default for current skin
-            const selectedSkinName = localStorage.getItem(STORAGE_KEY) || getDefaultSkinName();
+            const selectedSkinName = getStoredOrDefaultSkinName();
         const selectedSkin = SKINS_CONFIG.find(skin => skin.name === selectedSkinName);
         
             if (selectedSkin) {
@@ -2736,19 +2757,19 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         // Check if a default skin is specified in the main configuration
         const configDefaultSkin = window.KefinTweaksConfig?.defaultSkin;
         if (configDefaultSkin) {
-            LOG(`Using configured default skin: ${configDefaultSkin}`);
-            return configDefaultSkin;
+            const normalized = normalizeSkinName(configDefaultSkin);
+            LOG(`Using configured default skin: ${normalized}`);
+            return normalized;
         }
-        
-        // Fall back to 'Default' if no configuration is specified
-        return 'Default';
+
+        return BUILTIN_DEFAULT_SKIN_NAME;
     }
     
     /**
      * Load the currently selected skin
      */
     function loadSelectedSkin() {
-        const selectedSkinName = localStorage.getItem(STORAGE_KEY) || getDefaultSkinName();
+        const selectedSkinName = getStoredOrDefaultSkinName();
         const selectedSkin = SKINS_CONFIG.find(skin => skin.name === selectedSkinName);
         
         if (selectedSkin) {
