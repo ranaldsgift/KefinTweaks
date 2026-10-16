@@ -390,3 +390,14 @@ span.listItemBodyText.secondary.seasonal-tag {
 .config-tab-nav button[data-tab="order"] {
 	display: none;
 }
+
+
+.listItem[data-section-type="discovery"]:not([data-section-id^="custom"]) .section-row-title-line,
+.listItem[data-section-type="discovery"]:not([data-section-id^="custom"]) .section-row-caption {
+    display: none !important;
+}
+
+.listItem[data-section-type="discovery"]:not([data-section-id^="custom"]) .section-row-description {
+    font-size: 1em !important;
+    margin-top: 0 !important;
+}
