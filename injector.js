@@ -687,18 +687,27 @@
     //const urlSuffix = `?v=${new Date().getTime()}`;
 
     // Inject dashboard drawer version badge CSS using dynamic version number
+    function isFloatingKefinRootUrl(root) {
+        return /@(latest|main|master|experimental)(\/|$)/i.test(String(root || ''));
+    }
+
     async function injectVersionBadgeCSS() {
         const styleId = 'kefinTweaks-version-css';
         if (document.getElementById(styleId)) return;
         
-        // Get version from root URL in config
+        // Prefer pinned resolved root; GitHub resolve only for admins on floating symbolic roots
         let displayVersion = "";
         try {
-            const configRoot = window.KefinTweaksConfig?.kefinTweaksRoot || '';
+            const cfg = window.KefinTweaksConfig || {};
+            let configRoot = cfg.kefinTweaksRootResolved || cfg.kefinTweaksRoot || '';
             if (configRoot) {
-                // Resolve the root to get the actual version (if @latest or @main)
-                const resolvedRoot = await resolveRootVersion(configRoot);
-                displayVersion = extractVersionFromRoot(resolvedRoot);
+                if (isFloatingKefinRootUrl(configRoot)) {
+                    const isAdmin = await checkAdminWithTimeout(2000);
+                    if (isAdmin) {
+                        configRoot = await resolveRootVersion(configRoot);
+                    }
+                }
+                displayVersion = extractVersionFromRoot(configRoot);
             }
         } catch (error) {
             console.warn('[KefinTweaks Injector] Could not extract version, using fallback:', error);
@@ -870,10 +879,12 @@
     }
     
     // Get the root path for scripts from configuration
+    // Prefer kefinTweaksRootResolved; GitHub floating resolve only for admins.
     async function getScriptRoot() {
-        const kefinTweaksRoot = window.KefinTweaksConfig?.kefinTweaksRoot;
+        const cfg = window.KefinTweaksConfig || {};
+        const kefinTweaksRoot = cfg.kefinTweaksRootResolved || cfg.kefinTweaksRoot;
         
-        // If kefinTweaksRoot is not set or empty, return null (scripts should not load)
+        // If root is not set or empty, return null (scripts should not load)
         if (!kefinTweaksRoot || kefinTweaksRoot === '') {
             console.warn('[KefinTweaks Injector] kefinTweaksRoot is not configured');
             return null;
@@ -882,9 +893,14 @@
         // Ensure root ends with /
         let root = kefinTweaksRoot.endsWith('/') ? kefinTweaksRoot : kefinTweaksRoot + '/';
         
-        // Resolve @latest, @main, or @experimental if needed (with caching)
+        // Resolve floating refs only when still floating and user is admin (with caching)
         if (resolvedRootCache === null) {
-            root = await resolveRootVersion(root);
+            if (isFloatingKefinRootUrl(root)) {
+                const isAdmin = await checkAdminWithTimeout(2000);
+                if (isAdmin) {
+                    root = await resolveRootVersion(root);
+                }
+            }
             resolvedRootCache = root;
         } else {
             root = resolvedRootCache;
@@ -1185,6 +1201,11 @@
     async function initialize() {
         console.log('[KefinTweaks Injector] Starting KefinTweaks initialization...');
 
+        const bakeAlreadyAttached = !!(
+            window.KefinTweaksScriptsPreloaded
+            || window.KefinTweaksInjectorAttached
+        );
+
         const scriptRoot = await getScriptRoot();
         if (!scriptRoot) {
             console.log('[KefinTweaks Injector] kefinTweaksRoot is not configured. Please configure KefinTweaks using the installer before scripts can be loaded.');
@@ -1206,7 +1227,7 @@
         const config = window.KefinTweaksConfig || {};
         const root = Loader.getResolvedKefinRoot
             ? Loader.getResolvedKefinRoot(config)
-            : Loader.normalizeRoot(config.kefinTweaksRoot || '');
+            : Loader.normalizeRoot(config.kefinTweaksRootResolved || config.kefinTweaksRoot || '');
 
         try {
             const plan = Loader.buildLoadPlan(config, majorVersion, {
@@ -1214,8 +1235,15 @@
                 urlSuffix,
                 configOnly: config.enabled === false
             });
+
+            if (bakeAlreadyAttached) {
+                // Belt-and-suspenders: never dual-inject when bake already ran.
+                // Tip re-pin / bake rewrite is owned by kefinTweaks-plugin tip-sync path.
+                console.log('[KefinTweaks Injector] Bake already attached; skipping applyAssetsToDocument (stamp=', plan.stamp, ')');
+                return;
+            }
+
             console.log('[KefinTweaks Injector] Applying ordered assets:', plan.assets.length, 'stamp=', plan.stamp);
-            // Dedupe against tags already injected by baked KefinTweaks-injector
             Loader.applyAssetsToDocument(plan.assets);
             document.dispatchEvent(new CustomEvent('kefinTweaksLoaded', {
                 detail: {

@@ -367,7 +367,9 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         if (typeof window.KefinTweaksToaster?.toast !== 'function') return false;
         window.__kefinPendingRootUpdateToast = null;
         try {
-            window.KefinTweaksToaster.toast(pending.message, '5');
+            // Sticky when a forced tip-reload countdown is active; otherwise auto-hide.
+            const sticky = !!pending.sticky || !!window.__kefinTipReloadScheduled;
+            window.KefinTweaksToaster.toast(pending.message, pending.duration || '5', !sticky);
         } catch (e) {
             console.warn('[KefinTweaks Installer] Failed to show root-update toast:', e);
             return false;
@@ -375,9 +377,13 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         return true;
     }
 
-    function queueRootUpdateToast(message) {
+    function queueRootUpdateToast(message, options = null) {
         if (!message) return;
-        window.__kefinPendingRootUpdateToast = { message };
+        window.__kefinPendingRootUpdateToast = {
+            message,
+            sticky: !!(options && options.sticky),
+            duration: (options && options.duration) || '5'
+        };
         if (flushPendingRootUpdateToast()) return;
         const start = Date.now();
         const poll = () => {
@@ -389,7 +395,41 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
     }
 
     /**
-     * Queue toast after a floating root's resolved URL was persisted (skip first pin).
+     * After tip re-pin is persisted to disk, force reload so Config/bake/scripts stay aligned.
+     * Single-flight per page session.
+     */
+    function scheduleForcedTipReloadCountdown({ symbolicRoot, nextResolved }) {
+        if (window.__kefinTipReloadScheduled) return;
+        window.__kefinTipReloadScheduled = true;
+
+        const label = formatResolvedUpdateLabel(symbolicRoot, nextResolved);
+        let remaining = 5;
+
+        const show = (n) => {
+            queueRootUpdateToast(
+                `KefinTweaks updated to ${label} — refreshing in ${n}…`,
+                { sticky: true, duration: '6' }
+            );
+        };
+
+        show(remaining);
+        const tick = setInterval(() => {
+            remaining -= 1;
+            if (remaining <= 0) {
+                clearInterval(tick);
+                try {
+                    window.location.reload();
+                } catch (e) {
+                    console.warn('[KefinTweaks Installer] Reload after tip update failed:', e);
+                }
+                return;
+            }
+            show(remaining);
+        }, 1000);
+    }
+
+    /**
+     * After a floating root's resolved URL was persisted (skip first pin): countdown + reload.
      */
     function maybeQueueResolvedRootUpdateToast({ symbolicRoot, previousResolved, nextResolved, persisted }) {
         if (!persisted) return;
@@ -397,8 +437,78 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         const previous = normalizeKefinRootUrl(previousResolved);
         const next = normalizeKefinRootUrl(nextResolved);
         if (!previous || !next || previous === next) return;
-        const label = formatResolvedUpdateLabel(symbolicRoot, next);
-        queueRootUpdateToast(`KefinTweaks updated to ${label}`);
+        scheduleForcedTipReloadCountdown({ symbolicRoot, nextResolved: next });
+    }
+
+    /**
+     * Admin + bake already on page: tip resolve/persist/sync without loading live injector.js.
+     * Tip advanced → persist Config+bake then forced reload. Tip unchanged → stamp sync only.
+     */
+    async function handleAdminAttachedBakeTipSync(config) {
+        const symbolic = config?.kefinTweaksRoot || '';
+        if (!symbolic) return;
+
+        await waitForLoginForInjectorWrite();
+
+        const current = normalizeKefinRootUrl(config.kefinTweaksRootResolved || '');
+        let tip = normalizeKefinRootUrl(symbolic);
+        if (isFloatingKefinRoot(symbolic)) {
+            tip = normalizeKefinRootUrl(await resolveRootVersion(symbolic));
+        }
+
+        if (tip && tip !== current) {
+            console.log('[KefinTweaks Installer] Tip advanced while bake attached:', current || '(none)', '->', tip);
+            config.kefinTweaksRootResolved = tip;
+            if (!window.KefinTweaksConfig) {
+                window.KefinTweaksConfig = config;
+            } else {
+                window.KefinTweaksConfig.kefinTweaksRootResolved = tip;
+            }
+
+            try {
+                const persisted = await saveConfigToJavaScriptInjector(config);
+                if (persisted) {
+                    scheduleForcedTipReloadCountdown({ symbolicRoot: symbolic, nextResolved: tip });
+                    console.log('[KefinTweaks Installer] Tip persist+bake ok; scheduling reload');
+                } else {
+                    console.warn('[KefinTweaks Installer] Tip advanced but persist failed; not reloading');
+                }
+            } catch (e) {
+                console.error('[KefinTweaks Installer] Tip persist failed; not reloading:', e);
+            }
+            return;
+        }
+
+        // Tip unchanged — stamp sync only (no live inject, no reload)
+        try {
+            const loadRoot = current || tip;
+            if (!loadRoot) return;
+            await loadKefinTweaksLoaderFromRoot(loadRoot);
+            const Loader = window.KefinTweaksLoader;
+            if (!Loader || typeof Loader.syncKefinTweaksInjector !== 'function') {
+                console.log('[KefinTweaks Installer] Loader sync unavailable; bake attached, tip unchanged');
+                return;
+            }
+            Loader.ensureKefinTweaksApi(Loader.SCRIPT_DEFINITIONS);
+            let major = null;
+            try {
+                major = await window.KefinTweaks.getJellyfinMajorVersion();
+            } catch (e) { /* ignore */ }
+            const planRoot = Loader.getResolvedKefinRoot
+                ? Loader.getResolvedKefinRoot(config)
+                : loadRoot;
+            const plan = Loader.buildLoadPlan(config, major, {
+                root: planRoot,
+                configOnly: config.enabled === false
+            });
+            const syncResult = await Loader.syncKefinTweaksInjector(plan);
+            console.log(
+                '[KefinTweaks Installer] Attached bake stamp sync:',
+                syncResult?.synced ? ('synced ' + syncResult.stamp) : (syncResult?.reason || 'done')
+            );
+        } catch (e) {
+            console.warn('[KefinTweaks Installer] Attached bake stamp sync failed:', e);
+        }
     }
 
     function isKefinInjectorAttachedOnPage() {
@@ -2055,49 +2165,75 @@ main.MuiBox-root .customPage.libraryPage:not(.noSecondaryNavPage)[data-kefin-cus
         return root;
     }
 
-    // Load injector.js from a specific root URL (resolves floating refs first)
+    // Load injector.js from a specific root URL (fallback when bake is absent).
+    // GitHub floating resolve + persist only for admins; non-admins use pinned/symbolic as-is.
     async function loadInjectorFromRoot(root) {
         if (!root || root === '') {
             console.warn('[KefinTweaks Installer] Cannot load injector: kefinTweaksRoot is empty');
             return false;
         }
 
-        // Ensure root ends with /
-        const rootUrl = root.endsWith('/') ? root : root + '/';
-        const resolvedRoot = await resolveRootVersion(rootUrl);
-        const injectorUrl = `${resolvedRoot}injector.js`;
+        const rootUrl = normalizeKefinRootUrl(root);
+        const admin = await isAdmin();
+        let resolvedRoot = rootUrl;
+
+        if (isFloatingKefinRoot(rootUrl)) {
+            if (admin) {
+                resolvedRoot = normalizeKefinRootUrl(await resolveRootVersion(rootUrl));
+            } else {
+                const pinned = normalizeKefinRootUrl(window.KefinTweaksConfig?.kefinTweaksRootResolved || '');
+                resolvedRoot = pinned || rootUrl;
+                console.log('[KefinTweaks Installer] Non-admin: skipping GitHub resolve; using', resolvedRoot);
+            }
+        }
 
         if (resolvedRoot !== rootUrl) {
             console.log('[KefinTweaks Installer] Resolved root from', rootUrl, 'to', resolvedRoot);
         }
 
-        // Persist commit-SHA / release-tag root when floating GitHub refs resolve to a new URL
-        try {
-            const expected = normalizeKefinRootUrl(resolvedRoot);
-            if (!window.KefinTweaksConfig) {
-                window.KefinTweaksConfig = {};
-            }
-            const symbolicRoot = window.KefinTweaksConfig.kefinTweaksRoot || rootUrl;
-            const current = normalizeKefinRootUrl(window.KefinTweaksConfig.kefinTweaksRootResolved || '');
-            if (expected && expected !== current) {
-                window.KefinTweaksConfig.kefinTweaksRootResolved = expected;
-                console.log('[KefinTweaks Installer] Updated kefinTweaksRootResolved:', current || '(none)', '->', expected);
-                // Only admins can GET/POST /Plugins — never attempt persist for non-admins
-                if (isLoggedInForInjectorWrite() && await isAdmin()) {
-                    await saveConfigToJavaScriptInjector(window.KefinTweaksConfig);
-                    maybeQueueResolvedRootUpdateToast({
-                        symbolicRoot,
-                        previousResolved: current,
-                        nextResolved: expected,
-                        persisted: true
-                    });
-                } else if (!isLoggedInForInjectorWrite()) {
-                    console.warn('[KefinTweaks Installer] kefinTweaksRootResolved updated in memory; not logged in to persist');
+        // Admin: persist tip move; if replacing a previous pin, countdown reload (no tip injector this session)
+        if (admin && isFloatingKefinRoot(rootUrl)) {
+            try {
+                const expected = normalizeKefinRootUrl(resolvedRoot);
+                if (!window.KefinTweaksConfig) {
+                    window.KefinTweaksConfig = {};
                 }
+                const symbolicRoot = window.KefinTweaksConfig.kefinTweaksRoot || rootUrl;
+                const current = normalizeKefinRootUrl(window.KefinTweaksConfig.kefinTweaksRootResolved || '');
+                if (expected && expected !== current) {
+                    window.KefinTweaksConfig.kefinTweaksRootResolved = expected;
+                    console.log('[KefinTweaks Installer] Updated kefinTweaksRootResolved:', current || '(none)', '->', expected);
+                    if (isLoggedInForInjectorWrite()) {
+                        const persisted = await saveConfigToJavaScriptInjector(window.KefinTweaksConfig);
+                        if (persisted && current) {
+                            // Prior pin existed — force reload so scripts/Config stay aligned
+                            maybeQueueResolvedRootUpdateToast({
+                                symbolicRoot,
+                                previousResolved: current,
+                                nextResolved: expected,
+                                persisted: true
+                            });
+                            return true;
+                        }
+                        if (persisted && !current) {
+                            // First pin: continue and load injector from the new resolved URL
+                            console.log('[KefinTweaks Installer] First resolved pin persisted; loading injector.js');
+                        }
+                    } else {
+                        console.warn('[KefinTweaks Installer] kefinTweaksRootResolved updated in memory; not logged in to persist');
+                    }
+                }
+            } catch (e) {
+                console.warn('[KefinTweaks Installer] Failed to persist kefinTweaksRootResolved:', e);
             }
-        } catch (e) {
-            console.warn('[KefinTweaks Installer] Failed to persist kefinTweaksRootResolved:', e);
         }
+
+        if (window.__kefinTipReloadScheduled) {
+            console.log('[KefinTweaks Installer] Tip reload scheduled; skipping injector.js load');
+            return true;
+        }
+
+        const injectorUrl = `${resolvedRoot}injector.js`;
 
         // Check if injector is already loaded from this URL
         const existingScript = document.querySelector(`script[src="${injectorUrl}"]`);
@@ -2127,7 +2263,7 @@ main.MuiBox-root .customPage.libraryPage:not(.noSecondaryNavPage)[data-kefin-cus
         });
     }
 
-    // Check if config exists; auto-create KefinTweaks-injector when missing (admin only); always load live injector.js
+    // Check if config exists; auto-create bake when missing (admin); never dual-inject when bake attached
     async function checkAndLoadInjector() {
         try {
             // Prefer in-page Config (already injected). Avoid /Plugins GET on normal page load for non-admins.
@@ -2149,9 +2285,18 @@ main.MuiBox-root .customPage.libraryPage:not(.noSecondaryNavPage)[data-kefin-cus
                 return;
             }
 
+            // Bake already on page: never load live injector.js (prevents dual SHA trees)
             if (isKefinInjectorAttachedOnPage()) {
-                console.log('[KefinTweaks Installer] KefinTweaks-injector present on page; still loading injector.js for live plan + sync');
-            } else if (await isAdmin()) {
+                if (!(await isAdmin())) {
+                    console.log('[KefinTweaks Installer] KefinTweaks-injector attached; non-admin skipping live injector.js');
+                    return;
+                }
+                console.log('[KefinTweaks Installer] KefinTweaks-injector attached; admin tip sync without live inject');
+                await handleAdminAttachedBakeTipSync(config);
+                return;
+            }
+
+            if (await isAdmin()) {
                 await waitForLoginForInjectorWrite();
                 const ensured = await ensureKefinTweaksInjectorEntry(config);
                 if (ensured.ok && ensured.plan) {
@@ -2171,9 +2316,11 @@ main.MuiBox-root .customPage.libraryPage:not(.noSecondaryNavPage)[data-kefin-cus
                         }));
                     } catch (e) { /* ignore */ }
                     console.log('[KefinTweaks Installer] Applied KefinTweaks-injector assets after auto-create');
-                } else {
-                    console.log('[KefinTweaks Installer] KefinTweaks-injector not available (' + (ensured.reason || 'unknown') + '); loading injector.js');
+                    // Tip advance inside ensure may have scheduled reload; never also load tip injector.js
+                    if (window.__kefinTipReloadScheduled) return;
+                    return;
                 }
+                console.log('[KefinTweaks Installer] KefinTweaks-injector not available (' + (ensured.reason || 'unknown') + '); loading injector.js');
             } else {
                 console.log('[KefinTweaks Installer] KefinTweaks-injector not on page (non-admin); loading injector.js');
             }
