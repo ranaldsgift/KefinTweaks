@@ -1280,6 +1280,13 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         }
     }
     
+    function closeAppearancePopover() {
+        document.querySelectorAll(
+            '.dialogBackdrop[data-modal-id="appearance-popover"], .dialogContainer[data-modal-id="appearance-popover"]'
+        ).forEach((el) => el.remove());
+        document.removeEventListener('click', handlePopoverClickOutside);
+    }
+
     /**
      * Toggle the appearance popover
      */
@@ -1290,9 +1297,9 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         }
         
         // Remove existing popover if it exists
-        const existingPopover = document.querySelector('.kefin-appearance-popover');
+        const existingPopover = document.querySelector('.dialogContainer[data-modal-id="appearance-popover"]');
         if (existingPopover) {
-            existingPopover.remove();
+            closeAppearancePopover();
             return;
         }
 
@@ -1403,10 +1410,8 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         updatePopoverColorSchemes();
         updateSkinAuthorLabel();
         
-        // Add click outside to close
-        setTimeout(() => {
-            document.addEventListener('click', handlePopoverClickOutside);
-        }, 10);
+        // The toggle stops propagation, so the opening click cannot close the popover.
+        document.addEventListener('click', handlePopoverClickOutside);
         
         LOG('Appearance popover created with Jellyfin styling');
     }
@@ -2122,22 +2127,11 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
      * @param {Event} event - The click event
      */
     function handlePopoverClickOutside(event) {
-        const backdrop = document.querySelector('.dialogBackdrop[data-modal-id]');
-        const dialogContainer = document.querySelector('.dialogContainer[data-modal-id]');
-        
-        if (backdrop && dialogContainer && 
-            !dialogContainer.contains(event.target) && 
+        const dialogContainer = document.querySelector('.dialogContainer[data-modal-id="appearance-popover"]');
+        if (dialogContainer &&
+            !dialogContainer.contains(event.target) &&
             !event.target.closest('.headerAppearanceButton, [data-kefin-custom-menu-top-right]')) {
-            
-            // Remove backdrop and dialog container
-            if (backdrop.parentNode) {
-                backdrop.parentNode.removeChild(backdrop);
-            }
-            if (dialogContainer.parentNode) {
-                dialogContainer.parentNode.removeChild(dialogContainer);
-            }
-            
-            document.removeEventListener('click', handlePopoverClickOutside);
+            closeAppearancePopover();
         }
     }
     
