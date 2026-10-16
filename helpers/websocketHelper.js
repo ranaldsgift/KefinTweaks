@@ -197,7 +197,6 @@
      * @param {Function} callback - Receives the parsed message object
      */
     function listen(messageType, callback) {
-        return;
         if (typeof messageType !== 'string' || !messageType) {
             ERR('listen() requires a non-empty string messageType');
             return;
@@ -237,7 +236,6 @@
      * @param {Function} callback
      */
     function unlisten(messageType, callback) {
-        return;
         if (!listeners[messageType]) return;
         listeners[messageType] = listeners[messageType].filter((cb) => cb !== callback);
         LOG(`Unregistered listener for message type: ${messageType} (${listeners[messageType].length} remaining)`);
