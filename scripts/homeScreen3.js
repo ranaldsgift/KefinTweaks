@@ -1482,6 +1482,37 @@
         }
     }
 
+    function documentNeedsVerticalScroll() {
+        return document.documentElement.scrollHeight > window.innerHeight + 1;
+    }
+
+    /**
+     * Infinite discovery: if the page still has no scrollbar, load another group
+     * so content can fill the viewport (scroll gate is meaningless without overflow).
+     */
+    function maybeFillDiscoveryViewport() {
+        if (state.discoveryMode !== 'infinite') return;
+        if (state.isRenderingDiscovery) return;
+        if (state.discoverySectionsRemain === false) return;
+        if (!isDiscoveryAllowedForActiveCategory()) return;
+        if (!isDiscoveryHomeContext()) return;
+        if (documentNeedsVerticalScroll()) return;
+
+        state.discoveryNeedsMoreScroll = false;
+        LOG('Discovery viewport not full; loading next group without scroll');
+        renderNextDiscoveryGroup();
+    }
+
+    function scheduleMaybeFillDiscoveryViewport() {
+        if (state.discoveryMode !== 'infinite') return;
+        if (state.discoverySectionsRemain === false) return;
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                maybeFillDiscoveryViewport();
+            });
+        });
+    }
+
     async function renderNextDiscoveryGroup() {
         const container = document.querySelector('.libraryPage:not(.hide) .homeSectionsContainer');
         if (!container) return;
@@ -1587,6 +1618,8 @@
                 container.dataset.loadingDiscovery = 'false';
                 container.classList.remove('loading-discovery');
             }
+            // After layout settles: keep loading groups until a scrollbar exists (infinite only)
+            scheduleMaybeFillDiscoveryViewport();
         }
     }
 
