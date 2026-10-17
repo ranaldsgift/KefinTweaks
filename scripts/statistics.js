@@ -720,11 +720,13 @@
             const rankClass = rank <= 3 ? ` rank-${rank}` : '';
             const episodesText = show.episodesWatched === 1 ? 'episode' : 'episodes';
             const timeLabel = formatHours(show.watchedRuntimeTicks || 0);
+            const progressLabel = window.innerWidth >= 900 ? `${timeLabel} · ${show.episodesWatched} of ${show.totalEpisodes} ${episodesText} (${show.percentage}%)` : `${timeLabel}`;
+
             return `
                 <div class="top-show-item${rankClass}">
                     <div class="show-rank">${rank}</div>
                     <div class="top-show-name" title="${escapeHtml(show.name)}">${escapeHtml(show.name)}</div>
-                    <div class="top-show-episodes">${timeLabel} · ${show.episodesWatched} of ${show.totalEpisodes} ${episodesText} (${show.percentage}%)</div>
+                    <div class="top-show-episodes">${progressLabel}</div>
                 </div>
             `;
         }).join('');
