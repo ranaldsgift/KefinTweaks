@@ -25,6 +25,7 @@
 			sections: [
 				{
 					id: "my-media",
+					type: "home",
 					name: "My Media",
 					jellyfinId: "smalllibrarytiles",
 					enabled: false,
@@ -45,6 +46,7 @@
 				},
 				{
 					id: "my-media-small",
+					type: "home",
 					name: "My Media",
 					description: "Small Buttons",
 					jellyfinId: "librarybuttons",
@@ -73,6 +75,7 @@
 			sections: [
 				{
 					id: "continueWatching",
+					type: "home",
 					name: "Continue Watching",
 					jellyfinId: "resume",
 					enabled: false,
@@ -95,6 +98,7 @@
 				},
 				{
 					id: "nextUp",
+					type: "home",
 					name: "Next Up",
 					jellyfinId: "nextup",
 					enabled: false,
@@ -117,6 +121,7 @@
 				},
 				{
 					id: "continueWatchingAndNextUp",
+					type: "home",
 					name: "Continue Watching",
 					description: "Continue Watching and Next Up combined",
 					jellyfinId: "resume",
@@ -154,6 +159,7 @@
 				},
 				{
 					id: "continueListening",
+					type: "home",
 					name: "Continue Listening",
 					jellyfinId: "resumeaudio",
 					enabled: false,
@@ -176,6 +182,7 @@
 				},
 				{
 					id: "continueReading",
+					type: "home",
 					name: "Continue Reading",
 					jellyfinId: "resumebook",
 					enabled: false,
@@ -205,6 +212,7 @@
 			sections: [
 				{
 					id: "upcoming",
+					type: "home",
 					name: "Coming Soon",
 					enabled: true,
 					order: 60,
@@ -231,6 +239,7 @@
 			sections: [
 				{
 					id: "recentlyReleased.movies",
+					type: "home",
 					name: "Recently Released Movies",
 					enabled: true,
 					order: 40,
@@ -253,6 +262,7 @@
 				},
 				{
 					id: "recentlyReleased.episodes",
+					type: "home",
 					name: "Recently Aired Episodes",
 					enabled: true,
 					order: 41,
@@ -289,6 +299,7 @@
 			sections: [
 				{
 					id: "liveTv-recordings",
+					type: "home",
 					name: "Recordings",
 					jellyfinId: "activerecordings",
 					enabled: false,
@@ -311,6 +322,7 @@
 				},
 				{
 					id: "liveTv-timers",
+					type: "home",
 					name: "Scheduled Recordings",
 					enabled: false,
 					order: 17,
@@ -330,6 +342,7 @@
 				},
 				{
 					id: "liveTv-browse",
+					type: "home",
 					name: "Live TV",
 					jellyfinId: "livetv",
 					enabled: false,
@@ -365,6 +378,7 @@
 				},
 				{
 					id: "liveTv-on-now",
+					type: "home",
 					name: "On Now",
 					jellyfinId: "livetv",
 					enabled: false,
@@ -387,6 +401,7 @@
 				},
 				{
 					id: "liveTv-programs",
+					type: "home",
 					name: "Programs",
 					enabled: false,
 					order: 18,
@@ -406,6 +421,7 @@
 				},
 				{
 					id: "liveTv-channels",
+					type: "home",
 					name: "Channels",
 					enabled: false,
 					order: 19,
@@ -425,6 +441,7 @@
 				},
 				{
 					id: "liveTv-series-on-now",
+					type: "home",
 					name: "Shows From Live TV",
 					enabled: false,
 					order: 20,
@@ -449,6 +466,7 @@
 				},
 				{
 					id: "liveTv-movies-on-now",
+					type: "home",
 					name: "Movies From Live TV",
 					enabled: false,
 					order: 20,
@@ -469,6 +487,7 @@
 				},
 				{
 					id: "liveTv-sports-on-now",
+					type: "home",
 					name: "Sports From Live TV",
 					enabled: false,
 					order: 20,
@@ -489,6 +508,7 @@
 				},
 				{
 					id: "liveTv-news-on-now",
+					type: "home",
 					name: "News From Live TV",
 					enabled: false,
 					order: 20,
@@ -509,6 +529,7 @@
 				},
 				{
 					id: "liveTv-kids-on-now",
+					type: "home",
 					name: "Kids From Live TV",
 					enabled: false,
 					order: 20,
@@ -536,6 +557,7 @@
 			sections: [
 				{
 					id: "imdbTop250",
+					type: "home",
 					name: "IMDb Top 250",
 					enabled: true,
 					order: 70,
@@ -562,6 +584,7 @@
 			sections: [
 				{
 					id: "popularTVStudios",
+					type: "home",
 					name: "Popular TV Studios",
 					enabled: true,
 					order: 72,
@@ -586,6 +609,7 @@
 				},
 				{
 					id: "popularMovieStudios",
+					type: "home",
 					name: "Popular Movie Studios",
 					enabled: true,
 					order: 72,
@@ -610,6 +634,7 @@
 				},
 				{
 					id: "popularStudios",
+					type: "home",
 					name: "Popular Studios",
 					enabled: false,
 					order: 72,
@@ -647,6 +672,7 @@
 			sections: [
 				{
 					id: "watchAgain",
+					type: "home",
 					name: "Watch Again",
 					enabled: true,
 					order: 73,
@@ -673,6 +699,7 @@
 			sections: [
 				{
 					id: "watchlist",
+					type: "home",
 					name: "Watchlist",
 					enabled: true,
 					order: 71,
@@ -699,6 +726,7 @@
 			sections: [
 				{
 					id: "resumePlaylists",
+					type: "home",
 					name: "Continue Watching Your Playlists",
 					enabled: false,
 					order: 74,
@@ -719,6 +747,7 @@
 				},
 				{
 					id: "completeCollections",
+					type: "home",
 					name: "Finish Watching Your Collections",
 					enabled: false,
 					order: 75,
@@ -738,6 +767,7 @@
 				},
 				{
 					id: "playlists",
+					type: "home",
 					name: "Browse by Playlist",
 					enabled: false,
 					order: 76,
@@ -756,6 +786,7 @@
 				},
 				{
 					id: "collections",
+					type: "home",
 					name: "Browse by Collection",
 					enabled: false,
 					order: 77,
@@ -781,6 +812,7 @@
 			sections: [
 				{
 					id: "thematic-story-origins",
+					type: "home",
 					name: "Story Origins",
 					enabled: false,
 					userConfigurable: true,
@@ -838,6 +870,7 @@
 				},
 				{
 					id: "thematic-core-concepts",
+					type: "home",
 					name: "Core Concepts",
 					enabled: false,
 					userConfigurable: true,
@@ -960,6 +993,7 @@
 				},
 				{
 					id: "thematic-crime-stories",
+					type: "home",
 					name: "Crime Stories",
 					enabled: false,
 					userConfigurable: true,
@@ -1041,6 +1075,7 @@
 				},
 				{
 					id: "thematic-character-perspective",
+					type: "home",
 					name: "Character Perspective",
 					enabled: false,
 					userConfigurable: true,
@@ -1107,6 +1142,7 @@
 				},
 				{
 					id: "thematic-settings",
+					type: "home",
 					name: "Settings",
 					enabled: false,
 					userConfigurable: true,
@@ -1178,6 +1214,7 @@
 				},
 				{
 					id: "thematic-tone-style",
+					type: "home",
 					name: "Tone & Style",
 					enabled: false,
 					userConfigurable: true,
@@ -1234,6 +1271,7 @@
 				},
 				{
 					id: "thematic-themes-topics",
+					type: "home",
 					name: "Themes & Topics",
 					enabled: false,
 					userConfigurable: true,
@@ -1370,6 +1408,7 @@
 			sections: [
 				{
 					id: "seasonal.halloween.halloween-tag",
+					type: "seasonal",
 					name: "Halloween Movies",
 					enabled: true,
 					userConfigurable: true,
@@ -1390,6 +1429,7 @@
 				},
 				{
 					id: "seasonal.halloween.halloween-horror",
+					type: "seasonal",
 					name: "Horror Movies",
 					enabled: true,
 					userConfigurable: true,
@@ -1410,6 +1450,7 @@
 				},
 				{
 					id: "seasonal.halloween.halloween-thriller",
+					type: "seasonal",
 					name: "Thriller Movies",
 					enabled: true,
 					userConfigurable: true,
@@ -1430,6 +1471,7 @@
 				},
 				{
 					id: "seasonal.halloween.halloween-episodes",
+					type: "seasonal",
 					name: "Halloween Episodes",
 					enabled: true,
 					userConfigurable: true,
@@ -1553,6 +1595,7 @@
 			sections: [
 				{
 					id: "seasonal.christmas.christmas-movies",
+					type: "seasonal",
 					name: "Christmas Movies",
 					enabled: true,
 					userConfigurable: true,
@@ -1574,6 +1617,7 @@
 				},
 				{
 					id: "seasonal.christmas.christmas-episodes",
+					type: "seasonal",
 					name: "Christmas Episodes",
 					enabled: true,
 					userConfigurable: true,
@@ -1601,6 +1645,7 @@
 			sections: [
 				{
 					id: "seasonal.new-years.new-years-movies",
+					type: "seasonal",
 					name: "New Year's Movies",
 					enabled: true,
 					userConfigurable: true,
@@ -1621,6 +1666,7 @@
 				},
 				{
 					id: "seasonal.new-years.new-years-episodes",
+					type: "seasonal",
 					name: "New Year's Episodes",
 					enabled: true,
 					userConfigurable: true,
@@ -1648,6 +1694,7 @@
 			sections: [
 				{
 					id: "seasonal.valentines.valentines-movies",
+					type: "seasonal",
 					name: "Valentine's Movies",
 					enabled: true,
 					userConfigurable: true,
@@ -1668,6 +1715,7 @@
 				},
 				{
 					id: "seasonal.valentines.valentines-episodes",
+					type: "seasonal",
 					name: "Valentine's Episodes",
 					enabled: true,
 					userConfigurable: true,
@@ -1695,6 +1743,7 @@
 			sections: [
 				{
 					id: "seasonal.thanksgiving.thanksgiving-movies",
+					type: "seasonal",
 					name: "Thanksgiving Movies",
 					enabled: true,
 					userConfigurable: true,
@@ -1715,6 +1764,7 @@
 				},
 				{
 					id: "seasonal.thanksgiving.thanksgiving-episodes",
+					type: "seasonal",
 					name: "Thanksgiving Episodes",
 					enabled: true,
 					userConfigurable: true,
