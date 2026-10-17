@@ -1631,6 +1631,18 @@
         return entry ? getCustomMenuLinkHref(entry) : '';
     }
 
+    /** Match native v12 top-nav: Inherit when idle, Primary when selected. */
+    function applyMuiTopNavColorVariant(el, active) {
+        if (!el?.classList?.contains('MuiButton-root')) return;
+        if (active) {
+            el.classList.remove('MuiButton-textInherit', 'MuiButton-colorInherit');
+            el.classList.add('MuiButton-textPrimary', 'MuiButton-colorPrimary');
+        } else {
+            el.classList.remove('MuiButton-textPrimary', 'MuiButton-colorPrimary');
+            el.classList.add('MuiButton-textInherit', 'MuiButton-colorInherit');
+        }
+    }
+
     function syncCustomTopNavActiveState() {
         const links = Array.from(document.querySelectorAll('[data-kefin-custom-menu-top-link]'));
         if (!links.length) return;
@@ -1642,6 +1654,7 @@
 
         links.forEach((el) => {
             el.classList.remove('active');
+            applyMuiTopNavColorVariant(el, false);
             const score = customTopNavHrefMatchScore(resolveCustomTopNavHref(el), normalizedHash);
             if (score < 0) return;
             if (score > bestScore) {
@@ -1653,7 +1666,10 @@
             }
         });
 
-        winners.forEach((el) => el.classList.add('active'));
+        winners.forEach((el) => {
+            el.classList.add('active');
+            applyMuiTopNavColorVariant(el, true);
+        });
     }
 
     let customTopNavActiveSyncBound = false;
