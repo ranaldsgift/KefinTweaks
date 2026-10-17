@@ -3324,16 +3324,21 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		});
 	}
 
+	// Use the same options when loading and invalidating the rendered query.
+	function getWatchlistQueryOptions(itemType) {
+		return {
+			IncludeItemTypes: itemType,
+			Fields: 'PrimaryImageAspectRatio,DateCreated,ProductionYear,PremiereDate,ProviderIds,UserData'
+		};
+	}
+
 	async function buildWatchlistProgressiveSection(itemType, label, order, forceRefresh = false) {
 		const apiHelper = window.apiHelper;
 		if (!apiHelper?.getWatchlistQuery) {
 			throw new Error('apiHelper.getWatchlistQuery unavailable');
 		}
 
-		const queryOptions = {
-			IncludeItemTypes: itemType,
-			Fields: 'PrimaryImageAspectRatio,DateCreated,ProductionYear,PremiereDate,ProviderIds,UserData'
-		};
+		const queryOptions = getWatchlistQueryOptions(itemType);
 		const queryResult = await apiHelper.getWatchlistQuery(queryOptions, {
 			ttl: WATCHLIST_CACHE_TTL,
 			forceRefresh
@@ -3398,7 +3403,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		if (!apiHelper?.invalidateWatchlistQueries) return;
 		await Promise.all(
 			WATCHLIST_SECTION_TYPES.map(({ type }) =>
-				apiHelper.invalidateWatchlistQueries({ IncludeItemTypes: type })
+				apiHelper.invalidateWatchlistQueries(getWatchlistQueryOptions(type))
 			)
 		);
 	}
@@ -4982,7 +4987,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			syncOverlayWatchlistButtons();
 
 			if (itemType) {
-				await window.apiHelper?.invalidateWatchlistQueries?.({ IncludeItemTypes: itemType });
+				await window.apiHelper?.invalidateWatchlistQueries?.(getWatchlistQueryOptions(itemType));
 			} else {
 				await invalidateAllWatchlistQueries();
 			}
