@@ -30,7 +30,8 @@ function fixture({ customTabs = [], nativeOwned = false, modern = true } = {}) {
     list.children.push(favorites);
     const addTab = href => list.children.push(row('customTab', href, nativeOwned));
     customTabs.forEach(addTab);
-    const inject = vm.runInNewContext(extract('injectIntoV12Drawer') + '\ninjectIntoV12Drawer;', {
+    const inject = vm.runInNewContext((source.includes('function isSameCustomTabLink(') ? extract('isSameCustomTabLink') + '\n' : '') + extract('injectIntoV12Drawer') + '\ninjectIntoV12Drawer;', {
+        URLSearchParams,
         findFavoritesDrawerLi: () => modern ? favorites : null,
         entryKey: e => e.url,
         getCustomMenuLinkHref: e => e.url,
@@ -66,6 +67,74 @@ test('a different Custom Tab does not suppress the Watchlist entry', () => {
     const f = fixture({ customTabs: ['#/home?tab=3'] });
     f.inject();
     assert.deepEqual(f.rows(), ['kefin', 'customTab']);
+});
+
+test('the same stable tab is reused after its numeric position changes', () => {
+    const f = fixture({ customTabs: ['#/home?tab=3&ctTab=watchlist-id'] });
+    f.inject({ url: '#/home?tab=2&ctTab=watchlist-id' });
+    assert.deepEqual(f.rows(), ['customTab']);
+});
+
+test('a reordered native tab arriving later removes the stale fallback', () => {
+    const f = fixture();
+    const entry = { url: '#/home?tab=2&ctTab=watchlist-id' };
+    f.inject(entry);
+    assert.deepEqual(f.rows(), ['kefin']);
+    f.addTab('#/home?tab=3&ctTab=watchlist-id');
+    for (let i = 0; i < 4; i++) f.inject(entry);
+    assert.deepEqual(f.rows(), ['customTab']);
+});
+
+test('stable IDs match when returning to an earlier position', () => {
+    const f = fixture({ customTabs: ['#/home?tab=2&ctTab=watchlist-id'] });
+    f.inject({ url: '#/home?tab=3&ctTab=watchlist-id' });
+    assert.deepEqual(f.rows(), ['customTab']);
+});
+
+test('stable identity survives query ordering and URL encoding', () => {
+    const f = fixture({ customTabs: ['#/home?ctTab=watchlist%20id&tab=3'] });
+    f.inject({ url: '#/home?tab=2&ctTab=watchlist+id' });
+    assert.deepEqual(f.rows(), ['customTab']);
+});
+
+test('the supported home route spellings identify the same stable tab', () => {
+    const f = fixture({ customTabs: ['#/home?tab=3&ctTab=watchlist-id'] });
+    f.inject({ url: '#/home.html?tab=2&ctTab=watchlist-id' });
+    assert.deepEqual(f.rows(), ['customTab']);
+});
+
+test('additional query parameters do not change the stable tab identity', () => {
+    const f = fixture({ customTabs: ['#/home?tab=3&ctTab=watchlist-id&source=drawer'] });
+    f.inject({ url: '#/home?tab=2&ctTab=watchlist-id' });
+    assert.deepEqual(f.rows(), ['customTab']);
+});
+
+test('different stable IDs at the same position keep the fallback', () => {
+    const f = fixture({ customTabs: ['#/home?tab=2&ctTab=another-id'] });
+    f.inject({ url: '#/home?tab=2&ctTab=watchlist-id' });
+    assert.deepEqual(f.rows(), ['kefin', 'customTab']);
+});
+
+for (const href of ['#/home?tab=3', '#/home?tab=3&ctTab=', null, '#/details?tab=3&ctTab=watchlist-id', 'https://example.test/#/home?tab=3&ctTab=watchlist-id']) {
+    test('an absent or unrelated stable identity keeps the fallback: ' + href, () => {
+        const f = fixture({ customTabs: [href] });
+        f.inject({ url: '#/home?tab=2&ctTab=watchlist-id' });
+        assert.deepEqual(f.rows(), ['kefin', 'customTab']);
+    });
+}
+
+test('a numeric-only shortcut is not matched to a different position', () => {
+    const f = fixture({ customTabs: ['#/home?tab=3&ctTab=watchlist-id'] });
+    f.inject({ url: '#/home?tab=2' });
+    assert.deepEqual(f.rows(), ['kefin', 'customTab']);
+});
+
+test('stable links for other shortcuts or new windows retain their own entries', () => {
+    for (const entry of [{ name: 'Another shortcut' }, { openInNewTab: true }]) {
+        const f = fixture({ customTabs: ['#/home?tab=3&ctTab=watchlist-id'] });
+        f.inject({ url: '#/home?tab=2&ctTab=watchlist-id', ...entry });
+        assert.deepEqual(f.rows(), ['kefin', 'customTab']);
+    }
 });
 
 test('the internal Watchlist fallback is retained', () => {

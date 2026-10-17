@@ -672,6 +672,18 @@
         return li;
     }
 
+    function isSameCustomTabLink(href, targetHref) {
+        if (href === targetHref) return true;
+        // Custom Tabs keeps this ID when a tab moves to a different position.
+        const getStableId = (link) => {
+            const [route, query] = String(link || '').split('?');
+            if (route !== '#/home' && route !== '#/home.html') return null;
+            return new URLSearchParams(query).get('ctTab');
+        };
+        const targetId = getStableId(targetHref);
+        return !!targetId && targetId === getStableId(href);
+    }
+
     function injectIntoV12Drawer(entry) {
         const favLi = findFavoritesDrawerLi();
         if (!favLi || !favLi.parentElement) return false;
@@ -681,7 +693,7 @@
         // Custom Tabs may add its Watchlist entry after our fallback is rendered.
         const customTab = entry.name === 'Watchlist' && !entry.openInNewTab
             && Array.from(favLi.parentElement.querySelectorAll('a[id^="customTabDrawerButton_"]'))
-                .some((a) => a.getAttribute('href') === getCustomMenuLinkHref(entry));
+                .some((a) => isSameCustomTabLink(a.getAttribute('href'), getCustomMenuLinkHref(entry)));
         if (customTab) {
             const li = existing?.closest('li');
             if (li && !li.querySelector('a[id^="customTabDrawerButton_"]')) li.remove();
