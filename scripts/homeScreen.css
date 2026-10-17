@@ -640,7 +640,8 @@ html[data-active-page="home"] body[data-seasonal-background="true"] #reactRoot >
 	display: none !important;
 }
 
-.sections.homeSectionsContainer:not([data-category="none"]) {
+.sections.homeSectionsContainer:not([data-category="none"]),
+html.layout-mobile .homePage .sections.homeSectionsContainer:not([data-category="none"]) {
 	margin-top: 0 !important;
 	top: 0 !important;
 }
