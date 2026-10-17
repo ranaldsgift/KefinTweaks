@@ -151,7 +151,11 @@
     }
 
     function hasValidCustomItems(items) {
-        return (items || []).some(item => item.name?.trim() && item.posterUrl?.trim());
+        return (items || []).some((item) => {
+            const name = item.name?.trim();
+            if (!name) return false;
+            return !!(item.posterUrl?.trim() || item.cardUrl?.trim());
+        });
     }
 
     function hasCustomItemContent(item) {
@@ -165,7 +169,9 @@
     function buildStaticItemFromDraft(draft) {
         const name = draft.name?.trim();
         const posterUrl = draft.posterUrl?.trim();
-        if (!name || !posterUrl) return null;
+        const cardUrl = draft.cardUrl?.trim();
+        // Name + poster, or Name + link (e.g. liveTv-browse button tiles)
+        if (!name || (!posterUrl && !cardUrl)) return null;
 
         const imageKeys = ['posterUrl', 'thumbUrl', 'backdropUrl', 'squareUrl', 'bannerUrl', 'logoUrl'];
         const provided = {};
@@ -174,9 +180,10 @@
             if (value) provided[key] = value;
         });
 
-        const item = { Name: name, Type: draft.type || 'Folder' };
+        const item = { Name: name };
+        if (draft.type) item.Type = draft.type;
+        else if (posterUrl) item.Type = 'Folder';
         if (draft.id) item.Id = draft.id;
-        const cardUrl = draft.cardUrl?.trim();
         if (cardUrl) item.cardUrl = cardUrl;
         const cardFooter = draft.cardFooter?.trim();
         if (cardFooter) item.cardFooter = cardFooter;
@@ -185,7 +192,7 @@
         const keys = Object.keys(provided);
         if (keys.length === 1 && provided.posterUrl) {
             item.imageUrl = provided.posterUrl;
-        } else {
+        } else if (keys.length) {
             Object.assign(item, provided);
         }
         return item;
@@ -397,7 +404,7 @@
                 ${opts.intro ? `
                 <div class="hsse-section-block hsse-custom-items-intro">
                     <div class="listItemBodyText hsse-section-label">Custom Items</div>
-                    <p class="listItemBodyText secondary hsse-field-hint">Name and poster required. Link and other images optional.</p>
+                    <p class="listItemBodyText secondary hsse-field-hint">Name required; poster or link recommended. Other images optional.</p>
                 </div>` : ''}
                 <div class="hsse-custom-items-grid">
                     ${items.map((item, index) => renderCustomItemTileHTML(index, item, canRemove, opts, items.length)).join('')}

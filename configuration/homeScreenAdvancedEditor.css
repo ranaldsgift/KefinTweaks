@@ -81,6 +81,67 @@
 	text-overflow: ellipsis;
 }
 
+:is([data-modal-id="kefin-homescreen-section-editor"], [data-modal-id="kefin-homescreen-section-create-flow"])
+	.formDialogHeader
+	.hsae-header-actions {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.1em;
+	flex-shrink: 0;
+	margin-left: 0.15em;
+}
+
+:is([data-modal-id="kefin-homescreen-section-editor"], [data-modal-id="kefin-homescreen-section-create-flow"])
+	.formDialogHeader
+	.hsae-header-action-btn {
+	flex-shrink: 0;
+}
+
+:is([data-modal-id="kefin-homescreen-section-editor"], [data-modal-id="kefin-homescreen-section-create-flow"])
+	.formDialogHeader
+	.hsae-header-action-btn[hidden] {
+	display: none !important;
+}
+
+:is([data-modal-id="kefin-homescreen-section-editor"], [data-modal-id="kefin-homescreen-section-create-flow"])
+	.formDialogHeader
+	.hsae-header-action-btn
+	.material-icons {
+	font-size: 1.35rem;
+}
+
+.hsae-restore-diff-table {
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	border-radius: 8px;
+	font-size: 0.85rem;
+}
+
+.hsae-restore-diff-row {
+	display: grid;
+	grid-template-columns: minmax(5.5rem, 0.9fr) 1.1fr 1.1fr;
+	gap: 0.5em;
+	padding: 0.45em 0.65em;
+	border-top: 1px solid rgba(255, 255, 255, 0.08);
+	align-items: start;
+}
+
+.hsae-restore-diff-row:first-child {
+	border-top: none;
+}
+
+.hsae-restore-diff-head {
+	font-weight: 600;
+	opacity: 0.85;
+	background: rgba(255, 255, 255, 0.04);
+}
+
+.hsae-restore-diff-row > span {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 :is([data-modal-id="kefin-homescreen-section-editor"], [data-modal-id="kefin-homescreen-section-create-flow"]) .hsae-group {
 	margin-bottom: 1.25em;
 }
