@@ -38,7 +38,7 @@
 }
 
 #indexPage[data-discovery-exhausted] #discovery-loading-indicator:not(.show)::before {
-	content: "No More Content to Discover";
+	content: "We've run out of suggestions!";
 }
 
 #discovery-loading-indicator:not(.show)::after {

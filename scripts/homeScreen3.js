@@ -16,6 +16,10 @@
     const DISCOVERY_LEAD_VIEWPORTS = 1.5;
     /** Max consecutive auto-fill groups in one wave (empty/tiny sections). */
     const DISCOVERY_LEAD_FILL_MAX_GROUPS = 8;
+    /** Consecutive all-empty discovery groups before marking exhausted. */
+    const DISCOVERY_EMPTY_GROUP_STREAK_MAX = 6;
+    /** Settle delay after paint before counting surviving sections (enhance may remove empties). */
+    const DISCOVERY_EMPTY_GROUP_SETTLE_MS = 400;
 
     // Dependencies
     const ApiHelper = window.apiHelper;
@@ -102,6 +106,8 @@
         discoveryNeedsMoreScroll: false,
         /** Consecutive auto-fill loads while lead margin is short (reset when lead OK or user scroll loads). */
         discoveryLeadFillCount: 0,
+        /** Consecutive discovery groups where every section enhanced to empty / was removed. */
+        discoveryEmptyGroupStreak: 0,
         discoveryMode: null, // 'infinite' | 'chevron'
         infiniteScrollHandler: null,
         discoveryWheelHandler: null,
@@ -231,7 +237,7 @@
             el.classList.remove('show-focus');
             el.classList.remove('discovery-load-more-focusable');
             if (state.discoverySectionsRemain === false || getDiscoveryHomePageEl()?.dataset?.discoveryExhausted === 'true') {
-                el.setAttribute('aria-label', 'No More Content to Discover');
+                el.setAttribute('aria-label', "We've run out of suggestions!");
             } else {
                 el.removeAttribute('aria-label');
             }
@@ -345,9 +351,15 @@
     }
 
     function markDiscoveryExhausted() {
+        if (state.discoverySectionsRemain === false
+            && getDiscoveryHomePageEl()?.dataset?.discoveryExhausted === 'true') {
+            return;
+        }
         state.discoverySectionsRemain = false;
         state.discoveryBuffer = null;
         state.discoveryGroupRemainder = [];
+        state.discoveryEmptyGroupStreak = 0;
+        state.discoveryLeadFillCount = 0;
         removeDiscoveryScrollListeners();
         setDiscoveryPageAttrs({ ready: true, infinite: false, exhausted: true });
         const loadingIndicator = createDiscoveryLoadingIndicator(
@@ -359,7 +371,51 @@
             loadingIndicator.style.display = '';
             syncDiscoveryLoadMoreFocus(loadingIndicator);
         }
-        LOG('Discovery exhausted — No More Content to Discover');
+        LOG("Discovery exhausted — We've run out of suggestions!");
+    }
+
+    /**
+     * After a group paints, wait for enhance/empty dismiss, then update empty-group streak.
+     * @param {Element} container
+     * @param {Array<{ config?: { id?: string } }>} bufferedSections
+     */
+    function scheduleDiscoveryEmptyGroupStreakCheck(container, bufferedSections) {
+        const ids = (bufferedSections || [])
+            .map((s) => s?.config?.id)
+            .filter((id) => id != null)
+            .map((id) => String(id));
+        if (!ids.length || !container) return;
+
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                setTimeout(() => {
+                    if (state.discoverySectionsRemain === false) return;
+                    if (!isDiscoveryHomeContext()) return;
+
+                    const survivors = ids.filter((id) => {
+                        const escaped =
+                            typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+                                ? CSS.escape(id)
+                                : id.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+                        const el = container.querySelector(`[data-section-id="${escaped}"]`);
+                        return !!(el && el.isConnected);
+                    });
+
+                    if (survivors.length === 0) {
+                        state.discoveryEmptyGroupStreak += 1;
+                        LOG('Discovery group left no surviving sections', {
+                            streak: state.discoveryEmptyGroupStreak,
+                            groupSize: ids.length,
+                        });
+                        if (state.discoveryEmptyGroupStreak >= DISCOVERY_EMPTY_GROUP_STREAK_MAX) {
+                            markDiscoveryExhausted();
+                        }
+                    } else {
+                        state.discoveryEmptyGroupStreak = 0;
+                    }
+                }, DISCOVERY_EMPTY_GROUP_SETTLE_MS);
+            });
+        });
     }
 
     // Legacy helper kept for compatibility – no longer used in the main flow
@@ -1407,7 +1463,7 @@
                 LOG('No more discovery sections available for buffer.');
                 state.discoveryBuffer = [];
                 state.discoveryGroupRemainder = [];
-                state.discoverySectionsRemain = false;
+                markDiscoveryExhausted();
                 return state.discoveryBuffer;
             }
 
@@ -1429,7 +1485,7 @@
             if (!state.discoveryBuffer.length) {
                 // Only exhaust when this chunk failed AND nothing remains to try next
                 if (!state.discoveryGroupRemainder?.length) {
-                    state.discoverySectionsRemain = false;
+                    markDiscoveryExhausted();
                 }
             }
 
@@ -1468,6 +1524,8 @@
         state.discoverySectionsRemain = true;
         state.discoveryNeedsMoreScroll = false;
         state.discoveryGroupRemainder = [];
+        state.discoveryEmptyGroupStreak = 0;
+        state.discoveryLeadFillCount = 0;
 
         if (PRE_FETCH_DISCOVERY_DATA) {
             ensureDiscoveryBuffer();
@@ -1613,6 +1671,8 @@
             if (!state.discoveryGroupRemainder?.length) {
                 state.discoveryGroupIndex++;
             }
+
+            scheduleDiscoveryEmptyGroupStreakCheck(container, bufferedSections);
 
             state.discoveryBuffer = null;
             if (PRE_FETCH_DISCOVERY_DATA) {
