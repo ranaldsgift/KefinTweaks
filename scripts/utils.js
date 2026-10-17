@@ -677,7 +677,17 @@
         if (!favLi || !favLi.parentElement) return false;
 
         const key = entryKey(entry);
-        if (findByDataAttr(favLi.parentElement, 'data-kefin-custom-menu-link', key)) {
+        const existing = findByDataAttr(favLi.parentElement, 'data-kefin-custom-menu-link', key);
+        // Custom Tabs may add its Watchlist entry after our fallback is rendered.
+        const customTab = entry.name === 'Watchlist' && !entry.openInNewTab
+            && Array.from(favLi.parentElement.querySelectorAll('a[id^="customTabDrawerButton_"]'))
+                .some((a) => a.getAttribute('href') === getCustomMenuLinkHref(entry));
+        if (customTab) {
+            const li = existing?.closest('li');
+            if (li && !li.querySelector('a[id^="customTabDrawerButton_"]')) li.remove();
+            return true;
+        }
+        if (existing) {
             return true;
         }
 
@@ -1699,7 +1709,9 @@
 
     function addedNodeMatchesHost(node, hostSel) {
         if (!node || node.nodeType !== 1) return false;
-        return !!(node.matches?.(hostSel) || node.querySelector?.(hostSel));
+        const customTabAdded = node.closest?.('.MuiDrawer-paper')
+            && (node.id?.startsWith('customTabDrawerButton_') || node.querySelector?.('[id^="customTabDrawerButton_"]'));
+        return !!(node.matches?.(hostSel) || node.querySelector?.(hostSel) || customTabAdded);
     }
 
     function mutationShouldTriggerCustomMenuReapply(mutation) {
