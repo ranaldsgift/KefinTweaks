@@ -7191,7 +7191,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				return;
 			}
 
-			const visibleWatchlistSections = document.querySelectorAll('.libraryPage:not(.hide) .sections.watchlist');
+			const visibleWatchlistSections = document.querySelectorAll('.libraryPage:not(.hide) .sections.watchlist, div[id^="customTab_"] .sections.watchlist');
 
 			visibleWatchlistSections.forEach((section) => {
 				if (!section.dataset.watchlistRendered) {
@@ -7205,7 +7205,13 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			});
 		}
 
-		function armEmptyWatchlistObserver() {
+		async function armEmptyWatchlistObserver() {
+			if (window.userHelper?.waitForLogin && !await window.userHelper.waitForLogin()) {
+				disconnectEmptyWatchlistObserver();
+				return;
+			}
+			await window.KefinTweaksUtils.getWatchlistUrl();
+
 			const onWatchlistPage = window.location.pathname.includes(window.KefinTweaksUtils._watchlistUrl) || window.location.hash.includes(window.KefinTweaksUtils._watchlistUrl);
 			if (!onWatchlistPage) {
 				disconnectEmptyWatchlistObserver();
@@ -7215,6 +7221,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			checkForEmptyWatchlist();
 
 			const pageRoot =
+				document.querySelector('main') ||
 				document.querySelector('.libraryPage:not(.hide)') ||
 				document.querySelector('.customPage:not(.hide)') ||
 				document.querySelector('.homePage:not(.hide)');
