@@ -4634,28 +4634,47 @@ html.layout-tv .spotlight-section .spotlight-tagline {
 	--r2-focus: calc(var(--r2-small) * 2 + var(--r2-gap) * 2);
 }
 
-/* Portrait family: narrower → similar row height to backdrop */
+.rows-2.focus-1.emby-scroller-container[data-card-format="Logo"],
+.rows-2.focus-1.emby-scroller-container[data-card-format="Clear Art"] {
+	--r2-gap: 5em;
+}
+
 .rows-2.focus-1.emby-scroller-container[data-card-format="Poster"],
 .rows-2.focus-1.emby-scroller-container[data-card-format="Series Poster"],
 .rows-2.focus-1.emby-scroller-container[data-card-format="Default"] {
-	--r2-small: 6.2vw; /* ≈ 16.5 * (2/3) / (16/9) */
+	--r2-small: 6.2vw;
 }
 
-/* Square / Disc */
 .rows-2.focus-1.emby-scroller-container[data-card-format="Square"],
 .rows-2.focus-1.emby-scroller-container[data-card-format="Disc"] {
-	--r2-small: 9.3vw; /* ≈ 16.5 * 9/16 */
+	--r2-small: 9.3vw;
 }
 
-/* Banner: wider so short pads get usable height */
 .rows-2.focus-1.emby-scroller-container[data-card-format="Banner"] {
-	--r2-small: 28vw; /* tune up/down until banner height feels right */
+	--r2-small: 28vw;
 }
 
-/* Logo / Clear Art: usually closer to square or soft landscape */
-.rows-2.focus-1.emby-scroller-container[data-card-format="Logo"],
-.rows-2.focus-1.emby-scroller-container[data-card-format="Clear Art"] {
-	--r2-small: 11vw;
+@media (max-width: 900px) {
+	.rows-2.focus-1 {
+		--r2-gap: 0.4em;
+		--r2-small: 38.5vw;
+		--r2-focus: calc(var(--r2-small) * 2 + var(--r2-gap) * 2);
+	}
+
+	.rows-2.focus-1.emby-scroller-container[data-card-format="Poster"],
+	.rows-2.focus-1.emby-scroller-container[data-card-format="Series Poster"],
+	.rows-2.focus-1.emby-scroller-container[data-card-format="Default"] {
+		--r2-small: 25vw;
+	}
+
+	.rows-2.focus-1.emby-scroller-container[data-card-format="Square"],
+	.rows-2.focus-1.emby-scroller-container[data-card-format="Disc"] {
+		--r2-small: 32vw;
+	}
+
+	.rows-2.focus-1.emby-scroller-container[data-card-format="Banner"] {
+		--r2-small: 55vw;
+	}
 }
 
 .rows-2.focus-1.emby-scroller-container[data-card-format] .itemsContainer {
