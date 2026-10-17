@@ -613,7 +613,7 @@
         const totalItemCount = item.RecursiveItemCount || item.ChildCount || 0;
         const playedItemCount = totalItemCount - unplayedItemCount;
 
-        const isVideoCollection = document.querySelector('.libraryPage:not(.hide) .collectionItems:has(.card[data-mediatype="Video"])').length > 0;
+        const isVideoCollection = document.querySelector('.libraryPage:not(.hide) .collectionItems:has(.card[data-mediatype="Video"])') !== null;
         const progressText = isVideoCollection ? 'watched' : 'complete';
         const incompleteText = isVideoCollection ? 'unwatched' : 'incomplete';
 
