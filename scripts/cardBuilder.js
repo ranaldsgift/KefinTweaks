@@ -4044,6 +4044,49 @@
     }
 
     /**
+     * Hi-res image request for a card format: ~2× the classic fillHeight/fillWidth
+     * sizes (backdrop 267×474, square 297, banner 100×540, portrait 446×297).
+     * @param {string|null} cardFormat
+     * @returns {string} query params (no leading ?)
+     */
+    function getDoubledAspectRatioImageParams(cardFormat) {
+        const format = (cardFormat || '').toLowerCase();
+        let width;
+        let height;
+        switch (format) {
+            case 'backdrop':
+            case 'thumb':
+            case 'series thumb':
+            case 'logo':
+            case 'clear art':
+                // fillHeight=267&fillWidth=474 → ×2
+                width = 948;
+                height = 534;
+                break;
+            case 'square':
+            case 'disc':
+                // fillHeight=297&fillWidth=297 → ×2
+                width = 594;
+                height = 594;
+                break;
+            case 'banner':
+                // fillHeight=100&fillWidth=540 → ×2
+                width = 1080;
+                height = 200;
+                break;
+            case 'portrait':
+            case 'poster':
+            case 'series poster':
+            default:
+                // fillHeight=446&fillWidth=297 → ×2
+                width = 594;
+                height = 892;
+                break;
+        }
+        return `fillHeight=${height}&fillWidth=${width}`;
+    }
+
+    /**
      * Creates a Jellyfin card element from an item
      * @param {Object} item - The Jellyfin item object
      * @param {boolean} overflowCard - Use overflow card classes instead of normal card classes
@@ -4060,6 +4103,7 @@
         customFooterText = null,
         useParentCard = false,
         borderStyle = null,
+        cardImageParams = null
     ) {
         cardFormat = cardFormat?.toLowerCase() || null;
         if (cardFormat === 'button') {
@@ -4128,6 +4172,10 @@
                 padderClass = 'cardPadder-portrait';
                 imageParams = 'fillHeight=446&fillWidth=297';
             }
+        }
+
+        if (cardImageParams) {
+            imageParams = cardImageParams;
         }
 
         const cardLinkId = useParentCard && (item.SeriesId || item.ParentId) ? item.SeriesId || item.ParentId : itemId;
@@ -5029,11 +5077,20 @@
         customFooterText = null,
         useParentCard = false,
         borderStyle = null,
+        cardImageParams = null,
     ) {
         if (isTvLayout()) {
             return buildTvCardElement(item, overflowCard, cardFormat, customFooterText, useParentCard, borderStyle);
         }
-        return createJellyfinCardElement(item, overflowCard, cardFormat, customFooterText, useParentCard, borderStyle);
+        return createJellyfinCardElement(
+            item,
+            overflowCard,
+            cardFormat,
+            customFooterText,
+            useParentCard,
+            borderStyle,
+            cardImageParams,
+        );
     }
 
     /**
@@ -8382,8 +8439,22 @@
         // Add items to container (TV → button cards via createCardElement)
         const useParentCard = !!sectionConfig?.useParentCard;
         const borderStyle = sectionConfig?.borderStyle || null;
-        items.forEach((item, index) => {
-            const card = createCardElement(item, overflowCard, cardFormat, item.cardFooter, useParentCard, borderStyle);
+
+        items.forEach((item, index) => {            
+            let imageParams = null;
+            if (sectionConfig?.sectionCssClass && sectionConfig?.sectionCssClass.includes('rows-2') && index === 0) {
+                imageParams = getDoubledAspectRatioImageParams(cardFormat);
+            }
+
+            const card = createCardElement(
+                item,
+                overflowCard,
+                cardFormat,
+                item.cardFooter,
+                useParentCard,
+                borderStyle,
+                imageParams,
+            );
             card.setAttribute('data-index', index);
             itemsContainer.appendChild(card);
         });
@@ -9711,25 +9782,6 @@
         });
     }
 
-    function appendCardsForItems(
-        itemsContainer,
-        items,
-        overflowCard,
-        cardFormat,
-        startIndex = 0,
-        useParentCard = false,
-        borderStyle = null,
-    ) {
-        const cards = [];
-        items.forEach((item, offset) => {
-            const card = createCardElement(item, overflowCard, cardFormat, item.cardFooter, useParentCard, borderStyle);
-            card.setAttribute('data-index', String(startIndex + offset));
-            itemsContainer.appendChild(card);
-            cards.push(card);
-        });
-        return cards;
-    }
-
     function clearCardReconcileStyles(card) {
         card.classList.remove('cardbuilder-card-insert', 'cardbuilder-card-collapse', 'is-in');
         card.style.width = '';
@@ -9803,7 +9855,7 @@
         let nextNode = paintedCards[0] || null;
         let seenKept = false;
 
-        items.forEach((item) => {
+        items.forEach((item, index) => {
             if (!item?.Id) return;
             const existing = cardById.get(item.Id);
             if (existing) {
@@ -9815,6 +9867,11 @@
                 return;
             }
 
+            let imageParams = null;
+            if (sectionConfig?.sectionCssClass && sectionConfig?.sectionCssClass.includes('rows-2') && index === 0) {
+                imageParams = getDoubledAspectRatioImageParams(cardFormat);
+            }
+
             const card = createCardElement(
                 item,
                 overflowCard,
@@ -9822,6 +9879,7 @@
                 item.cardFooter,
                 !!sectionConfig?.useParentCard,
                 sectionConfig?.borderStyle || null,
+                imageParams,
             );
             if (nextNode) itemsContainer.insertBefore(card, nextNode);
             else itemsContainer.appendChild(card);
@@ -9933,8 +9991,22 @@
         } else {
             const useParentCard = !!sectionConfig?.useParentCard;
             const borderStyle = sectionConfig?.borderStyle || null;
+            
             items.forEach((item, index) => {
-                const card = createCardElement(item, overflowCard, cardFormat, item.cardFooter, useParentCard, borderStyle);
+                let imageParams = null;
+                if (sectionConfig?.sectionCssClass && sectionConfig?.sectionCssClass.includes('rows-2') && index === 0) {
+                    imageParams = getDoubledAspectRatioImageParams(cardFormat);
+                }
+
+                const card = createCardElement(
+                    item,
+                    overflowCard,
+                    cardFormat,
+                    item.cardFooter,
+                    useParentCard,
+                    borderStyle,
+                    imageParams,
+                );
                 card.setAttribute('data-index', String(index));
                 fragment.appendChild(card);
             });
