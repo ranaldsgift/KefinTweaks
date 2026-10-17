@@ -12,6 +12,10 @@
     const DISCOVERY_SECTIONS_PER_GROUP = 100;
     /** IntersectionObserver rootMargin for discovery section progressive enhance (batches + any discovery enhance). */
     const DISCOVERY_ENHANCE_ROOT_MARGIN = '30% 0px 30% 0px';
+    /** How many viewports of content to keep below the fold before idling infinite discovery. */
+    const DISCOVERY_LEAD_VIEWPORTS = 1.5;
+    /** Max consecutive auto-fill groups in one wave (empty/tiny sections). */
+    const DISCOVERY_LEAD_FILL_MAX_GROUPS = 8;
 
     // Dependencies
     const ApiHelper = window.apiHelper;
@@ -96,6 +100,8 @@
         discoverySectionsRemain: true,
         ensuringDiscoveryBuffer: false,
         discoveryNeedsMoreScroll: false,
+        /** Consecutive auto-fill loads while lead margin is short (reset when lead OK or user scroll loads). */
+        discoveryLeadFillCount: 0,
         discoveryMode: null, // 'infinite' | 'chevron'
         infiniteScrollHandler: null,
         discoveryWheelHandler: null,
@@ -1308,11 +1314,6 @@
                 enhanceOnVisible: true,
             });
 
-            // If MediaBar plugin is in use, call LayoutSync.update() to update the layout
-            if (typeof LayoutSync !== 'undefined' && LayoutSync && typeof LayoutSync.update === 'function') {
-                LayoutSync.update();
-            }
-
             // Allow deferred library-cache crawls to start (movies/series/people scheduleBootstrap)
             if (!state.homePaintedEventFired) {
                 state.homePaintedEventFired = true;
@@ -1489,13 +1490,20 @@
         }
     }
 
-    function documentNeedsVerticalScroll() {
-        return document.documentElement.scrollHeight > window.innerHeight + 1;
+    function getDiscoveryLeadPx() {
+        const scrollTop = window.pageYOffset || document.documentElement.scrollTop || 0;
+        const windowHeight = window.innerHeight;
+        const documentHeight = document.documentElement.scrollHeight;
+        return documentHeight - (scrollTop + windowHeight);
+    }
+
+    function discoveryLeadNeedsMore() {
+        return getDiscoveryLeadPx() < window.innerHeight * DISCOVERY_LEAD_VIEWPORTS;
     }
 
     /**
-     * Infinite discovery: if the page still has no scrollbar, load another group
-     * so content can fill the viewport (scroll gate is meaningless without overflow).
+     * Infinite discovery: keep loading groups while content below the fold is
+     * shorter than the same lead margin used by the scroll handler (1.5 viewports).
      */
     function maybeFillDiscoveryViewport() {
         if (state.discoveryMode !== 'infinite') return;
@@ -1503,10 +1511,23 @@
         if (state.discoverySectionsRemain === false) return;
         if (!isDiscoveryAllowedForActiveCategory()) return;
         if (!isDiscoveryHomeContext()) return;
-        if (documentNeedsVerticalScroll()) return;
 
+        if (!discoveryLeadNeedsMore()) {
+            state.discoveryLeadFillCount = 0;
+            return;
+        }
+
+        if (state.discoveryLeadFillCount >= DISCOVERY_LEAD_FILL_MAX_GROUPS) {
+            LOG('Discovery lead fill capped; waiting for user scroll near bottom');
+            return;
+        }
+
+        state.discoveryLeadFillCount += 1;
         state.discoveryNeedsMoreScroll = false;
-        LOG('Discovery viewport not full; loading next group without scroll');
+        LOG('Discovery lead short; loading next group without scroll', {
+            leadPx: Math.round(getDiscoveryLeadPx()),
+            fillCount: state.discoveryLeadFillCount,
+        });
         renderNextDiscoveryGroup();
     }
 
@@ -1625,7 +1646,7 @@
                 container.dataset.loadingDiscovery = 'false';
                 container.classList.remove('loading-discovery');
             }
-            // After layout settles: keep loading groups until a scrollbar exists (infinite only)
+            // After layout settles: keep loading groups until lead margin is filled (infinite only)
             scheduleMaybeFillDiscoveryViewport();
         }
     }
@@ -1787,11 +1808,7 @@
                 state.discoveryNeedsMoreScroll = false;
             }
 
-            const windowHeight = window.innerHeight;
-            const documentHeight = document.documentElement.scrollHeight;
-            const threshold = windowHeight * 1.5;
-
-            if (scrollTop + windowHeight < documentHeight - threshold) return;
+            if (!discoveryLeadNeedsMore()) return;
 
             if (state.discoveryScrollDebounceTimer) {
                 clearTimeout(state.discoveryScrollDebounceTimer);
@@ -1800,10 +1817,8 @@
                 state.discoveryScrollDebounceTimer = null;
                 if (state.isRenderingDiscovery || state.discoveryNeedsMoreScroll) return;
                 if (!isDiscoveryHomeContext()) return;
-                const st = window.pageYOffset || document.documentElement.scrollTop;
-                const wh = window.innerHeight;
-                const dh = document.documentElement.scrollHeight;
-                if (st + wh >= dh - wh * 1.5) {
+                if (discoveryLeadNeedsMore()) {
+                    state.discoveryLeadFillCount = 0;
                     renderNextDiscoveryGroup();
                 }
             }, 200);
@@ -2986,6 +3001,7 @@
         refreshHomeSections,
         refreshHomeSectionById,
         notifyUserHomePreferencesChanged,
+        scheduleMaybeFillDiscoveryViewport,
         resolveDiscoverySection: buildDiscoverySectionInstance,
         sectionHelper: () => window.sectionHelper,
         getActiveHomeCategory: () => homeChromeActiveCategory || 'none',

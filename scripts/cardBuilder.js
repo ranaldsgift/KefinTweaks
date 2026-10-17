@@ -1592,9 +1592,15 @@
         }, 1500);
     }
 
+    /** After an empty section is removed, let discovery infinite-scroll refill lead margin. */
+    function notifyDiscoveryLeadFillAfterSectionRemove() {
+        window.homeScreen3?.scheduleMaybeFillDiscoveryViewport?.();
+    }
+
     async function replaceSectionContent(sectionConfig, sectionElement, freshItems) {
         if (freshItems.length === 0) {
             sectionElement.remove();
+            notifyDiscoveryLeadFillAfterSectionRemove();
             return null;
         }
 
@@ -2024,6 +2030,7 @@
                 freshItems = await refreshSectionQueries(sectionConfig);
                 if (freshItems.length === 0) {
                     sectionElement.remove();
+                    notifyDiscoveryLeadFillAfterSectionRemove();
                     return null;
                 }
             }
@@ -10220,6 +10227,7 @@
             sectionElement.classList.add('is-hidden');
             runAfterTransition(sectionElement, 320, () => {
                 sectionElement.remove();
+                notifyDiscoveryLeadFillAfterSectionRemove();
             });
         }, hold);
     }
@@ -10266,6 +10274,7 @@
                 dismissEmptyProgressiveSection(sectionElement, { holdMs });
             } else {
                 sectionElement.remove();
+                notifyDiscoveryLeadFillAfterSectionRemove();
             }
             return;
         }
