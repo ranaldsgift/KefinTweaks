@@ -2348,3 +2348,7 @@ div[data-tab="watchlist"] .loading-message {
 .userSection .emby-button[data-kefin-custom-user-menu-link*="Watchlist"] {
 	order: -1;
 }
+
+#customPage-watchlist > div {
+	padding: 0 !important;
+}
