@@ -2226,12 +2226,28 @@
         });
     }
 
+    function updateCardFavoriteButtons(itemId, userData) {
+        if (!itemId || !userData || !('IsFavorite' in userData)) return;
+
+        const isFavorite = userData.IsFavorite === true;
+        itemIdDomVariants(itemId).forEach((variant) => {
+            const escapedId = escapeCssIdentForCardSync(variant);
+            document.querySelectorAll(
+                `[is="emby-ratingbutton"][data-id="${escapedId}"], button[data-isfavorite][data-id="${escapedId}"]`
+            ).forEach((button) => {
+                button.setAttribute('data-isfavorite', isFavorite ? 'true' : 'false');
+                button.title = isFavorite ? 'Remove from favorites' : 'Add to favorites';
+            });
+        });
+    }
+
     function applyUserDataEntriesToCards(entries, userId) {
         if (!isPrimaryUserDataChange(userId)) return;
         entries.forEach((entry) => {
             if (entry?.ItemId) {
                 updateCardResumeAttributes(entry.ItemId, entry);
                 updateCardWatchlistButtons(entry.ItemId, entry);
+                updateCardFavoriteButtons(entry.ItemId, entry);
             }
         });
     }
