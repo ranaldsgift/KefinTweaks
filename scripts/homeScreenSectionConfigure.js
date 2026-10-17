@@ -2469,7 +2469,7 @@
                     <button type="button" is="paper-icon-button-light" class="paper-icon-button-light emby-button kefin-section-unpin-button" title="Unpin" aria-label="Unpin from Home Screen">
                         <span class="material-icons" aria-hidden="true">push_pin</span>
                     </button>` : ''}
-                    <button type="button" is="paper-icon-button-light" class="paper-icon-button-light emby-button kefin-section-publish-btn" title="Apply to all users" aria-label="Apply to all users" hidden>
+                    <button type="button" is="paper-icon-button-light" class="paper-icon-button-light emby-button kefin-section-publish-btn" title="Update server default for this section" aria-label="Update server default for this section" hidden>
                         <span class="material-icons" aria-hidden="true">publish</span>
                     </button>
                     <button type="button" is="paper-icon-button-light" class="paper-icon-button-light emby-button kefin-section-open-editor-btn" title="Open Editor" aria-label="Open Editor" hidden>
