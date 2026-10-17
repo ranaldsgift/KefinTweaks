@@ -23,7 +23,6 @@
             top: 8px !important;
             right: 8px !important;
             z-index: 10 !important;
-            background: rgba(0, 0, 0, 0.7) !important;
             border: none !important;
             border-radius: 50% !important;
             width: 32px !important;
@@ -37,13 +36,12 @@
             transform: scale(0.8) !important;
         }
         
-        .cardOverlayContainer:hover .remove-continue-button {
+        .cardScalable:hover .remove-continue-button {
             opacity: 1 !important;
             transform: scale(1) !important;
         }
         
         .remove-continue-button:hover {
-            background: rgba(220, 38, 38, 0.9) !important;
             transform: scale(1.1) !important;
         }
         
@@ -54,7 +52,6 @@
         }
         
         .remove-continue-button .material-icons {
-            color: white !important;
             font-size: 18px !important;
         }
     `;
@@ -98,7 +95,7 @@
         // Create remove continue watching button
         const removeButton = document.createElement('button');
         removeButton.type = 'button';
-        removeButton.className = 'remove-continue-button';
+        removeButton.className = 'remove-continue-button cardOverlayButton cardOverlayButton-hover paper-icon-button-light emby-button button-flat';
         removeButton.setAttribute('data-action', 'none');
         removeButton.setAttribute('data-id', itemId);
         removeButton.title = 'Remove from Continue Watching';
