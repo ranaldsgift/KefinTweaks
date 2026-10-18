@@ -1629,6 +1629,85 @@
     }
 
     /**
+     * Persist kefinTweaks.homeScreen and rewrite Jellyfin homesection0–9 to match
+     * (same outbound pairing as saveUserPreferences / getConfig). Single displayPrefs write.
+     * Used by the home section configure popover after order/enable changes.
+     * @param {Object} homeScreen
+     * @returns {Promise<boolean>}
+     */
+    async function saveKefinTweaksHomeScreenAndSyncNative(homeScreen) {
+        if (!window.userHelper?.getUserDisplayPreferences && !window.userHelper?.getUserDisplayPreferencesForUser) {
+            ERR('userHelper not available for homeScreen + native sync save');
+            return false;
+        }
+        try {
+            const displayPrefs = await getEditorDisplayPreferences();
+            if (!displayPrefs) {
+                ERR('Could not load display preferences for homeScreen + native sync');
+                return false;
+            }
+            if (!displayPrefs.CustomPrefs) displayPrefs.CustomPrefs = {};
+
+            const sanitized = sanitizeHomeScreenSections(homeScreen).homeScreen;
+            const kefin = typeof window.userHelper?.parseKefinTweaks === 'function'
+                ? window.userHelper.parseKefinTweaks(displayPrefs)
+                : {};
+            kefin.homeScreen = sanitized;
+            displayPrefs.CustomPrefs.kefinTweaks = JSON.stringify(kefin);
+            displayPrefs.CustomPrefs.kefinHomeScreen = JSON.stringify(homeScreenToLegacyArray(sanitized));
+
+            // Build effective sections for slot packing (no inbound native→Kefin enable pass)
+            let sections = [];
+            const sectionsApi = window.KefinHomeScreen?.getSections;
+            if (typeof sectionsApi === 'function') {
+                const sectionsResult = await Promise.resolve(sectionsApi());
+                const { enabledHomeSections = [] } = sectionsResult || {};
+                const serverSections = [...enabledHomeSections];
+                const pinnedSections = buildPinnedSectionConfigs(sanitized);
+                const serverSectionsById = await buildServerSectionsById();
+                serverSections.forEach((section) => {
+                    if (section?.id && !serverSectionsById.has(section.id)) {
+                        serverSectionsById.set(section.id, section);
+                    }
+                });
+                sections = deduplicateHomeScreenSections([...serverSections, ...pinnedSections]);
+                sections = applyUserSectionOverrides(sections, sanitized, { serverSectionsById });
+                try {
+                    sections = await resolveRecentlyAddedSectionsForUser(sections);
+                    sections = applyUserSectionOverrides(sections, sanitized, { serverSectionsById });
+                } catch (e) {
+                    WARN('resolveRecentlyAddedSectionsForUser failed during native sync save:', e);
+                }
+                sections = sections.filter((section) => (
+                    section.enabled
+                    || section.userConfigurable === true
+                    || section.userConfigurable === undefined
+                ));
+                sections = deduplicateHomeScreenSections(sections);
+            } else {
+                WARN('KefinHomeScreen.getSections unavailable; saving homeScreen without native slot rebuild');
+            }
+
+            if (sections.length) {
+                syncNativeHomeSectionsFromKefin(
+                    sections,
+                    displayPrefs.CustomPrefs,
+                    sanitized,
+                    { syncUi: false }
+                );
+            }
+
+            const ok = await saveEditorDisplayPreferences(displayPrefs);
+            if (ok) LOG('kefinTweaks homeScreen saved (+ native homesectionN sync)');
+            else ERR('Failed to save homeScreen + native sync');
+            return ok;
+        } catch (e) {
+            ERR('Error saving homeScreen + syncing native homesectionN:', e);
+            return false;
+        }
+    }
+
+    /**
      * Persist items layout UI preference for a section (row|grid).
      * Home / seasonal / discovery → kefinTweaks.homeScreen; otherwise → kefinTweaks.sectionState.
      * Patches field 13 of the existing pref string so other overrides are preserved.
@@ -2739,6 +2818,7 @@
         applyUserSectionOverrides,
         buildPinnedSectionConfigs,
         saveKefinTweaksHomeScreen,
+        saveKefinTweaksHomeScreenAndSyncNative,
         loadKefinTweaksHomeScreenFromDisplayPrefs,
         createEmptyHomeScreen,
         parsePinnedListString,

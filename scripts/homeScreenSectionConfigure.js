@@ -180,6 +180,14 @@
         return window.KefinUserHomeScreenConfig;
     }
 
+    /** Persist homeScreen and rewrite Jellyfin homesectionN when the syncing API is available. */
+    async function saveHomeScreenPreferNativeSync(api, homeScreen) {
+        if (typeof api?.saveKefinTweaksHomeScreenAndSyncNative === 'function') {
+            return api.saveKefinTweaksHomeScreenAndSyncNative(homeScreen);
+        }
+        return api.saveKefinTweaksHomeScreen(homeScreen);
+    }
+
     function getCachePresetOptions() {
         const presets = window.KefinHomeScreenAdvancedEditor?.getCachePresets?.()
             || buildFallbackCachePresets();
@@ -624,7 +632,7 @@
         );
         homeScreen = api.upsertSectionPref(homeScreen, prefStr);
         pendingHomeScreen = homeScreen;
-        await api.saveKefinTweaksHomeScreen(homeScreen);
+        await saveHomeScreenPreferNativeSync(api, homeScreen);
         pendingHomeScreen = null;
 
         applyPresentationToElement(entry);
@@ -651,7 +659,7 @@
                     homeScreen = api.upsertSectionPref(homeScreen, prefStr);
                 });
                 pendingHomeScreen = homeScreen;
-                await api.saveKefinTweaksHomeScreen(homeScreen);
+                await saveHomeScreenPreferNativeSync(api, homeScreen);
                 pendingHomeScreen = null;
             } catch (e) {
                 WARN('Failed to save section preferences:', e);
