@@ -7670,7 +7670,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		const isCustomTabUrl = watchlistUrl.includes('/home?tab=');
 
 		const options = {
-			sideMenu: watchlistCfg.sideMenu !== false,
+			sideMenu: isCustomTabUrl ? false : watchlistCfg.sideMenu !== false,
 			userMenu: watchlistCfg.userMenu === true,
 			topNavigation: isCustomTabUrl ? 'none' : watchlistCfg.topNavigation,
 			order: watchlistCfg.order
