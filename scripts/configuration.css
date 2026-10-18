@@ -179,6 +179,21 @@
 	padding: 0.75em !important;
 }
 
+/* Only editable feature cards use the pointer; toggles/buttons keep pointer via their own rules */
+.kefin-config-wrapper .listItem.feature-card {
+	cursor: default;
+}
+
+.kefin-config-wrapper .listItem.feature-card.feature-card--editable {
+	cursor: pointer;
+}
+
+.kefin-config-wrapper .listItem.feature-card .checkboxContainer,
+.kefin-config-wrapper .listItem.feature-card .emby-checkbox-label,
+.kefin-config-wrapper .listItem.feature-card .emby-button {
+	cursor: pointer;
+}
+
 #customSections_list .listItem {
 	overflow: visible;
 }

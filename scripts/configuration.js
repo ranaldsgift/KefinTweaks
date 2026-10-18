@@ -1225,7 +1225,7 @@
             const configKey = script.key === 'flattenSingleSeasonShows' ? 'seriesEpisodes' : script.key;
             
             return `
-                <div class="listItem feature-card" data-feature-key="${script.key}" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; background: rgba(255,255,255,0.02); ${hasConfig ? 'cursor: pointer;' : ''}" ${hasConfig ? `onclick="openFeatureConfigurationModal(event, '${script.key}')"` : ''}>
+                <div class="listItem feature-card${hasConfig ? ' feature-card--editable' : ''}" data-feature-key="${script.key}" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; background: rgba(255,255,255,0.02);" ${hasConfig ? `onclick="openFeatureConfigurationModal(event, '${script.key}')"` : ''}>
                     <div class="listItemContent">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75em;">
                             <div class="listItemBodyText" style="font-weight: 500;">${script.label}</div>
