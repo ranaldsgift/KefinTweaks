@@ -5988,7 +5988,7 @@
             const infoIcon = document.createElement('span');
             infoIcon.className = 'material-icons';
             infoIcon.textContent = 'info';
-            infoIcon.title = 'Go To Item';
+            infoIcon.title = 'View Details';
             infoButton.appendChild(infoIcon);
 
             // Overview tooltip (hover only) — skip on TV
