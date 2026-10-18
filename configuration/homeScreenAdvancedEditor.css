@@ -142,6 +142,52 @@
 	white-space: nowrap;
 }
 
+.hsae-troubleshoot-summary-wrap {
+	margin-bottom: 0.85em;
+}
+
+.hsae-troubleshoot-summary {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 0.875rem;
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	border-radius: 8px;
+	overflow: hidden;
+}
+
+.hsae-troubleshoot-summary th,
+.hsae-troubleshoot-summary td {
+	padding: 0.45em 0.65em;
+	text-align: left;
+	border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.hsae-troubleshoot-summary thead th {
+	font-weight: 600;
+	opacity: 0.9;
+	background: rgba(255, 255, 255, 0.04);
+	border-top: none;
+}
+
+.hsae-troubleshoot-panels {
+	display: flex;
+	flex-direction: column;
+	gap: 0.85em;
+}
+
+.hsae-troubleshoot-panel {
+	min-width: 0;
+}
+
+.hsae-troubleshoot-textarea {
+	width: 100%;
+	min-height: 180px;
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 0.9em;
+	line-height: 1.5;
+	box-sizing: border-box;
+}
+
 :is([data-modal-id="kefin-homescreen-section-editor"], [data-modal-id="kefin-homescreen-section-create-flow"]) .hsae-group {
 	margin-bottom: 1.25em;
 }

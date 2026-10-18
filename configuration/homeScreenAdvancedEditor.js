@@ -3350,6 +3350,7 @@
             body.scrollTop = scrollTop;
         });
         updateSectionNameBadge(modalInstance);
+        syncHeaderActions(modalInstance);
     }
 
     function handleHsaeRootClick(e, modalInstance) {
@@ -3648,6 +3649,7 @@
     const HSAE_SECTION_EXPORT_MODAL_ID = 'hsae-section-export';
     const HSAE_SECTION_IMPORT_MODAL_ID = 'hsae-section-import-paste';
     const HSAE_RESTORE_DEFAULTS_MODAL_ID = 'hsae-section-restore-defaults';
+    const HSAE_TROUBLESHOOT_MODAL_ID = 'hsae-section-troubleshoot';
     const HSAE_SECTION_DIFF_KEYS = [
         'name', 'caption', 'description', 'enabled', 'order', 'cardFormat', 'renderMode', 'ttl',
         'queries', 'items', 'externalListUrls', 'spotlightConfig', 'hideName', 'userConfigurable',
@@ -4145,7 +4147,7 @@
         const content = document.createElement('div');
         content.innerHTML = `
             <div class="listItemBodyText" style="line-height: 1.5;">
-                Restoring defaults will override the current editor values for this section with the canonical Kefin defaults.
+                Restoring defaults will override the current editor values for this section with the KefinTweaks defaults.
                 Enabled status and order are kept. You still need to Save to persist.
             </div>
             ${rowsHtml}
@@ -4183,6 +4185,387 @@
                 });
             }
         });
+    }
+
+    function getEligibleTroubleshootQueries(section) {
+        const queries = Array.isArray(section?.queries) ? section.queries : [];
+        return queries
+            .map((query, index) => ({ query, index, sourceType: inferQuerySourceType(query) }))
+            .filter((entry) => entry.sourceType === 'jellyfin' || entry.sourceType === 'static');
+    }
+
+    function formatTroubleshootRequestUrl(method, url) {
+        const methodLabel = method || 'GET';
+        if (!url || typeof url !== 'string') {
+            return `${methodLabel} (no URL)`;
+        }
+        try {
+            const parsed = new URL(url, window.location?.origin || undefined);
+            const lines = [`${methodLabel} ${parsed.origin}${parsed.pathname}`];
+            parsed.searchParams.forEach((value, key) => {
+                let decoded = value;
+                try {
+                    decoded = decodeURIComponent(value);
+                } catch (_) { /* keep raw */ }
+                lines.push(`${key}=${decoded}`);
+            });
+            return lines.join('\n');
+        } catch (_) {
+            const qIndex = url.indexOf('?');
+            if (qIndex < 0) return `${methodLabel} ${url}`;
+            const base = url.slice(0, qIndex);
+            const query = url.slice(qIndex + 1);
+            const lines = [`${methodLabel} ${base}`];
+            query.split('&').forEach((pair) => {
+                if (!pair) return;
+                const eq = pair.indexOf('=');
+                const key = eq >= 0 ? pair.slice(0, eq) : pair;
+                const rawVal = eq >= 0 ? pair.slice(eq + 1) : '';
+                let decodedKey = key;
+                let decodedVal = rawVal;
+                try { decodedKey = decodeURIComponent(key); } catch (_) { /* keep */ }
+                try { decodedVal = decodeURIComponent(rawVal); } catch (_) { /* keep */ }
+                lines.push(`${decodedKey}=${decodedVal}`);
+            });
+            return lines.join('\n');
+        }
+    }
+
+    function troubleshootQueryLabel(entry) {
+        const name = entry?.name != null ? String(entry.name).trim() : '';
+        if (name) return name;
+        return `Query ${entry?.index ?? '?'}`;
+    }
+
+    function formatTroubleshootSectionConfigText(section) {
+        const eligible = getEligibleTroubleshootQueries(section);
+        if (!eligible.length) return '(no eligible queries)';
+        return eligible.map(({ query, index }) => {
+            const label = troubleshootQueryLabel({
+                index,
+                name: query?.name != null ? String(query.name).trim() : ''
+            });
+            const clone = deepCloneJson(query) || {};
+            // Drop ephemeral editor-only keys from the displayed config object
+            Object.keys(clone).forEach((key) => {
+                if (key.startsWith('_') && key !== '_sourceType') delete clone[key];
+            });
+            return `=== ${label} ===\n${JSON.stringify(clone, null, 2)}`;
+        }).join('\n\n');
+    }
+
+    function formatTroubleshootRequestText(payload) {
+        const entries = Array.isArray(payload?.queries) ? payload.queries : [];
+        if (!entries.length) return '(no requests)';
+        return entries.map((entry) => {
+            const header = `=== ${troubleshootQueryLabel(entry)} ===`;
+            const req = entry.request;
+            if (!req) return `${header}\n(no request)`;
+            if (req.error) return `${header}\nERROR: ${req.error}`;
+            if (typeof req.url === 'string') {
+                return `${header}\n${formatTroubleshootRequestUrl(req.method, req.url)}`;
+            }
+            // Non-URL request object (e.g. cache marker)
+            return `${header}\n${JSON.stringify(req, null, 2)}`;
+        }).join('\n\n');
+    }
+
+    function formatTroubleshootResponseText(payload) {
+        const entries = Array.isArray(payload?.queries) ? payload.queries : [];
+        if (!entries.length) return '(no responses)';
+        return entries.map((entry) => {
+            const header = `=== ${troubleshootQueryLabel(entry)} ===`;
+            return `${header}\n${JSON.stringify(entry.response ?? null, null, 2)}`;
+        }).join('\n\n');
+    }
+
+    function countTroubleshootItems(response) {
+        if (!response || typeof response !== 'object') return null;
+        if (response.error || response.skipped) return null;
+        if (Array.isArray(response.Items)) return response.Items.length;
+        if (Array.isArray(response.items)) return response.items.length;
+        if (Array.isArray(response)) return response.length;
+        if (typeof response.TotalRecordCount === 'number') return response.TotalRecordCount;
+        return null;
+    }
+
+    function measureTroubleshootResponseSize(response) {
+        if (response == null) return null;
+        try {
+            const json = typeof response === 'string' ? response : JSON.stringify(response);
+            if (typeof TextEncoder !== 'undefined') {
+                return new TextEncoder().encode(json).length;
+            }
+            return json.length;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function formatTroubleshootDuration(ms) {
+        if (ms == null || !Number.isFinite(ms)) return '—';
+        if (ms < 1000) return `${Math.round(ms)} ms`;
+        return `${(ms / 1000).toFixed(2)} s`;
+    }
+
+    function formatTroubleshootSize(bytes) {
+        if (bytes == null || !Number.isFinite(bytes)) return '—';
+        if (bytes < 1024) return `${bytes} B`;
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+        return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+    }
+
+    function buildTroubleshootSummaryHtml(payload) {
+        const entries = Array.isArray(payload?.queries) ? payload.queries : [];
+        if (!entries.length) {
+            return '<div class="listItemBodyText secondary">No query results.</div>';
+        }
+        const rows = entries.map((entry) => {
+            const stats = entry.stats || {};
+            const itemCount = stats.itemCount != null ? String(stats.itemCount) : '—';
+            const duration = formatTroubleshootDuration(stats.durationMs);
+            const size = formatTroubleshootSize(stats.responseBytes);
+            return `
+                <tr>
+                    <td>${escapeHtml(troubleshootQueryLabel(entry))}</td>
+                    <td>${escapeHtml(itemCount)}</td>
+                    <td>${escapeHtml(duration)}</td>
+                    <td>${escapeHtml(size)}</td>
+                </tr>
+            `;
+        }).join('');
+        return `
+            <table class="hsae-troubleshoot-summary">
+                <thead>
+                    <tr>
+                        <th>Query</th>
+                        <th>Item Count</th>
+                        <th>Response Time</th>
+                        <th>Response Size</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+        `;
+    }
+
+    function attachTroubleshootStats(entry, response, durationMs) {
+        entry.stats = {
+            itemCount: countTroubleshootItems(response),
+            durationMs: durationMs != null && Number.isFinite(durationMs) ? durationMs : null,
+            responseBytes: measureTroubleshootResponseSize(response)
+        };
+        return entry;
+    }
+
+    async function runSectionTroubleshoot(section) {
+        const apiHelper = window.apiHelper;
+        const userId = window.ApiClient?.getCurrentUserId?.();
+        const serverUrl = window.ApiClient?.serverAddress?.();
+        if (!apiHelper?.buildQueryFromSection || !apiHelper?.getQuery) {
+            return {
+                queries: [attachTroubleshootStats(
+                    { index: -1, request: null, response: { error: 'apiHelper unavailable' } },
+                    { error: 'apiHelper unavailable' },
+                    null
+                )]
+            };
+        }
+        if (!userId || !serverUrl) {
+            return {
+                queries: [attachTroubleshootStats(
+                    { index: -1, request: null, response: { error: 'Unable to get user ID or server URL' } },
+                    { error: 'Unable to get user ID or server URL' },
+                    null
+                )]
+            };
+        }
+
+        const isSpotlight = section?.renderMode === 'Spotlight' || section?.spotlight === true;
+        const sectionType = section?.type || deriveSectionSurfaceType(section);
+        const eligible = getEligibleTroubleshootQueries(section);
+        const results = [];
+
+        for (const { query, index } of eligible) {
+            const queryName = query?.name != null ? String(query.name).trim() : '';
+            let built;
+            try {
+                built = apiHelper.buildQueryFromSection(query, userId, serverUrl, isSpotlight, { sectionType });
+            } catch (err) {
+                const errBody = { error: err?.message || String(err) };
+                results.push(attachTroubleshootStats({
+                    index,
+                    name: queryName || null,
+                    request: { method: 'GET', url: null, error: errBody.error },
+                    response: errBody
+                }, errBody, null));
+                continue;
+            }
+
+            if (typeof built !== 'string') {
+                const skipped = { skipped: true, reason: 'Non-URL request (e.g. cache dataSource)' };
+                results.push(attachTroubleshootStats({
+                    index,
+                    name: queryName || null,
+                    request: built,
+                    response: skipped
+                }, skipped, null));
+                continue;
+            }
+
+            const entry = {
+                index,
+                name: queryName || null,
+                request: { method: 'GET', url: built },
+                response: null
+            };
+            const started = (typeof performance !== 'undefined' && performance.now)
+                ? performance.now()
+                : Date.now();
+            try {
+                entry.response = await apiHelper.getQuery(built, { useCache: false, forceRefresh: true });
+            } catch (err) {
+                entry.response = { error: err?.message || String(err) };
+            }
+            const ended = (typeof performance !== 'undefined' && performance.now)
+                ? performance.now()
+                : Date.now();
+            attachTroubleshootStats(entry, entry.response, ended - started);
+            results.push(entry);
+        }
+
+        return { queries: results };
+    }
+
+    function showSectionTroubleshootModal(modalInstance) {
+        if (!window.ModalSystem) {
+            showHsaeToast('Unable to open troubleshoot modal');
+            return;
+        }
+        if (window.ModalSystem.isOpen?.(HSAE_TROUBLESHOOT_MODAL_ID)) {
+            window.ModalSystem.close(HSAE_TROUBLESHOOT_MODAL_ID);
+        }
+
+        const dialog = modalInstance?.dialogContainer || modalInstance?.dialogContent;
+        const state = modalInstance?._hsaeState;
+        if (!dialog || !state) return;
+
+        const original = state.context?.originalSection || state.section || {};
+        const section = collectData(dialog, original);
+        if (!section) return;
+        if (state.section?.id) section.id = state.section.id;
+
+        // Quiet no-op if source/queries flipped mid-click (button should already be hidden)
+        if (!getEligibleTroubleshootQueries(section).length) return;
+
+        const canCopy = canUseClipboardWrite();
+        const sectionConfigText = formatTroubleshootSectionConfigText(section);
+        window.ModalSystem.create({
+            id: HSAE_TROUBLESHOOT_MODAL_ID,
+            title: 'Troubleshoot',
+            content: `
+                <div id="hsae-troubleshoot-summary" class="hsae-troubleshoot-summary-wrap">
+                    <div class="listItemBodyText secondary">Loading summary…</div>
+                </div>
+                <div class="hsae-troubleshoot-panels">
+                    <div class="hsae-troubleshoot-panel">
+                        <div class="listItemBodyText" style="margin-bottom: 0.35em; font-weight: 500;">Section Config</div>
+                        <textarea id="hsae-troubleshoot-section-config" class="fld emby-textarea hsae-troubleshoot-textarea" rows="10"
+                            readonly></textarea>
+                    </div>
+                    <div class="hsae-troubleshoot-panel">
+                        <div class="listItemBodyText" style="margin-bottom: 0.35em; font-weight: 500;">Request</div>
+                        <textarea id="hsae-troubleshoot-request" class="fld emby-textarea hsae-troubleshoot-textarea" rows="12"
+                            readonly></textarea>
+                    </div>
+                    <div class="hsae-troubleshoot-panel">
+                        <div class="listItemBodyText" style="margin-bottom: 0.35em; font-weight: 500;">Response</div>
+                        <textarea id="hsae-troubleshoot-response" class="fld emby-textarea hsae-troubleshoot-textarea" rows="12"
+                            readonly></textarea>
+                    </div>
+                </div>
+            `,
+            footer: `
+                ${canCopy ? `
+                <button type="button" class="emby-button raised button-submit" id="hsae-troubleshoot-copy-config-btn"
+                    style="padding: 0.75em 1.5em; font-size: 1em; font-weight: 500; margin-right: 0.5em;">
+                    <span>Copy config</span>
+                </button>
+                <button type="button" class="emby-button raised button-submit" id="hsae-troubleshoot-copy-request-btn"
+                    style="padding: 0.75em 1.5em; font-size: 1em; font-weight: 500; margin-right: 0.5em;" disabled>
+                    <span>Copy request</span>
+                </button>
+                <button type="button" class="emby-button raised button-submit" id="hsae-troubleshoot-copy-response-btn"
+                    style="padding: 0.75em 1.5em; font-size: 1em; font-weight: 500; margin-right: 1em;" disabled>
+                    <span>Copy response</span>
+                </button>` : ''}
+                <button type="button" class="emby-button raised" id="hsae-troubleshoot-close-btn"
+                    style="padding: 0.75em 2em; font-size: 1em;">
+                    <span>Close</span>
+                </button>
+            `,
+            closeOnBackdrop: true,
+            closeOnEscape: true,
+            dialogStyle: {
+                width: 'min(48rem, calc(100vw - 2rem))',
+                maxWidth: '48rem'
+            },
+            onOpen: (modal) => {
+                const summaryEl = modal.dialogContent?.querySelector('#hsae-troubleshoot-summary');
+                const configTa = modal.dialogContent?.querySelector('#hsae-troubleshoot-section-config');
+                const requestTa = modal.dialogContent?.querySelector('#hsae-troubleshoot-request');
+                const responseTa = modal.dialogContent?.querySelector('#hsae-troubleshoot-response');
+                const copyConfigBtn = modal.dialogFooter?.querySelector('#hsae-troubleshoot-copy-config-btn');
+                const copyRequestBtn = modal.dialogFooter?.querySelector('#hsae-troubleshoot-copy-request-btn');
+                const copyResponseBtn = modal.dialogFooter?.querySelector('#hsae-troubleshoot-copy-response-btn');
+                if (configTa) configTa.value = sectionConfigText;
+                if (requestTa) requestTa.value = 'Loading…';
+                if (responseTa) responseTa.value = 'Loading…';
+
+                modal.dialogFooter?.querySelector('#hsae-troubleshoot-close-btn')?.addEventListener('click', () => {
+                    window.ModalSystem.close(HSAE_TROUBLESHOOT_MODAL_ID);
+                });
+
+                const copyFrom = async (textarea, label) => {
+                    const text = textarea?.value || '';
+                    if (!text) return;
+                    try {
+                        await navigator.clipboard.writeText(text);
+                        showHsaeToast(`${label} copied to clipboard`);
+                    } catch (_) {
+                        textarea?.focus();
+                        textarea?.select();
+                        showHsaeToast('Select and copy the text manually');
+                    }
+                };
+                copyConfigBtn?.addEventListener('click', () => copyFrom(configTa, 'Section config'));
+                copyRequestBtn?.addEventListener('click', () => copyFrom(requestTa, 'Request'));
+                copyResponseBtn?.addEventListener('click', () => copyFrom(responseTa, 'Response'));
+
+                const applyPayload = (payload) => {
+                    if (summaryEl) summaryEl.innerHTML = buildTroubleshootSummaryHtml(payload);
+                    if (requestTa) requestTa.value = formatTroubleshootRequestText(payload);
+                    if (responseTa) responseTa.value = formatTroubleshootResponseText(payload);
+                    if (copyRequestBtn) copyRequestBtn.disabled = false;
+                    if (copyResponseBtn) copyResponseBtn.disabled = false;
+                };
+
+                runSectionTroubleshoot(section).then(applyPayload).catch((err) => {
+                    const errBody = { error: err?.message || String(err) };
+                    applyPayload({
+                        queries: [attachTroubleshootStats(
+                            { index: -1, request: null, response: errBody },
+                            errBody,
+                            null
+                        )]
+                    });
+                });
+            }
+        });
+    }
+
+    function handleHeaderTroubleshoot(modalInstance) {
+        showSectionTroubleshootModal(modalInstance);
     }
 
     async function handleHeaderExport(modalInstance) {
@@ -4255,6 +4638,45 @@
         });
     }
 
+    function getEditorItemSource(modalInstance) {
+        const state = modalInstance?._hsaeState;
+        const root = modalInstance?.dialogContent;
+        const fromDom = root?.querySelector?.('.hsae-source-card.hsae-active[data-item-source]')?.dataset?.itemSource;
+        if (fromDom) return fromDom;
+        const hsaeRoot = root?.classList?.contains('hsae-root') ? root : root?.querySelector?.('.hsae-root');
+        if (hsaeRoot?.dataset?.itemSource) return hsaeRoot.dataset.itemSource;
+        return state?.itemSource || inferItemSource(state?.section) || 'jellyfin';
+    }
+
+    function getEditorQueriesForTroubleshoot(modalInstance) {
+        const state = modalInstance?._hsaeState;
+        const root = modalInstance?.dialogContent;
+        const editors = root?.querySelectorAll?.('.query-editor');
+        if (editors?.length) {
+            return Array.from(editors).map((editor) => {
+                const index = parseInt(editor.dataset.queryIndex, 10);
+                const sourceType = editor.querySelector(`#query-${index}-sourceType`)?.value
+                    || inferQuerySourceType(state?.queries?.[index]);
+                if (sourceType === 'static') return { _sourceType: 'static' };
+                if (sourceType === 'cache') return { dataSource: 'cache' };
+                return {};
+            });
+        }
+        return Array.isArray(state?.queries) ? state.queries : [];
+    }
+
+    function sectionHasTroubleshootEligibleQueries(queries) {
+        return (queries || []).some((q) => {
+            const type = inferQuerySourceType(q);
+            return type === 'jellyfin' || type === 'static';
+        });
+    }
+
+    function canShowTroubleshoot(modalInstance) {
+        if (getEditorItemSource(modalInstance) !== 'jellyfin') return false;
+        return sectionHasTroubleshootEligibleQueries(getEditorQueriesForTroubleshoot(modalInstance));
+    }
+
     function syncHeaderActions(modalInstance) {
         const actions = modalInstance?.dialogHeader?.querySelector('.hsae-header-actions');
         if (!actions) return;
@@ -4265,6 +4687,7 @@
         const importBtn = actions.querySelector('[data-hsae-header-action="import"]');
         const exportBtn = actions.querySelector('[data-hsae-header-action="export"]');
         const restoreBtn = actions.querySelector('[data-hsae-header-action="restore"]');
+        const troubleshootBtn = actions.querySelector('[data-hsae-header-action="troubleshoot"]');
         if (importBtn) importBtn.hidden = isDefault;
         if (exportBtn) exportBtn.hidden = isDefault;
         if (restoreBtn) {
@@ -4272,6 +4695,9 @@
             if (isDefault && !getCanonicalDefaultSection(section.id)) {
                 restoreBtn.hidden = true;
             }
+        }
+        if (troubleshootBtn) {
+            troubleshootBtn.hidden = !canShowTroubleshoot(modalInstance);
         }
     }
 
@@ -4327,9 +4753,11 @@
         const importBtn = createHeaderActionButton('import', 'Import', 'content_paste');
         const exportBtn = createHeaderActionButton('export', 'Export', 'content_copy');
         const restoreBtn = createHeaderActionButton('restore', 'Restore Defaults', 'settings_backup_restore');
+        const troubleshootBtn = createHeaderActionButton('troubleshoot', 'Troubleshoot', 'troubleshoot');
         actions.appendChild(importBtn);
         actions.appendChild(exportBtn);
         actions.appendChild(restoreBtn);
+        actions.appendChild(troubleshootBtn);
         headerMain.appendChild(actions);
 
         actions.addEventListener('click', (e) => {
@@ -4341,6 +4769,7 @@
             if (action === 'export') handleHeaderExport(modalInstance);
             else if (action === 'import') handleHeaderImport(modalInstance);
             else if (action === 'restore') handleHeaderRestoreDefaults(modalInstance);
+            else if (action === 'troubleshoot') handleHeaderTroubleshoot(modalInstance);
         });
 
         if (closeBtn) {
