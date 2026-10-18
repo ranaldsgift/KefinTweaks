@@ -3299,6 +3299,56 @@
         return null;
     }
 
+    function buildAdvancedAttachContext(section, originalSection) {
+        const buildCtx = resolveAdvancedEditorBuildContext(section);
+        return {
+            section,
+            originalSection: originalSection || JSON.parse(JSON.stringify(section)),
+            ...buildCtx,
+            ...(activeEditCtx?.groupContext || {})
+        };
+    }
+
+    function buildAdvancedPersistCallbacks(modalInstance) {
+        return {
+            persistSection: async (sectionData, options = {}) => {
+                if (typeof activeEditCtx?.onSave !== 'function') {
+                    throw new Error('No save handler available');
+                }
+                await activeEditCtx.onSave(sectionData, options);
+            },
+            remountAfterPersist: (sectionData) => {
+                remountOpenSectionEditor(modalInstance, sectionData);
+            }
+        };
+    }
+
+    function remountOpenSectionEditor(modalInstance, sectionData) {
+        if (!modalInstance?.dialogContent || !window.KefinHomeScreenAdvancedEditor) return;
+        const section = JSON.parse(JSON.stringify(sectionData || {}));
+        const originalSection = JSON.parse(JSON.stringify(section));
+        if (activeEditCtx) {
+            activeEditCtx.originalSection = originalSection;
+        }
+
+        window.KefinHomeScreenAdvancedEditor.destroyAppearancePickrs?.(modalInstance);
+        modalInstance.dialogContent.innerHTML = buildSectionEditorHTML(section);
+
+        const titleEl = modalInstance.dialogHeader?.querySelector('.dialogTitle, h2');
+        if (titleEl) {
+            // Keep the "Edit Section:" chrome; badge shows the live name
+            titleEl.textContent = `Edit Section: ${section.name || 'Unnamed'}`;
+        }
+
+        // Root listeners stay on dialogContent across innerHTML rebuilds — do not reset
+        // _hsaeRootListenersAttached or they will double-bind.
+        window.KefinHomeScreenAdvancedEditor.attachListeners(
+            modalInstance,
+            buildAdvancedAttachContext(section, originalSection),
+            buildAdvancedPersistCallbacks(modalInstance)
+        );
+    }
+
     function openSectionEditorModal(section, ctx) {
         const modalId = SECTION_EDITOR_MODAL_ID;
 
@@ -3308,6 +3358,8 @@
         }
 
         const originalSection = ctx.originalSection || JSON.parse(JSON.stringify(section));
+        if (ctx) ctx.originalSection = originalSection;
+        if (activeEditCtx) activeEditCtx.originalSection = originalSection;
 
         const content = document.createElement('div');
         content.innerHTML = buildSectionEditorHTML(section);
@@ -3343,33 +3395,22 @@
             onOpen: (modalInstance) => {
                 if (modalInstance.dialogContent?.querySelector('.hsae-root') && window.KefinHomeScreenAdvancedEditor) {
                     window.KefinHomeScreenAdvancedEditor.setupModalHeader(modalInstance);
-                    let currentGroupName = activeEditCtx?.groupContext?.currentGroupName || '';
-                    if (!currentGroupName && section.id) {
-                        const config = getActiveConfig();
-                        let found = null;
-                        if (config) {
-                            const groupTypes = ['HOME_SECTION_GROUPS', 'SEASONAL_SECTION_GROUPS', 'DISCOVERY_SECTION_GROUPS', 'CUSTOM_SECTION_GROUPS'];
-                            for (const gt of groupTypes) {
-                                found = findSectionInGroupsForEditor(config[gt] || [], section.id);
-                                if (found) break;
-                            }
-                        }
-                        if (found) currentGroupName = found.group.name || '';
-                    }
-                    if (!currentGroupName && section._targetGroupName) currentGroupName = section._targetGroupName;
-                    const allGroups = getActiveConfig()?.CUSTOM_SECTION_GROUPS || [];
-                    const existingGroupNames = [...new Set(allGroups.map(g => g.name).filter(Boolean))];
-                    window.KefinHomeScreenAdvancedEditor.attachListeners(modalInstance, { section, ...(activeEditCtx?.groupContext || {}) });
+                    window.KefinHomeScreenAdvancedEditor.attachListeners(
+                        modalInstance,
+                        buildAdvancedAttachContext(section, originalSection),
+                        buildAdvancedPersistCallbacks(modalInstance)
+                    );
                 }
 
                 // Attach event listeners
                 const saveSectionFromEditor = async () => {
-                    const sectionData = collectSectionEditorData(originalSection);
+                    const liveOriginal = activeEditCtx?.originalSection || originalSection;
+                    const sectionData = collectSectionEditorData(liveOriginal);
                     if (!sectionData) {
                         sectionEditorShowToast('Error collecting section data');
                         return null;
                     }
-                    sectionData.id = section.id;
+                    sectionData.id = sectionData.id || liveOriginal?.id || section.id;
                     if (typeof ctx.onSave === 'function') {
                         await ctx.onSave(sectionData);
                     }
@@ -3438,12 +3479,13 @@
                 const previewBtn = modalInstance.dialogFooter.querySelector('.section-preview-btn');
                 if (previewBtn && typeof ctx.onPreview === 'function') {
                     previewBtn.addEventListener('click', async () => {
-                        const sectionData = collectSectionEditorData(originalSection);
+                        const liveOriginal = activeEditCtx?.originalSection || originalSection;
+                        const sectionData = collectSectionEditorData(liveOriginal);
                         if (!sectionData) {
                             sectionEditorShowToast('Error collecting section data for preview');
                             return;
                         }
-                        sectionData.id = sectionData.id || originalSection?.id || section.id;
+                        sectionData.id = sectionData.id || liveOriginal?.id || section.id;
                         await ctx.onPreview(sectionData, ctx.sectionType, previewBtn);
                     });
                 }

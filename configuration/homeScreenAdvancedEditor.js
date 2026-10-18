@@ -3925,10 +3925,13 @@
         const state = modalInstance?._hsaeState;
         if (!state || !importedSection) return;
         const current = state.section || {};
-        const context = state.context || {};
+        const context = { ...(state.context || {}) };
         const merged = deepCloneJson(importedSection) || {};
         merged.id = current.id || merged.id;
         if (current.deleted === true) merged.deleted = true;
+        // Keep collect/export/troubleshoot bases in sync with the applied section
+        context.originalSection = deepCloneJson(merged);
+        context.section = merged;
         const newState = buildEditorStateFromSection(merged, context);
         modalInstance._hsaeState = newState;
         const stateHost = modalInstance.dialogContainer || modalInstance.dialogContent;
@@ -4147,8 +4150,8 @@
         const content = document.createElement('div');
         content.innerHTML = `
             <div class="listItemBodyText" style="line-height: 1.5;">
-                Restoring defaults will override the current editor values for this section with the KefinTweaks defaults.
-                Enabled status and order are kept. You still need to Save to persist.
+                Restoring defaults will save the KefinTweaks defaults for this section and reload the editor.
+                Enabled status and order are kept.
             </div>
             ${rowsHtml}
         `;
@@ -4178,10 +4181,19 @@
                 modal.dialogFooter?.querySelector('#hsae-restore-cancel')?.addEventListener('click', () => {
                     window.ModalSystem.close(HSAE_RESTORE_DEFAULTS_MODAL_ID);
                 });
-                modal.dialogFooter?.querySelector('#hsae-restore-proceed')?.addEventListener('click', () => {
+                modal.dialogFooter?.querySelector('#hsae-restore-proceed')?.addEventListener('click', async () => {
                     if (matching) return;
-                    window.ModalSystem.close(HSAE_RESTORE_DEFAULTS_MODAL_ID);
-                    if (typeof onProceed === 'function') onProceed();
+                    const proceedBtn = modal.dialogFooter?.querySelector('#hsae-restore-proceed');
+                    const cancelBtn = modal.dialogFooter?.querySelector('#hsae-restore-cancel');
+                    if (proceedBtn) proceedBtn.disabled = true;
+                    if (cancelBtn) cancelBtn.disabled = true;
+                    try {
+                        window.ModalSystem.close(HSAE_RESTORE_DEFAULTS_MODAL_ID);
+                        if (typeof onProceed === 'function') await onProceed();
+                    } catch (e) {
+                        console.warn('[HSAE] Restore defaults failed:', e);
+                        showHsaeToast('Failed to restore defaults');
+                    }
                 });
             }
         });
@@ -4627,13 +4639,29 @@
         const current = collectData(dialog, original) || deepCloneJson(state.section) || {};
         if (state.section?.id) current.id = state.section.id;
         const diffs = diffSectionAgainstDefault(current, canonical);
-        showRestoreDefaultsConfirmModal(modalInstance, diffs, () => {
+        showRestoreDefaultsConfirmModal(modalInstance, diffs, async () => {
             const merged = deepCloneJson(canonical) || {};
             merged.id = current.id || sectionId;
             if (Object.prototype.hasOwnProperty.call(current, 'enabled')) merged.enabled = current.enabled;
             if (Object.prototype.hasOwnProperty.call(current, 'order')) merged.order = current.order;
             if (current.deleted === true) merged.deleted = true;
-            applyImportedSection(modalInstance, merged);
+
+            const callbacks = modalInstance._hsaeCallbacks || {};
+            const persist = typeof callbacks.persistSection === 'function'
+                ? callbacks.persistSection
+                : (typeof callbacks.onSave === 'function' ? callbacks.onSave : null);
+
+            if (persist) {
+                await persist(merged, { quiet: true });
+                if (typeof callbacks.remountAfterPersist === 'function') {
+                    callbacks.remountAfterPersist(merged);
+                } else {
+                    applyImportedSection(modalInstance, merged);
+                }
+            } else {
+                // No persist path (e.g. create flow): update editor only
+                applyImportedSection(modalInstance, merged);
+            }
             showHsaeToast('Defaults restored');
         });
     }
@@ -4787,7 +4815,12 @@
         modalInstance._hsaePreviewInitialized = false;
 
         const section = context.section || {};
+        // Ensure collect/export/troubleshoot always have a stable original base
+        if (!context.originalSection) {
+            context = { ...context, originalSection: deepCloneJson(section) };
+        }
         modalInstance._hsaeState = buildEditorStateFromSection(section, context);
+        modalInstance._hsaeCallbacks = callbacks || {};
 
         const stateHost = modalInstance.dialogContainer || modalInstance.dialogContent;
         if (stateHost) stateHost._hsaeState = modalInstance._hsaeState;
@@ -4808,10 +4841,11 @@
             saveBtn.dataset.listenerAttached = 'true';
             saveBtn.addEventListener('click', async () => {
                 const dialog = modalInstance.dialogContainer || modalInstance.dialogContent;
-                const originalSection = context.originalSection || section;
+                const liveState = modalInstance._hsaeState;
+                const originalSection = liveState?.context?.originalSection || context.originalSection || section;
                 const sectionData = collectData(dialog, originalSection);
                 if (!sectionData) return;
-                sectionData.id = section.id || originalSection.id;
+                sectionData.id = liveState?.section?.id || section.id || originalSection.id;
                 if (typeof updateSectionInConfig === 'function') {
                     updateSectionInConfig(sectionData);
                 }

@@ -3212,9 +3212,10 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         const editCtxBase = {
             sectionType,
             config: currentConfig,
-            onSave: async (sectionData) => {
+            onSave: async (sectionData, saveOptions = {}) => {
                 const targetGroupName = sectionData._targetGroupName;
                 delete sectionData._targetGroupName;
+                const quiet = saveOptions?.quiet === true;
 
                 const found = findSectionInAllGroups(currentConfig, sectionData.id);
                 const savingToCustom = !found || found.groupType === 'CUSTOM_SECTION_GROUPS'
@@ -3239,7 +3240,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                         found.group.sections.splice(found.sectionIndex, 1);
                         addSectionToGroup(currentConfig[found.groupType], targetGroupName, sectionData);
                         await saveConfig(currentConfig);
-                        showToast('Section saved');
+                        if (!quiet) showToast('Section saved');
                         refreshMainModal({
                             focusSectionId: sectionData.id,
                             sectionType: sectionTypeForRow
@@ -3247,7 +3248,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                     } else {
                         updateSectionInGroups(currentConfig[found.groupType], sectionData.id, sectionData);
                         await saveConfig(currentConfig);
-                        showToast('Section saved');
+                        if (!quiet) showToast('Section saved');
                         if (updateSectionRowInPlace(sectionData, sectionTypeForRow)) {
                             scrollSectionRowIntoView(sectionData.id);
                         } else {
@@ -3260,7 +3261,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                 } else {
                     addSectionToGroup(currentConfig.CUSTOM_SECTION_GROUPS, targetGroupName || 'Custom Sections', sectionData);
                     await saveConfig(currentConfig);
-                    showToast('Saved new Home Screen Section');
+                    if (!quiet) showToast('Saved new Home Screen Section');
                     refreshMainModal({
                         focusSectionId: sectionData.id,
                         sectionType: 'custom'
@@ -5865,8 +5866,8 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             return { items: [], limit: 0, section: previewSection };
         }
 
-        const limit = withPreviewQueryOptions(queriesToLoad[0]).queryOptions.Limit
-            || previewSection.itemLimit
+        const limit = previewSection.itemLimit
+            || withPreviewQueryOptions(queriesToLoad[0]).queryOptions.Limit
             || PREVIEW_DEFAULT_LIMIT;
         allItems = window.cardBuilder.postProcessItems(previewSection, allItems);
         const limitedItems = allItems.slice(0, parseInt(limit, 10));
