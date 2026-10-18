@@ -123,7 +123,7 @@
 					id: "continueWatchingAndNextUp",
 					type: "home",
 					name: "Continue Watching",
-					description: "Continue Watching and Next Up combined",
+					description: "Resumable and Next Up items combined into one section",
 					jellyfinId: "resume",
 					jellyfinId2: "nextup",
 					enabled: false,
@@ -133,8 +133,10 @@
 					sortBy: "DatePlayed", // Used to sort merged results from both queries
 					sortOrder: "Descending", // Most recent first
 					userConfigurable: true,
+					itemLimit: 24,
 					queries: [
 						{
+							name: "Resume",
 							path: "/UserItems/Resume",
 							queryOptions: {
 								MediaTypes: "Video",
@@ -146,6 +148,7 @@
 							},
 						},
 						{
+							name: "Next Up",
 							path: "/Shows/NextUp",
 							queryOptions: {
 								Fields: "PrimaryImageAspectRatio,DateCreated,Path,MediaSourceCount",
