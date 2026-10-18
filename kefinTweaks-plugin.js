@@ -321,6 +321,44 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         });
     }
 
+    /** True for bakeds that early-return on official CDN (isOfficialCdn gate). */
+    function isBrickedOfficialCdnBakeScript(scriptText) {
+        return String(scriptText || '').includes('isOfficialCdn');
+    }
+
+    function getLatestSymbolicRoot() {
+        return normalizeKefinRootUrl(JSDELIVR_BASE + '@latest/');
+    }
+
+    /**
+     * Load loader from root even if another KefinTweaksLoader is already sticky.
+     * Used by bricked-bake heal so a pinned broken tag cannot supply the builder.
+     */
+    function loadKefinTweaksLoaderFromRootForced(root) {
+        const normalized = root.endsWith('/') ? root : root + '/';
+        const url = `${normalized}scripts/kefinTweaks-loader.js`;
+        const existingForUrl = document.querySelector(`script[src="${url}"]`);
+        if (window.KefinTweaksLoader && existingForUrl) {
+            return Promise.resolve(window.KefinTweaksLoader);
+        }
+        try {
+            delete window.KefinTweaksLoader;
+        } catch (e) {
+            window.KefinTweaksLoader = undefined;
+        }
+        return new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = url;
+            script.async = false;
+            script.onload = () => {
+                if (window.KefinTweaksLoader) resolve(window.KefinTweaksLoader);
+                else reject(new Error('KefinTweaksLoader missing after load: ' + url));
+            };
+            script.onerror = () => reject(new Error('Failed to load ' + url));
+            document.head.appendChild(script);
+        });
+    }
+
     function isLoggedInForInjectorWrite() {
         try {
             return !!(window.ApiClient
@@ -873,6 +911,122 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             || window.KefinTweaksScriptsPreloaded
             || window.KefinTweaksInjectorStamp
         );
+    }
+
+    /**
+     * Detect bricked official-CDN bake (isOfficialCdn early-return) and rewrite in place
+     * using the loader from current GitHub @latest tip. User kefinTweaksRoot / assets unchanged.
+     * @returns {Promise<{ healed: boolean, reason?: string, tip?: string }>}
+     */
+    async function healBrickedOfficialCdnBake(config) {
+        if (window.__kefinBrickedBakeHealDone) {
+            return { healed: false, reason: 'already attempted' };
+        }
+        window.__kefinBrickedBakeHealDone = true;
+
+        if (!isLoggedInForInjectorWrite()) {
+            return { healed: false, reason: 'not logged in' };
+        }
+        if (!(await isAdmin())) {
+            return { healed: false, reason: 'not admin' };
+        }
+
+        try {
+            const pluginId = await findJavaScriptInjectorPlugin();
+            if (!pluginId) {
+                return { healed: false, reason: 'JavaScript Injector plugin not found' };
+            }
+            const injectorConfig = await getJavaScriptInjectorConfig(pluginId);
+            if (!injectorConfig) {
+                return { healed: false, reason: 'Could not read JS Injector configuration' };
+            }
+
+            const entry = (injectorConfig.CustomJavaScripts || []).find(
+                (s) => s.Name === 'KefinTweaks-injector' && s.Enabled !== false
+            );
+            if (!entry || !isBrickedOfficialCdnBakeScript(entry.Script)) {
+                return { healed: false, reason: 'not bricked' };
+            }
+
+            console.warn(
+                '[KefinTweaks Installer] Bricked KefinTweaks-injector detected (isOfficialCdn); rebuilding with @latest loader'
+            );
+
+            const latestSymbolic = getLatestSymbolicRoot();
+            const latestTip = normalizeKefinRootUrl(await resolveRootVersion(latestSymbolic));
+            await loadKefinTweaksLoaderFromRootForced(latestTip);
+            const Loader = window.KefinTweaksLoader;
+            if (!Loader || typeof Loader.buildInjectorScript !== 'function') {
+                return { healed: false, reason: 'KefinTweaksLoader unavailable from @latest tip' };
+            }
+
+            Loader.ensureKefinTweaksApi(Loader.SCRIPT_DEFINITIONS);
+            let major = null;
+            try {
+                major = await window.KefinTweaks.getJellyfinMajorVersion();
+            } catch (e) {
+                console.warn('[KefinTweaks Installer] Could not resolve Jellyfin major for bricked-bake heal:', e);
+            }
+
+            const planRoot = Loader.getResolvedKefinRoot
+                ? Loader.getResolvedKefinRoot(config)
+                : normalizeKefinRootUrl(config?.kefinTweaksRootResolved || config?.kefinTweaksRoot || '');
+            const plan = Loader.buildLoadPlan(config, major, {
+                root: planRoot,
+                configOnly: config?.enabled === false
+            });
+            const injectorScriptContent = Loader.buildInjectorScript(plan);
+            if (isBrickedOfficialCdnBakeScript(injectorScriptContent)) {
+                console.error(
+                    '[KefinTweaks Installer] @latest loader still produces bricked bake; aborting heal'
+                );
+                return { healed: false, reason: 'latest loader still bricked' };
+            }
+
+            const configScriptContent = `// KefinTweaks Configuration
+// This file is automatically generated by KefinTweaks Installer
+// Do not edit manually unless you know what you're doing
+
+window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
+
+            if (!injectorConfig.CustomJavaScripts) {
+                injectorConfig.CustomJavaScripts = [];
+            }
+            injectorConfig.CustomJavaScripts = Loader.upsertInjectorEntries(
+                injectorConfig.CustomJavaScripts,
+                { configScriptContent, injectorScriptContent }
+            );
+
+            const server = ApiClient._serverAddress;
+            const response = await fetch(`${server}/Plugins/${pluginId}/Configuration`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': getAuthHeader(),
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(injectorConfig)
+            });
+            if (!response.ok) {
+                return {
+                    healed: false,
+                    reason: `POST failed HTTP ${response.status}: ${response.statusText}`
+                };
+            }
+
+            console.log(
+                '[KefinTweaks Installer] Bricked bake rebuilt from @latest loader tip:',
+                latestTip,
+                '(' + ((plan.assets && plan.assets.length) || 0) + ' assets)'
+            );
+            scheduleForcedTipReloadCountdown({
+                symbolicRoot: latestSymbolic,
+                nextResolved: latestTip
+            });
+            return { healed: true, tip: latestTip };
+        } catch (err) {
+            console.warn('[KefinTweaks Installer] healBrickedOfficialCdnBake failed:', err);
+            return { healed: false, reason: err?.message || String(err) };
+        }
     }
 
     async function waitForLoginForInjectorWrite(maxWaitMs = 10000, checkInterval = 250) {
@@ -2641,16 +2795,42 @@ main.MuiBox-root .customPage.libraryPage:not(.noSecondaryNavPage)[data-kefin-cus
                 return;
             }
 
-            // Bake already on page: never load live injector.js (prevents dual SHA trees)
+            // Bake already on page: prefer tip sync / heal; only dual-load when bake is inert
+            let attachedBakeInertFallthrough = false;
             if (isKefinInjectorAttachedOnPage()) {
-                if (!(await isAdmin())) {
+                const admin = await isAdmin();
+                if (admin) {
+                    console.log('[KefinTweaks Installer] KefinTweaks-injector attached; admin tip sync without live inject');
+                    await waitForLoginForInjectorWrite();
+                    const heal = await healBrickedOfficialCdnBake(config);
+                    if (heal.healed || window.__kefinTipReloadScheduled) {
+                        // Latest release check must run here — injector.js is not loaded on this path
+                        await runPinnedVersionUpdateCheck(config);
+                        return;
+                    }
+                    await handleAdminAttachedBakeTipSync(config);
+                    await runPinnedVersionUpdateCheck(config);
+                    if (window.KefinTweaksScriptsPreloaded || window.__kefinTipReloadScheduled) {
+                        return;
+                    }
+                    console.warn(
+                        '[KefinTweaks Installer] Bake attached but scripts not preloaded; falling through to live injector.js'
+                    );
+                    attachedBakeInertFallthrough = true;
+                } else if (window.KefinTweaksScriptsPreloaded) {
                     console.log('[KefinTweaks Installer] KefinTweaks-injector attached; non-admin skipping live injector.js');
                     return;
+                } else {
+                    console.warn(
+                        '[KefinTweaks Installer] Bake attached but scripts not preloaded; non-admin falling through to live injector.js'
+                    );
+                    attachedBakeInertFallthrough = true;
                 }
-                console.log('[KefinTweaks Installer] KefinTweaks-injector attached; admin tip sync without live inject');
-                await handleAdminAttachedBakeTipSync(config);
-                // Latest release check must run here — injector.js is not loaded on this path
-                await runPinnedVersionUpdateCheck(config);
+            }
+
+            // Inert attached bake: skip ensure (would rebuild from possibly-bad user root) — live inject only
+            if (attachedBakeInertFallthrough) {
+                await loadInjectorFromRoot(root);
                 return;
             }
 
