@@ -3438,8 +3438,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	}
 
 	async function renderWatchlistProgressive(forceRefresh = false) {
-		const host = getWatchlistProgressiveHost();
-		if (!host) {
+		if (!getWatchlistProgressiveHost()) {
 			ERR('Watchlist progressive host not found');
 			return;
 		}
@@ -3465,12 +3464,19 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		}
 
 		const validSections = sections.filter(Boolean);
-		host.innerHTML = '';
-		await window.cardBuilder.renderProgressiveSections(
-			host,
-			validSections.map((section) => Promise.resolve(section)),
-			{ showStaleDataBeforeRefresh: true }
-		);
+		// Custom Tabs can replace the panel while queries or card painting are pending.
+		let host;
+		do {
+			host = getWatchlistProgressiveHost();
+			if (!host) return;
+			host.innerHTML = '';
+			await window.cardBuilder.renderProgressiveSections(
+				host,
+				validSections.map((section) => Promise.resolve(section)),
+				{ showStaleDataBeforeRefresh: true }
+			);
+			if (generation !== watchlistRenderGeneration) return;
+		} while (host !== getWatchlistProgressiveHost());
 
 		resetWatchlistItemsByType();
 		await Promise.all(validSections.map(async (section) => {
@@ -7666,7 +7672,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			order: window.KefinTweaksConfig?.watchlist?.order !== undefined ? window.KefinTweaksConfig?.watchlist?.order : 2
 		};
 
-		const watchlistUrl = await window.KefinTweaksUtils.getWatchlistUrl();
+		const watchlistUrl = await window.KefinTweaksUtils.getWatchlistUrl({ stable: true });
 		const isCustomTabUrl = watchlistUrl.includes('/home?tab=');
 
 		const options = {

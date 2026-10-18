@@ -2849,9 +2849,11 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
 
 
     let _watchlistTabIndex = null;
+    let watchlistTabId = null;
+    let watchlistUrlRequest = null;
+    let watchlistOnHome = null;
 
-    async function fetchWatchlistTabIndex() {
-        // Fetch the tab index as we do in addCustomMenuLink
+    async function fetchWatchlistTab() {
         try {
             const response = await fetch(`${ApiClient._serverAddress}/CustomTabs/Config`, {
                 method: "GET",
@@ -2861,45 +2863,55 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                 },
             });
             const data = await response.json();
-            let tabIndex = null;
+            let watchlistTab = null;
             data.forEach((tab, index) => {
-                if (tab.ContentHtml.indexOf('sections watchlist') !== -1) {
-                    tabIndex = index + 2;
+                if (typeof tab.ContentHtml === 'string' && tab.ContentHtml.includes('sections watchlist')) {
+                    watchlistTab = { index: index + 2, id: typeof tab.Id === 'string' ? tab.Id : null };
                 }
             });
-            return tabIndex;
+            return watchlistTab;
         } catch (err) {
             WARN('CustomTabs plugin not found.');
             return null;
         }
     }
 
-    async function getWatchlistUrl() {
-		if (window.KefinTweaksUtils._watchlistUrl) {
-			return window.KefinTweaksUtils._watchlistUrl;
-		}
-		const isModernUI = window.KefinTweaksUtils.isModernUI();
-		const watchlistTabIndex = await getWatchlistTabIndex() || null;
+    async function getWatchlistUrl({ stable = false } = {}) {
+        const route = String(window.location?.hash || '').split('?')[0];
+        const onHome = ['', '#/', '#/home', '#/home.html'].includes(route);
+        // Custom Tabs re-reads its configuration on Home visits. Resolve our
+        // position again too, including changes made by another administrator.
+        if (onHome && watchlistOnHome === false) {
+            _watchlistTabIndex = null;
+            watchlistTabId = null;
+            window.KefinTweaksUtils._watchlistUrl = null;
+            watchlistUrlRequest = null;
+        }
+        watchlistOnHome = onHome;
 
-        let watchlistUrl = '#/watchlist';
-
-		if (watchlistTabIndex !== null && watchlistTabIndex !== undefined) {
-			watchlistUrl = `#/home?tab=${watchlistTabIndex}`;
-		}
-		window.KefinTweaksUtils._watchlistUrl = watchlistUrl;
-		return watchlistUrl;
+        if (!window.KefinTweaksUtils._watchlistUrl && !watchlistUrlRequest) {
+            const request = fetchWatchlistTab().then((tab) => {
+                // A response from before navigation must not replace a newer lookup.
+                if (watchlistUrlRequest !== request) return getWatchlistUrl();
+                _watchlistTabIndex = tab?.index ?? null;
+                watchlistTabId = tab?.id || null;
+                const url = tab ? `#/home?tab=${tab.index}` : '#/watchlist';
+                window.KefinTweaksUtils._watchlistUrl = url;
+                return url;
+            }).finally(() => {
+                if (watchlistUrlRequest === request) watchlistUrlRequest = null;
+            });
+            watchlistUrlRequest = request;
+        }
+        const url = window.KefinTweaksUtils._watchlistUrl || await watchlistUrlRequest;
+        // Keep numeric routes for existing rendering/sub-tab checks. Only menu
+        // shortcuts need the stable ID that follows a tab after reordering.
+        return stable && watchlistTabId ? `${url}&ctTab=${encodeURIComponent(watchlistTabId)}` : url;
     }
 
-	/**
-	 * Get watchlist tab index, fetching if not yet set
-	 * @returns {number|null} The watchlist tab index or null if not found
-	 */
-	async function getWatchlistTabIndex() {
-		if (_watchlistTabIndex !== null) {
-			return _watchlistTabIndex;
-		}
-
-        _watchlistTabIndex = await fetchWatchlistTabIndex();
+    /** Get the current Watchlist position using the same lookup as its URL. */
+    async function getWatchlistTabIndex() {
+        await getWatchlistUrl();
         return _watchlistTabIndex;
     }
 
