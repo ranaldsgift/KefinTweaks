@@ -975,14 +975,10 @@
 
     /**
      * Whether baked KefinTweaks-injector should inject assets for this root.
-     * Allow Experimental and self-host/custom; no-op for official jsDelivr Latest/Dev/version/SHA.
+     * Any configured root (Latest, Dev, Experimental, SHA, self-host) is allowed.
      */
     function allowsKefinInjectorPreload(root) {
-        const r = String(root || '').trim();
-        if (!r) return false;
-        if (isExperimentalKefinRoot(r)) return true;
-        if (!isOfficialJsDelivrKefinRoot(r)) return true;
-        return false;
+        return !!String(root || '').trim();
     }
 
     function buildInjectorScript(loadPlan) {
@@ -1010,18 +1006,16 @@
             '// kefinTweaksInjectorStamp=' + stamp,
             '(function () {',
             '  if (window.KefinTweaksScriptsPreloaded) return;',
-            '  window.KefinTweaksInjectorAttached = true;',
             '  var cfg = window.KefinTweaksConfig || {};',
             '  if (cfg.enabled !== true) return;',
             '  var symbolicRoot = cfg.kefinTweaksRoot || \'\';',
-            '  var isExperimental = /@experimental(\\/|$)/i.test(String(symbolicRoot));',
-            '  var isOfficialCdn = /cdn\\.jsdelivr\\.net\\/gh\\/ranaldsgift\\/KefinTweaks@/i.test(String(symbolicRoot));',
             '  if (!String(symbolicRoot).trim()) return;',
-            '  if (!isExperimental && isOfficialCdn) return;',
             '  var resolvedRoot = String(cfg.kefinTweaksRootResolved || cfg.kefinTweaksRoot || \'\').trim();',
             '  if (!resolvedRoot) return;',
             '  if (resolvedRoot.charAt(resolvedRoot.length - 1) !== \'/\') resolvedRoot += \'/\';',
             getJoinAssetUrlRuntimeSource(),
+            // Only claim attached/preloaded after gates pass — otherwise live inject would skip forever
+            '  window.KefinTweaksInjectorAttached = true;',
             '  window.KefinTweaksScriptsPreloaded = true;',
             '  window.KefinTweaksInjectorStamp = ' + stampJson + ';',
             '  var SCRIPT_DEFINITIONS_BAKED = ' + defsJson + ';',
