@@ -5,7 +5,25 @@
 (function() {
     'use strict';
 
-    console.log('[KefinTweaks Injector] Initializing...');    
+    console.log('[KefinTweaks Injector] Initializing...');
+
+    // Check for global configuration reset (admin "Reset All Users Local Settings")
+    try {
+        const config = window.KefinTweaksConfig || {};
+        const remoteVersion = config.configVersion || 0;
+        const localVersion = parseInt(localStorage.getItem('kefinTweaks_lastResetVersion') || '0', 10);
+
+        if (remoteVersion > localVersion && remoteVersion > 0) {
+            console.log('[KefinTweaks] Global reset detected. Clearing user configuration.');
+            Object.keys(localStorage)
+                .filter(key => key.startsWith('kefinTweaks'))
+                .forEach(key => localStorage.removeItem(key));
+            localStorage.setItem('kefinTweaks_lastResetVersion', remoteVersion.toString());
+        }
+    } catch (e) {
+        console.error('[KefinTweaks] Error checking for global reset:', e);
+    }
+
     // Cache for resolved root URL (to avoid multiple API calls)
     let resolvedRootCache = null;
     // Cached Jellyfin major (10 / 11 / 12 …); null until resolved or if unavailable

@@ -885,7 +885,7 @@
                         <button class="emby-button raised" id="changeKefinTweaksSourceBtn" style="padding: 0.75em 2em; font-size: 1em;" title="Switch between the Latest, Development, Version specific branches or point to your own self hosted location!">
                             <span>Plugin Settings</span>
                         </button>
-                        <button class="emby-button raised" id="manageConfigBtn" style="padding: 0.75em 2em; font-size: 1em;" title="Manage backups, export, and import">
+                        <button class="emby-button raised" id="manageConfigBtn" style="padding: 0.75em 2em; font-size: 1em;" title="Manage backups, export, import, and resets">
                             <span>Manage</span>
                         </button>
                     </div>
@@ -2494,15 +2494,12 @@
             </div>
         `;
 
-        // Create footer with save, export, and import buttons
+        // Create footer with save (reset actions live in Manage)
         const footer = document.createElement('div');
         footer.style.display = 'flex';
         footer.style.gap = '0.75em';
         footer.style.alignItems = 'center';
         footer.innerHTML = `
-            <button class="emby-button raised" id="resetConfigBtn" style="padding: 0.75em 2em; font-size: 1em;">
-                <span>Restore Defaults</span>
-            </button>
             <button class="emby-button raised button-submit" id="saveConfigBtn" style="padding: 0.75em 2em; font-size: 1em; font-weight: 500;">
                 <span>Save</span>
             </button>
@@ -4758,12 +4755,7 @@
             });
         }
 
-        const resetBtn = modalInstance.dialogFooter?.querySelector('#resetConfigBtn');
-        if (resetBtn) {
-            resetBtn.addEventListener('click', () => handleResetConfig(modalInstance));
-        }
-
-        // Manage button handler (Backups / Export / Import)
+        // Manage button handler (Backups / Export / Import / Resets)
         const manageBtn = modalInstance.dialog?.querySelector('#manageConfigBtn');
         if (manageBtn) {
             manageBtn.addEventListener('click', () => openManageConfigModal(config, modalInstance));
@@ -5356,10 +5348,12 @@
             },
             content: `
                 <div class="manage-config-shell">
-                    <div class="manage-config-tabs" style="display:flex;gap:0.5em;margin-bottom:1em;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:0.5em;flex-shrink:0;">
+                    <div class="manage-config-tabs" style="display:flex;gap:0.5em;margin-bottom:1em;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:0.5em;flex-shrink:0;flex-wrap:wrap;">
                         <button type="button" class="emby-button raised manage-tab-btn active" data-manage-tab="backups" style="padding:0.5em 1.25em;">Backups</button>
                         <button type="button" class="emby-button raised manage-tab-btn" data-manage-tab="export" style="padding:0.5em 1.25em;">Export</button>
                         <button type="button" class="emby-button raised manage-tab-btn" data-manage-tab="import" style="padding:0.5em 1.25em;">Import</button>
+                        <button type="button" class="emby-button raised" id="manageRestoreDefaultsBtn" style="padding:0.5em 1.25em;">Restore Defaults</button>
+                        <button type="button" class="emby-button raised button-delete" id="manageResetAllUsersBtn" style="padding:0.5em 1.25em;">Reset All Users</button>
                     </div>
                     <div class="manage-tab-panels">
                         <div class="manage-tab-panel is-active" data-manage-panel="backups">
@@ -5395,6 +5389,16 @@
                 };
                 content.querySelectorAll('.manage-tab-btn').forEach((btn) => {
                     btn.addEventListener('click', () => setTab(btn.dataset.manageTab));
+                });
+
+                content.querySelector('#manageRestoreDefaultsBtn')?.addEventListener('click', async () => {
+                    const didReset = await handleResetConfig(parentModalInstance || manageModal);
+                    if (didReset) {
+                        manageModal.close();
+                    }
+                });
+                content.querySelector('#manageResetAllUsersBtn')?.addEventListener('click', () => {
+                    handleResetAllUsersConfig();
                 });
 
                 // Export panel
@@ -6077,16 +6081,19 @@
         }
     }
 
+    /**
+     * @returns {Promise<boolean>} true if defaults were restored
+     */
     async function handleResetConfig(modalInstance) {
         const userIsAdmin = await isAdmin();
         if (!userIsAdmin) {
             alert('You must be an administrator to reset configuration.');
-            return;
+            return false;
         }
 
         const confirmed = confirm('This will restore the KefinTweaks configuration to its defaults. It cannot be undone. Are you sure you want to continue?');
         if (!confirmed) {
-            return;
+            return false;
         }
 
         try {
@@ -6114,8 +6121,46 @@
                 modalInstance.close();
             }
             openConfigurationModal();
+            return true;
         } catch (error) {
             console.error('[KefinTweaks Configuration] Error resetting config:', error);
+            if (window.KefinTweaksToaster && window.KefinTweaksToaster.toast) {
+                window.KefinTweaksToaster.toast(`Error resetting configuration: ${error.message}`, '5');
+            } else {
+                alert(`Error resetting configuration: ${error.message}`);
+            }
+            return false;
+        }
+    }
+
+    /**
+     * Bump configVersion so clients clear kefinTweaks* localStorage on next load (see injector.js).
+     */
+    async function handleResetAllUsersConfig() {
+        const userIsAdmin = await isAdmin();
+        if (!userIsAdmin) {
+            alert('You must be an administrator to reset configuration for all users.');
+            return;
+        }
+
+        const confirmed = confirm('WARNING: This will force ALL users to reset their KefinTweaks local settings on their next visit. This action cannot be undone. Are you sure you want to continue?');
+        if (!confirmed) {
+            return;
+        }
+
+        try {
+            const config = await getKefinTweaksConfig();
+            config.configVersion = Date.now();
+
+            await KefinTweaksUtils.saveConfigToJavaScriptInjector(config);
+
+            if (window.KefinTweaksToaster && window.KefinTweaksToaster.toast) {
+                window.KefinTweaksToaster.toast('Reset signal sent. All users will be reset on next load.');
+            } else {
+                alert('Reset signal sent. All users will be reset on next load.');
+            }
+        } catch (error) {
+            console.error('[KefinTweaks Configuration] Error resetting all users config:', error);
             if (window.KefinTweaksToaster && window.KefinTweaksToaster.toast) {
                 window.KefinTweaksToaster.toast(`Error resetting configuration: ${error.message}`, '5');
             } else {
