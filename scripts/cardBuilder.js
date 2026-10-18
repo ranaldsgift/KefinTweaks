@@ -5499,6 +5499,8 @@
         // Create main container
         const container = document.createElement('div');
         container.className = 'spotlight-section padded-left';
+        // Live toggle target for section configure (setSpotlightAnimation); read via isPanAnimationEnabled()
+        container.dataset.panAnimation = panAnimation !== false ? 'true' : 'false';
 
         // Create banner container
         const bannerContainer = document.createElement('div');
@@ -6653,8 +6655,13 @@
                 breathe: 'scale3d(1, 1, 1)',
                 heatHaze: 'scale3d(1.05, 1.05, 1) skewX(0deg)',
             };
+            /** Prefer live dataset (section configure toggle) over create-time option. */
+            function isPanAnimationEnabled() {
+                return container.dataset.panAnimation !== 'false';
+            }
+
             function applyPanAnimationToSlide(slideElement) {
-                if (!slideElement || !panAnimation) return;
+                if (!slideElement || !isPanAnimationEnabled()) return;
                 const imgs = slideElement.querySelectorAll('.spotlight-background-layer img, .spotlight-background-single img');
                 if (!imgs.length) return;
                 currentSlideAnimationComplete = false;
@@ -6686,7 +6693,7 @@
             }
 
             function setSlideAnimationPlayState(slideElement, playState) {
-                if (!slideElement || !panAnimation) return;
+                if (!slideElement || !isPanAnimationEnabled()) return;
                 slideElement
                     .querySelectorAll('.spotlight-background-layer img, .spotlight-background-single img')
                     .forEach((img) => {
@@ -6932,7 +6939,7 @@
                         }
 
                         const needsInitialPan =
-                            panAnimation &&
+                            isPanAnimationEnabled() &&
                             currentSlide &&
                             !initialPanScheduled &&
                             !currentSlide.querySelector(
@@ -6942,7 +6949,7 @@
                         if (needsInitialPan) {
                             initialPanScheduled = true;
                             requestAnimationFrame(() => {
-                                if (!container.isConnected || !panAnimation || !isVisible) return;
+                                if (!container.isConnected || !isPanAnimationEnabled() || !isVisible) return;
                                 const slide = getCurrentSpotlightSlide();
                                 if (!slide) return;
                                 if (
