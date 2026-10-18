@@ -4727,7 +4727,7 @@ html.layout-tv .spotlight-section .spotlight-tagline {
 	min-height: 0;
 }
 .rows-2.focus-1 .itemsContainer > .card:first-child .cardPadder {
-	/* padding-bottom: 0 !important; */
+	background-color: transparent !important;
 	height: 100%;
 }
 .rows-2.focus-1 .itemsContainer > .card:first-child .cardImageContainer,
