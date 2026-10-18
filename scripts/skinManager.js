@@ -408,6 +408,10 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         }
     }
 
+    // Legacy: strip exact default duplicates / old Jellypane URLs from admin skins and persist.
+    // Disabled — can wipe enable/disable stubs. Keep helpers + body for possible restore.
+    const RUN_LEGACY_SKIN_DEDUP_CLEANUP = false;
+
     // Load and merge skin configurations
     async function loadSkinConfig() {
         // Load default skins from skinConfig.js (for merging)
@@ -418,73 +422,75 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         
         // Load admin-configured skins from window.KefinTweaksConfig (from JS Injector)
         let adminSkins = window.KefinTweaksConfig?.skins || [];
-        
-        // Clean up admin skins: remove exact duplicates of legacy defaults and old Jellypane format
-        const cleanedAdminSkins = [];
-        const skinsToRemove = new Set();
-        
-        adminSkins.forEach(adminSkin => {
-            // Check for exact match with any legacy default skin (canonical comparison)
-            const matchingLegacyDefault = legacyDefaults.find(legacySkin => {
-                if (adminSkin.name !== legacySkin.name) {
-                    return false;
+
+        if (RUN_LEGACY_SKIN_DEDUP_CLEANUP) {
+            // Clean up admin skins: remove exact duplicates of legacy defaults and old Jellypane format
+            const cleanedAdminSkins = [];
+            const skinsToRemove = new Set();
+
+            adminSkins.forEach(adminSkin => {
+                // Check for exact match with any legacy default skin (canonical comparison)
+                const matchingLegacyDefault = legacyDefaults.find(legacySkin => {
+                    if (adminSkin.name !== legacySkin.name) {
+                        return false;
+                    }
+                    const matches = skinsMatchExactly(adminSkin, legacySkin);
+                    if (!matches) {
+                        // Debug: Log why skins with same name don't match
+                        LOG(`[Skin Match Debug] Skin '${adminSkin.name}' found in both configs but URLs/colorSchemes differ. Admin: ${JSON.stringify({url: adminSkin.url, colorSchemes: adminSkin.colorSchemes})}, Legacy Default: ${JSON.stringify({url: legacySkin.url, colorSchemes: legacySkin.colorSchemes})}`);
+                    }
+                    return matches;
+                });
+
+                if (matchingLegacyDefault) {
+                    // Exact match found - remove from admin config
+                    LOG(`Removing exact duplicate of legacy default skin '${adminSkin.name}' from admin config`);
+                    skinsToRemove.add(adminSkin.name);
+                    return; // Skip adding to cleanedAdminSkins
                 }
-                const matches = skinsMatchExactly(adminSkin, legacySkin);
-                if (!matches) {
-                    // Debug: Log why skins with same name don't match
-                    LOG(`[Skin Match Debug] Skin '${adminSkin.name}' found in both configs but URLs/colorSchemes differ. Admin: ${JSON.stringify({url: adminSkin.url, colorSchemes: adminSkin.colorSchemes})}, Legacy Default: ${JSON.stringify({url: legacySkin.url, colorSchemes: legacySkin.colorSchemes})}`);
+
+                // Special case: Jellypane with old URL format
+                if (isJellypaneWithOldUrlFormat(adminSkin)) {
+                    LOG(`Removing Jellypane with old URL format from admin config`);
+                    skinsToRemove.add(adminSkin.name);
+                    return; // Skip adding to cleanedAdminSkins
                 }
-                return matches;
+
+                // Keep this admin skin
+                cleanedAdminSkins.push(adminSkin);
             });
-            
-            if (matchingLegacyDefault) {
-                // Exact match found - remove from admin config
-                LOG(`Removing exact duplicate of legacy default skin '${adminSkin.name}' from admin config`);
-                skinsToRemove.add(adminSkin.name);
-                return; // Skip adding to cleanedAdminSkins
-            }
-            
-            // Special case: Jellypane with old URL format
-            if (isJellypaneWithOldUrlFormat(adminSkin)) {
-                LOG(`Removing Jellypane with old URL format from admin config`);
-                skinsToRemove.add(adminSkin.name);
-                return; // Skip adding to cleanedAdminSkins
-            }
-            
-            // Keep this admin skin
-            cleanedAdminSkins.push(adminSkin);
-        });
-        
-        // If we removed any skins, create backup and save cleaned config
-        if (skinsToRemove.size > 0 && window.KefinTweaksConfig) {
-            // Create a deep copy of the original config for backup
-            const originalConfig = JSON.parse(JSON.stringify(window.KefinTweaksConfig));
-            
-            // Create backup before modifying
-            const backupCreated = await createConfigBackup(originalConfig);
-            if (!backupCreated) {
-                WARN('Failed to create backup, but continuing with cleanup');
-            }
-            
-            // Update KefinTweaksConfig with cleaned skins
-            window.KefinTweaksConfig.skins = cleanedAdminSkins;
-            
-            // Save the cleaned config back to JS Injector
-            if (window.KefinTweaksUtils && window.KefinTweaksUtils.saveConfigToJavaScriptInjector) {
-                const saveSuccess = await window.KefinTweaksUtils.saveConfigToJavaScriptInjector(window.KefinTweaksConfig, { waitForLogin: false });
-                if (saveSuccess) {
-                    LOG(`Successfully saved cleaned config (removed ${skinsToRemove.size} duplicate/old-format skin(s): ${Array.from(skinsToRemove).join(', ')})`);
-                } else {
-                    WARN('Failed to save cleaned config to JS Injector');
+
+            // If we removed any skins, create backup and save cleaned config
+            if (skinsToRemove.size > 0 && window.KefinTweaksConfig) {
+                // Create a deep copy of the original config for backup
+                const originalConfig = JSON.parse(JSON.stringify(window.KefinTweaksConfig));
+
+                // Create backup before modifying
+                const backupCreated = await createConfigBackup(originalConfig);
+                if (!backupCreated) {
+                    WARN('Failed to create backup, but continuing with cleanup');
                 }
-            } else {
-                WARN('KefinTweaksUtils.saveConfigToJavaScriptInjector not available, cannot save cleaned config');
+
+                // Update KefinTweaksConfig with cleaned skins
+                window.KefinTweaksConfig.skins = cleanedAdminSkins;
+
+                // Save the cleaned config back to JS Injector
+                if (window.KefinTweaksUtils && window.KefinTweaksUtils.saveConfigToJavaScriptInjector) {
+                    const saveSuccess = await window.KefinTweaksUtils.saveConfigToJavaScriptInjector(window.KefinTweaksConfig, { waitForLogin: false });
+                    if (saveSuccess) {
+                        LOG(`Successfully saved cleaned config (removed ${skinsToRemove.size} duplicate/old-format skin(s): ${Array.from(skinsToRemove).join(', ')})`);
+                    } else {
+                        WARN('Failed to save cleaned config to JS Injector');
+                    }
+                } else {
+                    WARN('KefinTweaksUtils.saveConfigToJavaScriptInjector not available, cannot save cleaned config');
+                }
+
+                LOG(`Cleaned up ${skinsToRemove.size} duplicate/old-format skin(s) from admin config: ${Array.from(skinsToRemove).join(', ')}`);
             }
-            
-            LOG(`Cleaned up ${skinsToRemove.size} duplicate/old-format skin(s) from admin config: ${Array.from(skinsToRemove).join(', ')}`);
+
+            adminSkins = cleanedAdminSkins;
         }
-        
-        adminSkins = cleanedAdminSkins;
 
         // Merge: Start with defaults, then override/add from admin config
         // Admin config takes precedence for duplicate names

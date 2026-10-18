@@ -198,7 +198,7 @@
             name: 'skinManager-configuration',
             script: '../configuration/skinManager-configuration.js',
             css: null,
-            dependencies: ['modal', 'toaster', 'utils'],
+            dependencies: ['modal', 'toaster', 'utils', 'skinConfigLegacyDefaults', 'skinConfig'],
             description: 'Skin manager configuration for KefinTweaks'
         },
         {

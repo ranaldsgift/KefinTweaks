@@ -6,11 +6,25 @@
 
     const LOG = (...args) => console.log('[KefinTweaks SkinManager Config]', ...args);
     const ERR = (...args) => console.error('[KefinTweaks SkinManager Config]', ...args);
+    const WARN = (...args) => console.warn('[KefinTweaks SkinManager Config]', ...args);
 
     const MODAL_ID = 'kefin-skinmanager-config';
     
     // Store loaded config for use in listeners
     let currentLoadedConfig = null;
+
+    function hasDefaultSkinsCatalog() {
+        const skins = window.KefinTweaksDefaultSkinsConfig?.skins;
+        return Array.isArray(skins) && skins.length > 0;
+    }
+
+    function notifySkinManagerConfig(message) {
+        if (window.KefinTweaksToaster?.toast) {
+            window.KefinTweaksToaster.toast(message);
+        } else {
+            alert(message);
+        }
+    }
 
     // Helper function to build Jellyfin checkbox
     function buildJellyfinCheckbox(id, checked, label, dataAttributes = {}) {
@@ -298,6 +312,22 @@
      */
     async function saveConfig(skinManagerConfig) {
         try {
+            if (!hasDefaultSkinsCatalog()) {
+                WARN('Refusing to save Skin Manager config: default skins catalog not loaded');
+                notifySkinManagerConfig('Default skins are not loaded yet. Try again in a moment.');
+                return false;
+            }
+
+            const existingSkins = window.KefinTweaksConfig?.skins;
+            const existingNonEmpty = Array.isArray(existingSkins) && existingSkins.length > 0;
+            const nextSkins = skinManagerConfig?.skins;
+            const nextEmpty = !Array.isArray(nextSkins) || nextSkins.length === 0;
+            if (nextEmpty && existingNonEmpty) {
+                WARN('Refusing to save Skin Manager config: would wipe non-empty skins array');
+                notifySkinManagerConfig('Save blocked: collected skins list is empty but existing config has skins. Reload and try again.');
+                return false;
+            }
+
             if (!window.KefinTweaksConfig) {
                 window.KefinTweaksConfig = {};
             }
@@ -437,10 +467,17 @@
 
     /**
      * Collect configuration from form
+     * @returns {Object|null} Collected config, or null if unsafe to save
      */
     function collectConfig() {
+        if (!hasDefaultSkinsCatalog()) {
+            WARN('Cannot collect Skin Manager config: default skins catalog not loaded');
+            notifySkinManagerConfig('Default skins are not loaded yet. Try again in a moment.');
+            return null;
+        }
+
         // Get default skin
-        const defaultSkin = document.getElementById('defaultSkin')?.value || null;
+        let defaultSkin = document.getElementById('defaultSkin')?.value || null;
         if (defaultSkin === '') {
             defaultSkin = null;
         }
@@ -532,6 +569,14 @@
         // Add the current category's optional includes
         optionalIncludes.push(...currentCategoryOptionalIncludes);
 
+        const existingSkins = window.KefinTweaksConfig?.skins;
+        const existingNonEmpty = Array.isArray(existingSkins) && existingSkins.length > 0;
+        if (skins.length === 0 && existingNonEmpty) {
+            WARN('Cannot collect Skin Manager config: would wipe non-empty skins array');
+            notifySkinManagerConfig('Save blocked: collected skins list is empty but existing config has skins. Reload and try again.');
+            return null;
+        }
+
         return {
             skins: skins,
             themes: themes,
@@ -577,6 +622,11 @@
      */
     async function openConfigModal() {
         try {
+            if (!hasDefaultSkinsCatalog()) {
+                notifySkinManagerConfig('Default skins are not loaded yet. Try again in a moment.');
+                return;
+            }
+
             // Load config
             const config = await loadConfig();
             
@@ -617,6 +667,7 @@
                     if (saveBtn) {
                         saveBtn.addEventListener('click', async () => {
                             const skinManagerConfig = collectConfig();
+                            if (!skinManagerConfig) return;
                             const success = await saveConfig(skinManagerConfig);
                             if (success) {
                                 if (window.KefinTweaksToaster && window.KefinTweaksToaster.toast) {
