@@ -527,7 +527,7 @@
     }
 
     async function getWatchlistUrl() {
-        return window.KefinTweaksUtils._watchlistUrl || '#/watchlist';
+        return window.KefinTweaksUtils.getWatchlistUrl();
     }
 
     /**
@@ -585,7 +585,7 @@
             const watchlistUrl = await getWatchlistUrl();
 
             if (watchlistUrl) {
-                return `${watchlistUrl}?pageTab=history`;
+                return `${watchlistUrl}${watchlistUrl.includes('?') ? '&' : '?'}pageTab=history`;
             }
             return null;
         }
