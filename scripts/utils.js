@@ -358,6 +358,7 @@
     
     // ----- Custom menu links (placements: side / top main|right / userMenu) -----
     const customMenuLinkRegistry = [];
+    const customMenuLinkOrders = new WeakMap();
     let customMenuLinkObserver = null;
     let customMenuLinkReapplyDepth = 0;
     const FAVORITES_HREF = '#/home?tab=1';
@@ -1003,41 +1004,53 @@
         return item;
     }
 
+    function insertOrderedCustomMenuLink(parent, el, order, fromRight = false, reserved = 0) {
+        if (Number.isFinite(order)) {
+            customMenuLinkOrders.set(el, { order: Math.max(0, Math.floor(order)), fromRight });
+        } else {
+            customMenuLinkOrders.delete(el);
+        }
+        const isOrdered = (child) => customMenuLinkOrders.get(child)?.fromRight === fromRight;
+        const children = Array.from(parent.children);
+        const directional = fromRight ? children.slice().reverse() : children;
+        const ordered = directional.filter(isOrdered);
+        if (!children.includes(el) && isOrdered(el)) ordered.push(el);
+        ordered.sort((a, b) => customMenuLinkOrders.get(a).order - customMenuLinkOrders.get(b).order);
+
+        // Compute the final group layout before moving anything. Inserting links
+        // independently lets a later link shift an earlier link out of position.
+        const layout = children.filter((child) => !isOrdered(child));
+        const reservedCount = Math.min(reserved, layout.length);
+        const tail = reservedCount ? layout.splice(-reservedCount) : [];
+        if (fromRight) layout.reverse();
+        let nextIndex = 0;
+        for (const child of ordered) {
+            const index = Math.min(Math.max(customMenuLinkOrders.get(child).order, nextIndex), layout.length);
+            layout.splice(index, 0, child);
+            nextIndex = index + 1;
+        }
+        if (fromRight) layout.reverse();
+        layout.push(...tail);
+
+        // Move only Kefin links, preserving native/other-plugin nodes and their order.
+        // Work backwards so each reference is already in its final position.
+        for (let i = layout.length - 1; i >= 0; i--) {
+            const child = layout[i];
+            if (!isOrdered(child)) continue;
+            const ref = layout[i + 1] || null;
+            if (child.parentNode !== parent || child.nextElementSibling !== ref) {
+                parent.insertBefore(child, ref);
+            }
+        }
+    }
+
     function insertByMainOrder(parent, el, order) {
-        const idx = Math.max(0, Math.floor(order));
-        const siblings = Array.from(parent.children).filter((c) => c !== el);
-        const ref = siblings[idx] || null;
-        if (el.parentNode === parent && el.nextSibling === ref) return;
-        if (ref) parent.insertBefore(el, ref);
-        else parent.appendChild(el);
+        insertOrderedCustomMenuLink(parent, el, order);
     }
 
     function insertByRightOrder(parent, el, order) {
-        const n = Math.max(0, Math.floor(order));
-        const siblings = Array.from(parent.children).filter((c) => c !== el);
-        let ref = null;
-
-        if (isModernUI()) {
-            if (n === 0) {
-                ref = null; // append → last
-            } else {
-                const idx = Math.max(0, siblings.length - n);
-                ref = siblings[idx] || null;
-            }
-        } else {
-            // Legacy headerRight: last two children are cast/user controls — keep them rightmost
-            const reserved = 2;
-            const idx = siblings.length - reserved - n;
-            if (idx <= 0) {
-                ref = siblings[0] || null;
-            } else {
-                ref = siblings[idx] || siblings[0] || null;
-            }
-        }
-
-        if (el.parentNode === parent && el.nextSibling === ref) return;
-        if (ref) parent.insertBefore(el, ref);
-        else parent.appendChild(el);
+        // Legacy headerRight keeps its cast/user controls rightmost.
+        insertOrderedCustomMenuLink(parent, el, order, true, isModernUI() ? 0 : 2);
     }
 
     function injectIntoTopNavV12(entry) {
@@ -1074,7 +1087,9 @@
             return true;
         }
 
-        if (findByDataAttr(stack, 'data-kefin-custom-menu-top-link', key)) {
+        const existing = findByDataAttr(stack, 'data-kefin-custom-menu-top-link', key);
+        if (existing) {
+            insertByMainOrder(stack, existing, entry.order);
             return true;
         }
 
@@ -1137,7 +1152,9 @@
         if (!slider) return false;
 
         const key = entryKey(entry);
-        if (findByDataAttr(slider, 'data-kefin-custom-menu-top-link', key)) {
+        const existing = findByDataAttr(slider, 'data-kefin-custom-menu-top-link', key);
+        if (existing) {
+            insertByMainOrder(slider, existing, entry.order);
             return true;
         }
 
@@ -1219,7 +1236,9 @@
         if (!headerRight) return false;
 
         const key = entryKey(entry);
-        if (findByDataAttr(headerRight, 'data-kefin-custom-menu-top-right', key)) {
+        const existing = findByDataAttr(headerRight, 'data-kefin-custom-menu-top-right', key);
+        if (existing) {
+            insertByRightOrder(headerRight, existing, entry.order);
             return true;
         }
 
@@ -1275,8 +1294,11 @@
 
         const parent = search.parentElement;
         const key = entryKey(entry);
-        if (findByDataAttr(parent, 'data-kefin-custom-menu-top-right', key)
-            || findByDataAttr(document, 'data-kefin-custom-menu-top-right', key)) {
+        const existing = findByDataAttr(parent, 'data-kefin-custom-menu-top-right', key)
+            || findByDataAttr(document, 'data-kefin-custom-menu-top-right', key);
+        if (existing) {
+            if (existing.parentElement === parent) insertByRightOrder(parent, existing, entry.order);
+            else if (!Number.isFinite(entry.order)) customMenuLinkOrders.delete(existing);
             return true;
         }
 
@@ -1720,8 +1742,13 @@
 
     function mutationShouldTriggerCustomMenuReapply(mutation) {
         const addedEls = Array.from(mutation.addedNodes).filter((n) => n.nodeType === 1);
-        if (!addedEls.length) return false;
-        if (addedEls.every((n) => isKefinCustomMenuOwnedNode(n))) return false;
+        const changedEls = addedEls.concat(Array.from(mutation.removedNodes).filter((n) => n.nodeType === 1));
+        if (!changedEls.length) return false;
+        if (changedEls.every((n) => isKefinCustomMenuOwnedNode(n))) return false;
+        // A native/other-plugin icon can change positions without remounting its header.
+        if (mutation.target?.matches?.(
+            '.headerRight, .headerTabs.sectionTabs .emby-tabs-slider, .MuiToolbar-root, .MuiToolbar-root .MuiStack-root, .MuiToolbar-root .MuiBox-root'
+        )) return true;
         return addedEls.some((n) => addedNodeMatchesHost(n, ANY_CUSTOM_MENU_HOST_SEL));
     }
 
