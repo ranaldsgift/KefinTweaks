@@ -2,6 +2,7 @@ interface HomeScreenSection {
 	// Identification
 	id: string;
 	name: string;
+	description?: string; // Description of the section, useful when the Section Name is insufficient at describing the section or for sharing Custom Sections
 	caption?: string;
 	enabled: boolean;
 	order: number;
@@ -55,7 +56,13 @@ interface HomeScreenSection {
 		Type?: string;
 		cardFooter?: string;
 		imageUrl: string;
+		backdropUrl?: string;
+		bannerUrl?: string;
+		logoUrl?: string;
+		thumbUrl?: string;
+		squareUrl?: string;
 		cardUrl: string;
+		hidden?: boolean; // Whether to hide the item from the section
 	}>;
 
 	// Query Construction
@@ -81,6 +88,8 @@ interface HomeScreenSection {
 	// Seasonal Config
 	startDate?: string;
 	endDate?: string;
+
+	dataMonitors?: string[]; // A list of data monitor names to use for this section
 
 	// Cache Settings
 	ttl?: number;
