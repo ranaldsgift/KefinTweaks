@@ -863,6 +863,7 @@ This README and the inline comments in kefinTweaks.js and the other scripts is t
 
 ## Version History
 
+- **v0.5.0**: New Features: Home Screen Overhaul, Stats Overhaul, Thumbnail Scrubber, Watch Together, User Manager, Version Preferences, Library Mini-games
 - **v0.4.0**: New Features: Proper Install Flow, Watchlist->Playlist Sync, Series Info+, Series Page Episodes, Christmas Seasonal Home Screen
 - **v0.3.5**: Critical bug fix
 - **v0.3.4**: Improved handling of Latest/Development branches for KefinTweaks installation. Improved collection caching.
