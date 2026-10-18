@@ -2189,15 +2189,183 @@
         return userId === primaryId;
     }
 
+    const RESUME_OR_NEXTUP_SECTION_IDS = new Set([
+        'continueWatching',
+        'nextUp',
+        'continueWatchingAndNextUp',
+    ]);
+    const NEXTUP_REFRESH_SECTION_IDS = ['nextUp', 'continueWatchingAndNextUp'];
+    const NEXTUP_PROGRESSIVE_REFRESH_DEBOUNCE_MS = 400;
+    let nextUpProgressiveRefreshTimer = null;
+
+    function getCardHomeSectionId(card) {
+        const sectionEl = card?.closest?.('[data-section-id]');
+        return sectionEl?.getAttribute('data-section-id') || sectionEl?.dataset?.sectionId || null;
+    }
+
+    function findMountedHomeSectionElement(sectionId) {
+        if (!sectionId) return null;
+        const escaped = escapeCssIdentForCardSync(sectionId);
+        return document.querySelector(`.homePage:not(.hide) #homeTab .sections [data-section-id="${escaped}"]`)
+            || document.querySelector(`[data-section-id="${escaped}"]`);
+    }
+
+    function maybeDismissEmptyResumeSection(sectionElement) {
+        if (!sectionElement?.isConnected) return;
+        const itemsContainer = sectionElement.querySelector('.itemsContainer');
+        const remaining = itemsContainer
+            ? getRealLayoutCards(itemsContainer).filter((card) => {
+                return card.getAttribute('data-id')
+                    && !card.classList.contains('skeleton-card')
+                    && !card.classList.contains('cardbuilder-card-collapse');
+            })
+            : [];
+        if (remaining.length) return;
+
+        const holdMs = getDismissEmptySectionTimerMs();
+        if (holdMs > 0) {
+            dismissEmptyProgressiveSection(sectionElement, { holdMs });
+        } else {
+            sectionElement.remove();
+            notifyDiscoveryLeadFillAfterSectionRemove();
+        }
+    }
+
+    /**
+     * Collapse cards with the same animation as reconcileRowItems outgoing cards, then remove.
+     * @param {HTMLElement[]} cards
+     * @param {Function} [onComplete]
+     */
+    function collapseAndRemoveCards(cards, onComplete) {
+        const uniqueCards = [];
+        const seen = new Set();
+        (cards || []).forEach((card) => {
+            if (!card?.isConnected || seen.has(card)) return;
+            seen.add(card);
+            uniqueCards.push(card);
+        });
+        if (!uniqueCards.length) {
+            if (typeof onComplete === 'function') onComplete();
+            return;
+        }
+
+        const bySection = new Map();
+        uniqueCards.forEach((card) => {
+            const sectionEl = card.closest?.('[data-section-id]');
+            if (!sectionEl) {
+                card.remove();
+                return;
+            }
+            if (!bySection.has(sectionEl)) bySection.set(sectionEl, []);
+            bySection.get(sectionEl).push(card);
+        });
+
+        let pending = bySection.size;
+        if (!pending) {
+            if (typeof onComplete === 'function') onComplete();
+            return;
+        }
+
+        const finishOne = () => {
+            pending -= 1;
+            if (pending <= 0 && typeof onComplete === 'function') onComplete();
+        };
+
+        bySection.forEach((sectionCards, sectionElement) => {
+            const itemsContainer = sectionElement.querySelector('.itemsContainer');
+            if (!itemsContainer) {
+                sectionCards.forEach((card) => card.remove());
+                maybeDismissEmptyResumeSection(sectionElement);
+                finishOne();
+                return;
+            }
+
+            const layouts = sectionCards.map(captureCardLayout);
+            layouts.forEach((layout) => {
+                layout.card.classList.add('cardbuilder-card-collapse');
+                applyCardExpandedSize(layout);
+            });
+            // Force layout before collapsing (same as reconcileRowItems)
+            itemsContainer.offsetHeight;
+            itemsContainer.classList.add('cardbuilder-row-animating');
+
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    layouts.forEach(({ card }) => applyCardCollapsedSize(card));
+                    const animTarget = sectionCards[0] || itemsContainer;
+                    runAfterTransition(animTarget, 450, () => {
+                        sectionCards.forEach((card) => {
+                            if (card.isConnected) card.remove();
+                        });
+                        itemsContainer.classList.remove('cardbuilder-row-animating');
+                        reindexSectionCards(itemsContainer);
+                        maybeDismissEmptyResumeSection(sectionElement);
+                        finishOne();
+                    });
+                });
+            });
+        });
+    }
+
+    /**
+     * Invalidate-free progressive refresh for currently mounted home sections.
+     * @param {string[]} sectionIds
+     */
+    async function refreshMountedSectionsProgressive(sectionIds) {
+        const ids = Array.isArray(sectionIds) ? sectionIds.filter(Boolean) : [];
+        for (const sectionId of ids) {
+            const sectionElement = findMountedHomeSectionElement(sectionId);
+            if (!sectionElement?.isConnected) continue;
+
+            const runtime = window.KefinHomeScreenSectionRuntime?.get?.(sectionId);
+            const cfg = runtime?.effectiveConfig || null;
+            if (!cfg) continue;
+
+            let items = [];
+            try {
+                items = await refreshSectionQueries(cfg);
+            } catch (e) {
+                console.warn('[KefinTweaks CardBuilder] Progressive refresh failed for', sectionId, e);
+                continue;
+            }
+            if (!Array.isArray(items)) items = [];
+
+            if (runtime) {
+                runtime.cachedItems = items;
+                runtime.element = sectionElement;
+            }
+
+            applyProgressiveEnhancement(
+                sectionElement,
+                { config: cfg, result: { data: { Items: items } } },
+                items,
+                { updateScrollButtons: true },
+            );
+            await yieldToMainThread();
+        }
+    }
+
+    function scheduleNextUpSectionsProgressiveRefresh() {
+        if (nextUpProgressiveRefreshTimer) clearTimeout(nextUpProgressiveRefreshTimer);
+        nextUpProgressiveRefreshTimer = setTimeout(() => {
+            nextUpProgressiveRefreshTimer = null;
+            void refreshMountedSectionsProgressive(NEXTUP_REFRESH_SECTION_IDS);
+        }, NEXTUP_PROGRESSIVE_REFRESH_DEBOUNCE_MS);
+    }
+
     /**
      * Keep data-positionticks on visible cards aligned with primary-user playstate.
      * Driven by UserDataChanged (same event Jellyfin uses for progress bars) — not DOM observation.
+     * @param {string} itemId
+     * @param {Object} userData
+     * @param {HTMLElement[]} [cardsHint] optional pre-found cards (avoids a second DOM scan)
+     * @returns {HTMLElement[]}
      */
-    function updateCardResumeAttributes(itemId, userData) {
-        if (!itemId || !userData) return;
+    function updateCardResumeAttributes(itemId, userData, cardsHint) {
+        if (!itemId || !userData) return [];
 
-        const cards = findVisibleCardsForItemId(itemId);
-        if (!cards.length) return;
+        const cards = Array.isArray(cardsHint) ? cardsHint : findVisibleCardsForItemId(itemId);
+        if (!cards.length) return cards;
 
         const ticks = userData.PlaybackPositionTicks;
 
@@ -2212,6 +2380,7 @@
                 card.removeAttribute('data-positionticks');
             }
         });
+        return cards;
     }
 
     function updateCardWatchlistButtons(itemId, userData) {
@@ -2250,12 +2419,31 @@
 
     function applyUserDataEntriesToCards(entries, userId) {
         if (!isPrimaryUserDataChange(userId)) return;
+
+        const cardsToCollapse = [];
         entries.forEach((entry) => {
-            if (entry?.ItemId) {
-                updateCardResumeAttributes(entry.ItemId, entry);
-                updateCardWatchlistButtons(entry.ItemId, entry);
-                updateCardFavoriteButtons(entry.ItemId, entry);
+            if (!entry?.ItemId) return;
+
+            const cards = findVisibleCardsForItemId(entry.ItemId);
+            updateCardResumeAttributes(entry.ItemId, entry, cards);
+            updateCardWatchlistButtons(entry.ItemId, entry);
+            updateCardFavoriteButtons(entry.ItemId, entry);
+
+            if (entry.Played === true) {
+                cards.forEach((card) => {
+                    const sectionId = getCardHomeSectionId(card);
+                    if (sectionId && RESUME_OR_NEXTUP_SECTION_IDS.has(sectionId)) {
+                        cardsToCollapse.push(card);
+                    }
+                });
             }
+        });
+
+        if (!cardsToCollapse.length) return;
+
+        // Refresh after collapse so progressive enhance does not race outgoing animation
+        collapseAndRemoveCards(cardsToCollapse, () => {
+            scheduleNextUpSectionsProgressiveRefresh();
         });
     }
 
@@ -2815,6 +3003,7 @@
         getSectionTitleForMultiQuery: getSectionTitleForMultiQuery,
         getActiveViewMoreUrl: getActiveViewMoreUrl,
         refreshSectionQueries: refreshSectionQueries,
+        refreshMountedSectionsProgressive: refreshMountedSectionsProgressive,
         loadActiveSectionQueryItems: loadActiveSectionQueryItems,
         createSectionScrollableContainer: createSectionScrollableContainer,
         applySectionPresentationAttrs: applySectionPresentationAttrs,
