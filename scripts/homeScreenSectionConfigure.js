@@ -688,7 +688,7 @@
 
     function getCardFormats() {
         return getEditorConstants().CARD_FORMATS
-            || ['Poster', 'Thumb', 'Series Thumb', 'Series Poster', 'Backdrop', 'Square', 'Random', 'Button', 'Banner', 'Logo', 'Clear Art', 'Disc'];
+            || ['Poster', 'Thumb', 'Series Poster', 'Series Thumb', 'Backdrop', 'Square', 'Random', 'Button', 'Banner', 'Logo', 'Clear Art', 'Disc'];
     }
 
     function getCardTitleHorizontalAlignOptions() {

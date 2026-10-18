@@ -2344,7 +2344,7 @@
         EnableUserData: { label: 'Enable User Data', type: 'boolean' }
     };
 
-    const CARD_FORMATS = ['Poster', 'Thumb', 'Backdrop', 'Square', 'Random', 'Button', 'Banner', 'Logo', 'Clear Art', 'Disc', 'Series Thumb', 'Series Poster'];
+    const CARD_FORMATS = ['Poster', 'Thumb', 'Backdrop', 'Square', 'Random', 'Button', 'Banner', 'Logo', 'Clear Art', 'Disc', 'Series Poster', 'Series Thumb'];
     const BADGE_FIELD_DESCRIPTIONS = {
         IncludeItemTypes: 'Limit results to these item types.',
         Genres: 'Filter results to items matching these genres.',
@@ -3333,6 +3333,9 @@
             closeOnBackdrop: false,
             closeOnEscape: true,
             showCloseButton: true,
+            dialogStyle: window.innerWidth >= 900
+                ? { maxWidth: '90vw', width: '1400px', height: '90vh' }
+                : undefined,
             onClose: () => {
                 window.KefinHomeScreenAdvancedEditor?.destroyAppearancePickrs?.(modalInstance);
                 activeEditCtx = null;
@@ -4623,6 +4626,9 @@
             closeOnBackdrop: false,
             closeOnEscape: true,
             showCloseButton: true,
+            dialogStyle: window.innerWidth >= 900
+                ? { maxWidth: '90vw', width: '1400px', height: '90vh' }
+                : undefined,
             onClose: () => {
                 window.KefinHomeScreenAdvancedEditor?.destroyAppearancePickrs?.(modalInstance);
             },
