@@ -1,0 +1,28 @@
+div#kefinTweaks-breadcrumbs-wrapper {
+	position: unset;
+	bottom: 0;
+	left: 0;
+	width: 100%;
+	height: auto;
+	background: none;
+	background-color: #110d20de;
+	margin: 0;
+}
+div#kefinTweaks-breadcrumbs-wrapper {
+	background: none;
+	position: unset;
+}
+:not(.layout-mobile) #indexPage .homeSectionsContainer .itemsContainer:not([data-layout="grid"]),
+:not(.layout-mobile) #itemDetailPage .custom-scroller .itemsContainer:not([data-layout="grid"]) {
+	flex-wrap: nowrap !important;
+}
+.elsewhere-link-reset::before {
+	content: none !important;
+}
+.homeSectionsContainer .spotlight-section {
+	padding-left: 0;
+}
+.layout-desktop #indexPage .verticalSection .itemsContainer.scrollSlider.focuscontainer-x.animatedScrollX .card:nth-child(n + 15),
+.layout-tv #indexPage .verticalSection .itemsContainer.scrollSlider.focuscontainer-x.animatedScrollX .card:nth-child(n + 15) {
+	display: block !important;
+}

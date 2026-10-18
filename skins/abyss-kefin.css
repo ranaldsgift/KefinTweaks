@@ -1,0 +1,14 @@
+.dashboardDocument .mainAnimatedPage:not(.metadataEditorPage) {
+	left: 300px !important;
+}
+.MuiDrawer-root > .MuiDrawer-paper {
+	width: auto !important;
+}
+.spotlight-section button.btnPlay {
+    background: rgba(255, 255, 255, 0.95) !important;
+    padding: .4em 1.4em .4em 1em !important;
+    color: #111 !important;
+}
+.spotlight-tagline {
+	background: transparent !important;
+}

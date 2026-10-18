@@ -23,7 +23,6 @@
             top: 8px !important;
             right: 8px !important;
             z-index: 10 !important;
-            background: rgba(0, 0, 0, 0.7) !important;
             border: none !important;
             border-radius: 50% !important;
             width: 32px !important;
@@ -37,13 +36,12 @@
             transform: scale(0.8) !important;
         }
         
-        .cardOverlayContainer:hover .remove-continue-button {
+        .cardScalable:hover .remove-continue-button {
             opacity: 1 !important;
             transform: scale(1) !important;
         }
         
         .remove-continue-button:hover {
-            background: rgba(220, 38, 38, 0.9) !important;
             transform: scale(1.1) !important;
         }
         
@@ -54,7 +52,6 @@
         }
         
         .remove-continue-button .material-icons {
-            color: white !important;
             font-size: 18px !important;
         }
     `;
@@ -78,7 +75,7 @@
         
         // Only add button to cards with data-positionticks (in progress items)
         const positionTicks = card.getAttribute('data-positionticks');
-        if (!positionTicks) {
+        if (!positionTicks || positionTicks === '0') {
             return; // Not a continue watching item, skip
         }
         
@@ -98,7 +95,7 @@
         // Create remove continue watching button
         const removeButton = document.createElement('button');
         removeButton.type = 'button';
-        removeButton.className = 'remove-continue-button';
+        removeButton.className = 'remove-continue-button cardOverlayButton cardOverlayButton-hover paper-icon-button-light emby-button button-flat';
         removeButton.setAttribute('data-action', 'none');
         removeButton.setAttribute('data-id', itemId);
         removeButton.title = 'Remove from Continue Watching';
@@ -162,7 +159,7 @@
         const response = await fetch(userDataUrl, {
             method: 'GET',
             headers: { 
-                "Authorization": apiHelper.getAuthHeader(),
+                "Authorization": window.apiHelper.getAuthHeader(),
                 "Content-Type": "application/json"
             }
         });
@@ -196,7 +193,7 @@
         const response = await fetch(userDataUrl, {
             method: 'POST',
             headers: { 
-                "Authorization": apiHelper.getAuthHeader(),
+                "Authorization": window.apiHelper.getAuthHeader(),
                 "Content-Type": "application/json"
             },
             body: JSON.stringify(updatedUserData)
@@ -237,50 +234,47 @@
         });
     }
 
-    // Set up MutationObserver to watch for new overlay containers
+    // Shared body observer: inject when card overlays appear
     function setupRemoveContinueButtonObserver() {
-        const observer = new MutationObserver((mutations) => {
-            mutations.forEach((mutation) => {
-                if (mutation.type === 'childList') {
-                    // Check for added nodes
-                    mutation.addedNodes.forEach((node) => {
-                        if (node.nodeType === Node.ELEMENT_NODE) {
-                            // Check if the added node is an overlay container
-                            if (node.classList && node.classList.contains('cardOverlayContainer')) {
-                                const buttonContainer = node.querySelector('.cardOverlayButton-br');
-                                if (buttonContainer) {
-                                    addRemoveContinueButton(node);
-                                }
-                            }
-                            
-                            // Check for overlay containers within the added node
-                            const overlayContainers = node.querySelectorAll && node.querySelectorAll('.cardOverlayContainer');
-                            if (overlayContainers && overlayContainers.length > 0) {
-                                overlayContainers.forEach((overlayContainer) => {
-                                    const buttonContainer = overlayContainer.querySelector('.cardOverlayButton-br');
-                                    if (buttonContainer) {
-                                        addRemoveContinueButton(overlayContainer);
-                                    }
-                                });
-                            }
-                        }
-                    });
+        const processNode = (node) => {
+            if (!node || node.nodeType !== Node.ELEMENT_NODE) return;
+            if (node.classList?.contains('cardOverlayContainer')) {
+                if (node.querySelector('.cardOverlayButton-br')) addRemoveContinueButton(node);
+            }
+            node.querySelectorAll?.('.cardOverlayContainer').forEach((overlayContainer) => {
+                if (overlayContainer.querySelector('.cardOverlayButton-br')) {
+                    addRemoveContinueButton(overlayContainer);
                 }
             });
-        });
-        
-        // Start observing
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
-        
-        // Process any existing overlay containers
+        };
+
+        const onMutations = (mutations) => {
+            for (const mutation of mutations) {
+                if (mutation.type !== 'childList') continue;
+                mutation.addedNodes.forEach(processNode);
+            }
+        };
+
+        const utils = window.KefinTweaksUtils;
+        if (utils?.onBodyMutation) {
+            utils.onBodyMutation('removeContinue-overlays', onMutations);
+        } else if (typeof MutationObserver !== 'undefined' && document.body) {
+            const observer = new MutationObserver(onMutations);
+            observer.observe(document.body, { childList: true, subtree: true });
+        }
+
         processExistingOverlayContainers();
     }
 
-    // Initialize the observer
-    setupRemoveContinueButtonObserver();
+    function startRemoveContinue() {
+        if (!window.KefinTweaksUtils?.onBodyMutation && !document.body) {
+            setTimeout(startRemoveContinue, 500);
+            return;
+        }
+        setupRemoveContinueButtonObserver();
+    }
+
+    startRemoveContinue();
 
     // Debug function for troubleshooting (available in console)
     window.debugRemoveContinueButtons = function() {

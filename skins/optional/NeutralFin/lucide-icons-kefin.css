@@ -1,0 +1,76 @@
+.material-icons.book:before {
+    content: "\e062";
+}
+.material-icons.newspaper:before {
+    content: "\e34c";
+}
+.material-icons.quiz:before {
+    content: "\e34b";
+}
+.material-icons.person_add:before {
+    content: '\e1a2';
+}
+.material-icons.help:before {
+    content: '\e0ff';
+}
+.material-icons.bookmark:before, .material-icons.bookmark_border:before, .material-icons.watchlist:before {
+    content: '\e064';
+}
+.material-icons.bookmark_border:before {
+    content: '\e064';
+}
+.material-icons.thumb_up:before {
+    content: '\e18a';
+}
+.material-icons.palette:before {
+    content: '\e1dd';
+}
+.material-icons.star:before {
+    content: '\e17a';
+}
+.material-icons.sort:before {
+    content: '\e04b';
+}
+.material-icons.arrow_drop_down:before {
+    content: '\e071';
+}
+.material-icons.play_circle:before {
+    content: '\e084';
+}
+.material-icons.check_circle_outline:before {
+    content: '\e226';
+}
+.material-icons.favorite_border:before {
+    content: '\e0f6';
+}
+.material-icons.build:before {
+    content: '\e1b1';
+}
+
+/* Lazy workaround for the pause button on the media bar plugin */
+.pause-button .material-icons {
+    font-family: var(--iconPack) !important;
+}
+
+/* Jellyfin Enhanced Random Item Button */
+button#randomItemButton>i {
+    display: none;
+}
+
+button#randomItemButton:before {
+    content: '\e28c';
+    font-family: lucide !important;
+    font-weight: 400;
+    font-style: normal;
+    display: inline-block;
+    line-height: 1;
+    text-transform: none;
+    letter-spacing: normal;
+    word-wrap: normal;
+    white-space: nowrap;
+    direction: ltr;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "liga";
+}

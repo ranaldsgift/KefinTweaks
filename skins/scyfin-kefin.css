@@ -1,15 +1,10 @@
-/* Media bar slides container */
-div#slides-container {
-    margin-left: 250px !important;
-    width: calc(100% - 250px) !important;
-}
-body.home-screen .emby-tab-button {
+body:has(.homePage:not(.hide)) .emby-tab-button {
     display: flex;
 }
-body.home-screen .emby-tabs-slider {
+body:has(.homePage:not(.hide)) .emby-tabs-slider {
     display: flex;
 }
-body.home-screen .emby-tab-button > div {
+body:has(.homePage:not(.hide)) .emby-tab-button > div {
     align-self: normal;
 }
 .series-episodes-section {
@@ -22,4 +17,9 @@ body.home-screen .emby-tab-button > div {
     margin-right: -115px !important;
     padding-right: 20px !important;
     right: 140px !important;
+}
+.spotlight-tagline .emby-tab-button,
+.spotlight-nav-buttons-container,
+.spotlight-section-title .emby-tab-button {
+    background-color: unset;
 }

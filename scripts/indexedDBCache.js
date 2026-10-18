@@ -53,8 +53,9 @@
             return `${this.prefix}${cacheName}_${user}`;
         }
 
-        // Check if cache is valid (not expired)
-        async isCacheValid(cacheName, userId = null) {
+        // Get cached data entry (payload + metadata). Does NOT filter by TTL —
+        // callers (e.g. apiHelper.getQuery) may intentionally use stale rows.
+        async getCacheEntry(cacheName, userId = null) {
             const key = this.getCacheKey(cacheName, userId);
             
             try {
@@ -67,32 +68,31 @@
                     request.onsuccess = () => {
                         const data = request.result;
                         if (!data) {
-                            resolve(false);
+                            resolve(null);
                             return;
                         }
                         
-                        const now = Date.now();
-                        const ttl = data.ttl || this.ttl;
-                        resolve((now - data.timestamp) < ttl);
+                        // Return full entry including timestamp and ttl
+                        resolve({
+                            payload: data.payload,
+                            timestamp: data.timestamp,
+                            ttl: data.ttl || this.ttl
+                        });
                     };
                     
                     request.onerror = () => {
-                        WARN('Error checking cache validity:', request.error);
-                        resolve(false);
+                        WARN('Error getting cache entry:', request.error);
+                        resolve(null);
                     };
                 });
             } catch (error) {
-                ERR('Error in isCacheValid:', error);
-                return false;
+                ERR('Error in getCacheEntry:', error);
+                return null;
             }
         }
 
-        // Get cached data if valid
+        // Get cached payload if present and not expired (single store.get)
         async get(cacheName, userId = null) {
-            if (!(await this.isCacheValid(cacheName, userId))) {
-                return null;
-            }
-            
             const key = this.getCacheKey(cacheName, userId);
             
             try {
@@ -104,7 +104,16 @@
                 return new Promise((resolve) => {
                     request.onsuccess = () => {
                         const data = request.result;
-                        resolve(data ? data.payload : null);
+                        if (!data) {
+                            resolve(null);
+                            return;
+                        }
+                        const ttl = data.ttl || this.ttl;
+                        if ((Date.now() - data.timestamp) >= ttl) {
+                            resolve(null);
+                            return;
+                        }
+                        resolve(data.payload);
                     };
                     
                     request.onerror = () => {
@@ -220,8 +229,18 @@
         }
     }
 
+    let _instance = null;
+
+    function getIndexedDBCache() {
+        if (!_instance) {
+            _instance = new IndexedDBCache();
+            LOG('IndexedDBCache instance created');
+        }
+        return _instance;
+    }
+
     // Create global instance
-    window.IndexedDBCache = IndexedDBCache;
+    window.IndexedDBCache = getIndexedDBCache();
     
     LOG('IndexedDBCache manager loaded');
     

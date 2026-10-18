@@ -3,7 +3,7 @@
 // Supports: Movie, Series, Season, Episode, MusicArtist, MusicAlbum, Audio
 // Requires: utils.js module to be loaded before this script
 
-(function() {
+(function () {
     'use strict';
     
     console.log('[KefinTweaks Breadcrumbs] Initializing...');
@@ -72,18 +72,26 @@
     async function getTargetBreadcrumbStructure(item) {
         const structure = {
             elements: [],
-            item: item
+            item: item,
         };
-
+        
         // Don't append .html for server versions 10.11 and above
-        const urlSuffix = ApiClient._appVersion.split('.')[1] > 10 ? '' : '.html'
-
+        const urlSuffix = ApiClient._appVersion.split('.')[1] > 10 ? '' : '.html';
+        
         let queryParams = '';
         if (item.ParentId) {
             // Get the top parent item from the ancestors with a Type = CollectionFolder
-            const ancestors = await ApiClient.getAncestorItems(item.Id);
-            const collectionFolder = ancestors.find(ancestor => ancestor.Type === 'CollectionFolder');
-            const userRootFolder = ancestors.find(ancestor => ancestor.Type === 'UserRootFolder');
+            // Use apiHelper.getQuery rather than getAncestorItems so we can use the cached data
+            const ancestorsUrl = `${ApiClient.serverAddress()}/Items/${item.Id}/Ancestors`;
+            const queryResult = await window.apiHelper.getQuery(ancestorsUrl, { useCache: true });
+            let ancestors = queryResult.data;
+            
+            if (!ancestors || !Array.isArray(ancestors)) {
+                ancestors = await queryResult.dataPromise;
+            }
+            
+            const collectionFolder = ancestors.find((ancestor) => ancestor.Type === 'CollectionFolder');
+            const userRootFolder = ancestors.find((ancestor) => ancestor.Type === 'UserRootFolder');
             if (collectionFolder) {
                 queryParams = `?topParentId=${collectionFolder.Id}&serverId=${ApiClient.serverId()}`;
             } else if (userRootFolder) {
@@ -91,21 +99,20 @@
             } else {
                 queryParams = `?serverId=${ApiClient.serverId()}`;
             }
-        }
-        else if (ApiClient.serverId()) {
+        } else if (ApiClient.serverId()) {
             queryParams = `?serverId=${ApiClient.serverId()}`;
         }
         
         if (item.Type === 'Movie') {
             structure.elements = [
                 { text: 'Movies', url: `#/movies${urlSuffix}${queryParams}&tab=0`, clickable: true },
-                { text: item.Name, url: null, clickable: false }
+                { text: item.Name, url: null, clickable: false },
             ];
         } else if (item.Type === 'Series') {
             structure.elements = [
                 { text: 'Shows', url: `#/tv${urlSuffix}${queryParams}&tab=0`, clickable: true },
                 { text: item.Name, url: null, clickable: false },
-                { text: 'All Seasons', url: null, clickable: true, popover: true }
+                { text: 'All Seasons', url: null, clickable: true, popover: true },
             ];
         } else if (item.Type === 'Season') {
             // Get series details for the series name
@@ -114,8 +121,12 @@
             
             structure.elements = [
                 { text: 'Shows', url: `#/tv${urlSuffix}${queryParams}&tab=0`, clickable: true },
-                { text: seriesName, url: `${ApiClient._serverAddress}/web/#/details?id=${item.ParentId}&serverId=${ApiClient.serverId()}`, clickable: true },
-                { text: item.Name || `Season ${item.IndexNumber}`, url: null, clickable: true, popover: true }
+                {
+                    text: seriesName,
+                    url: `${ApiClient._serverAddress}/web/#/details?id=${item.ParentId}&serverId=${ApiClient.serverId()}`,
+                    clickable: true,
+                },
+                { text: item.Name || `Season ${item.IndexNumber}`, url: null, clickable: true, popover: true },
             ];
         } else if (item.Type === 'Episode') {
             // Get series details for the series name
@@ -124,26 +135,36 @@
             
             // Get season details for the season name
             const seasonDetails = await getItemDetails(item.ParentId);
-            const seasonName = seasonDetails ? (seasonDetails.Name || `Season ${seasonDetails.IndexNumber}`) : `Season ${item.ParentIndexNumber}`;
+            const seasonName = seasonDetails
+                ? seasonDetails.Name || `Season ${seasonDetails.IndexNumber}`
+                : `Season ${item.ParentIndexNumber}`;
             
             structure.elements = [
                 { text: 'Shows', url: `#/tv${urlSuffix}${queryParams}&tab=0`, clickable: true },
-                { text: seriesName, url: `${ApiClient._serverAddress}/web/#/details?id=${item.SeriesId}&serverId=${ApiClient.serverId()}`, clickable: true },
+                {
+                    text: seriesName,
+                    url: `${ApiClient._serverAddress}/web/#/details?id=${item.SeriesId}&serverId=${ApiClient.serverId()}`,
+                    clickable: true,
+                },
                 { text: seasonName, url: null, clickable: true, popover: true },
-                { text: `${item.ParentIndexNumber}x${padNumber(item.IndexNumber)} - ${item.Name}`, url: null, clickable: false }
+                { text: `${item.ParentIndexNumber}x${padNumber(item.IndexNumber)} - ${item.Name}`, url: null, clickable: false },
             ];
         } else if (item.Type === 'MusicArtist') {
             structure.elements = [
                 { text: 'Music', url: `#/music${urlSuffix}${queryParams}&tab=0`, clickable: true },
                 { text: item.Name, url: null, clickable: false },
-                { text: 'All Albums', url: null, clickable: true, popover: true }
+                { text: 'All Albums', url: null, clickable: true, popover: true },
             ];
         } else if (item.Type === 'MusicAlbum') {
             structure.elements = [
                 { text: 'Music', url: `#/music${urlSuffix}${queryParams}&tab=0`, clickable: true },
-                { text: item.AlbumArtist, url: `${ApiClient._serverAddress}/web/#/details?id=${item.ParentId}&serverId=${ApiClient.serverId()}`, clickable: true },
+                {
+                    text: item.AlbumArtist,
+                    url: `${ApiClient._serverAddress}/web/#/details?id=${item.ParentId}&serverId=${ApiClient.serverId()}`,
+                    clickable: true,
+                },
                 { text: item.Name, url: null, clickable: true, popover: true },
-                { text: 'All Songs', url: null, clickable: true, popover: true }
+                { text: 'All Songs', url: null, clickable: true, popover: true },
             ];
         } else if (item.Type === 'Audio') {
             // Get album details for the album name and artist info
@@ -154,9 +175,13 @@
             
             structure.elements = [
                 { text: 'Music', url: `#/music${urlSuffix}${queryParams}&tab=0`, clickable: true },
-                { text: artistName, url: artistId ? `${ApiClient._serverAddress}/web/#/details?id=${artistId}&serverId=${ApiClient.serverId()}` : null, clickable: !!artistId },
+                {
+                    text: artistName,
+                    url: artistId ? `${ApiClient._serverAddress}/web/#/details?id=${artistId}&serverId=${ApiClient.serverId()}` : null,
+                    clickable: !!artistId,
+                },
                 { text: albumName, url: null, clickable: true, popover: true },
-                { text: item.Name, url: null, clickable: false }
+                { text: item.Name, url: null, clickable: false },
             ];
         }
         
@@ -168,8 +193,8 @@
         const differences = [];
         
         // Check if we have the right number of elements
-        const existingElements = Array.from(breadcrumbContainer.children).filter(child => 
-            child.classList.contains('kefinTweaks-breadcrumb-element')
+        const existingElements = Array.from(breadcrumbContainer.children).filter((child) =>
+            child.classList.contains('kefinTweaks-breadcrumb-element'),
         );
         
         log('Comparing breadcrumbs - existing:', existingElements.length, 'target:', target.elements.length);
@@ -192,14 +217,14 @@
                 const targetClickable = targetElement.clickable;
                 
                 // Check if popover functionality needs to be updated
-                const needsPopoverUpdate = targetElement.popover && (
-                    existingText !== targetElement.text || 
-                    existingClickable !== targetClickable ||
-                    // Force update for "All Seasons", "All Albums", and "All Songs" elements since the underlying data changes
-                    targetElement.text === 'All Seasons' ||
-                    targetElement.text === 'All Albums' ||
-                    targetElement.text === 'All Songs'
-                );
+                const needsPopoverUpdate =
+                    targetElement.popover &&
+                    (existingText !== targetElement.text ||
+                        existingClickable !== targetClickable ||
+                        // Force update for "All Seasons", "All Albums", and "All Songs" elements since the underlying data changes
+                        targetElement.text === 'All Seasons' ||
+                        targetElement.text === 'All Albums' ||
+                        targetElement.text === 'All Songs');
                 
                 if (existingText !== targetElement.text || existingClickable !== targetClickable || needsPopoverUpdate) {
                     differences.push({ action: 'update', index: i, element: targetElement });
@@ -220,8 +245,8 @@
         log('Applying breadcrumb differences:', differences.length, 'changes needed');
         
         // Get existing elements
-        const existingElements = Array.from(breadcrumbContainer.children).filter(child => 
-            child.classList.contains('kefinTweaks-breadcrumb-element')
+        const existingElements = Array.from(breadcrumbContainer.children).filter((child) =>
+            child.classList.contains('kefinTweaks-breadcrumb-element'),
         );
         
         // Process differences in reverse order to maintain indices
@@ -248,7 +273,6 @@
                 }
                 
                 log('Added new breadcrumb element:', diff.element.text);
-                
             } else if (diff.action === 'remove') {
                 // Remove element and its separator
                 const elementToRemove = existingElements[diff.index];
@@ -260,7 +284,6 @@
                     breadcrumbContainer.removeChild(elementToRemove);
                     log('Removed breadcrumb element at index:', diff.index);
                 }
-                
             } else if (diff.action === 'update') {
                 // Update existing element
                 const elementToUpdate = existingElements[diff.index];
@@ -378,7 +401,7 @@
                     window.location.href = `${ApiClient._serverAddress}/web/#/details?id=${seasons[0].Id}&serverId=${ApiClient.serverId()}`;
                 });
             } else {
-                const currentSeason = seasons.find(season => season.Id === item.ParentId);
+                const currentSeason = seasons.find((season) => season.Id === item.ParentId);
                 element.addEventListener('click', (e) => {
                     e.stopPropagation();
                     const popover = createPopover(seasons, currentSeason, (selectedSeason) => {
@@ -393,14 +416,12 @@
             let albumArtists = item.AlbumArtists;
             if (!albumArtists || !Array.isArray(albumArtists) || albumArtists.length === 0) {
                 const albumDetails = await getItemDetails(item.Id);
-                albumArtists = (albumDetails && albumDetails.AlbumArtists) ? albumDetails.AlbumArtists : [];
+                albumArtists = albumDetails && albumDetails.AlbumArtists ? albumDetails.AlbumArtists : [];
             }
-
-            const artistIds = (albumArtists || []).map(a => a.Id).filter(Boolean);
-            const albums = artistIds.length > 0
-                ? await getAlbumsByArtistIds(artistIds)
-                : await getAlbumsIfNeeded(item.ParentId);
-
+            
+            const artistIds = (albumArtists || []).map((a) => a.Id).filter(Boolean);
+            const albums = artistIds.length > 0 ? await getAlbumsByArtistIds(artistIds) : await getAlbumsIfNeeded(item.ParentId);
+            
             if (albums.length === 1) {
                 element.addEventListener('click', () => {
                     window.location.href = `${ApiClient._serverAddress}/web/#/details?id=${albums[0].Id}&serverId=${ApiClient.serverId()}`;
@@ -417,12 +438,13 @@
         } else if (item.Type === 'Audio') {
             // Audio (Song) page - clicking album name should show albums from all AlbumArtists of the album
             const albumDetails = await getItemDetails(item.ParentId);
-            const albumArtists = (albumDetails && albumDetails.AlbumArtists) ? albumDetails.AlbumArtists : [];
-            const artistIds = albumArtists.map(a => a.Id).filter(Boolean);
-            const albums = artistIds.length > 0
-                ? await getAlbumsByArtistIds(artistIds)
-                : await getAlbumsIfNeeded(albumDetails ? albumDetails.ParentId : null);
-
+            const albumArtists = albumDetails && albumDetails.AlbumArtists ? albumDetails.AlbumArtists : [];
+            const artistIds = albumArtists.map((a) => a.Id).filter(Boolean);
+            const albums =
+                artistIds.length > 0
+                    ? await getAlbumsByArtistIds(artistIds)
+                    : await getAlbumsIfNeeded(albumDetails ? albumDetails.ParentId : null);
+            
             if (albums && albums.length === 1) {
                 element.addEventListener('click', () => {
                     window.location.href = `${ApiClient._serverAddress}/web/#/details?id=${albums[0].Id}&serverId=${ApiClient.serverId()}`;
@@ -463,15 +485,30 @@
     }
     
     // DOM manipulation
+    function isModernUI() {
+        if (ApiClient._appVersion && ApiClient._appVersion.startsWith('12') && localStorage.getItem('layout')?.length === 0) {
+            return true;
+        }
+        
+        return !!document.querySelector('main.MuiBox-root');
+    }
+    
+    function resolveBreadcrumbMount() {
+        if (isModernUI()) {
+            return document.querySelector('.MuiToolbar-root');
+        }
+        return document.querySelector('.skinHeader .headerLeft');
+    }
+    
     function createBreadcrumbContainer() {
         if (breadcrumbContainer) {
             return breadcrumbContainer;
         }
         
-        // Find the header left container
-        const headerLeft = document.querySelector('.skinHeader .headerLeft');
-        if (!headerLeft) {
-            error('Could not find .skinHeader .headerLeft element');
+        const isModern = isModernUI();
+        const mount = resolveBreadcrumbMount();
+        if (!mount) {
+            error(isModern ? 'Could not find .MuiToolbar-root for breadcrumbs' : 'Could not find .skinHeader .headerLeft element');
             return null;
         }
         
@@ -479,6 +516,9 @@
         const wrapper = document.createElement('div');
         wrapper.id = 'kefinTweaks-breadcrumbs-wrapper';
         wrapper.className = 'kefinTweaks-breadcrumbs-wrapper';
+        if (isModern) {
+            wrapper.classList.add('kefinTweaks-breadcrumbs-wrapper--modern');
+        }
         wrapper.style.cssText = `
             display: none;
         `;
@@ -501,10 +541,37 @@
         
         wrapper.appendChild(breadcrumbContainer);
         wrapper.appendChild(popoverContainer);
-        headerLeft.appendChild(wrapper);
+        mount.appendChild(wrapper);
         
-        log('Created breadcrumb container with wrapper structure inside .skinHeader .headerLeft');
+        log(
+            isModern
+                ? 'Created breadcrumb container inside .MuiToolbar-root'
+                : 'Created breadcrumb container with wrapper structure inside .skinHeader .headerLeft',
+        );
         return breadcrumbContainer;
+    }
+    
+    function ensureBreadcrumbContainer(retries = 20) {
+        const existing = createBreadcrumbContainer();
+        if (existing) return Promise.resolve(existing);
+        
+        return new Promise((resolve) => {
+            let attempts = 0;
+            const tryMount = () => {
+                const container = createBreadcrumbContainer();
+                if (container) {
+                    resolve(container);
+                    return;
+                }
+                attempts += 1;
+                if (attempts >= retries) {
+                    resolve(null);
+                    return;
+                }
+                setTimeout(tryMount, 100);
+            };
+            tryMount();
+        });
     }
     
     function showBreadcrumbs() {
@@ -538,7 +605,7 @@
         }
         closePopover();
     }
-
+    
     function closePopover() {
         if (activePopover) {
             activePopover.remove();
@@ -548,16 +615,16 @@
     
     function createPopover(items, currentItem, onItemClick) {
         const popover = document.createElement('div');
-        popover.className = 'kefinTweaks-popover';
+        popover.className = 'kefinTweaks-popover itemDetailsGroup';
         popover.style.display = 'block'; // Ensure it's visible
         
         log('Creating popover with', items.length, 'items');
         
         let selectedItemElement = null;
         
-        items.forEach(item => {
+        items.forEach((item) => {
             const itemElement = document.createElement('div');
-            itemElement.className = 'kefinTweaks-popover-item';
+            itemElement.className = 'kefinTweaks-popover-item detailsGroupItem';
             
             if (currentItem && item.Id === currentItem.Id) {
                 itemElement.classList.add('selected');
@@ -590,7 +657,7 @@
                 selectedItemElement.scrollIntoView({
                     behavior: 'instant',
                     block: 'nearest',
-                    inline: 'nearest'
+                    inline: 'nearest',
                 });
                 log('Auto-scrolled to selected item:', selectedItemElement.textContent);
             }, 10);
@@ -610,16 +677,31 @@
         const popoverContainer = document.getElementById('kefinTweaks-popover-container');
         if (popoverContainer) {
             // Calculate the left offset to align with the trigger element
-            // Since breadcrumbs are now in the header, we need to calculate relative to the page
             const triggerRect = triggerElement.getBoundingClientRect();
             const popoverContainerRect = popoverContainer.getBoundingClientRect();
-            
-            // Calculate offset from popover container to trigger element
             const leftOffset = triggerRect.left - popoverContainerRect.left - 22;
             popover.style.left = `${leftOffset}px`;
             
+            // Decide whether to open above or below based on viewport space
+            // When breadcrumbs are at the bottom of the page, open above
+            const viewportHeight = window.innerHeight;
+            const spaceBelow = viewportHeight - triggerRect.bottom;
+            const spaceAbove = triggerRect.top;
+            const showAbove = spaceBelow < spaceAbove;
+            
+            popoverContainer.classList.toggle('kefinTweaks-popover-container--above', showAbove);
+            popover.classList.toggle('kefinTweaks-popover--above', showAbove);
+            // Clear inline top when above so CSS bottom: 100% takes effect; restore when below
+            if (showAbove) {
+                popoverContainer.style.top = '';
+                popoverContainer.style.bottom = '100%';
+            } else {
+                popoverContainer.style.top = 'calc(100% - 15px)';
+                popoverContainer.style.bottom = '';
+            }
+            
             popoverContainer.appendChild(popover);
-            log('Popover added to popover container with left offset:', leftOffset);
+            log('Popover added to popover container with left offset:', leftOffset, 'showAbove:', showAbove);
         } else {
             log('Popover container not found, falling back to trigger element');
             triggerElement.style.position = 'relative';
@@ -646,11 +728,17 @@
             if (!currentUserId) {
                 throw new Error('No user ID found');
             }
-
+            
             const url = ApiClient.getUrl(`Users/${currentUserId}/Items/${itemId}`);
-            const response = await ApiClient.getJSON(url);
-            log('Retrieved item details:', response.Name, response.Type);
-            return response;
+            const response = await window.apiHelper.getQuery(url, { useCache: true });
+            
+            if (!response.data) {
+                response.data = await response.dataPromise;
+            }
+            
+            const item = response.data;
+            log('Retrieved item details:', item.Name, item.Type);
+            return item;
         } catch (err) {
             console.error('Failed to get item details:', err);
             return null;
@@ -659,13 +747,14 @@
     
     async function getSeasons(seriesId) {
         try {
-            const url = ApiClient.getUrl(`Shows/${seriesId}/Seasons`, {
-                userId: ApiClient.getCurrentUserId(),
-                imageTypeLimit: 1
-            });
-            const response = await ApiClient.getJSON(url);
-            log('Retrieved seasons:', response.Items?.length || 0);
-            return response.Items || [];
+            const url = ApiClient.getUrl(`Shows/${seriesId}/Seasons`);
+            const response = await window.apiHelper.getQuery(url, { useCache: true });
+            if (!response.data) {
+                response.data = await response.dataPromise;
+            }
+            const seasons = response.data.Items || response.data || [];
+            log('Retrieved seasons:', seasons.length);
+            return seasons;
         } catch (err) {
             error('Failed to get seasons:', err);
             return [];
@@ -683,11 +772,15 @@
                 StartIndex: 0,
                 CollapseBoxSetItems: false,
                 AlbumArtistIds: artistId,
-                SortBy: 'PremiereDate,ProductionYear,Sortname'
+                SortBy: 'PremiereDate,ProductionYear,Sortname',
             });
-            const response = await ApiClient.getJSON(url);
-            log('Retrieved albums:', response.Items?.length || 0);
-            return response.Items || [];
+            const response = await window.apiHelper.getQuery(url, { useCache: true });
+            if (!response.data) {
+                response.data = await response.dataPromise;
+            }
+            const albums = response.data.Items || response.data || [];
+            log('Retrieved albums:', albums.length);
+            return albums;
         } catch (err) {
             error('Failed to get albums:', err);
             return [];
@@ -706,10 +799,13 @@
                 StartIndex: 0,
                 CollapseBoxSetItems: false,
                 AlbumArtistIds: idsParam,
-                SortBy: 'PremiereDate,ProductionYear,Sortname'
+                SortBy: 'PremiereDate,ProductionYear,Sortname',
             });
-            const response = await ApiClient.getJSON(url);
-            const items = response.Items || [];
+            const response = await window.apiHelper.getQuery(url, { useCache: true });
+            if (!response.data) {
+                response.data = await response.dataPromise;
+            }
+            const items = response.data.Items || response.data || [];
             // Deduplicate by Id when multiple artists overlap
             const unique = [];
             const seen = new Set();
@@ -736,11 +832,15 @@
                 Fields: 'ParentId',
                 Limit: 100,
                 StartIndex: 0,
-                SortBy: 'IndexNumber,SortName'
+                SortBy: 'IndexNumber,SortName',
             });
-            const response = await ApiClient.getJSON(url);
-            log('Retrieved songs:', response.Items?.length || 0);
-            return response.Items || [];
+            const response = await window.apiHelper.getQuery(url, { useCache: true });
+            if (!response.data) {
+                response.data = await response.dataPromise;
+            }
+            const songs = response.data.Items || response.data || [];
+            log('Retrieved songs:', songs.length);
+            return songs;
         } catch (err) {
             error('Failed to get songs:', err);
             return [];
@@ -753,6 +853,26 @@
         separator.textContent = ' / ';
         separator.style.margin = '0 8px';
         return separator;
+    }
+    
+    // Serialize page-change work so overlapping view callbacks cannot race the DOM.
+    // Latest-wins pending: overwrite the single pending slot; drain runs one at a time.
+    let pageChangePending = undefined; // undefined = empty; null/item = pending job
+    let pageChangeDrain = Promise.resolve();
+    
+    function enqueuePageChange(item = null) {
+        pageChangePending = item;
+        pageChangeDrain = pageChangeDrain
+            .then(async () => {
+                if (pageChangePending === undefined) return;
+                const next = pageChangePending;
+                pageChangePending = undefined;
+                await handlePageChange(next);
+            })
+            .catch((err) => {
+                error('Breadcrumb page change queue failed:', err);
+            });
+        return pageChangeDrain;
     }
     
     // Page change handler
@@ -770,7 +890,7 @@
                 hideBreadcrumbs();
                 return;
             }
-
+            
             // Check if the user is logged in
             if (!ApiClient._loggedIn) {
                 clearBreadcrumbs();
@@ -779,7 +899,7 @@
             }
             
             // Extract item ID
-            if (!item || !item.Id) {
+            if (!item || !item.Id || (item.Type !== 'Series' && item.Type !== 'Season' && item.Type !== 'Episode')) {
                 clearBreadcrumbs();
                 hideBreadcrumbs();
                 return;
@@ -794,7 +914,12 @@
             
             // Determine target breadcrumb structure
             const targetStructure = await getTargetBreadcrumbStructure(item);
-            log('Target breadcrumb structure:', targetStructure.elements.map(e => e.text));
+            log(
+                'Target breadcrumb structure:',
+                targetStructure.elements.map((e) => e.text),
+            );
+            
+            const breadcrumbContainer = getBreadcrumbContainer();
             
             // Check if we need to create breadcrumbs from scratch
             if (!breadcrumbContainer || !currentBreadcrumbs) {
@@ -807,13 +932,16 @@
             }
             
             // Update state
-            currentBreadcrumbs = targetStructure;
+            // Update the currentBreadcrumbs from the current page
+            if (breadcrumbContainer && breadcrumbContainer.children) {
+                currentBreadcrumbs = Array.from(breadcrumbContainer.children);
+            }
+            //currentBreadcrumbs = targetStructure;
             currentItemId = item.Id;
             
             log('About to show breadcrumbs...');
             showBreadcrumbs();
             log('Breadcrumbs updated successfully');
-            
         } catch (err) {
             error('Error handling page change:', err);
             clearBreadcrumbs();
@@ -823,9 +951,13 @@
     
     // Create breadcrumbs from scratch
     async function createBreadcrumbsFromScratch(targetStructure) {
-        // Create container if it doesn't exist
+        // Create container if it doesn't exist (retry briefly on ModernUI if toolbar not ready)
         if (!breadcrumbContainer) {
-            breadcrumbContainer = createBreadcrumbContainer();
+            breadcrumbContainer = await ensureBreadcrumbContainer();
+        }
+        if (!breadcrumbContainer) {
+            error('Breadcrumb container unavailable');
+            return;
         }
         
         // Build all elements first
@@ -846,9 +978,13 @@
         breadcrumbContainer.innerHTML = '';
         
         // Append all elements at once
-        elements.forEach(el => breadcrumbContainer.appendChild(el));
+        elements.forEach((el) => breadcrumbContainer.appendChild(el));
         
         log('Created breadcrumbs from scratch with', targetStructure.elements.length, 'elements');
+    }
+    
+    function getBreadcrumbContainer() {
+        return document.getElementById('kefinTweaks-breadcrumbs');
     }
     
     // Window resize handler
@@ -871,18 +1007,19 @@
             log('Registering breadcrumb handler with KefinTweaksUtils');
             
             // Register handler for all pages (breadcrumbs can appear on any detail page)
-            window.KefinTweaksUtils.onViewPage(async (view, element, hash, itemPromise) => {
-                try {
-                    // Await the item promise to get the actual item data
-                    const item = await itemPromise;
-                    // Run our custom code
-                    handlePageChange(item);
-                } catch (err) {
-                    error('Breadcrumb page change handler failed:', err);
-                }
-            }, {
-                pages: [] // Empty array means all pages
-            });
+            window.KefinTweaksUtils.onViewPage(
+                async (view, element, hash, itemPromise) => {
+                    try {
+                        const item = await itemPromise;
+                        await enqueuePageChange(item);
+                    } catch (err) {
+                        error('Breadcrumb page change handler failed:', err);
+                    }
+                },
+                {
+                    pages: [], // Empty array means all pages
+                },
+            );
         } else {
             error('KefinTweaksUtils not available, breadcrumbs may not work correctly');
         }
@@ -891,7 +1028,7 @@
         window.addEventListener('resize', handleResize);
         
         // Initial check
-        handlePageChange();
+        enqueuePageChange(null);
         
         log('Breadcrumbs initialized successfully');
     }
@@ -902,5 +1039,4 @@
     } else {
         initialize();
     }
-    
 })();

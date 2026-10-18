@@ -1,0 +1,4 @@
+.homePage .unairedIndicator,
+.homePage .missingIndicator {
+	display: none;
+}

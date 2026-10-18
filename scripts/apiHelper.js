@@ -13,6 +13,87 @@
             throw new Error('ApiClient is not available');
         }
     }
+
+    const DEFAULT_ITEM_FIELDS = 'PrimaryImageAspectRatio,DateCreated,Overview,Taglines,ProductionYear,RecursiveItemCount,ChildCount,UserData,ProviderIds,MediaSourceCount';
+    const SPOTLIGHT_ITEM_FIELDS = `${DEFAULT_ITEM_FIELDS},People,Genres,ParentBackdropImageTags,Studios`;
+    const PIPE_DELIMITED_FIELDS = ['Genres', 'Tags', 'OfficialRatings', 'Studios', 'Artists', 'ExcludeArtistsIds', 'Albums', 'AlbumIds', 'StudioIds', 'GenreIds'];
+
+    function getDefaultFields(isSpotlight) {
+        return isSpotlight ? SPOTLIGHT_ITEM_FIELDS : DEFAULT_ITEM_FIELDS;
+    }
+
+    /**
+     * Resolve Fields param for a query based on section type and explicit queryOptions.Fields.
+     * @param {Object} queryOptions
+     * @param {{ isSpotlight?: boolean, sectionType?: string }} context
+     * @returns {string}
+     */
+    function resolveQueryFields(queryOptions, { isSpotlight = false, sectionType = '' } = {}) {
+        const explicit = queryOptions?.Fields;
+        if (!explicit) {
+            return getDefaultFields(isSpotlight);
+        }
+        const isDefaultHome = sectionType === 'home';
+        if (isDefaultHome && !isSpotlight) {
+            return mergeFields(null, explicit);
+        }
+        if (isDefaultHome && isSpotlight) {
+            return mergeFields(SPOTLIGHT_ITEM_FIELDS, explicit);
+        }
+        return mergeFields(getDefaultFields(isSpotlight), explicit);
+    }
+
+    function getNextUpDateCutoff(userId) {
+        const raw = userId ? localStorage.getItem(`${userId}-maxDaysForNextUp`) : null;
+        const days = raw != null && raw !== '' ? parseInt(raw, 10) : 365;
+        const maxDays = Number.isFinite(days) && days >= 0 ? days : 365;
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - maxDays);
+        return cutoff.toISOString().split('T')[0];
+    }
+
+    function getEnableRewatchingInNextUp(userId) {
+        if (!userId) return false;
+        return localStorage.getItem(`${userId}-enableRewatchingInNextUp`) === 'true';
+    }
+
+    function mergeFields(base, extra) {
+        const seen = new Set();
+        const result = [];
+        const add = (value) => {
+            if (value == null || value === '') return;
+            const parts = Array.isArray(value) ? value : String(value).split(',');
+            for (const part of parts) {
+                const field = String(part).trim();
+                if (!field) continue;
+                const key = field.toLowerCase();
+                if (seen.has(key)) continue;
+                seen.add(key);
+                result.push(field);
+            }
+        };
+        add(base);
+        add(extra);
+        return result.join(',');
+    }
+
+    function applyQueryOptionsToParams(params, queryOptions, { skipFields = false } = {}) {
+        Object.entries(queryOptions || {}).forEach(([key, value]) => {
+            if (value === undefined || value === null) return;
+            if (key === 'Limit' && value === 0) return;
+            if (key === 'Fields') {
+                if (skipFields) return;
+                params.set('Fields', mergeFields(params.get('Fields'), value));
+                return;
+            }
+            if (Array.isArray(value)) {
+                const delimiter = PIPE_DELIMITED_FIELDS.includes(key) ? '|' : ',';
+                params.set(key, value.join(delimiter));
+                return;
+            }
+            params.set(key, value);
+        });
+    }
     
     /**
      * Retrieves the active playback session for this device
@@ -154,23 +235,37 @@
     }
 
     /**
-     * Build MediaBrowser Authorization header
-     * @returns {string} - Authorization header
+     * Build MediaBrowser Authorization header for an explicit access token.
+     * When token is empty/missing, Token is omitted (required for AuthenticateByName).
+     * @param {string} [token]
+     * @returns {string}
      */
-    function getAuthHeader() {
-        const token = ApiClient.accessToken();
-        const client = typeof ApiClient.applicationName === 'function' ? ApiClient.applicationName() : 'Jellyfin Web';
-        const device = typeof ApiClient.deviceName === 'function' ? ApiClient.deviceName() : (navigator.userAgent.includes('Chrome') ? 'Chrome' : 'Browser');
-        const deviceId = typeof ApiClient.deviceId === 'function' ? ApiClient.deviceId() : '';
-        const version = ApiClient._appVersion || ApiClient._serverVersion || '';
+    function getAuthHeaderForToken(token) {
+        const api = (typeof ApiClient !== 'undefined' && ApiClient) || window.ApiClient || null;
+        const client = api && typeof api.applicationName === 'function' ? api.applicationName() : 'Jellyfin Web';
+        const device = api && typeof api.deviceName === 'function' ? api.deviceName() : (navigator.userAgent.includes('Chrome') ? 'Chrome' : 'Browser');
+        const deviceId = api && typeof api.deviceId === 'function' ? api.deviceId() : '';
+        const version = (api && (api._appVersion || api._serverVersion)) || '';
         const parts = [
             `Client="${encodeURIComponent(client)}"`,
             `Device="${encodeURIComponent(device)}"`,
             `DeviceId="${encodeURIComponent(deviceId)}"`,
-            `Version="${encodeURIComponent(version)}"`,
-            `Token="${encodeURIComponent(token)}"`
+            `Version="${encodeURIComponent(version)}"`
         ];
+        if (token) {
+            parts.push(`Token="${encodeURIComponent(token)}"`);
+        }
         return `MediaBrowser ${parts.join(', ')}`;
+    }
+
+    /**
+     * Build MediaBrowser Authorization header for the current ApiClient session.
+     * @returns {string} - Authorization header
+     */
+    function getAuthHeader() {
+        return getAuthHeaderForToken(typeof ApiClient !== 'undefined' && ApiClient.accessToken
+            ? ApiClient.accessToken()
+            : '');
     }
     
     /**
@@ -244,11 +339,367 @@
         
         return `${serverAddress}/Users/${userId}/Items?${params.toString()}`;
     }
+
+    const state = {
+        cachedServerVersion: null
+    }
+
+    /**
+     * Fields used by progressive Watchlist sections. Must match getWatchlistQuery /
+     * invalidateWatchlistQueries so cache clear hits the same URL as fetch.
+     */
+    const WATCHLIST_PROGRESSIVE_FIELDS =
+        'PrimaryImageAspectRatio,DateCreated,ProductionYear,PremiereDate,ProviderIds,UserData';
+
+    /**
+     * Build a single top-level Likes query def (shared by getWatchlistItems / getWatchlistQuery).
+     * Callers pass IncludeItemTypes (and other options) to narrow results.
+     * Default Fields match progressive sections so invalidate clears the fetched URL.
+     * @param {Object} options
+     * @returns {{ queryOptions: Object }}
+     */
+    function buildWatchlistQueryDef(options = {}) {
+        return {
+            queryOptions: {
+                Recursive: true,
+                ImageTypeLimit: 1,
+                EnableImageTypes: 'Primary,Backdrop,Thumb',
+                Fields: WATCHLIST_PROGRESSIVE_FIELDS,
+                ...options,
+                Filters: 'Likes'
+            }
+        };
+    }
     
     /**
      * API Helper functions for Jellyfin operations
      */
     const apiHelper = {
+        /**
+         * Get the MediaBrowser Authorization header for an explicit access token
+         * @param {string} [token]
+         * @returns {string}
+         */
+        getAuthHeaderForToken: getAuthHeaderForToken,
+
+        /**
+         * Get the MediaBrowser Authorization header
+         * @returns {string} - Authorization header
+         */
+        getAuthHeader: getAuthHeader,
+
+        /**
+         * Generic data fetcher with universal caching and progressive loading support
+         * @param {string} url - Full URL to fetch
+         * @param {Object} options - Cache options
+         * @param {boolean} options.useCache - Whether to return cached data first (default: false)
+         * @param {number} options.ttl - Cache time to live in milliseconds (default: 300000)
+         * @returns {Object|Promise<Object>} - If useCache is true, returns progressive stub { data, ensureData, isStalePromise } synchronously. Otherwise returns Promise<data>.
+         */
+        getQuery: function(url, options = {}) {
+            ensureApiClient();
+            
+            const useCache = options.useCache || false;
+            let ttl = 60000;
+            if (Number(options.ttl) >= 0) {
+                ttl = Number(options.ttl);
+            }
+            const forceRefresh = options.forceRefresh || false;
+            const cacheKey = url;
+            
+            // Standard fetch function
+            const fetchData = async () => {
+                try {
+                    const response = await fetch(url, {
+                        headers: {
+                            'Authorization': getAuthHeader(),
+                            'Accept': 'application/json'
+                        }
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    
+                    const data = await response.json();
+                    
+                    // Always cache successful responses
+                    if (data) {
+                        setCachedQuery(cacheKey, data);
+                        // Also persist to IndexedDB if available
+                        if (window.IndexedDBCache) {
+                            const cache = window.IndexedDBCache;
+                            // We use the full URL as part of the key, but hashed or sanitized might be safer. 
+                            // For now using URL as is common in this codebase.
+                            // IndexedDBCache expects a "name" which it prefixes. 
+                            // We'll use a hash of the URL to keep keys clean? 
+                            // Or just pass the URL as the cacheName but it might get messy.
+                            // Let's use a simple mapping or just stringify.
+                            // Actually, let's just stick to the in-memory cache for 'getQuery' unless we want persistent storage for home screen.
+                            // The requirement says "use existing indexeddbcache functionality". 
+                            // So let's use it.
+                            await cache.set(url, data, null, ttl);
+                        }
+                    }
+                    
+                    return data;
+                } catch (error) {
+                    ERR('Failed to fetch URL:', error);
+                    throw error;
+                }
+            };
+
+            // If not using cache, just fetch
+            if (!useCache) {
+                return fetchData();
+            }
+
+            // Progressive loading Logic
+            const result = {
+                data: null,
+                dataPromise: null,
+                isStalePromise: null
+            };
+
+            // 1. Get cached data immediately (async but fast)
+            const cachePromise = (async () => {
+                // Try memory cache first
+                let cached = getCachedQuery(cacheKey, ttl);
+                
+                // If not in memory, try IndexedDB
+                if (!cached && window.IndexedDBCache) {
+                    const dbCache = window.IndexedDBCache;
+                    const entry = await dbCache.getCacheEntry(url);
+                    if (entry) {
+                        cached = entry; // Keep structure { payload, timestamp, ttl }
+                        LOG(`[Cache] Found in IndexedDB: ${url.substring(0, 60)}...`);
+                    }
+                } else if (cached) {
+                    // Wrap memory cache to match structure
+                    cached = { payload: cached, timestamp: Date.now(), ttl: ttl }; 
+                    LOG(`[Cache] Found in Memory: ${url.substring(0, 60)}...`);
+                } else {
+                    LOG(`[Cache] Miss: ${url.substring(0, 60)}...`);
+                }
+                
+                return cached;
+            })();
+
+            // 2. Define staleness check
+            result.isStalePromise = cachePromise.then(async (entry) => {
+                if (forceRefresh) {
+                    LOG(`[StaleCheck] Force Refresh -> Stale`);
+                    return true; // Force Refresh = stale
+                }
+
+                if (!entry) {
+                    LOG(`[StaleCheck] No cache entry -> Stale`);
+                    return true; // No cache = stale
+                }
+                
+                const now = Date.now();
+                const age = now - entry.timestamp;
+                const isExpired = age > ttl;
+                
+                result.data = entry.payload;
+
+                if (!isExpired) {
+                    LOG(`[StaleCheck] Cache valid (${(age/1000).toFixed(1)}s old) -> Not Stale`);
+                    return false; // Valid
+                }
+                
+                LOG(`[StaleCheck] Cache expired (${(age/1000).toFixed(1)}s old). Refreshing...`);
+                return true;
+
+                /* LOG(`[StaleCheck] Cache expired (${(age/1000).toFixed(1)}s old). Validating...`);
+
+                // Cache is expired, check if we can validate it
+                // Logic: Check SortBy
+                const urlObj = new URL(url);
+                const sortBy = urlObj.searchParams.get('SortBy');
+                const isRandom = !sortBy || sortBy.includes('Random');
+
+                if (isRandom) {
+                    LOG(`[StaleCheck] Random sort detected -> Stale (Force Refresh)`);
+                    return true; // Random + Expired = Stale
+                }
+
+                // Fixed Sort: Fetch first 3 items
+                try {
+                    // Clone URL and modify params
+                    const checkUrl = new URL(url);
+                    checkUrl.searchParams.set('Limit', '3');
+                    //checkUrl.searchParams.set('StartIndex', '0'); // Ensure start
+                    
+                    const checkResponse = await fetch(checkUrl.toString(), {
+                        headers: {
+                            'Authorization': getAuthHeader(),
+                            'Accept': 'application/json'
+                        }
+                    });
+                    
+                    if (!checkResponse.ok) {
+                        LOG(`[StaleCheck] Validation fetch failed -> Stale`);
+                        return true; 
+                    }
+                    
+                    const checkData = await checkResponse.json();
+                    
+                    // Compare IDs
+                    const cachedItems = entry.payload.Items || entry.payload || [];
+                    const freshItems = checkData.Items || checkData || [];
+                    
+                    if (freshItems.length === 0 && cachedItems.length === 0) {
+                        LOG(`[StaleCheck] Both empty -> Not Stale`);
+                        return false; 
+                    }
+                    if (freshItems.length !== Math.min(cachedItems.length, 3)) {
+                        LOG(`[StaleCheck] Count mismatch (Fresh: ${freshItems.length}, Cached: ${Math.min(cachedItems.length, 3)}) -> Stale`);
+                        return true; 
+                    }
+
+                    for (let i = 0; i < freshItems.length; i++) {
+                        if (freshItems[i].Id !== cachedItems[i].Id) {
+                            LOG(`[StaleCheck] Item mismatch at index ${i} -> Stale`);
+                            return true; // Mismatch found
+                        }
+
+                        // Also check the UserData for the item
+                        if (freshItems[i].UserData) {
+                            // Check each key in the UserData object
+                            for (const key in freshItems[i].UserData) {
+                                if (freshItems[i].UserData[key] !== cachedItems[i].UserData[key]) {
+                                    LOG(`[StaleCheck] UserData mismatch for key ${key} -> Stale`);
+                                    return true; // Mismatch found
+                                }
+                            }
+                        }
+
+                        // Also check the ImageTags for the item
+                        if (freshItems[i].ImageTags) {
+                            // Check each key in the ImageTags object
+                            for (const key in freshItems[i].ImageTags) {
+                                if (freshItems[i].ImageTags[key] !== cachedItems[i].ImageTags[key]) {
+                                    LOG(`[StaleCheck] ImageTags mismatch for key ${key} -> Stale`);
+                                    return true; // Mismatch found
+                                }
+                            }
+                        }
+                    }
+
+                    // Validation Successful: Update timestamp
+                    LOG(`[StaleCheck] Content matches -> Not Stale (Updating Timestamp)`);
+                    if (window.IndexedDBCache) {
+                        const dbCache = window.IndexedDBCache;
+                        // Update with new timestamp but same data
+                        dbCache.set(url, entry.payload, null, ttl);
+                    }
+                    
+                    result.data = entry.payload; // Use cached data
+                    return false; // Not stale
+
+                } catch (e) {
+                    WARN('Error validating cache:', e);
+                    return true; // Assume stale on error
+                } */
+            });
+
+            // 3. Lazy data promise — do not start fetchData until ensureData()/dataPromise is used
+            // Stale-while-revalidate: return usable cache immediately; refresh in _refreshPromise
+            const hasUsableCachedPayload = (data) => {
+                if (!data) return false;
+                if (Array.isArray(data)) return data.length > 0;
+                if (Array.isArray(data.Items)) return data.Items.length > 0;
+                return false;
+            };
+
+            result.ensureData = function() {
+                if (!result._dataPromise) {
+                    result._dataPromise = result.isStalePromise.then(isStale => {
+                        if (!isStale) {
+                            LOG(`[Fetch] Using cached data for: ${url}...`);
+                            return result.data;
+                        }
+
+                        const refreshPromise = fetchData().then((fresh) => {
+                            if (fresh != null) result.data = fresh;
+                            return fresh;
+                        });
+
+                        if (hasUsableCachedPayload(result.data)) {
+                            result._refreshPromise = refreshPromise;
+                            LOG(`[Fetch] Returning stale cache; refreshing in background: ${url}...`);
+                            return result.data;
+                        }
+
+                        LOG(`[Fetch] Refreshing data for: ${url}...`);
+                        return refreshPromise;
+                    });
+                }
+                return result._dataPromise;
+            };
+            Object.defineProperty(result, 'dataPromise', {
+                configurable: true,
+                enumerable: true,
+                get() {
+                    return result.ensureData();
+                }
+            });
+
+            // Sync stub: do not await IndexedDB before return (home first paint).
+            // cachePromise / isStalePromise hydrate result.data in the background.
+            // Thenable waits for hydrate but must NOT fulfill with `result` itself
+            // (Promise assimilation would recurse on result.then forever).
+            result.data = { Items: [] };
+            result.isStale = true;
+            const readyPromise = cachePromise.then((entry) => {
+                if (entry) {
+                    result.data = entry.payload;
+                    result.isStale = forceRefresh || (Date.now() - entry.timestamp > ttl);
+                } else {
+                    // Cache miss: clear placeholder so data?.Items cannot fake a hit
+                    result.data = null;
+                    result.isStale = true;
+                }
+            }).catch(() => {
+                result.data = null;
+                result.isStale = true;
+            });
+
+            function toSettledView() {
+                return {
+                    data: result.data,
+                    isStale: result.isStale,
+                    isStalePromise: result.isStalePromise,
+                    ensureData: result.ensureData,
+                    get dataPromise() {
+                        return result.ensureData();
+                    }
+                };
+            }
+
+            result.then = function (onFulfilled, onRejected) {
+                return readyPromise.then(
+                    () => (typeof onFulfilled === 'function' ? onFulfilled(toSettledView()) : toSettledView()),
+                    onRejected
+                );
+            };
+            result.catch = function (onRejected) {
+                return result.then(undefined, onRejected);
+            };
+            return result;
+        },
+
+        invalidateCache: function(url) {
+            const dbCache = window.IndexedDBCache;
+            if (dbCache) {
+                dbCache.clear(url);
+            }
+            if (queryCache) {
+                queryCache.delete(url);
+            }
+        },
+
         /**
          * Generic data fetcher with universal caching
          * Always caches successful responses, but only checks cache when useCache is true
@@ -300,51 +751,93 @@
         },
 
         getWatchlistItems: async function(options = {}, useCache = false) {
-            // First fetch the Library Items that contain items of the supported types from ApiClient.getJSON(ApiClient.getUrl("Library/MediaFolders"))
-            const libraryItems = await ApiClient.getItems();
-            
-            // We now want to include the library items with ColletionType "tvshows", or "movies"
-            const supportedCollectionTypes = ['tvshows', 'movies', 'homevideos', 'boxsets', 'playlists'];
-            const supportedLibraryItems = libraryItems.Items.filter(item => supportedCollectionTypes.includes(item.CollectionType) || !item.CollectionType);
-
-            // Now use these support library items as the parent ids for the Items query, since the Items endpoint doesn't support ParentIds as an array we need to make a different call for each library. Querying with the parent id will dramatically reduce the time for the request to return so this is fine
-            let watchlistItems = [];
-            for (const libraryItem of supportedLibraryItems.reverse()) {
-                // Get the item types to include based on the library type. if its a Movies library only use the Movie type. If it's tvshows then use Series, Season and Episode
-                let itemTypes = options.IncludeItemTypes.split(',');
-                if (itemTypes.length > 1) { 
-                    if (libraryItem.CollectionType === 'movies') {
-                        itemTypes = options.IncludeItemTypes.split(',').filter(item => item === 'Movie');
-                    } else if (libraryItem.CollectionType === 'tvshows') {
-                        itemTypes = options.IncludeItemTypes.split(',').filter(item => item === 'Series' || item === 'Season' || item === 'Episode');
-                    }
-                }
-                
-                // Use getItems to fetch the items for the library item
-                const data = await this.getItems({
-                    ParentId: libraryItem.Id,
-                    Filters: 'Likes',
-                    IncludeItemTypes: itemTypes.join(','),
-                    Recursive: true,
-                    ImageTypeLimit: 1,
-                    EnableImageTypes: 'Primary,Backdrop,Thumb',
-                    ...options
-                }, useCache);
-
-                //const url = `${ApiClient.serverAddress()}/Items?Filters=Likes&IncludeItemTypes=${type}&UserId=${ApiClient.getCurrentUserId()}&Recursive=true&ImageTypeLimit=1&EnableImageTypes=Primary,Backdrop,Thumb&ParentId=${libraryItem.Id}`;
-                //const data = await this.getData(url, useCache);
-                watchlistItems.push(...data.Items);
-            }
-
-            // Deuplicate any duplicate Id's in the watchlistItems array
-            watchlistItems = watchlistItems.filter((item, index, self) =>
-                index === self.findIndex((t) => t.Id === item.Id)
-            );
+            const query = buildWatchlistQueryDef(options);
+            const data = await this.getItems({ ...query.queryOptions }, useCache);
+            const items = Array.isArray(data?.Items) ? data.Items : (Array.isArray(data) ? data : []);
 
             return {
-                Items: watchlistItems,
-                TotalRecordCount: watchlistItems.length
+                Items: items,
+                TotalRecordCount: data?.TotalRecordCount ?? items.length
             };
+        },
+
+        /**
+         * Progressive watchlist query (single top-level Likes getQuery).
+         * @param {Object} options - Same shape as getWatchlistItems (IncludeItemTypes, Fields, ...)
+         * @param {Object} [cacheOptions]
+         * @param {number} [cacheOptions.ttl=300000]
+         * @param {boolean} [cacheOptions.forceRefresh=false]
+         * @returns {Promise<Object>} Progressive result: { data, isStale, isStalePromise, ensureData, dataPromise, urls }
+         */
+        getWatchlistQuery: async function(options = {}, cacheOptions = {}) {
+            ensureApiClient();
+
+            let ttl = 300000;
+            if (Number(cacheOptions.ttl) >= 0) {
+                ttl = Number(cacheOptions.ttl);
+            }
+            const forceRefresh = !!cacheOptions.forceRefresh;
+            const userId = ApiClient.getCurrentUserId();
+            const serverUrl = ApiClient.serverAddress();
+            const query = buildWatchlistQueryDef(options);
+            const url = this.buildQueryFromSection(query, userId, serverUrl);
+            if (typeof url !== 'string') {
+                throw new Error('Invalid watchlist query URL');
+            }
+
+            const queryResult = this.getQuery(url, {
+                useCache: true,
+                ttl,
+                forceRefresh
+            });
+
+            const normalize = (data) => {
+                const items = Array.isArray(data?.Items) ? data.Items : (Array.isArray(data) ? data : []);
+                return { Items: items, TotalRecordCount: data?.TotalRecordCount ?? items.length };
+            };
+
+            let mappedDataPromise = null;
+            const ensureData = () => {
+                if (!mappedDataPromise) {
+                    const raw = typeof queryResult.ensureData === 'function'
+                        ? queryResult.ensureData()
+                        : queryResult.dataPromise;
+                    mappedDataPromise = Promise.resolve(raw).then(normalize);
+                }
+                return mappedDataPromise;
+            };
+
+            const result = {
+                data: { Items: [] },
+                isStale: true,
+                isStalePromise: queryResult.isStalePromise || Promise.resolve(false),
+                ensureData,
+                urls: [url]
+            };
+            Object.defineProperty(result, 'dataPromise', {
+                configurable: true,
+                enumerable: true,
+                get() {
+                    return ensureData();
+                }
+            });
+
+            return result;
+        },
+
+        /**
+         * Invalidate cached watchlist query URL for the given IncludeItemTypes options.
+         * @param {Object} [options]
+         */
+        invalidateWatchlistQueries: async function(options = {}) {
+            ensureApiClient();
+            const query = buildWatchlistQueryDef(options);
+            const userId = ApiClient.getCurrentUserId();
+            const serverUrl = ApiClient.serverAddress();
+            const url = this.buildQueryFromSection(query, userId, serverUrl);
+            if (typeof url === 'string') {
+                this.invalidateCache(url);
+            }
         },
         
         /**
@@ -530,6 +1023,319 @@
             LOG('Queue updated successfully');
         },
         /**
+         * Lookup a genre ID from the local movie-genres catalog (localStorage / memory).
+         * Never awaits network — schedules a background sync when missing or older than 24h.
+         * @param {string} genreName - Name of the genre to find
+         * @returns {Promise<string|null>} - Genre ID or null if not found / not yet cached
+         */
+        getGenreId: async function(genreName) {
+            if (!genreName) return null;
+
+            hydrateMovieGenresFromStorage();
+            const empty = !cachedMovieGenres || cachedMovieGenres.length === 0;
+            if (empty || isMovieGenresSyncDue()) {
+                ensureGenreSyncScheduled();
+            }
+            if (!cachedMovieGenres || cachedMovieGenres.length === 0) return null;
+
+            const needle = String(genreName).toLowerCase();
+            const genre = cachedMovieGenres.find((g) => g?.Name && g.Name.toLowerCase() === needle);
+            return genre ? genre.Id : null;
+        },
+
+        /**
+         * Subscribe to movie-genres catalog sync completion (localStorage + memory refreshed).
+         * @param {Function} callback
+         * @returns {Function} unsubscribe
+         */
+        onMovieGenresSynced: function(callback) {
+            if (typeof callback !== 'function') return () => {};
+            movieGenresSyncedListeners.add(callback);
+            return () => movieGenresSyncedListeners.delete(callback);
+        },
+
+        /**
+         * Build query URL from section query configuration
+         * Handles minAge/maxAge conversion to MinPremiereDate/MaxPremiereDate
+         * @param {Object} query - Query object with optional path, dataSource, minAge, maxAge, and queryOptions
+         * @param {string} userId - User ID
+         * @param {string} serverUrl - Server URL
+         * @returns {string|Object} - Query URL string or dataSource marker object
+         */
+        buildQueryFromSection: function(query, userId, serverUrl, isSpotlight = false, options = {}) {
+            ensureApiClient();
+            
+            const sectionType = options.sectionType || '';
+            const queryOptions = { ...(query.queryOptions || {}) };
+            
+            // Convert minAge/maxAge to premiere date range
+            if (query.minAge !== undefined || query.maxAge !== undefined) {
+                const now = new Date();
+                
+                if (query.maxAge !== undefined) {
+                    const minDate = new Date(now);
+                    minDate.setDate(minDate.getDate() - query.maxAge);
+                    queryOptions.MinPremiereDate = minDate.toISOString().split('T')[0];
+                }
+                
+                if (query.minAge !== undefined) {
+                    const maxDate = new Date(now);
+                    maxDate.setDate(maxDate.getDate() - query.minAge);
+                    queryOptions.MaxPremiereDate = maxDate.toISOString().split('T')[0];
+                }
+            }
+            
+            const buildContext = { isSpotlight, sectionType };
+            
+            if (query.path) {
+                return this.buildCustomEndpoint(query.path, queryOptions, userId, serverUrl, buildContext);
+            }
+            
+            if (query.dataSource) {
+                return {
+                    dataSource: query.dataSource,
+                    options: queryOptions,
+                    dataSourceOptions: query.dataSourceOptions || {}
+                };
+            }
+            
+            return this.buildStandardQuery(queryOptions, userId, serverUrl, buildContext);
+        },
+
+        /**
+         * Build standard /Items query URL
+         * @param {Object} queryOptions - Query options
+         * @param {string} userId - User ID
+         * @param {string} serverUrl - Server URL
+         * @param {{ isSpotlight?: boolean, sectionType?: string }} context
+         * @returns {string} - Query URL
+         */
+        buildStandardQuery: function(queryOptions, userId, serverUrl, context = {}) {
+            if (context === true || context === false) {
+                context = { isSpotlight: context === true };
+            }
+            const params = new URLSearchParams({
+                Recursive: 'true',
+                Fields: resolveQueryFields(queryOptions, context),
+            });
+
+            applyQueryOptionsToParams(params, queryOptions, { skipFields: true });
+
+            return userId ? `${serverUrl}/Users/${userId}/Items?${params.toString()}` : `${serverUrl}/Items?${params.toString()}`;
+        },
+
+        /**
+         * Build custom endpoint URL
+         * @param {string} path - Custom endpoint path (e.g., '/Shows/NextUp')
+         * @param {Object} queryOptions - Query options
+         * @param {string} userId - User ID
+         * @param {string} serverUrl - Server URL
+         * @param {{ isSpotlight?: boolean, sectionType?: string }} context
+         * @returns {string} - Query URL
+         */
+        buildCustomEndpoint: function(path, queryOptions, userId, serverUrl, context = {}) {
+            if (context === true || context === false) {
+                context = { isSpotlight: context === true };
+            }
+            const params = new URLSearchParams({
+                UserId: userId,
+                Fields: resolveQueryFields(queryOptions, context),
+            });
+
+            applyQueryOptionsToParams(params, queryOptions, { skipFields: true });
+
+            if (path === '/Shows/NextUp') {
+                // If NextUpDateCutoff is not set, set it to the current date
+                if (!params.has('NextUpDateCutoff') && queryOptions.NextUpDateCutoff === undefined) {
+                    params.set('NextUpDateCutoff', getNextUpDateCutoff(userId));
+                }
+
+                // If EnableRewatching is not set, set it to the current value
+                if (!params.has('EnableRewatching') && queryOptions.EnableRewatching === undefined) {
+                    params.set('EnableRewatching', getEnableRewatchingInNextUp(userId) ? 'true' : 'false');
+                }
+
+                // If EnableResumable is not set, set it to false
+                if (!params.has('EnableResumable') && queryOptions.EnableResumable === undefined) {
+                    params.set('EnableResumable', 'false');
+                }
+            }
+
+            if (!params.has('EnableTotalRecordCount')) {
+                params.set('EnableTotalRecordCount', 'false');
+            }
+
+            return `${serverUrl}${path}?${params.toString()}`;
+        },
+        
+        /**
+         * Resolve args for a cache dataSource method.
+         * Prefers explicit dataSourceOptions; falls back to legacy ItemType/MinCount in queryOptions.
+         */
+        resolveDataSourceMethodArgs: function(dataSourceOptions, queryOptions) {
+            if (dataSourceOptions && typeof dataSourceOptions === 'object') {
+                const keys = Object.keys(dataSourceOptions);
+                if (keys.length) return { ...dataSourceOptions };
+            }
+            const qo = queryOptions || {};
+            const out = {};
+            if (qo.ItemType != null && qo.ItemType !== '') out.ItemType = qo.ItemType;
+            else if (qo.itemType != null && qo.itemType !== '') out.ItemType = qo.itemType;
+            if (qo.MinCount != null && qo.MinCount !== '') out.MinCount = qo.MinCount;
+            else if (qo.minCount != null && qo.minCount !== '') out.MinCount = qo.minCount;
+            else if (qo.minimumSeries != null && qo.minimumSeries !== '') out.minimumSeries = qo.minimumSeries;
+            return out;
+        },
+
+        /**
+         * Fetch from data source (cache-based)
+         * @param {string} dataSource - Data source in format "CacheName.methodName"
+         * @param {Object} queryOptions - Post-processing options (SortBy, SortOrder, Limit, etc.)
+         * @param {boolean} [useCache=true]
+         * @param {Object} [dataSourceOptions] - Args passed to the cache method (e.g. ItemType, MinCount)
+         * @returns {Object} - Object with data, dataPromise, and isStalePromise
+         */
+        fetchFromDataSource: async function(dataSource, queryOptions, useCache = true, dataSourceOptions) {
+            const [cacheName, methodName] = dataSource.split('.');
+            const cache = window[cacheName];
+            const options = queryOptions || {};
+            const methodArgs = this.resolveDataSourceMethodArgs(dataSourceOptions, options);
+            
+            if (!cache || !cache[methodName]) {
+                WARN(`Data source not available: ${dataSource}`);
+                return {
+                    data: { Items: [] },
+                    dataPromise: Promise.resolve({ Items: [] }),
+                    isStalePromise: Promise.resolve(false)
+                };
+            }
+            
+            try {
+                let dataPromise = Promise.resolve(cache[methodName](methodArgs));
+                dataPromise = dataPromise.then(data => {
+                    if (!Array.isArray(data)) {
+                        data = [];
+                    }
+                    
+                    // Apply options (sorting, limits, etc.)
+                    if (options.SortBy === 'Random') {
+                        data = data.sort(() => Math.random() - 0.5);
+                    } else if (options.SortBy) {
+                        data = data.sort((a, b) => {
+                            const aVal = a[options.SortBy];
+                            const bVal = b[options.SortBy];
+                            if (aVal === bVal) return 0;
+                            const comparison = aVal > bVal ? 1 : -1;
+                            return options.SortOrder === 'Descending' ? -comparison : comparison;
+                        });
+                    }
+                    
+                    if (options.Limit) {
+                        data = data.slice(0, options.Limit);
+                    }
+                    return {
+                        Items: data
+                    };
+                });
+
+                if (!useCache) {
+                    return await dataPromise;
+                }
+                
+                return {
+                    data: { Items: [] },
+                    dataPromise: dataPromise,
+                    isStalePromise: Promise.resolve(false)
+                };
+            } catch (error) {
+                ERR(`Failed to fetch from ${dataSource}:`, error);
+                return {
+                    data: { Items: [] },
+                    dataPromise: Promise.resolve({ Items: [] }),
+                    isStalePromise: Promise.resolve(false)
+                };
+            }
+        },
+
+        /**
+         * Merge results from multiple queries
+         * @param {Array} results - Array of query result objects
+         * @param {Object} sectionConfig - Section configuration object
+         * @returns {Object} - Merged result object with config, result.data, result.dataPromise, result.isStalePromise
+         */
+        mergeMultiQueryResults: function(results, sectionConfig) {
+            // Combine all items from all queries
+            const allItems = [];
+            const itemsByQuery = [];
+            
+            results.forEach(result => {
+                if (result.data?.Items) {
+                    allItems.push(...result.data.Items);
+                    itemsByQuery.push(result.data.Items);
+                }
+            });
+            
+            // Sort merged items if sortBy specified
+            /* if (sectionConfig.sortBy) {
+                allItems.sort((a, b) => {
+                    const aVal = a[sectionConfig.sortBy] || (a.UserData?.[sectionConfig.sortBy] ? new Date(a.UserData[sectionConfig.sortBy]).getTime() : 0);
+                    const bVal = b[sectionConfig.sortBy] || (b.UserData?.[sectionConfig.sortBy] ? new Date(b.UserData[sectionConfig.sortBy]).getTime() : 0);
+                    
+                    // Handle DatePlayed specifically for merged Continue/NextUp
+                    if (sectionConfig.sortBy === 'DatePlayed') {
+                        const aDate = a.UserData?.LastPlayedDate ? new Date(a.UserData.LastPlayedDate).getTime() : 0;
+                        const bDate = b.UserData?.LastPlayedDate ? new Date(b.UserData.LastPlayedDate).getTime() : 0;
+                        const comparison = aDate > bDate ? 1 : aDate < bDate ? -1 : 0;
+                        return sectionConfig.sortOrder === 'Descending' ? -comparison : comparison;
+                    }
+                    
+                    const comparison = aVal > bVal ? 1 : aVal < bVal ? -1 : 0;
+                    return sectionConfig.sortOrder === 'Descending' ? -comparison : comparison;
+                });
+            } */
+            
+            let dataPromise = null;
+            const ensureData = function() {
+                if (!dataPromise) {
+                    dataPromise = Promise.all(results.map((r) => (
+                        typeof r.ensureData === 'function' ? r.ensureData() : r.dataPromise
+                    ))).then((allData) => {
+                        const itemsByFreshQuery = [];
+                        allData.forEach((data) => {
+                            if (data?.Items) {
+                                itemsByFreshQuery.push(data.Items);
+                            }
+                        });
+                        return window.cardBuilder.postProcessItemsByQuery(sectionConfig, itemsByFreshQuery);
+                    });
+                }
+                return dataPromise;
+            };
+
+            const mergedResult = {
+                data: { Items: window.cardBuilder.postProcessItemsByQuery(sectionConfig, itemsByQuery) },
+                isStale: results.some((r) => r.isStale),
+                isStalePromise: Promise.all(results.map(r => r.isStalePromise || Promise.resolve(false)))
+                    .then(staleFlags => staleFlags.some(s => s)),
+                ensureData
+            };
+            Object.defineProperty(mergedResult, 'dataPromise', {
+                configurable: true,
+                enumerable: true,
+                get() {
+                    return ensureData();
+                }
+            });
+            
+            return {
+                config: sectionConfig,
+                result: mergedResult
+            };
+        },
+        
+        isAdmin: isAdmin,
+
+        /**
          * Get the list of plugins from the server
          * @returns {Promise<Array>} - Array of plugin objects
          */
@@ -550,12 +1356,168 @@
 
             return await response.json();
         },
-
-        getAuthHeader,
     };
-    
+
+    const GENRE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+    const GENRE_SETTLE_DELAY_MS = 1500;
+    let cachedMovieGenres = null;
+    let movieGenresLastSyncedAt = null;
+    let genreSyncScheduledPromise = null;
+    let genreSyncInFlightPromise = null;
+    const movieGenresSyncedListeners = new Set();
+
+    function normalizeServerAddressForStorage(serverAddress) {
+        if (!serverAddress) return '';
+        return String(serverAddress).replace(/\/+$/, '');
+    }
+
+    function getMovieGenresStorageKey() {
+        try {
+            const serverAddress = normalizeServerAddressForStorage(
+                (typeof ApiClient !== 'undefined' && ApiClient?.serverAddress?.()) || ''
+            );
+            if (!serverAddress) return null;
+            return `kefinTweaks_movieGenres_${encodeURIComponent(serverAddress)}`;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function readMovieGenresFromStorage() {
+        const key = getMovieGenresStorageKey();
+        if (!key) return null;
+        try {
+            const raw = localStorage.getItem(key);
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            if (!parsed || !Array.isArray(parsed.items)) return null;
+            return {
+                items: parsed.items.filter((g) => g && g.Id && g.Name),
+                lastSyncedAt: Number(parsed.lastSyncedAt) || 0
+            };
+        } catch (err) {
+            WARN('Failed to read movie genres from localStorage:', err);
+            return null;
+        }
+    }
+
+    function writeMovieGenresToStorage(items, lastSyncedAt) {
+        const key = getMovieGenresStorageKey();
+        if (!key) return;
+        try {
+            localStorage.setItem(key, JSON.stringify({
+                items: (items || []).map((g) => ({ Id: g.Id, Name: g.Name })),
+                lastSyncedAt: lastSyncedAt || Date.now()
+            }));
+        } catch (err) {
+            WARN('Failed to write movie genres to localStorage:', err);
+        }
+    }
+
+    function hydrateMovieGenresFromStorage() {
+        if (cachedMovieGenres && cachedMovieGenres.length > 0) return true;
+        const stored = readMovieGenresFromStorage();
+        if (!stored?.items?.length) return false;
+        cachedMovieGenres = stored.items;
+        movieGenresLastSyncedAt = stored.lastSyncedAt || movieGenresLastSyncedAt;
+        LOG(`Hydrated movie genres from localStorage: ${cachedMovieGenres.length} items`);
+        return true;
+    }
+
+    function isMovieGenresSyncDue() {
+        const stored = readMovieGenresFromStorage();
+        const last = movieGenresLastSyncedAt || stored?.lastSyncedAt || 0;
+        const hasItems = (cachedMovieGenres && cachedMovieGenres.length > 0) || (stored?.items?.length > 0);
+        if (!hasItems) return true;
+        if (!last) return true;
+        return (Date.now() - last) >= GENRE_TTL;
+    }
+
+    function waitForDocumentComplete() {
+        if (document.readyState === 'complete') return Promise.resolve();
+        return new Promise((resolve) => {
+            window.addEventListener('load', () => resolve(), { once: true });
+        });
+    }
+
+    function notifyMovieGenresSynced() {
+        try {
+            window.dispatchEvent(new CustomEvent('kefinTweaksMovieGenresSynced'));
+        } catch (_) { /* ignore */ }
+        movieGenresSyncedListeners.forEach((cb) => {
+            try {
+                cb();
+            } catch (err) {
+                WARN('onMovieGenresSynced listener failed:', err);
+            }
+        });
+    }
+
+    async function runMovieGenresSync() {
+        if (genreSyncInFlightPromise) return genreSyncInFlightPromise;
+
+        genreSyncInFlightPromise = (async () => {
+            try {
+                if (window.userHelper?.waitForLogin) {
+                    await window.userHelper.waitForLogin();
+                }
+                ensureApiClient();
+                const url = `${ApiClient.serverAddress()}/Genres?IncludeItemTypes=Movie`;
+                const genres = await apiHelper.getData(url, true, GENRE_TTL);
+                const items = Array.isArray(genres?.Items) ? genres.Items : [];
+                cachedMovieGenres = items;
+                movieGenresLastSyncedAt = Date.now();
+                writeMovieGenresToStorage(items, movieGenresLastSyncedAt);
+                LOG(`Synced movie genres: ${items.length} items`);
+                notifyMovieGenresSynced();
+            } catch (err) {
+                ERR('Failed to sync movie genres:', err);
+            } finally {
+                genreSyncInFlightPromise = null;
+            }
+        })();
+
+        return genreSyncInFlightPromise;
+    }
+
+    /**
+     * Deduped: after settle, sync Genres when cache is missing or older than 24h.
+     */
+    function ensureGenreSyncScheduled() {
+        hydrateMovieGenresFromStorage();
+        if (!isMovieGenresSyncDue()) {
+            return genreSyncScheduledPromise || Promise.resolve();
+        }
+        if (genreSyncScheduledPromise) return genreSyncScheduledPromise;
+
+        genreSyncScheduledPromise = (async () => {
+            try {
+                if (window.userHelper?.waitForLogin) {
+                    await window.userHelper.waitForLogin();
+                }
+                await waitForDocumentComplete();
+                await new Promise((resolve) => setTimeout(resolve, GENRE_SETTLE_DELAY_MS));
+                hydrateMovieGenresFromStorage();
+                if (!isMovieGenresSyncDue()) return;
+                await runMovieGenresSync();
+            } catch (err) {
+                ERR('Failed to schedule movie genres sync:', err);
+            } finally {
+                genreSyncScheduledPromise = null;
+            }
+        })();
+
+        return genreSyncScheduledPromise;
+    }
+
+    // Shared with watchlist progressive sections / invalidate (same Fields → same cache URL)
+    apiHelper.WATCHLIST_PROGRESSIVE_FIELDS = WATCHLIST_PROGRESSIVE_FIELDS;
+
     // Expose apiHelper to global window object
     window.apiHelper = apiHelper;
-    
+
+    // Daily / empty-cache sync without waiting for a getGenreId caller
+    ensureGenreSyncScheduled();
+
     console.log('[KefinTweaks APIHelper] Module loaded and available at window.apiHelper');
 })();

@@ -75,6 +75,91 @@
                 name: 'Animated Overlay',
                 url: 'https://cdn.jsdelivr.net/gh/LitCastVlog/Flow@main/CSS/ScyFlow-AnimatedOverlay.css',
                 enabled: false
+            },
+            {
+                name: 'Left Aligned Font / Poster Spacing / Watched Indicators',
+                url: 'https://cdn.jsdelivr.net/gh/LitCastVlog/Flow@main/CSS/ScyFlow-FontTweaks.css',
+                enabled: false
+            },
+            {
+                name: 'Wrap Items In Home Sections',
+                url: `${getKefinTweaksRoot()}skins/optional/global/wrapHomeScrollerItems.css`,
+                enabled: false
+            },
+            {
+                name: 'Genre Thumbnails',
+                url: `${getKefinTweaksRoot()}skins/optional/global/genreThumbnails.css`,
+                enabled: false
+            },
+            {
+                name: 'Upcoming Calendar View',
+                url: `${getKefinTweaksRoot()}skins/optional/global/upcomingCalendar.css`,
+                enabled: false
+            },
+            {
+                name: 'Hide Title If Logo Present',
+                url: `${getKefinTweaksRoot()}skins/optional/global/hideTitleIfLogoPresent.css`,
+                enabled: false
+            },
+            {
+                name: 'Sort People With Images First',
+                url: `${getKefinTweaksRoot()}skins/optional/global/sortPeopleWithImagesFirst.css`,
+                enabled: false
+            },
+            {
+                name: 'No Clear Art on Spotlights',
+                url: `${getKefinTweaksRoot()}skins/optional/global/noClearArtOnSpotlights.css`,
+                enabled: false
+            },
+            {
+                name: 'Show Section Controls Always',
+                url: `${getKefinTweaksRoot()}skins/optional/global/sectionControlsAlways.css`,
+                enabled: false
+            },
+            {
+                name: 'Studio Thumbnails',
+                url: `${getKefinTweaksRoot()}skins/optional/global/studioThumbnails.css`,
+                enabled: false
+            },
+            {
+                name: 'Spotlight Controls On Hover Only',
+                url: `${getKefinTweaksRoot()}skins/optional/global/spotlightControlsOnHover.css`,
+                enabled: false
+            },
+            {
+                name: 'Darken Background Images',
+                url: `${getKefinTweaksRoot()}skins/optional/global/darkenBackgroundImages.css`,
+                enabled: false
+            },
+            {
+                name: 'Left Aligned Card Footer Text',
+                url: `${getKefinTweaksRoot()}skins/optional/global/leftAlignCardFooterText.css`,
+                enabled: false
+            },
+            {
+                name: '16:9 Episode Thumbnails on Season Page',
+                url: `${getKefinTweaksRoot()}skins/optional/global/episodeThumbnailSize.css`,
+                enabled: false
+            },
+            {
+                name: 'Hide Missing And Unaired Indicators On Home Screen',
+                url: `${getKefinTweaksRoot()}skins/optional/global/hideMissingAndUnairedIndicatorsOnHomeScreen.css`,
+                enabled: false
+            },
+            {
+                name: 'Hide Seasonal Background Images',
+                url: `${getKefinTweaksRoot()}skins/optional/global/seasonalBackgroundHide.css`,
+                enabled: false
+            },
+            {
+                name: 'Disable Seasonal Animations',
+                url: `${getKefinTweaksRoot()}skins/optional/global/seasonalAnimationDisable.css`,
+                enabled: false
+            },
+            {
+                name: 'Unhide Native User Home Controls on User > Home settings page',
+                url: `${getKefinTweaksRoot()}skins/optional/global/unhideNativeUserHomeControls.css`,
+                enabled: false
             }
         ],
         
@@ -90,7 +175,7 @@
         // Each skin should have an author field indicating who created the skin
         skins: [
             {
-                name: 'Default',
+                name: 'Jellyfin Default',
                 author: 'Jellyfin',
                 url: null,  // null means no additional CSS (default Jellyfin theme)
                 colorSchemes: []
@@ -103,14 +188,16 @@
                         majorServerVersions: [10],
                         urls: [
                             'https://cdn.jsdelivr.net/gh/lscambo13/ElegantFin@main/Theme/ElegantFin-jellyfin-theme-build-latest-minified.css',
-                            `${getKefinTweaksRoot()}skins/elegant-kefin.css`
+                            `${getKefinTweaksRoot()}skins/elegant-kefin.css`,
+                            `${getKefinTweaksRoot()}skins/fin-kefin-10.10.css`
                         ]
                     },
                     {
                         majorServerVersions: [11, 12],
                         urls: [
                             'https://cdn.jsdelivr.net/gh/lscambo13/ElegantFin@main/Theme/ElegantFin-jellyfin-theme-build-latest-minified.css',
-                            `${getKefinTweaksRoot()}skins/elegant-kefin.css`,                            
+                            `${getKefinTweaksRoot()}skins/elegant-kefin.css`,,
+                            `${getKefinTweaksRoot()}skins/elegant-kefin-10.11.css`,
                             `${getKefinTweaksRoot()}skins/fin-kefin-10.11.css`
                         ]
                     }
@@ -159,11 +246,19 @@
                 author: 'KartoffelChipss',
                 url: [
                     {
-                        majorServerVersions: [10, 11, 12],
+                        majorServerVersions: [10],
                         urls: [
                             'https://cdn.jsdelivr.net/gh/KartoffelChipss/NeutralFin@latest/theme/neutralfin-minified.css',
-                            'https://cdn.jsdelivr.net/gh/KartoffelChipss/Jellyfin-Lucide@main/theme/jellyfin-lucide.css',
-                            `${getKefinTweaksRoot()}skins/neutralfin-kefin.css`
+                            `${getKefinTweaksRoot()}skins/neutralfin-kefin.css`,
+                            `${getKefinTweaksRoot()}skins/fin-kefin-10.10.css`
+                        ]
+                    },
+                    {
+                        majorServerVersions: [11, 12],
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/KartoffelChipss/NeutralFin@latest/theme/neutralfin-minified.css',
+                            `${getKefinTweaksRoot()}skins/neutralfin-kefin.css`,
+                            `${getKefinTweaksRoot()}skins/fin-kefin-10.11.css`
                         ]
                     }
                 ],
@@ -203,6 +298,16 @@
                         name: 'Solid App Bar',
                         url: `${getKefinTweaksRoot()}skins/optional/ElegantFin/solidAppBar.css`,
                         enabled: false
+                    },
+                    {
+                        name: 'Jellyfin Lucide Icons (enable with Lucide Icons for KefinTweaks)',
+                        url: 'https://cdn.jsdelivr.net/gh/KartoffelChipss/Jellyfin-Lucide@main/theme/jellyfin-lucide.css',
+                        enabled: false
+                    },
+                    {
+                        name: 'Lucide Icons for KefinTweaks (enable with Jellyfin Lucide Icons)',
+                        url: `${getKefinTweaksRoot()}skins/optional/NeutralFin/lucide-icons-kefin.css`,
+                        enabled: false
                     }
                 ]
             },
@@ -211,11 +316,21 @@
                 author: 'KBH-Reeper',
                 url: [
                     {
-                        majorServerVersions: [10, 11, 12],
+                        majorServerVersions: [10],
                         urls: [
                             'https://cdn.jsdelivr.net/gh/KBH-Reeper/GlassFin@latest/Theme/GlassFin-Theme-latest-stable.css',
                             'https://cdn.jsdelivr.net/gh/KBH-Reeper/GlassFin@latest/Theme/PluginStyling/MediaBar-Plugin-latest.css',
-                            `${getKefinTweaksRoot()}skins/glassfin-kefin.css`
+                            `${getKefinTweaksRoot()}skins/glassfin-kefin.css`,
+                            `${getKefinTweaksRoot()}skins/fin-kefin-10.10.css`
+                        ]
+                    },
+                    {
+                        majorServerVersions: [11, 12],
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/KBH-Reeper/GlassFin@latest/Theme/GlassFin-Theme-latest-stable.css',
+                            'https://cdn.jsdelivr.net/gh/KBH-Reeper/GlassFin@latest/Theme/PluginStyling/MediaBar-Plugin-latest.css',
+                            `${getKefinTweaksRoot()}skins/glassfin-kefin.css`,
+                            `${getKefinTweaksRoot()}skins/fin-kefin-10.11.css`
                         ]
                     }
                 ],
@@ -288,31 +403,90 @@
                 ]
             },
             {
+                name: 'NetFin',
+                author: 'ya0903',
+                url: [
+                    {
+                        majorServerVersions: [10, 11, 12],
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/ya0903/NetFin@main/netfin.css',
+                            `${getKefinTweaksRoot()}skins/netfin-kefin.css`,
+                        ]
+                    },
+                ],
+                colorSchemes: [],
+                optionalIncludes: [
+                    {
+                        name: 'Mobile Buttons Size Adjustment',
+                        url: `${getKefinTweaksRoot()}skins/optional/NetFin/mobileButtonsSizeAdjustment.css`,
+                        enabled: false
+                    },
+                    {
+                        name: 'Disable Card Hover Effect',
+                        url: `${getKefinTweaksRoot()}skins/optional/ElegantFin/cardHoverEffect.css`,
+                        enabled: false
+                    },
+                    {
+                        name: 'Center Overlay Play Button',
+                        url: `${getKefinTweaksRoot()}skins/optional/ElegantFin/centerPlayButton.css`,
+                        enabled: false
+                    },
+                    {
+                        name: 'Extra Overlay Buttons',
+                        url: `${getKefinTweaksRoot()}skins/optional/ElegantFin/extraOverlayButtons.css`,
+                        enabled: false
+                    },
+                    {
+                        name: 'Library Label Visibility',
+                        url: `${getKefinTweaksRoot()}skins/optional/ElegantFin/libraryLabelVisibility.css`,
+                        enabled: false
+                    },
+                    {
+                        name: 'Solid App Bar',
+                        url: `${getKefinTweaksRoot()}skins/optional/ElegantFin/solidAppBar.css`,
+                        enabled: false
+                    }
+                ]
+            },
+            {
                 name: 'Jellypane',
                 author: 'tedhinklater',
                 url: [ // TODO: Update this when we get the specific 10.10.X / 10.11.X versions
                     {
                         majorServerVersions: [10],
-                        urls: ['https://cdn.jsdelivr.net/gh/ranaldsgift/Jellypane@main/jellypane.css']
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/ranaldsgift/Jellypane@main/jellypane.css', 
+                            `${getKefinTweaksRoot()}skins/jellypane-kefin.css`
+                        ]
                     },
                     {
                         majorServerVersions: [11, 12],
-                        urls: ['https://cdn.jsdelivr.net/gh/tedhinklater/Jellypane@main/jellypane.css']
+                        urls: ['https://cdn.jsdelivr.net/gh/tedhinklater/Jellypane@main/jellypane.css',
+                            `${getKefinTweaksRoot()}skins/jellypane-kefin.css`
+                        ]
                     },
                 ],
                 colorSchemes: []
             },
             {
-                name: 'Finimalism',
+                name: 'Finimalism 7',
                 author: 'tedhinklater',
                 url: [
                     {
                         majorServerVersions: [10],
-                        urls: ['https://cdn.jsdelivr.net/gh/tedhinklater/finimalism@main/finimalism7.css']
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/tedhinklater/finimalism@main/finimalism7.css',
+                            `${getKefinTweaksRoot()}skins/finimalism-kefin.css`,
+                            `${getKefinTweaksRoot()}skins/finimalism-7-kefin.css`
+                        ]
                     },
                     {
                         majorServerVersions: [11, 12],
-                        urls: ['https://cdn.jsdelivr.net/gh/tedhinklater/finimalism@main/finimalism10.11.css']
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/tedhinklater/finimalism@main/finimalism10.11.css',
+                            `${getKefinTweaksRoot()}skins/finimalism-kefin.css`,
+                            `${getKefinTweaksRoot()}skins/finimalism-7-kefin.css`
+                        ]
                     }
                 ],
                 colorSchemes: [],
@@ -330,18 +504,55 @@
                 ]
             },
             {
+                name: 'Finimalism 11',
+                author: 'tedhinklater',
+                url: [
+                    {
+                        majorServerVersions: [11, 12],
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/tedhinklater/finimalism@main/Finimalism11.css',
+                            `${getKefinTweaksRoot()}skins/finimalism-11-kefin.css`
+                        ]
+                    }
+                ],
+                colorSchemes: [],
+                optionalIncludes: [
+                    {
+                        name: 'Horizontal Scrolling on Home Page',
+                        url: 'https://cdn.jsdelivr.net/gh/tedhinklater/finimalism@main/scrollers-11.css',
+                        enabled: false
+                    }
+                ]
+            },
+            {
+                name: 'Finimalism 12',
+                author: 'tedhinklater',
+                url: [
+                    {
+                        majorServerVersions: [11, 12],
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/tedhinklater/finimalism@main/Finimalism12.css',
+                            `${getKefinTweaksRoot()}skins/finimalism-12-kefin.css`
+                        ]
+                    }
+                ],
+            },
+            {
                 name: 'Jellyfish',
                 author: 'n00bcodr',
                 url: [
                     {
                         majorServerVersions: [10],
-                        urls: ['https://cdn.jsdelivr.net/gh/n00bcodr/jellyfish@main/theme.css']
+                        urls: ['https://cdn.jsdelivr.net/gh/n00bcodr/jellyfish@main/theme.css',
+                            `${getKefinTweaksRoot()}skins/jellyfish-kefin.css`
+                        ]
                     },
                     {
                         majorServerVersions: [11, 12],
                         urls: [
                             'https://cdn.jsdelivr.net/gh/n00bcodr/jellyfish@main/theme.css',
-                            'https://cdn.jsdelivr.net/gh/n00bcodr/jellyfish@main/10.11_fixes.css'
+                            'https://cdn.jsdelivr.net/gh/n00bcodr/jellyfish@main/10.11_fixes.css',
+                            `${getKefinTweaksRoot()}skins/jellyfish-kefin.css`
                         ]
                     }
                 ],
@@ -429,7 +640,10 @@
                 url: [
                     {
                         majorServerVersions: [10, 11, 12],
-                        urls: ['https://cdn.jsdelivr.net/gh/alexyle/jellyfin-theme@main/glassmorphism/theme.css']
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/alexyle/jellyfin-theme@main/glassmorphism/theme.css',
+                            `${getKefinTweaksRoot()}skins/glassmorphism-kefin.css`
+                        ]
                     }
                 ],
                 colorSchemes: []
@@ -440,6 +654,10 @@
                 url: [
                     {
                         majorServerVersions: [10],
+                        urls: ['https://cdn.jsdelivr.net/gh/MakD/zombie-release@latest/graveyard/zombie-min-git.css']
+                    },
+                    {
+                        majorServerVersions: [12],
                         urls: ['https://cdn.jsdelivr.net/gh/MakD/zombie-release@latest/zombie_revived.css']
                     }
                 ],
@@ -491,7 +709,7 @@
                         ]
                     },
                     {
-                        majorServerVersions: [11, 12],
+                        majorServerVersions: [11],
                         urls: [
                             'https://cdn.jsdelivr.net/gh/JamsRepos/Jamfin@latest/theme/complete.css',
                             `${getKefinTweaksRoot()}skins/jamfin-kefin.css`
@@ -664,11 +882,6 @@
                         name: 'Nyan Progress Bar',
                         url: 'https://cdn.jsdelivr.net/gh/LitCastVlog/Flow@main/CSS/Themes/NyanProgress.css',
                         enabled: false
-                    },
-                    {
-                        name: 'Left Aligned Font / Poster Spacing / Watched Indicators',
-                        url: 'https://cdn.jsdelivr.net/gh/LitCastVlog/Flow@main/CSS/ScyFlow-FontTweaks.css',
-                        enabled: false
                     }
                 ],
                 colorSchemes: [
@@ -748,113 +961,348 @@
                     },
                     {
                         name: 'Round UI Corners',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/rounding.css',
-                        enabled: false
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/rounding.css'
                     },
                     {
                         name: 'Round UI with circle accent on hover',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/rounding_circlehover.css',
-                        enabled: false
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/rounding_circlehover.css'
                     },
                     {
                         name: 'Login Screen Minimal',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/login/login_minimalistic.css',
-                        enabled: false
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/login/login_minimalistic.css'
                     },
                     {
                         name: 'Login Screen Full',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/login/login_frame.css',
-                        enabled: false
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/login/login_frame.css'
                     },
                     {
                         name: 'Input Fields with Border',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/fields/fields_border.css',
-                        enabled: false
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/fields/fields_border.css'
                     },
                     {
                         name: 'Input Fields without Border',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/fields/fields_noborder.css',
-                        enabled: false
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/fields/fields_noborder.css'
                     },
                     {
                         name: 'Floating Watched Indicators',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/cornerindicator/indicator_floating.css',
-                        enabled: false
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/cornerindicator/indicator_floating.css'
                     },
                     {
                         name: 'Corner Watched Indicators',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/cornerindicator/indicator_corner.css',
-                        enabled: false
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/cornerindicator/indicator_corner.css'
                     },
                     {
                         name: 'Simple Titles',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/titlepage/title_simple.css',
-                        enabled: false
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/titlepage/title_simple.css'
                     },
                     {
                         name: 'Logo Titles',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/titlepage/title_simple-logo.css',
-                        enabled: false
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/titlepage/title_simple-logo.css'
                     },
                     {
                         name: 'Banner Titles',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/titlepage/title_banner.css',
-                        enabled: false
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/titlepage/title_banner.css'
                     },
                     {
                         name: 'Banner Logo Titles',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/titlepage/title_banner-logo.css',
-                        enabled: false
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/titlepage/title_banner-logo.css'
                     },
                     {
                         name: 'Progress Bar',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/overlayprogress.css',
-                        enabled: false
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/overlayprogress.css'
                     },
                     {
                         name: 'Bottom Progress Bar',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/bottombarprogress.css',
-                        enabled: false
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/bottombarprogress.css'
                     },
                     {
                         name: 'Floating Progress Bar',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/progress/floating.css',
-                        enabled: false
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/progress/floating.css'
                     },
                     {
                         name: 'Hoverglow Effect',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/effects/hoverglow.css',
-                        enabled: false
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/effects/hoverglow.css'
                     },
                     {
                         name: 'Glassy Effect',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/effects/glassy.css',
-                        enabled: false
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/effects/glassy.css'
                     },
                     {
                         name: 'Mobile Backdrop "Hack"',
-                        url: 'https://ctalvio.github.io/Monochromic/backdrop-hack_style.css',
+                        url: 'https://ctalvio.github.io/Monochromic/backdrop-hack_style.css'
+                    }
+                ],
+                colorSchemes: [
+                    {
+                        name: 'Default',
+                        url: '',
+                    },
+                    {
+                        name: 'Monochromic',
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/presets/monochromic_preset.css'
+                    },
+                    {
+                        name: 'Kaleidochromic',
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/presets/kaleidochromic_preset.css'
+                    },
+                    {
+                        name: 'Novachromic',
+                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/presets/novachromic_preset.css'
+                    }
+                ]
+            },
+            {
+                name: 'Evergreen',
+                author: 'everviolet',
+                url: [
+                    {
+                        majorServerVersions: [10, 11, 12],
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/everviolet/jellyfin@latest/themes/evergarden-winter.css',
+                        ]
+                    },
+                ],
+                colorSchemes: [
+                    {
+                        name: 'Winter',
+                        url: ''
+                    },
+                    {
+                        name: 'Fall',
+                        url: 'https://cdn.jsdelivr.net/gh/everviolet/jellyfin@latest/themes/evergarden-fall.css'
+                    },
+                    {
+                        name: 'Spring',
+                        url: 'https://cdn.jsdelivr.net/gh/everviolet/jellyfin@latest/themes/evergarden-spring.css'
+                    },
+                    {
+                        name: 'Summer',
+                        url: 'https://cdn.jsdelivr.net/gh/everviolet/jellyfin@latest/themes/evergarden-summer.css'
+                    },
+                ]
+            },
+            {
+                name: 'Finity',
+                author: 'prism2001',
+                url: [
+                    {
+                        majorServerVersions: [10],
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/prism2001/finity@main/minimal/finity-minimal.css',
+                        ]
+                    },
+                ],
+            },
+            {
+                name: 'infinitv',
+                author: 'buesche87',
+                url: [
+                    {
+                        majorServerVersions: [10, 11, 12],
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/buesche87/infinitv@latest/infinitv.css',
+                            `${getKefinTweaksRoot()}skins/infinitv-kefin.css`
+                        ]
+                    },
+                ],
+            },
+            {
+                name: 'JellySkin',
+                author: 'prayag17',
+                url: [
+                    {
+                        majorServerVersions: [10],
+                        urls: [
+                            'https://cdn.jsdelivr.net/npm/jellyskin@latest/dist/main.css',
+                        ]
+                    },
+                ],
+                optionalIncludes: [
+                    {
+                        name: 'Logos',
+                        url: 'https://cdn.jsdelivr.net/npm/jellyskin@latest/dist/logo.css',
+                        enabled: false
+                    },
+                    {
+                        name: 'Remove Backdrop Filter',
+                        url: 'https://cdn.jsdelivr.net/npm/jellyskin@latest/dist/addons/improvePerformance/removeBackdropFilter.css',
+                        enabled: false
+                    },
+                    {
+                        name: 'Remove Fading Scroll',
+                        url: 'https://cdn.jsdelivr.net/npm/jellyskin@latest/dist/addons/improvePerformance/removeFadingScroll.css',
+                        enabled: false
+                    },
+                    {
+                        name: 'Horizontal My Media',
+                        url: 'https://cdn.jsdelivr.net/npm/jellyskin@latest/dist/addons/horizontalMyMedia.css',
+                        enabled: false
+                    },
+                    {
+                        name: 'Video Theme Blur',
+                        url: 'https://cdn.jsdelivr.net/npm/jellyskin@latest/dist/addons/videoThemeBlur.css',
                         enabled: false
                     }
                 ],
                 colorSchemes: [
                     {
-                        name: 'Monochromic',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/presets/monochromic_preset.css',
+                        name: 'Default',
+                        url: ''
+                    },
+                    {
+                        name: 'Mauve',
+                        url: 'https://cdn.jsdelivr.net/npm/jellyskin@latest/dist/addons/gradients/mauve.css'
+                    },
+                    {
+                        name: 'Night Sky',
+                        url: 'https://cdn.jsdelivr.net/npm/jellyskin@latest/dist/addons/gradients/nightSky.css'
+                    },
+                    {
+                        name: 'Sea',
+                        url: 'https://cdn.jsdelivr.net/npm/jellyskin@latest/dist/addons/gradients/sea.css'
+                    },
+                ]
+            },
+            {
+                name: 'Better Jellyfin UI',
+                author: 'tromoSM',
+                url: [
+                    {
+                        majorServerVersions: [10],
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/tromoSM/better-jellyfin-ui@main/theme.css',
+                        ]
+                    },
+                    {
+                        majorServerVersions: [11, 12],
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/tromoSM/better-jellyfin-ui@main/theme.css',
+                        ]
+                    },
+                ],
+                optionalIncludes: [
+                    {
+                        name: 'Floating Header',
+                        url: 'https://cdn.jsdelivr.net/gh/tromoSM/better-jellyfin-ui@main/options/Floating-header.css',
                         enabled: false
                     },
                     {
-                        name: 'Kaleidochromic',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/presets/kaleidochromic_preset.css',
+                        name: 'High Contrast Interface',
+                        url: 'https://cdn.jsdelivr.net/gh/tromoSM/better-jellyfin-ui@main/options/High-contrast-interface.css',
+                        enabled: false
+                    },
+                        {
+                        name: 'Scale up animation on hover card',
+                        url: 'https://cdn.jsdelivr.net/gh/tromoSM/better-jellyfin-ui@main/options/Scale-up-animation-on-hover-card.css',
                         enabled: false
                     },
                     {
-                        name: 'Novachromic',
-                        url: 'https://cdn.jsdelivr.net/gh/CTalvio/Ultrachromic/presets/novachromic_preset.css',
+                        name: 'No liquid glass borders',
+                        url: 'https://cdn.jsdelivr.net/gh/tromoSM/better-jellyfin-ui@main/options/no-liquid-glass-borders.css',
+                        enabled: false
+                    },
+                    {
+                        name: 'Alternative navigation bar',
+                        url: 'https://cdn.jsdelivr.net/gh/tromoSM/better-jellyfin-ui@main/options/alternative-navigation-bar.css',
+                        enabled: false
+                    },
+                ],
+            },
+            {
+                name: 'Jellyfin Better Styles',
+                author: 'Tetrax-10',
+                url: [
+                    {
+                        majorServerVersions: [10],
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/Tetrax-10/jellyfin-better-styles@dist/theme.css',
+                        ]
+                    },
+                    {
+                        majorServerVersions: [11, 12],
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/Tetrax-10/jellyfin-better-styles@dist/theme.css',
+                            `${getKefinTweaksRoot()}skins/better-styles-kefin-11.css`
+                        ]
+                    },
+                ],
+            },
+            {
+                name: 'Zesty Theme',
+                author: 'stpnwf',
+                url: [
+                    {
+                        majorServerVersions: [10],
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/stpnwf/ZestyTheme@legacy/v10.10/theme.css',
+                            `${getKefinTweaksRoot()}skins/zesty-kefin.css`
+                        ]
+                    },
+                    {
+                        majorServerVersions: [11, 12],
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/stpnwf/ZestyTheme@latest/theme.css',
+                            `${getKefinTweaksRoot()}skins/zesty-kefin.css`
+                        ]
+                    },
+                ],
+                optionalIncludes: [
+                    {
+                        name: 'Alternative Login Background',
+                        url: 'https://cdn.jsdelivr.net/gh/stpnwf/ZestyTheme@latest/login-alt.css',
                         enabled: false
                     }
+                ],
+                colorSchemes: [
+                    {
+                        name: 'Cyan',
+                        url: ''
+                    },
+                    {
+                        name: 'Fall',
+                        url: 'https://cdn.jsdelivr.net/gh/stpnwf/ZestyTheme@latest/colorschemes/blue.css'
+                    },
+                    {
+                        name: 'Spring',
+                        url: 'https://cdn.jsdelivr.net/gh/stpnwf/ZestyTheme@latest/colorschemes/coral.css'
+                    },
+                    {
+                        name: 'Summer',
+                        url: 'https://cdn.jsdelivr.net/gh/stpnwf/ZestyTheme@latest/colorschemes/gray.css'
+                    },
+                    {
+                        name: 'Green',
+                        url: 'https://cdn.jsdelivr.net/gh/stpnwf/ZestyTheme@latest/colorschemes/green.css'
+                    },
+                    {
+                        name: 'Purple',
+                        url: 'https://cdn.jsdelivr.net/gh/stpnwf/ZestyTheme@latest/colorschemes/purple.css'
+                    },
+                    {
+                        name: 'Red',
+                        url: 'https://cdn.jsdelivr.net/gh/stpnwf/ZestyTheme@latest/colorschemes/red.css'
+                    },
+                    {
+                        name: 'Yellow',
+                        url: 'https://cdn.jsdelivr.net/gh/stpnwf/ZestyTheme@latest/colorschemes/yellow.css'
+                    }
                 ]
-            }
+            },
+            {
+                //Abyss by ArumGupta
+                //@import url('https://cdn.jsdelivr.net/gh/AumGupta/abyss-jellyfin@main/abyss.css');
+                name: 'Abyss',
+                author: 'ArumGupta',
+                url: [
+                    {
+                        majorServerVersions: [10, 11, 12],
+                        urls: [
+                            'https://cdn.jsdelivr.net/gh/AumGupta/abyss-jellyfin@main/abyss.css',
+                            `${getKefinTweaksRoot()}skins/abyss-kefin.css`
+                        ]
+                    },
+                ],
+            },
             // Add more skins here as needed
         ]
     };

@@ -9,6 +9,10 @@
     const WARN = (...args) => console.warn('[KefinTweaks SeriesInfo]', ...args);
     const ERR = (...args) => console.error('[KefinTweaks SeriesInfo]', ...args);
 
+    const state = {
+        use24HourTimeFormat: false,
+    }
+
     /**
      * Parses a runtime string (e.g., "42m", "1h 5m") into total minutes
      * @param {string} runtimeStr - Runtime string like "42m" or "1h 5m"
@@ -147,7 +151,7 @@
         const timeStr = endTime.toLocaleTimeString([], { 
             hour: 'numeric', 
             minute: '2-digit',
-            hour12: true 
+            hour12: !state.use24HourTimeFormat
         });
 
         // Check if end date is the same as current day
@@ -186,7 +190,7 @@
         const timeStr = endTime.toLocaleTimeString([], { 
             hour: 'numeric', 
             minute: '2-digit',
-            hour12: true 
+            hour12: !state.use24HourTimeFormat
         });
 
         // Check if end date is the same as current day
@@ -206,30 +210,94 @@
         }
     }
 
+    const seriesSeasonsCountCache = new Map();
+    const seriesSeasonEpisodeCountCache = new Map();
+
+    async function getSeasonsCount(item, includeSpecials = false) {
+        if (!seriesSeasonsCountCache.has(item.Id)) {
+            // Get Seasons from apiHelper.getQuery
+            const response = await apiHelper.getQuery(`${ApiClient.serverAddress()}/Shows/${item.Id}/Seasons`, { useCache: true });
+            
+            if (!response.data) {
+                response.data = await response.dataPromise;
+            }
+
+            const data = response.data;
+
+            let seasons = data.Items || data ||[];
+
+            if (!includeSpecials) {
+                seasons = seasons.filter(season => season.IndexNumber !== 0);
+            }
+
+            seriesSeasonsCountCache.set(item.Id, seasons.length);
+        }
+
+        return seriesSeasonsCountCache.get(item.Id);
+    }
+
+    async function getEpisodesCount(seriesId, seasonIndex = null, includeSpecials = false) {
+
+        if (!seriesSeasonEpisodeCountCache.has(seriesId)) {
+            const response = await apiHelper.getQuery(`${ApiClient.serverAddress()}/Shows/${seriesId}/Episodes`, { useCache: true });
+            if (!response.data) {
+                response.data = await response.dataPromise;
+            }
+            const data = response.data;
+            let episodes = data.Items || data || [];
+
+            // Create a Season:EpisodesCount map
+            const seasonEpisodeCountMap = new Map();
+            episodes.forEach(episode => {
+                const seasonIndex = episode.ParentIndexNumber;
+                if (!seasonEpisodeCountMap.has(seasonIndex)) {
+                    seasonEpisodeCountMap.set(seasonIndex, 0);
+                }
+                seasonEpisodeCountMap.set(seasonIndex, seasonEpisodeCountMap.get(seasonIndex) + 1);
+            });
+
+            seriesSeasonEpisodeCountCache.set(seriesId, seasonEpisodeCountMap);
+        }
+
+        // Return the episodes count for the season index
+        if (seasonIndex !== null && !isNaN(seasonIndex)) {
+            return seriesSeasonEpisodeCountCache.get(seriesId).get(seasonIndex) || 0;
+        }
+
+        // Return the total episodes count for all seasons
+        if (!includeSpecials) {
+            // Ignore season 0
+            const specialsCount = seriesSeasonEpisodeCountCache.get(seriesId).get(0) || 0;
+            return seriesSeasonEpisodeCountCache.get(seriesId).values().reduce((a, b) => a + b, 0) - specialsCount;
+        }
+        return seriesSeasonEpisodeCountCache.get(seriesId).values().reduce((a, b) => a + b, 0);
+    }
+
     /**
      * Adds series info to the itemMiscInfo container
      * @param {Object} item - Series item object
      * @param {HTMLElement} miscInfoContainer - The .itemMiscInfo container
      */
-    function addSeriesInfo(item, miscInfoContainer) {
+    async function addSeriesInfo(item, miscInfoContainer) {
         // Check if already added
-        if (miscInfoContainer.querySelector('.kt-series-info')) {
+        if (miscInfoContainer.dataset.seriesInfo) {
             LOG('Series info already added, skipping');
             return;
         }
 
-        const infoContainer = document.createElement('div');
-        infoContainer.className = 'kt-series-info';
-        infoContainer.style.display = 'flex';
-        infoContainer.style.margin = '0 1em 0 0';
+        miscInfoContainer.dataset.seriesInfo = 'true';
+
+        const seasonsCount = await getSeasonsCount(item);
+        const episodesCount = await getEpisodesCount(item.Id);
+
+        let childCount = item.ChildCount || 0;
 
         // Seasons count (only show if more than 1 season)
-        const childCount = item.ChildCount || 0;
         if (childCount > 1) {
             const seasonsDiv = document.createElement('div');
             seasonsDiv.className = 'mediaInfoItem';
-            seasonsDiv.textContent = `${childCount} Seasons`;
-            infoContainer.appendChild(seasonsDiv);
+            seasonsDiv.textContent = `${seasonsCount} Seasons`;
+            miscInfoContainer.appendChild(seasonsDiv);
         }
 
         // Episodes count
@@ -237,8 +305,8 @@
         if (RecursiveItemCount > 0) {
             const episodesDiv = document.createElement('div');
             episodesDiv.className = 'mediaInfoItem';
-            episodesDiv.textContent = `${RecursiveItemCount} ${RecursiveItemCount === 1 ? 'Episode' : 'Episodes'}`;
-            infoContainer.appendChild(episodesDiv);
+            episodesDiv.textContent = `${episodesCount} ${episodesCount === 1 ? 'Episode' : 'Episodes'}`;
+            miscInfoContainer.appendChild(episodesDiv);
         }
 
         // End time - RunTimeTicks is for first episode, multiply by episode count for total
@@ -248,16 +316,12 @@
             if (endTimeStr) {
                 const endTimeDiv = document.createElement('div');
                 endTimeDiv.className = 'mediaInfoItem';
-                endTimeDiv.textContent = `Ends at: ${endTimeStr}`;
-                infoContainer.appendChild(endTimeDiv);
+                endTimeDiv.textContent = `Ends at ${endTimeStr}`;
+                miscInfoContainer.appendChild(endTimeDiv);
             }
         }
-
-        // Append to miscInfoContainer
-        if (infoContainer.children.length > 0) {
-            miscInfoContainer.appendChild(infoContainer);
-            LOG('Added series info to itemMiscInfo container');
-        }
+        
+        LOG('Added series info to itemMiscInfo container');
     }
 
     /**
@@ -274,17 +338,19 @@
         }
 
         // Check if already added
-        if (miscInfoContainer.querySelector('.kt-season-info')) {
+        if (miscInfoContainer.dataset.seasonInfo) {
             LOG('Season info already added, skipping');
             return;
         }
+
+        miscInfoContainer.dataset.seasonInfo = 'true';
 
         const infoContainer = document.createElement('div');
         infoContainer.className = 'kt-season-info';
         infoContainer.style.display = 'flex';
 
         // Episodes count
-        const episodeCount = item.ChildCount || 0;
+        const episodeCount = await getEpisodesCount(item.SeriesId, item.IndexNumber);
         if (episodeCount > 0) {
             const episodesDiv = document.createElement('div');
             episodesDiv.className = 'mediaInfoItem';
@@ -299,7 +365,7 @@
             if (endTimeStr) {
                 const endTimeDiv = document.createElement('div');
                 endTimeDiv.className = 'mediaInfoItem';
-                endTimeDiv.textContent = `Ends at: ${endTimeStr}`;
+                endTimeDiv.textContent = `Ends at ${endTimeStr}`;
                 infoContainer.appendChild(endTimeDiv);
             }
         }
@@ -338,7 +404,7 @@
         if (item.Type === 'Series') {
             addSeriesInfo(item, miscInfoContainer);
         } else if (item.Type === 'Season') {
-            await addSeasonInfo(item, miscInfoContainer, activePage);
+            addSeasonInfo(item, miscInfoContainer, activePage);
         }
     }
 
@@ -351,6 +417,19 @@
             setTimeout(initializeSeriesInfoHook, 1000);
             return;
         }
+
+        // Get the use24HourTime setting from the configuration
+        const config = window.KefinTweaksConfig || {};
+        let seriesInfoConfig = config.seriesInfo || null;
+
+        if (seriesInfoConfig === null) {
+            // Use the browser's default time format
+            seriesInfoConfig = {
+                use24HourTimeFormat: Intl.DateTimeFormat().resolvedOptions().timeStyle === 'short'
+            };
+        }
+
+        state.use24HourTimeFormat = seriesInfoConfig.use24HourTimeFormat === true;
 
         LOG('Registering series info handler with KefinTweaksUtils');
 

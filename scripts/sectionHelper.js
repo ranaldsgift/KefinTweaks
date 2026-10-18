@@ -1,0 +1,1421 @@
+// KefinTweaks Section Helper
+// Discovery source resolution + section load helpers (extracted from homeScreen3).
+(function () {
+    'use strict';
+
+    const LOG = (...args) => console.log('[KefinTweaks SectionHelper]', ...args);
+    const WARN = (...args) => console.warn('[KefinTweaks SectionHelper]', ...args);
+    const ERR = (...args) => console.error('[KefinTweaks SectionHelper]', ...args);
+
+    const ApiHelper = window.apiHelper || window.ApiHelper;
+    const Config = () => window.KefinHomeConfig2 || window.KefinHomeScreen?.getConfig?.() || {};
+
+    const discoveryState = {
+        renderedDiscoveryIds: {
+            genres: new Set(),
+            genresSeries: new Set(),
+            seriesStudios: new Set(),
+            seriesStudiosTopRated: new Set(),
+            collections: new Set(),
+            people: new Set(),
+            similar: new Set(),
+            watchlist: new Set(),
+            customDiscoverySections: new Set()
+        },
+        /** Session-scoped: discovery template ids whose source pool resolved empty (not incomplete cache). */
+        emptyDiscoverySourceTemplates: new Set(),
+        currentDiscoveryGenre: null,
+        currentDiscoveryStudio: null,
+        // Map of pairKey -> Promise resolving to dynamicResult for spotlight pairing
+        pairResolvePromises: new Map()
+    };
+
+    function getDiscoverySettings() {
+        const defaults = window.KefinHomeConfig2?.DISCOVERY_SETTINGS || {};
+        const fromHome = window.KefinHomeScreen?.getConfig?.()?.DISCOVERY_SETTINGS;
+        const fromUser = window.KefinTweaksConfig?.homeScreenConfig?.DISCOVERY_SETTINGS;
+        return {
+            ...defaults,
+            ...(fromHome || {}),
+            ...(fromUser || {})
+        };
+    }
+
+    function getPairKey(configId) {
+        if (configId === 'genreMovies' || configId === 'spotlightGenre') return 'genre-movie';
+        if (configId === 'genreSeries' || configId === 'spotlightGenreSeries') return 'genre-series';
+        if (configId === 'studioShows' || configId === 'spotlightNetwork') return 'studio-series';
+        return null;
+    }
+
+    function resetDiscoveryDedupe() {
+        const ids = discoveryState.renderedDiscoveryIds;
+        Object.keys(ids).forEach((key) => {
+            if (ids[key] instanceof Set) ids[key].clear();
+        });
+        discoveryState.emptyDiscoverySourceTemplates.clear();
+        discoveryState.currentDiscoveryGenre = null;
+        discoveryState.currentDiscoveryStudio = null;
+        discoveryState.pairResolvePromises.clear();
+    }
+
+    function getDiscoveryTemplateExclusionKey(configOrId) {
+        if (configOrId == null) return '';
+        if (typeof configOrId === 'string') {
+            const id = configOrId;
+            const stamped = id.replace(/-\d{10,}-[a-z0-9]+$/i, '');
+            return stamped || id.split('-')[0] || id;
+        }
+        if (configOrId.discoveryTemplateId) return String(configOrId.discoveryTemplateId);
+        return getDiscoveryTemplateExclusionKey(String(configOrId.id || ''));
+    }
+
+    function markEmptyDiscoverySourceTemplate(configOrId) {
+        const key = getDiscoveryTemplateExclusionKey(configOrId);
+        if (!key) return;
+        discoveryState.emptyDiscoverySourceTemplates.add(key);
+        LOG(`Excluding empty discovery source template for session: ${key}`);
+    }
+
+    function isEmptyDiscoverySourceTemplate(configOrId) {
+        const key = getDiscoveryTemplateExclusionKey(configOrId);
+        return !!key && discoveryState.emptyDiscoverySourceTemplates.has(key);
+    }
+
+    /**
+     * One-shot: whether this section's dependent Movies/Series/People cache is already complete.
+     * Incomplete → skip (do not poll/wait). Missing LibraryCache → treat as ready.
+     */
+    async function isSectionCacheReady(sectionConfig) {
+        if (!window.LibraryCache?.sectionDependsOnIncompleteCache) return true;
+        try {
+            return (await window.LibraryCache.sectionDependsOnIncompleteCache(sectionConfig)) !== true;
+        } catch (_) {
+            return true;
+        }
+    }
+
+    /** Section configs waiting for movie-genres catalog before See All can resolve. */
+    const pendingGenreViewMoreConfigs = new Set();
+
+    function sectionNeedsGenreNameResolve(sectionConfig) {
+        if (!sectionConfig || sectionConfig.viewMoreUrl) return false;
+        const genres = sectionConfig.queries?.[0]?.queryOptions?.Genres;
+        if (typeof genres !== 'string' || !genres) return false;
+        return !/^\d+$/.test(genres);
+    }
+
+    function applyViewMoreUrlToSection(sectionConfig, viewMoreUrl) {
+        if (!sectionConfig || !viewMoreUrl) return;
+        sectionConfig.viewMoreUrl = viewMoreUrl;
+        const id = sectionConfig.id;
+        if (!id) return;
+        const escaped = typeof CSS !== 'undefined' && CSS.escape
+            ? CSS.escape(id)
+            : String(id).replace(/["\\]/g, '\\$&');
+
+        // Do not upgrade skeleton/empty titles into links — that eats .skeleton-section-title
+        // and leaves an empty <a>, so enhance skips rebuildSectionTitleInPlace.
+        // viewMoreUrl stays on sectionConfig for rebuild / appendSectionTitleContent.
+        const titleReadyForLinkUpgrade = (el) => {
+            if (!el) return false;
+            if (el.querySelector?.('.skeleton-section-title, .skeleton-text-line')) return false;
+            return !!(el.textContent && el.textContent.trim());
+        };
+
+        document.querySelectorAll(
+            `.verticalSection[data-section-id="${escaped}"], .spotlight-section[data-section-id="${escaped}"]`
+        ).forEach((sectionElement) => {
+            const existingLink =
+                sectionElement.querySelector('a.sectionTitle-link') ||
+                sectionElement.querySelector('.spotlight-section-title a.emby-tab-button');
+            if (existingLink) {
+                existingLink.href = viewMoreUrl;
+                // Recover empty links left by an earlier race (href only, no title text)
+                if (!existingLink.textContent?.trim() && sectionConfig.name) {
+                    const nestedTitle = existingLink.querySelector('.sectionTitle.sectionTitle-cards');
+                    if (nestedTitle) nestedTitle.textContent = sectionConfig.name;
+                    else existingLink.textContent = sectionConfig.name;
+                }
+                return;
+            }
+            const plainTitle = sectionElement.querySelector(
+                '.sectionTitleContainer .sectionTitle.sectionTitle-cards:not(a)'
+            );
+            if (plainTitle) {
+                if (!titleReadyForLinkUpgrade(plainTitle)) return;
+                const link = document.createElement('a');
+                link.className = 'sectionTitle sectionTitle-cards sectionTitle-link emby-button';
+                link.href = viewMoreUrl;
+                link.textContent = plainTitle.textContent;
+                plainTitle.replaceWith(link);
+                return;
+            }
+            const spotTitle = sectionElement.querySelector(
+                '.spotlight-section-title .emby-tab-button:not(a)'
+            );
+            if (spotTitle) {
+                if (!titleReadyForLinkUpgrade(spotTitle)) return;
+                const link = document.createElement('a');
+                link.className = 'emby-tab-button emby-tab-button-active emby-button';
+                link.href = viewMoreUrl;
+                link.title = 'See All';
+                link.style.textDecoration = 'none';
+                link.textContent = spotTitle.textContent;
+                spotTitle.replaceWith(link);
+                sectionElement.querySelector('.spotlight-section-title')?.classList.remove('spotlight-title-link');
+            }
+        });
+    }
+
+    function scheduleViewMoreUrl(sectionConfig) {
+        resolveViewMoreUrl(sectionConfig).then((viewMoreUrl) => {
+            if (viewMoreUrl) {
+                applyViewMoreUrlToSection(sectionConfig, viewMoreUrl);
+                pendingGenreViewMoreConfigs.delete(sectionConfig);
+                return;
+            }
+            if (sectionNeedsGenreNameResolve(sectionConfig)) {
+                pendingGenreViewMoreConfigs.add(sectionConfig);
+            }
+        }).catch((err) => {
+            WARN(`Failed to resolve viewMoreUrl for ${sectionConfig?.id}:`, err);
+            if (sectionNeedsGenreNameResolve(sectionConfig)) {
+                pendingGenreViewMoreConfigs.add(sectionConfig);
+            }
+        });
+    }
+
+    function reschedulePendingGenreViewMoreUrls() {
+        const pending = Array.from(pendingGenreViewMoreConfigs);
+        pending.forEach((sectionConfig) => {
+            resolveViewMoreUrl(sectionConfig).then((viewMoreUrl) => {
+                if (!viewMoreUrl) return;
+                applyViewMoreUrlToSection(sectionConfig, viewMoreUrl);
+                pendingGenreViewMoreConfigs.delete(sectionConfig);
+            }).catch((err) => {
+                WARN(`Failed to re-resolve viewMoreUrl for ${sectionConfig?.id}:`, err);
+            });
+        });
+    }
+
+    async function loadSectionForRendering(sectionConfig) {
+        LOG(`Loading Section for Rendering: ${sectionConfig.id} (${sectionConfig.name})`);
+
+        const loadSectionTimerStart = performance.now();
+        const hasStaticItems = sectionConfig.items && sectionConfig.items.length > 0;
+
+        // Sync prep only (viewMore deferred for non-static so it does not block first paint)
+        const cardFormat = resolveCardFormat(sectionConfig);
+        const sectionName = fillTemplate(sectionConfig.name, sectionConfig.metadata);
+
+        sectionConfig.overflowCard = true;
+
+        if (cardFormat) {
+            sectionConfig.cardFormat = cardFormat;
+        }
+        if (sectionName) {
+            sectionConfig.name = sectionName;
+        }
+
+        // Check renderMode first (preferred), fallback to spotlight boolean for backward compatibility
+        const shouldRenderSpotlight = sectionConfig.renderMode === 'Spotlight' || sectionConfig.renderMode === 'Random' || sectionConfig.spotlight === true;
+        if (shouldRenderSpotlight) {
+            const spotlightConfig = {
+                ...(window.KefinHomeScreen?.getConfig?.()?.SPOTLIGHT_SETTINGS || {}),
+                ...sectionConfig.spotlightConfig
+            };
+            sectionConfig.spotlightConfig = spotlightConfig;
+            // Set renderMode if not already set (for backward compatibility)
+            if (!sectionConfig.renderMode && sectionConfig.spotlight) {
+                sectionConfig.renderMode = 'Spotlight';
+            }
+        }
+
+        // Static items: normalize and return immediately (no queries, no dataPromise)
+        if (hasStaticItems) {
+            const viewMoreUrl = await resolveViewMoreUrl(sectionConfig);
+            if (viewMoreUrl) {
+                sectionConfig.viewMoreUrl = viewMoreUrl;
+            }
+
+            const kefinTweaksRoot = window.KefinTweaksConfig?.kefinTweaksRoot || '';
+            const serverId = ApiClient.serverId();
+            const normalizeTemplate = (value) => (value || '')
+                .replace(/\$\{kefinTweaksRoot\}/g, kefinTweaksRoot)
+                .replace(/\$\{serverId\}/g, serverId);
+
+            const visibleItems = sectionConfig.items.filter((item) => item && item.hidden !== true);
+            const normalizedItems = visibleItems.map((item, index) => {
+                const posterUrl = normalizeTemplate(item.posterUrl);
+                const thumbUrl = normalizeTemplate(item.thumbUrl);
+                const squareUrl = normalizeTemplate(item.squareUrl);
+                const imageUrl = normalizeTemplate(item.imageUrl);
+                const cardUrl = normalizeTemplate(item.cardUrl);
+                const backdropUrl = normalizeTemplate(item.backdropUrl);
+                const bannerUrl = normalizeTemplate(item.bannerUrl);
+                const logoUrl = normalizeTemplate(item.logoUrl);
+
+                return {
+                    Name: item.Name,
+                    Id: item.Id || 'static-' + sectionConfig.id + '-' + index,
+                    Type: item.Type || 'Folder',
+                    posterUrl: posterUrl,
+                    thumbUrl: thumbUrl,
+                    squareUrl: squareUrl,
+                    imageUrl: imageUrl,
+                    cardUrl: cardUrl,
+                    backdropUrl: backdropUrl,
+                    bannerUrl: bannerUrl,
+                    logoUrl: logoUrl,
+                    CustomFooterText: item.cardFooter || undefined
+                };
+            });
+            const loadSectionTimerEnd = performance.now();
+            const loadSectionDuration = loadSectionTimerEnd - loadSectionTimerStart;
+            LOG(`Section ${sectionConfig.id} (static items) loaded for rendering in time: ${loadSectionDuration.toFixed(2)}ms`);
+            let postProcessedItems = normalizedItems;
+            if (window.cardBuilder.postProcessItems) {
+                postProcessedItems = window.cardBuilder.postProcessItems(sectionConfig, normalizedItems);
+            }
+            postProcessedItems = applyExcludeItemIdFilter(sectionConfig, postProcessedItems);
+
+            return {
+                config: sectionConfig,
+                result: { data: postProcessedItems }
+            };
+        }
+
+        // Cache-backed sections only mount once Movies/Series/People cache is complete
+        if (!(await isSectionCacheReady(sectionConfig))) {
+            LOG(`Skipping section ${sectionConfig.id}: dependent library cache not complete`);
+            return null;
+        }
+
+        // External list (MDBList) — progressive for network fetch when caches are already ready
+        if (Array.isArray(sectionConfig.externalListUrls) && sectionConfig.externalListUrls.length > 0) {
+            if (!window.KefinExternalList?.resolveExternalListItems) {
+                WARN(`Section ${sectionConfig.id}: externalListUrls set but KefinExternalList unavailable`);
+                return null;
+            }
+
+            scheduleViewMoreUrl(sectionConfig);
+
+            let mappedDataPromise = null;
+            const ensureData = () => {
+                if (!mappedDataPromise) {
+                    mappedDataPromise = (async () => {
+                        if (!(await isSectionCacheReady(sectionConfig))) {
+                            return [];
+                        }
+                        const listResult = await window.KefinExternalList.resolveExternalListItems(sectionConfig);
+                        let items = listResult?.Items || [];
+                        if (window.cardBuilder.postProcessItems) {
+                            items = window.cardBuilder.postProcessItems(sectionConfig, items);
+                        }
+                        return applyExcludeItemIdFilter(sectionConfig, items);
+                    })();
+                }
+                return mappedDataPromise;
+            };
+
+            // Kick off list resolve immediately; first paint may still be empty
+            ensureData();
+
+            const result = {
+                data: { Items: [] },
+                isStale: true,
+                ensureData
+            };
+            Object.defineProperty(result, 'dataPromise', {
+                configurable: true,
+                enumerable: true,
+                get() { return ensureData(); }
+            });
+
+            const loadSectionTimerEnd = performance.now();
+            LOG(`Section ${sectionConfig.id} (external list) progressive stub in ${(loadSectionTimerEnd - loadSectionTimerStart).toFixed(2)}ms`);
+            return {
+                config: sectionConfig,
+                result
+            };
+        }
+
+        // Ensure queries array exists when section has no static items
+        if (!sectionConfig.queries || !Array.isArray(sectionConfig.queries) || sectionConfig.queries.length === 0) {
+            WARN(`Section ${sectionConfig.id} has no queries array and no static items`);
+            return null;
+        }
+
+        const userId = ApiClient.getCurrentUserId();
+        const serverUrl = ApiClient.serverAddress();
+
+        // Initialize active query index before view-more resolution (multi-picker / random)
+        const resolveQueries = window.cardBuilder?.resolveQueriesToLoad;
+        const queriesToLoad = typeof resolveQueries === 'function'
+            ? resolveQueries(sectionConfig, { initialize: true })
+            : (() => {
+                if (sectionConfig.queries.length > 1 && sectionConfig.useRandomQuery === true) {
+                    const randomIndex = Math.floor(Math.random() * sectionConfig.queries.length);
+                    LOG(`Section ${sectionConfig.id}: useRandomQuery — selected query index ${randomIndex}`);
+                    return [sectionConfig.queries[randomIndex]];
+                }
+                return sectionConfig.queries;
+            })();
+
+        if (sectionConfig.useMultiQueryPicker === true && sectionConfig.queries.length > 1) {
+            const index = sectionConfig._selectedQueryIndex;
+            LOG(`Section ${sectionConfig.id}: useMultiQueryPicker — selected query index ${index}`);
+        } else if (queriesToLoad.length === 1 && sectionConfig.queries.length > 1 && sectionConfig.useRandomQuery === true) {
+            const index = sectionConfig.queries.indexOf(queriesToLoad[0]);
+            LOG(`Section ${sectionConfig.id}: useRandomQuery — selected query index ${index}`);
+        }
+
+        scheduleViewMoreUrl(sectionConfig);
+
+        const postProcess = (cfg, items) => {
+            let postProcessedItems = items;
+            if (window.cardBuilder.postProcessItems) {
+                postProcessedItems = window.cardBuilder.postProcessItems(cfg, items);
+            }
+            postProcessedItems = applyExcludeItemIdFilter(cfg, postProcessedItems);
+            return sortItemsByConfiguredIds(cfg, postProcessedItems);
+        };
+
+        let mappedDataPromise = null;
+        const result = {
+            data: { Items: [] },
+            isStale: true,
+            ensureData: null
+        };
+
+        const ensureData = () => {
+            if (!mappedDataPromise) {
+                mappedDataPromise = (async () => {
+                    if (!(await isSectionCacheReady(sectionConfig))) {
+                        return [];
+                    }
+
+                    const results = [];
+                    for (const query of queriesToLoad) {
+                        let queryResult;
+
+                        if (query.dataSource) {
+                            queryResult = await ApiHelper.fetchFromDataSource(
+                                query.dataSource,
+                                query.queryOptions || {},
+                                true,
+                                query.dataSourceOptions
+                            );
+                        } else {
+                            const queryUrl = ApiHelper.buildQueryFromSection(query, userId, serverUrl, sectionConfig.renderMode === 'Spotlight', { sectionType: sectionConfig.type });
+
+                            if (typeof queryUrl !== 'string') {
+                                WARN(`Invalid query URL for section ${sectionConfig.id}`);
+                                continue;
+                            }
+
+                            const cacheCfg = Config().CACHE || {};
+                            let sectionTtl = cacheCfg.DEFAULT_TTL;
+                            if (Number(sectionConfig.ttl) >= 0) {
+                                sectionTtl = Number(sectionConfig.ttl);
+                            }
+
+                            queryResult = ApiHelper.getQuery(queryUrl, {
+                                useCache: true,
+                                ttl: sectionTtl
+                            });
+                        }
+
+                        if (queryResult) results.push(queryResult);
+                    }
+
+                    if (!results.length) {
+                        return [];
+                    }
+
+                    if (results.length > 1) {
+                        const merged = ApiHelper.mergeMultiQueryResults(results, sectionConfig);
+                        const raw = typeof merged.result?.ensureData === 'function'
+                            ? await merged.result.ensureData()
+                            : await merged.result?.dataPromise;
+
+                        const hasRefresh = results.some((r) => r && r._refreshPromise);
+                        if (hasRefresh) {
+                            result.refreshPromise = Promise.all(
+                                results.map((r) => r._refreshPromise || Promise.resolve(r.data))
+                            ).then((allData) => {
+                                const itemsByFreshQuery = [];
+                                allData.forEach((data) => {
+                                    if (data?.Items) itemsByFreshQuery.push(data.Items);
+                                    else if (Array.isArray(data)) itemsByFreshQuery.push(data);
+                                });
+                                const mergedFresh = window.cardBuilder?.postProcessItemsByQuery
+                                    ? window.cardBuilder.postProcessItemsByQuery(sectionConfig, itemsByFreshQuery)
+                                    : itemsByFreshQuery.flat();
+                                return postProcess(sectionConfig, mergedFresh);
+                            });
+                        }
+
+                        return postProcess(sectionConfig, raw);
+                    }
+
+                    const queryResult = results[0];
+                    const raw = typeof queryResult.ensureData === 'function'
+                        ? await queryResult.ensureData()
+                        : await queryResult.dataPromise;
+
+                    if (queryResult._refreshPromise) {
+                        result.refreshPromise = queryResult._refreshPromise.then((fresh) =>
+                            postProcess(sectionConfig, fresh)
+                        );
+                    }
+
+                    return postProcess(sectionConfig, raw);
+                })();
+            }
+            return mappedDataPromise;
+        };
+
+        result.ensureData = ensureData;
+        Object.defineProperty(result, 'dataPromise', {
+            configurable: true,
+            enumerable: true,
+            get() {
+                return ensureData();
+            }
+        });
+
+        const loadSectionTimerEnd = performance.now();
+        LOG(`Section ${sectionConfig.id} progressive stub in ${(loadSectionTimerEnd - loadSectionTimerStart).toFixed(2)}ms`);
+
+        return {
+            config: sectionConfig,
+            queryUrl: null,
+            result
+        };
+    }
+
+    /**
+     * Jellyfin /Items?Ids= does not reliably return items in request order.
+     * When queryOptions.Ids is set, re-sort the item list to match that sequence.
+     */
+    function sortItemsByConfiguredIds(sectionConfig, items) {
+        const list = Array.isArray(items) ? items : (items?.Items || []);
+        if (!Array.isArray(list) || list.length === 0) return items;
+
+        const rawIds = sectionConfig?.queries?.[0]?.queryOptions?.Ids;
+        if (!rawIds) return items;
+
+        const ids = Array.isArray(rawIds)
+            ? rawIds.filter(Boolean)
+            : String(rawIds).split(',').map((s) => s.trim()).filter(Boolean);
+        if (!ids.length) return items;
+
+        const order = new Map(ids.map((id, i) => [String(id), i]));
+        const sorted = [...list].sort((a, b) => {
+            const ai = order.has(String(a?.Id)) ? order.get(String(a.Id)) : 1e9;
+            const bi = order.has(String(b?.Id)) ? order.get(String(b.Id)) : 1e9;
+            return ai - bi;
+        });
+
+        if (Array.isArray(items)) return sorted;
+        if (items && typeof items === 'object' && Array.isArray(items.Items)) {
+            return { ...items, Items: sorted };
+        }
+        return sorted;
+    }
+
+    async function getWatchlistUrl() {
+        return window.KefinTweaksUtils._watchlistUrl || '#/watchlist';
+    }
+
+    /**
+     * Active query index for multi-query picker sections (falls back to 0).
+     */
+    function getActiveQueryIndexForViewMore(sectionConfig) {
+        const queries = sectionConfig?.queries || [];
+        if (queries.length <= 1) return 0;
+        if (sectionConfig.useMultiQueryPicker !== true) return 0;
+        const stored = sectionConfig._selectedQueryIndex;
+        if (Number.isInteger(stored) && stored >= 0 && stored < queries.length) {
+            return stored;
+        }
+        return 0;
+    }
+
+    /**
+     * Resolve view more URL from queryOptions / known section ids.
+     * Multi-query picker sections resolve from the active query (not always queries[0]).
+     */
+    async function resolveViewMoreUrl(sectionConfig) {
+        const queries = sectionConfig?.queries || [];
+        const isMultiPicker = sectionConfig?.useMultiQueryPicker === true && queries.length > 1;
+
+        // Section-level URL is authoritative for single-query sections only.
+        // Multi-picker keeps a cached sectionConfig.viewMoreUrl that goes stale on switch.
+        if (sectionConfig.viewMoreUrl && !isMultiPicker) {
+            return sectionConfig.viewMoreUrl;
+        }
+
+        const { id } = sectionConfig;
+
+        // Handle specific section IDs
+        if (id === 'continueWatching') {
+            return `#/tv.html?collectionType=tvshows&tab=1&serverId=${ApiClient.serverId()}`;
+        }
+
+        if (id === 'popularTVNetworks') {
+            return `#/tv.html?collectionType=tvshows&tab=4&serverId=${ApiClient.serverId()}`;
+        }
+
+        if (id === 'upcoming' || id === 'recentlyReleased.episodes') {
+            return `#/tv.html?collectionType=tvshows&tab=2&serverId=${ApiClient.serverId()}`;
+        }
+
+        if (id === 'nextUp') {
+            return `#/list.html?type=nextup&serverId=${ApiClient.serverId()}`;
+        }
+
+        if (id === 'watchlist') {
+            return await getWatchlistUrl();
+        }
+
+        if (id === 'watchAgain') {
+            const watchlistUrl = await getWatchlistUrl();
+
+            if (watchlistUrl) {
+                return `${watchlistUrl}?pageTab=history`;
+            }
+            return null;
+        }
+
+        // Infer from active query (multi-picker) or first query
+        if (queries.length > 0) {
+            const activeQuery = queries[getActiveQueryIndexForViewMore(sectionConfig)] || queries[0];
+            if (activeQuery?.viewMoreUrl) {
+                return activeQuery.viewMoreUrl;
+            }
+
+            const queryOptions = activeQuery.queryOptions || {};
+            const serverId = window.ApiClient ? window.ApiClient.serverId() : '';
+
+            // Check for Tags
+            if (queryOptions.Tags) {
+                return `#/list.html?type=tag&tag=${encodeURIComponent(queryOptions.Tags)}&serverId=${serverId}`;
+            }
+
+            // Check for Genres (name → Id via local catalog; never use unresolved names as genreId)
+            if (queryOptions.Genres) {
+                let genreId = queryOptions.Genres;
+                if (typeof genreId === 'string' && !genreId.match(/^\d+$/)) {
+                    const resolvedId = await ApiHelper.getGenreId(genreId);
+                    if (!resolvedId) return null;
+                    genreId = resolvedId;
+                }
+                return `#/list.html?genreId=${genreId}&serverId=${serverId}`;
+            }
+
+            // Check for GenreIds
+            if (queryOptions.GenreIds) {
+                return `#/list.html?genreId=${queryOptions.GenreIds.join(',')}&serverId=${serverId}`;
+            }
+
+            // Check for PersonIds
+            if (queryOptions.PersonIds) {
+                return `#/details?id=${queryOptions.PersonIds.join(',')}&serverId=${serverId}`;
+            }
+
+            // Check for StudioIds
+            if (queryOptions.StudioIds) {
+                return `#/list.html?studioId=${queryOptions.StudioIds.join(',')}&serverId=${serverId}`;
+            }
+
+            // Check for ParentId
+            if (queryOptions.ParentId) {
+                if (sectionConfig.discoveryType === 'Collection' || sectionConfig.discoveryType === 'Playlist') {
+                    return `#/details?id=${queryOptions.ParentId}&serverId=${serverId}`;
+                }
+
+                return `#/list.html?parentId=${queryOptions.ParentId}&serverId=${serverId}`;
+            }
+
+            // Check for custom path
+            if (activeQuery.path) {
+                // Derive URL from path if possible
+                if (activeQuery.path.includes('NextUp')) {
+                    return `#/tv.html?collectionType=tvshows&tab=1`;
+                }
+                if (activeQuery.path.includes('Upcoming')) {
+                    return `#/tv.html?collectionType=tvshows&tab=2`;
+                }
+                // If query path is Items/itemid/Similar then return the details page for the item
+                if (activeQuery.path.includes('Similar')) {
+                    const itemId = activeQuery.path.split('/')[2];
+                    return `#/details?id=${itemId}&serverId=${serverId}`;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    function resolveCardFormat(sectionConfig) {
+        return sectionConfig.cardFormat || 'Poster';
+    }
+
+    function normalizeDiscoveryConfig(config) {
+        const normalized = { ...config };
+        normalized.discoveryType = normalized.discoveryType
+            || (normalized.source === 'Dynamic' ? normalized.type : null);
+        normalized.discoveryPersonType = normalized.discoveryPersonType || normalized.personType || 'Actor';
+        normalized.discoveryItemType = normalized.discoveryItemType
+            || (Array.isArray(normalized.includeItemTypes) && normalized.includeItemTypes[0])
+            || 'Movie';
+        if (!normalized.discoverySourceQuery) {
+            normalized.discoverySourceQuery = inferLegacyDiscoverySourceQuery(normalized);
+        }
+        return normalized;
+    }
+
+    function inferLegacyDiscoverySourceQuery(config) {
+        const itemType = config.discoveryItemType || config.includeItemTypes?.[0] || 'Movie';
+        const discoveryType = config.discoveryType;
+
+        if (discoveryType === 'Genre') {
+            return {
+                path: '/Genres',
+                queryOptions: { IncludeItemTypes: [itemType], Limit: 0 }
+            };
+        }
+        if (discoveryType === 'Studio') {
+            return {
+                path: '/Studios',
+                queryOptions: {
+                    IncludeItemTypes: [itemType === 'Series' ? 'Series' : 'Movie'],
+                    SortBy: 'ChildCount',
+                    SortOrder: 'Descending',
+                    Limit: 0
+                }
+            };
+        }
+        if (discoveryType === 'Collection') {
+            return {
+                path: '/Items',
+                queryOptions: {
+                    IncludeItemTypes: ['BoxSet'],
+                    Recursive: true,
+                    Fields: 'RecursiveItemCount,ChildCount,TotalRecordCount',
+                    Limit: 500,
+                    SortBy: 'TotalRecordCount'
+                }
+            };
+        }
+        if (discoveryType === 'Person') {
+            if (config.sourceType && String(config.sourceType).includes('watched')) {
+                const poolType = itemType === 'Series' ? 'Episode' : itemType;
+                return {
+                    path: '/Items',
+                    queryOptions: {
+                        IncludeItemTypes: [poolType],
+                        Recursive: true,
+                        Filters: 'IsPlayed',
+                        Fields: 'UserData,People',
+                        SortBy: config.sourceType === 'watched-recent' ? 'DatePlayed' : 'Random',
+                        SortOrder: config.sourceType === 'watched-recent' ? 'Descending' : undefined,
+                        Limit: config.sourceType === 'watched-recent' ? 5 : 20
+                    }
+                };
+            }
+            const role = config.discoveryPersonType || config.personType || 'Actor';
+            const method = role === 'Director' ? 'getTopDirectors'
+                : role === 'Writer' ? 'getTopWriters'
+                    : 'getTopActors';
+            return {
+                dataSource: `PeopleCache.${method}`,
+                dataSourceOptions: { ItemType: itemType },
+                queryOptions: { Limit: 100 }
+            };
+        }
+        if (discoveryType === 'Similar' || discoveryType === 'Watchlist') {
+            if (config.sourceType === 'liked' || discoveryType === 'Watchlist') {
+                return {
+                    path: '/Items',
+                    queryOptions: {
+                        IncludeItemTypes: [itemType === 'Series' ? 'Episode' : itemType],
+                        Recursive: true,
+                        Filters: discoveryType === 'Watchlist' ? 'Likes' : 'IsFavorite',
+                        SortBy: 'Random',
+                        Limit: 20,
+                        Fields: 'UserData,People'
+                    }
+                };
+            }
+            if (config.sourceType === 'watched-recent') {
+                return {
+                    path: '/Items',
+                    queryOptions: {
+                        IncludeItemTypes: [itemType === 'Series' ? 'Episode' : itemType],
+                        Recursive: true,
+                        Filters: 'IsPlayed',
+                        Fields: 'UserData,People',
+                        SortBy: 'DatePlayed',
+                        SortOrder: 'Descending',
+                        Limit: 5
+                    }
+                };
+            }
+            if (config.sourceType === 'finished') {
+                return {
+                    path: '/Items',
+                    queryOptions: {
+                        IncludeItemTypes: ['Series'],
+                        Recursive: true,
+                        Filters: 'IsPlayed',
+                        SortBy: 'PlayedPercentage',
+                        SortOrder: 'Descending',
+                        Limit: 5,
+                        Fields: 'UserData,People'
+                    }
+                };
+            }
+            return {
+                path: '/Items',
+                queryOptions: {
+                    IncludeItemTypes: [itemType === 'Series' ? 'Episode' : itemType],
+                    Recursive: true,
+                    Filters: 'IsPlayed',
+                    SortBy: 'Random',
+                    Limit: 20,
+                    Fields: 'UserData,People'
+                }
+            };
+        }
+        return null;
+    }
+
+    async function unwrapQueryItems(result) {
+        if (!result) return [];
+        if (Array.isArray(result)) return result;
+        if (Array.isArray(result.Items)) return result.Items;
+        if (typeof result.ensureData === 'function') {
+            const fresh = await result.ensureData();
+            if (Array.isArray(fresh)) return fresh;
+            return fresh?.Items || [];
+        }
+        if (result.dataPromise) {
+            const fresh = await result.dataPromise;
+            if (Array.isArray(fresh)) return fresh;
+            return fresh?.Items || [];
+        }
+        if (Array.isArray(result.data?.Items)) return result.data.Items;
+        return [];
+    }
+
+    async function fetchDiscoveryPool(sectionConfig) {
+        const config = normalizeDiscoveryConfig(sectionConfig);
+        const sourceQuery = config.discoverySourceQuery;
+        if (!sourceQuery) {
+            WARN(`Discovery section ${config.id}: missing discoverySourceQuery`);
+            return [];
+        }
+
+        if ((await window.LibraryCache?.sectionDependsOnIncompleteCache?.({
+            discoverySourceQuery: sourceQuery,
+            queries: []
+        })) === true) {
+            LOG(`Discovery section ${config.id}: skipping pool fetch — incomplete library cache`);
+            // null = incomplete cache (do not permanently exclude template)
+            return null;
+        }
+
+        const cfg = Config();
+        const ttl = cfg.CACHE?.DISCOVERY_TTL ?? cfg.CACHE?.LONG_TTL ?? 3600000;
+        const userId = ApiClient.getCurrentUserId();
+        const serverUrl = ApiClient.serverAddress();
+        const built = ApiHelper.buildQueryFromSection(sourceQuery, userId, serverUrl, false);
+
+        if (typeof built === 'object' && built.dataSource) {
+            const result = await ApiHelper.fetchFromDataSource(
+                built.dataSource,
+                built.options || {},
+                false,
+                built.dataSourceOptions
+            );
+            return unwrapQueryItems(result);
+        }
+
+        if (typeof built !== 'string') return [];
+        const stub = ApiHelper.getQuery(built, { useCache: true, ttl });
+        const raw = typeof stub.ensureData === 'function' ? await stub.ensureData() : await stub;
+        return unwrapQueryItems(raw);
+    }
+
+    function shuffleArray(arr) {
+        const copy = arr.slice();
+        for (let i = copy.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [copy[i], copy[j]] = [copy[j], copy[i]];
+        }
+        return copy;
+    }
+
+    function personDedupeKey(itemType, personType, personId) {
+        return `${itemType}:${personType}:${personId}`;
+    }
+
+    function isPersonUsed(itemType, personType, personId) {
+        return discoveryState.renderedDiscoveryIds.people.has(personDedupeKey(itemType, personType, personId));
+    }
+
+    function markPersonUsed(itemType, personType, personId) {
+        discoveryState.renderedDiscoveryIds.people.add(personDedupeKey(itemType, personType, personId));
+    }
+
+    function getStudioDedupeSet(config) {
+        const baseId = String(config.id || '').split('-')[0];
+        if (baseId === 'spotlightNetwork' || baseId === 'spotlightNetworkSeries') {
+            return discoveryState.renderedDiscoveryIds.seriesStudiosTopRated;
+        }
+        return discoveryState.renderedDiscoveryIds.seriesStudios;
+    }
+
+    function getGenreDedupeSet(itemType) {
+        return itemType === 'Series' ? discoveryState.renderedDiscoveryIds.genresSeries : discoveryState.renderedDiscoveryIds.genres;
+    }
+
+    function resolveSimilarSourceId(item) {
+        if (!item) return null;
+        if (item.Type === 'Episode' && item.SeriesId) return item.SeriesId;
+        return item.Id;
+    }
+
+    /** Drop discovery source title(s) from result lists (API ExcludeItemIds fallback). */
+    function applyExcludeItemIdFilter(sectionConfig, items) {
+        const raw = sectionConfig?.excludeItemId;
+        if (raw == null || items == null) return items;
+        const ids = new Set((Array.isArray(raw) ? raw : [raw]).map(String));
+        if (Array.isArray(items)) {
+            return items.filter((item) => item?.Id != null && !ids.has(String(item.Id)));
+        }
+        if (Array.isArray(items.Items)) {
+            return {
+                ...items,
+                Items: items.Items.filter((item) => item?.Id != null && !ids.has(String(item.Id)))
+            };
+        }
+        return items;
+    }
+
+    function resolveTitleMetadata(item, itemType) {
+        const title = item?.SeriesName || item?.Name || '';
+        const meta = { Title: title };
+        if (itemType === 'Series' || item?.Type === 'Series' || item?.Type === 'Episode') {
+            meta.Series = title;
+        } else {
+            meta.Movie = title;
+        }
+        return meta;
+    }
+
+    function buildPersonMetadata(personName, personType, sourceItem, itemType) {
+        const titleMeta = sourceItem ? resolveTitleMetadata(sourceItem, itemType) : {};
+        const meta = { Person: personName, ...titleMeta };
+        meta[personType] = personName;
+        return meta;
+    }
+
+    function pickPersonFromHistoryPool(pool, personType, itemType) {
+        const shuffled = shuffleArray(pool);
+        for (const item of shuffled) {
+            if (!item?.People?.length) continue;
+            const candidates = item.People.filter((p) => p.Type === personType).slice(0, 10);
+            if (!candidates.length) continue;
+            const shuffledPeople = shuffleArray(candidates);
+            for (const person of shuffledPeople) {
+                if (!person?.Id) continue;
+                if (isPersonUsed(itemType, personType, person.Id)) continue;
+                markPersonUsed(itemType, personType, person.Id);
+                return {
+                    id: person.Id,
+                    name: person.Name,
+                    // Episode history sources used for Series results must exclude SeriesId
+                    excludeItemId: resolveSimilarSourceId(item) || item.Id,
+                    metadata: buildPersonMetadata(person.Name, personType, item, itemType)
+                };
+            }
+        }
+        return null;
+    }
+
+    function pickPersonFromPeopleCachePool(pool, personType, itemType) {
+        const shuffled = shuffleArray(pool);
+        for (const person of shuffled) {
+            if (!person?.Id) continue;
+            if (isPersonUsed(itemType, personType, person.Id)) continue;
+            markPersonUsed(itemType, personType, person.Id);
+            return {
+                id: person.Id,
+                name: person.Name,
+                metadata: buildPersonMetadata(person.Name, personType, null, itemType)
+            };
+        }
+        return null;
+    }
+
+    async function resolveDiscoverySource(rawConfig) {
+        const config = normalizeDiscoveryConfig(rawConfig);
+        const discoveryType = config.discoveryType;
+        const itemType = config.discoveryItemType || 'Movie';
+        const personType = config.discoveryPersonType || 'Actor';
+
+        if (!discoveryType || !config.discoverySourceQuery) {
+            WARN(`Discovery section misconfigured: ${config.id}`);
+            return null;
+        }
+
+        const pool = await fetchDiscoveryPool(config);
+        // Incomplete library cache — skip this attempt without excluding the template
+        if (pool == null) return null;
+        if (!pool.length) {
+            markEmptyDiscoverySourceTemplate(config);
+            return null;
+        }
+
+        if (discoveryType === 'Genre') {
+            const settings = getDiscoverySettings();
+            const minCount = itemType === 'Series'
+                ? (settings.minGenreSeriesCount ?? settings.minGenreMovieCount ?? 50)
+                : (settings.minGenreMovieCount ?? 50);
+            const countField = itemType === 'Series' ? 'SeriesCount' : 'MovieCount';
+            const dedupe = getGenreDedupeSet(itemType);
+            const eligible = pool.filter((g) => !dedupe.has(g.Id) && (g[countField] || 0) > minCount);
+            if (!eligible.length) return null;
+            const selected = eligible[Math.floor(Math.random() * eligible.length)];
+            dedupe.add(selected.Id);
+            return {
+                id: selected.Id,
+                name: selected.Name,
+                metadata: { Genre: selected.Name }
+            };
+        }
+
+        if (discoveryType === 'Studio') {
+            const settings = getDiscoverySettings();
+            const minCount = itemType === 'Series'
+                ? (settings.minStudioSeriesCount ?? settings.minStudioMovieCount ?? 25)
+                : (settings.minStudioMovieCount ?? 25);
+            const countField = itemType === 'Series' ? 'SeriesCount' : 'MovieCount';
+            const dedupe = getStudioDedupeSet(config);
+            const eligible = pool.filter((s) => s?.Id && !dedupe.has(s.Id) && (s[countField] || 0) > minCount);
+            if (!eligible.length) return null;
+            const selected = eligible[Math.floor(Math.random() * eligible.length)];
+            dedupe.add(selected.Id);
+            return {
+                id: selected.Id,
+                name: selected.Name,
+                metadata: { Studio: selected.Name }
+            };
+        }
+
+        if (discoveryType === 'Collection') {
+            const minimumItems = config.minimumItems || 3;
+            const eligible = pool.filter((c) => {
+                if (!c?.Id || discoveryState.renderedDiscoveryIds.collections.has(c.Id)) return false;
+                const count = (c.TotalRecordCount ?? c.RecursiveItemCount ?? c.ChildCount ?? 0);
+                return count >= minimumItems;
+            });
+            if (!eligible.length) return null;
+            const selected = eligible[Math.floor(Math.random() * eligible.length)];
+            discoveryState.renderedDiscoveryIds.collections.add(selected.Id);
+            return {
+                id: selected.Id,
+                name: selected.Name,
+                metadata: { Collection: selected.Name, 'Collection Name': selected.Name }
+            };
+        }
+
+        if (discoveryType === 'Similar' || discoveryType === 'Watchlist') {
+            const dedupe = discoveryState.renderedDiscoveryIds.similar;
+            const eligible = shuffleArray(pool).filter((item) => {
+                const sourceId = resolveSimilarSourceId(item);
+                return sourceId && !dedupe.has(sourceId);
+            });
+            if (!eligible.length) return null;
+            const selected = eligible[0];
+            const similarSourceId = resolveSimilarSourceId(selected);
+            dedupe.add(similarSourceId);
+            return {
+                id: similarSourceId,
+                similarSourceId,
+                excludeItemId: selected.Id,
+                metadata: resolveTitleMetadata(selected, itemType)
+            };
+        }
+
+        if (discoveryType === 'Person') {
+            const sourceQuery = config.discoverySourceQuery;
+            if (sourceQuery.dataSource && String(sourceQuery.dataSource).startsWith('PeopleCache.')) {
+                return pickPersonFromPeopleCachePool(pool, personType, itemType);
+            }
+            return pickPersonFromHistoryPool(pool, personType, itemType);
+        }
+
+        WARN(`Unsupported discoveryType: ${discoveryType}`);
+        return null;
+    }
+
+    function fillTemplate(template, data) {
+        if (!data || !template) return template;
+
+        // Support both {Key} and [Key] formats, allowing spaces in keys
+        return template.replace(/\{([^}]+)\}|\[([^\]]+)\]/g, (match, key1, key2) => {
+            const key = key1 || key2;
+            return data[key] || match;
+        });
+    }
+
+    /**
+     * Resolves a dynamic discovery template into a concrete section config with queries.
+     * Returns null when no source could be resolved (e.g. no eligible genre/person left).
+     * @param {Object} template - Discovery section template
+     * @param {Object} [options]
+     * @param {boolean} [options.pairSpotlight] - Reuse the paired spotlight source (home render behaviour)
+     * @param {boolean} [options.resolveViewMore] - Resolve the "view more" URL (may issue extra requests)
+     * @param {string} [options.stubId] - Stable id from progressive stub
+     * @param {number} [options.stubOrder] - Stable order from progressive stub
+     */
+    async function buildDiscoverySectionInstance(template, options = {}) {
+        if (!(await isSectionCacheReady(template))) {
+            LOG(`Skipping discovery ${template?.id}: dependent library cache not complete`);
+            return null;
+        }
+
+        const pairSpotlight = options.pairSpotlight !== false;
+        const resolveViewMore = options.resolveViewMore !== false;
+
+        const instanceConfig = {
+            ...template,
+            id: options.stubId || `${template.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            discoveryTemplateId: template.id,
+            type: 'discovery',
+        };
+        if (options.stubOrder != null) {
+            instanceConfig.order = options.stubOrder;
+        }
+        if (!instanceConfig.discoveryType && template.type
+            && !['home', 'seasonal', 'discovery'].includes(String(template.type).toLowerCase())) {
+            instanceConfig.discoveryType = template.type;
+        }
+
+        const normalized = normalizeDiscoveryConfig(instanceConfig);
+        Object.assign(instanceConfig, normalized);
+
+        const baseId = String(template.id || instanceConfig.id || '').split('-')[0];
+        const pairKey = (pairSpotlight && getDiscoverySettings().renderSpotlightAboveMatching)
+            ? getPairKey(baseId)
+            : null;
+
+        let dynamicResult = null;
+        if (pairKey) {
+            // Sequential partner already finished: reuse stored result (do not resolve again)
+            if ((pairKey === 'genre-movie' || pairKey === 'genre-series') && discoveryState.currentDiscoveryGenre) {
+                dynamicResult = discoveryState.currentDiscoveryGenre;
+                discoveryState.currentDiscoveryGenre = null;
+            } else if (pairKey === 'studio-series' && discoveryState.currentDiscoveryStudio) {
+                dynamicResult = discoveryState.currentDiscoveryStudio;
+                discoveryState.currentDiscoveryStudio = null;
+            } else {
+                // Parallel partner in-flight (or we are first): share one resolve promise
+                if (!discoveryState.pairResolvePromises.has(pairKey)) {
+                    const resolvePromise = resolveDiscoverySource(instanceConfig);
+                    discoveryState.pairResolvePromises.set(pairKey, resolvePromise);
+                    resolvePromise.finally(() => {
+                        // Clear after settle so the next discovery group can pick a new entity.
+                        // Parallel awaiters already hold this promise reference.
+                        setTimeout(() => {
+                            if (discoveryState.pairResolvePromises.get(pairKey) === resolvePromise) {
+                                discoveryState.pairResolvePromises.delete(pairKey);
+                            }
+                        }, 0);
+                    });
+                }
+                dynamicResult = await discoveryState.pairResolvePromises.get(pairKey);
+
+                // Leave for a sequential partner that starts after we finish
+                if (dynamicResult) {
+                    if (pairKey === 'genre-movie' || pairKey === 'genre-series') {
+                        if (!discoveryState.currentDiscoveryGenre) {
+                            discoveryState.currentDiscoveryGenre = dynamicResult;
+                        } else {
+                            // Partner (or race twin) already stored/consumed — clear our leave-behind
+                            discoveryState.currentDiscoveryGenre = null;
+                        }
+                    } else if (pairKey === 'studio-series') {
+                        if (!discoveryState.currentDiscoveryStudio) {
+                            discoveryState.currentDiscoveryStudio = dynamicResult;
+                        } else {
+                            discoveryState.currentDiscoveryStudio = null;
+                        }
+                    }
+                }
+            }
+        } else {
+            dynamicResult = await resolveDiscoverySource(instanceConfig);
+
+            // Legacy sequential pairing when Map is not used (pairSpotlight off path already skipped)
+            if (pairSpotlight && getDiscoverySettings().renderSpotlightAboveMatching) {
+                const configId = baseId;
+                const genrePairIds = new Set(['genreMovies', 'spotlightGenre', 'genreSeries', 'spotlightGenreSeries']);
+                const studioPairIds = new Set(['studioShows', 'spotlightNetwork']);
+
+                if (genrePairIds.has(configId)) {
+                    if (discoveryState.currentDiscoveryGenre) {
+                        dynamicResult = discoveryState.currentDiscoveryGenre;
+                        discoveryState.currentDiscoveryGenre = null;
+                    } else if (dynamicResult) {
+                        discoveryState.currentDiscoveryGenre = dynamicResult;
+                    }
+                }
+                if (studioPairIds.has(configId)) {
+                    if (discoveryState.currentDiscoveryStudio) {
+                        dynamicResult = discoveryState.currentDiscoveryStudio;
+                        discoveryState.currentDiscoveryStudio = null;
+                    } else if (dynamicResult) {
+                        discoveryState.currentDiscoveryStudio = dynamicResult;
+                    }
+                }
+            }
+        }
+        if (!dynamicResult) return null;
+
+        instanceConfig.source = dynamicResult.id || dynamicResult.name;
+        instanceConfig.metadata = dynamicResult.metadata;
+        instanceConfig.excludeItemId = dynamicResult.excludeItemId;
+
+        const discoveryKind = instanceConfig.discoveryType || instanceConfig.type;
+        const resolvedSource = instanceConfig.source;
+        const contentTypes = instanceConfig.discoveryItemType
+            ? [instanceConfig.discoveryItemType]
+            : (instanceConfig.includeItemTypes || ['Movie']);
+
+        const hasTemplateQueries = Array.isArray(instanceConfig.queries) && instanceConfig.queries.length > 0;
+        const queryOptions = hasTemplateQueries
+            ? { ...(instanceConfig.queries[0].queryOptions || {}) }
+            : {
+                Recursive: 'true',
+                Limit: instanceConfig.itemLimit || 20,
+                IncludeItemTypes: contentTypes
+            };
+
+        if (!hasTemplateQueries) {
+            if (instanceConfig.sortOrder) queryOptions.SortBy = instanceConfig.sortOrder;
+            if (instanceConfig.sortOrderDirection) queryOptions.SortOrder = instanceConfig.sortOrderDirection;
+        } else if (!queryOptions.IncludeItemTypes?.length) {
+            queryOptions.IncludeItemTypes = contentTypes;
+        }
+        if (!queryOptions.Limit) queryOptions.Limit = instanceConfig.itemLimit || 20;
+
+        const applyExcludeItemIdsToQueryOptions = (opts) => {
+            if (!instanceConfig.excludeItemId || !opts) return opts;
+            opts.ExcludeItemIds = Array.isArray(instanceConfig.excludeItemId)
+                ? instanceConfig.excludeItemId
+                : [instanceConfig.excludeItemId];
+            return opts;
+        };
+
+        if (discoveryKind === 'Similar' || discoveryKind === 'Watchlist') {
+            const similarId = dynamicResult.similarSourceId || resolvedSource;
+            // Preserve template options (e.g. IsUnplayed / Hide Watched, SortBy) — only overlay Similar-required fields
+            const similarQueryOptions = applyExcludeItemIdsToQueryOptions({
+                ...queryOptions,
+                Limit: queryOptions.Limit || instanceConfig.itemLimit || 20,
+                Fields: queryOptions.Fields || 'PrimaryImageAspectRatio,DateCreated,Overview,Taglines,ProductionYear,RecursiveItemCount,ChildCount,UserData',
+                IncludeItemTypes: queryOptions.IncludeItemTypes?.length
+                    ? queryOptions.IncludeItemTypes
+                    : contentTypes
+            });
+            instanceConfig.queries = [{
+                ...(hasTemplateQueries ? instanceConfig.queries[0] : {}),
+                path: `/Items/${similarId}/Similar`,
+                queryOptions: similarQueryOptions
+            }];
+        } else {
+            switch (discoveryKind) {
+                case 'Genre':
+                    if (resolvedSource && resolvedSource.match(/^[a-f0-9]{32}$/)) {
+                        queryOptions.GenreIds = [resolvedSource];
+                    } else if (resolvedSource) {
+                        queryOptions.Genres = resolvedSource;
+                    }
+                    break;
+                case 'Tag':
+                    if (resolvedSource) queryOptions.Tags = resolvedSource;
+                    break;
+                case 'Person':
+                    if (resolvedSource) queryOptions.PersonIds = [resolvedSource];
+                    {
+                        const personType = instanceConfig.discoveryPersonType || instanceConfig.personType || 'Actor';
+                        queryOptions.PersonTypes = [personType];
+                        // Series-scoped person rows: actors → Series; director/writer/guest → Episode
+                        const itemScope = instanceConfig.discoveryItemType
+                            || (Array.isArray(contentTypes) && contentTypes[0])
+                            || 'Movie';
+                        if (itemScope === 'Series' && personType !== 'Actor') {
+                            queryOptions.IncludeItemTypes = ['Episode'];
+                        }
+                    }
+                    break;
+                case 'Studio':
+                    if (resolvedSource && resolvedSource.match(/^[a-f0-9]{32}$/)) {
+                        queryOptions.StudioIds = [resolvedSource];
+                    } else if (resolvedSource) {
+                        queryOptions.Studios = resolvedSource;
+                    }
+                    break;
+                case 'Collection':
+                case 'Parent':
+                    if (resolvedSource) queryOptions.ParentId = resolvedSource;
+                    break;
+            }
+
+            if (instanceConfig.spotlight || instanceConfig.renderMode === 'Spotlight') {
+                queryOptions.Fields = queryOptions.Fields || 'PrimaryImageAspectRatio,DateCreated,Overview,Taglines,ProductionYear,RecursiveItemCount,ChildCount,UserData,People,Genres,ParentBackdropImageTags,Studios';
+                const spotlightConfig = instanceConfig.spotlightConfig || {};
+                const adminSpotlightConfig = window.KefinHomeScreen?.getConfig?.()?.SPOTLIGHT_SETTINGS || {};
+                instanceConfig.spotlightConfig = { ...adminSpotlightConfig, ...spotlightConfig };
+            } else if (!queryOptions.Fields) {
+                queryOptions.Fields = 'PrimaryImageAspectRatio,DateCreated,Overview,Taglines,ProductionYear,RecursiveItemCount,ChildCount,UserData';
+            }
+
+            applyExcludeItemIdsToQueryOptions(queryOptions);
+
+            instanceConfig.queries = [{
+                ...(hasTemplateQueries ? instanceConfig.queries[0] : {}),
+                queryOptions
+            }];
+        }
+
+        instanceConfig.name = fillTemplate(instanceConfig.name, dynamicResult.metadata);
+        if (instanceConfig.caption) {
+            instanceConfig.caption = fillTemplate(instanceConfig.caption, dynamicResult.metadata);
+            if (dynamicResult.excludeItemId) {
+                instanceConfig.captionUrl = `#/details?id=${dynamicResult.excludeItemId}&serverId=${ApiClient.serverId()}`;
+            }
+        }
+        instanceConfig.cardFormat = resolveCardFormat(instanceConfig);
+        if (resolveViewMore) {
+            instanceConfig.viewMoreUrl = await resolveViewMoreUrl(instanceConfig);
+        }
+
+        instanceConfig.discoveryPending = false;
+        return instanceConfig;
+    }
+
+    /**
+     * Progressive discovery: return a stub config + lazy-loading result immediately.
+     * Concrete resolve + load runs on first ensureData / dataPromise / isStalePromise access.
+     */
+    async function buildDiscoverySectionPromise(template, options = {}) {
+        // Incomplete library cache: still return a progressive stub; loadConcrete /
+        // loadSectionForRendering ensureData waits until caches are ready.
+
+        const pairSpotlight = options.pairSpotlight !== false;
+        const order = options.order;
+        const uniqueId = `${template.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+        const config = {
+            ...template,
+            id: uniqueId,
+            discoveryTemplateId: template.id,
+            type: 'discovery',
+            discoveryPending: true,
+            order: order != null ? order : template.order,
+            overflowCard: true
+        };
+        if (config.cardFormat) {
+            /* keep */
+        } else {
+            config.cardFormat = resolveCardFormat(config);
+        }
+
+        // Shared load: resolve + loadSectionForRendering
+        let loadConcretePromise = null;
+        const loadConcrete = () => {
+            if (!loadConcretePromise) {
+                loadConcretePromise = (async () => {
+                    const resolved = await buildDiscoverySectionInstance(template, {
+                        pairSpotlight,
+                        resolveViewMore: true,
+                        stubId: uniqueId,
+                        stubOrder: config.order
+                    });
+                    if (!resolved) return null;
+                    resolved.discoveryPending = false;
+                    // Keep stable id/order for DOM
+                    resolved.id = uniqueId;
+                    if (config.order != null) resolved.order = config.order;
+                    Object.assign(config, resolved);
+                    config.discoveryPending = false;
+                    const qr = await loadSectionForRendering(resolved);
+                    return qr;
+                })();
+            }
+            return loadConcretePromise;
+        };
+
+        const ensureData = async () => {
+            const qr = await loadConcrete();
+            if (!qr) return { Items: [] };
+            const items = typeof qr.result?.ensureData === 'function'
+                ? await qr.result.ensureData()
+                : (qr.result?.dataPromise ?? qr.result?.data);
+            return items;
+        };
+
+        const result = {
+            data: { Items: [] },
+            isStalePromise: loadConcrete().then(async (qr) => {
+                if (!qr) return true;
+                if (qr.result?.isStalePromise) return await qr.result.isStalePromise;
+                return qr.result?.isStale === true;
+            }),
+            ensureData
+        };
+        Object.defineProperty(result, 'dataPromise', {
+            configurable: true,
+            enumerable: true,
+            get() { return ensureData(); }
+        });
+
+        return { config, result };
+    }
+
+    window.sectionHelper = {
+        loadSectionForRendering,
+        buildDiscoverySectionInstance,
+        buildDiscoverySectionPromise,
+        resolveDiscoverySource,
+        fillTemplate,
+        resolveCardFormat,
+        resolveViewMoreUrl,
+        getDiscoverySettings,
+        getDiscoveryState: () => discoveryState,
+        resetDiscoveryDedupe,
+        getDiscoveryTemplateExclusionKey,
+        markEmptyDiscoverySourceTemplate,
+        isEmptyDiscoverySourceTemplate
+    };
+
+    // After movie-genres catalog sync, fill in See All links that waited on name→Id
+    function bindMovieGenresSynced() {
+        const api = window.apiHelper || ApiHelper;
+        if (api?.onMovieGenresSynced) {
+            api.onMovieGenresSynced(reschedulePendingGenreViewMoreUrls);
+        }
+        window.addEventListener('kefinTweaksMovieGenresSynced', reschedulePendingGenreViewMoreUrls);
+    }
+    bindMovieGenresSynced();
+
+    LOG('sectionHelper ready');
+})();

@@ -1,0 +1,12 @@
+.sectionTitleContainer.sectionTitleContainer-cards.padded-left > .sectionTitle.sectionTitle-cards {
+	display: inline-block;
+}
+
+.cardText-secondary {
+	border-bottom-right-radius: 0;
+	border-bottom-left-radius: 0;
+}
+
+.layout-desktop .libraryPage:not(.noSecondaryNavPage) {
+	padding-top: 0 !important;
+}

@@ -140,10 +140,7 @@
         const style = document.createElement('style');
         style.id = styleId;
         style.textContent = `
-            #moviesTab .listPaging>div, 
-            #seriesTab .listPaging>div {
-                display: none !important;
-            }
+            
             
             /* Infinite scroll loading indicator */
             .infinite-scroll-loading {
@@ -189,8 +186,7 @@
     function waitForApiClient() {
         return new Promise((resolve) => {
             if (typeof ApiClient !== 'undefined' && ApiClient._serverInfo && ApiClient._serverInfo.UserId) {
-                userId = ApiClient._serverInfo.UserId;
-                LOG('ApiClient ready, userId:', userId);
+                LOG('ApiClient ready, userId:', ApiClient._serverInfo.UserId);
                 resolve();
             } else {
                 LOG('Waiting for ApiClient...');
@@ -225,7 +221,6 @@
         for (const match of hashMatches) {
             const pageFromHash = match.replace('#/', '');
             if (SUPPORTED_PAGES.includes(pageFromHash)) {
-                LOG('Found supported page:', pageFromHash);
                 return pageFromHash;
             }
         }
@@ -346,20 +341,8 @@
     }
 
     // Update pagination display to show current range
-    function updatePaginationDisplay() {
-        const page = getCurrentPage();
-        if (!page) return;
-        
-        let activeTab = null;
-        if (page === 'tv.html') {
-            activeTab = document.querySelector("#seriesTab.is-active");
-        } else if (page === 'movies.html') {
-            activeTab = document.querySelector("#moviesTab.is-active");
-        }
-        
-        if (!activeTab) return;
-        
-        const listPagings = activeTab.querySelectorAll(".listPaging");
+    function updatePaginationDisplay() {        
+        const listPagings = document.querySelectorAll(".page:not(.hide) .pageTabContent.is-active .listPaging");
         if (!listPagings.length) return;
         
         listPagings.forEach(listPaging => {
@@ -388,9 +371,9 @@
         
         let activeTab = null;
         if (page === 'tv.html' || page === 'tv') {
-            activeTab = document.querySelector("#seriesTab.is-active");
+            activeTab = libraryPage.querySelector("#seriesTab.is-active") || document.querySelector("#tvshowsPage:not(.hide)");
         } else if (page === 'movies.html' || page === 'movies') {
-            activeTab = document.querySelector("#moviesTab.is-active");
+            activeTab = libraryPage.querySelector("#moviesTab.is-active") || document.querySelector("#moviesPage:not(.hide)");
         }
         
         if (!activeTab) {
@@ -403,6 +386,31 @@
         }
         
         return container;
+    }
+
+    /**
+     * Infer card format from existing cards in the items container.
+     * @param {Element} container
+     * @returns {string|null} 'backdrop'|'square'|'banner'|'portrait'|null
+     */
+    function inferCardFormatFromContainer(container) {
+        if (!container) return null;
+        const existing = container.querySelector('.card');
+        if (!existing) return null;
+
+        if (existing.classList.contains('backdropCard') || existing.classList.contains('overflowBackdropCard')) {
+            return 'backdrop';
+        }
+        if (existing.classList.contains('squareCard') || existing.classList.contains('overflowSquareCard')) {
+            return 'square';
+        }
+        if (existing.classList.contains('bannerCard') || existing.classList.contains('overflowBannerCard')) {
+            return 'banner';
+        }
+        if (existing.classList.contains('portraitCard') || existing.classList.contains('overflowPortraitCard')) {
+            return 'portrait';
+        }
+        return null;
     }
 
     async function loadMore() {
@@ -522,7 +530,7 @@
             LOG('Added alpha picker filter:', alphaPicker);
         }
 
-        const url = ApiClient.getUrl("Users/" + userId + "/Items", apiParams);
+        const url = ApiClient.getUrl("Users/" + ApiClient.getCurrentUserId() + "/Items", apiParams);
 
         LOG('Loading more items:', { page, tab, startIndex, limit, url });
 
@@ -554,11 +562,16 @@
                     });
                     
                     // Build each card individually and append to container
+                    const cardFormat = inferCardFormatFromContainer(container);
+                    LOG('Inferred card format from container:', cardFormat);
                     result.Items.forEach((item, index) => {
-                        const card = window.cardBuilder.buildCard(item);
+                        const card = window.cardBuilder.buildCard(item, false, cardFormat);
                         card.setAttribute('data-index', startIndex + index);
                         container.appendChild(card);
                     });
+                    if (typeof window.cardBuilder.registerLazyImagesIn === 'function') {
+                        window.cardBuilder.registerLazyImagesIn(container);
+                    }
                     
                     LOG('Cards built successfully');
                 }
@@ -650,13 +663,12 @@
     function checkScrollPosition() {
         // Don't trigger if already loading, no more items, or request in progress
         if (loading || !hasMore || isScrollTriggered || isRequestInProgress) {
-            LOG('Scroll check blocked:', { loading, hasMore, isScrollTriggered, isRequestInProgress });
             return;
         }
         
+        // Don't trigger when not on a supported page
         const container = getContainer();
         if (!container) {
-            LOG('No container found in scroll check');
             return;
         }
         
@@ -674,19 +686,6 @@
         // Calculate distance from bottom - trigger when one viewport height away
         const distanceFromBottom = documentHeight - (scrollTop + windowHeight);
         const triggerThreshold = windowHeight; // One viewport height from bottom
-        
-        LOG('Scroll check:', {
-            scrollTop,
-            windowHeight,
-            documentHeight,
-            distanceFromBottom,
-            triggerThreshold,
-            existingItemsCount,
-            loading,
-            hasMore,
-            isScrollTriggered,
-            isRequestInProgress
-        });
         
         if (distanceFromBottom <= triggerThreshold) {
             isScrollTriggered = true;
@@ -735,6 +734,8 @@
 
     // Check if we should initialize infinite scroll
     function shouldInitialize() {
+        if (hasInitialized) return false;
+
         const page = getCurrentPage();
         const container = getContainer();
         
@@ -747,26 +748,16 @@
             return false;
         }
         
-        // Double-check that we have the correct active tab
-        let activeTab = null;
-        if (page === 'tv.html') {
-            activeTab = document.querySelector("#seriesTab.is-active");
-        } else if (page === 'movies.html') {
-            activeTab = document.querySelector("#moviesTab.is-active");
+        if (page === 'tv.html' || page === 'tv' || page === 'movies.html' || page === 'movies') {
+            return true;
         }
-        
-        if (!activeTab) {
-            LOG('No active tab found for page, skipping initialization:', page);
-            return false;
-        }
-        
-        return true;
+
+        return false;
     }
     
     // Initialize infinite scroll
     async function initialize() {
-        if (!shouldInitialize() || hasInitialized || isInitializing) {
-            LOG('Skipping initialization:', { shouldInit: shouldInitialize(), hasInitialized, isInitializing });
+        if (hasInitialized || isInitializing) {
             return;
         }
         
@@ -790,30 +781,52 @@
             reset();
             //loadMore(); // load first page
             setupScrollWatcher();
-            
-            // Update pagination display with initial state
-            updatePaginationDisplay();
         } finally {
             isInitializing = false;
         }
     }
     
     // Scroll state loading removed - not needed
-    
-    // Wait for page to mount
-    const observer = new MutationObserver(() => {
+
+    function tryInitializeFromView() {
         if (shouldInitialize()) {
             initialize().catch(err => ERR('Initialization failed:', err));
+            return true;
         }
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
-    
-    // Also try to initialize immediately if page is already loaded
-    if (document.readyState === 'complete') {
-        setTimeout(() => {
-            initialize().catch(err => ERR('Initial initialization failed:', err));
-        }, 100);
+        return false;
     }
+
+    function armLibraryPageInit() {
+        if (tryInitializeFromView()) return;
+        const utils = window.KefinTweaksUtils;
+        if (utils?.pollUntil) {
+            utils.pollUntil(() => (tryInitializeFromView() ? true : null), {
+                intervalMs: 200,
+                timeoutMs: 15000
+            });
+            return;
+        }
+        // Fallback brief poll
+        let tries = 0;
+        const timer = setInterval(() => {
+            tries += 1;
+            if (tryInitializeFromView() || tries >= 75) clearInterval(timer);
+        }, 200);
+    }
+
+    function startInfiniteScrollHook() {
+        const utils = window.KefinTweaksUtils;
+        if (!utils?.onViewPage) {
+            setTimeout(startInfiniteScrollHook, 500);
+            return;
+        }
+        utils.onViewPage(() => {
+            armLibraryPageInit();
+        }, { pages: SUPPORTED_PAGES });
+        armLibraryPageInit();
+    }
+
+    startInfiniteScrollHook();
     
     // Cleanup function
     function cleanup() {

@@ -1,6 +1,7 @@
 // Jellyfin Watchlist Script
 // Adds watchlist functionality throughout Jellyfin interface
-// Requires: cardBuilder.js, localStorageCache.js, modal.js, utils.js modules to be loaded before this script
+// Requires: cardBuilder.js, localStorageCache.js, modal.js, utils.js, statistics.js modules to be loaded before this script
+// Chart.js is loaded as a thirdParty dependency of watchlist
 // Requirement #2: Custom Tabs plugin
 /* 
 In the Custom Tabs plugin, add a new tab with the following HTML content:
@@ -24,8 +25,6 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	
 	const WATCHLIST_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-	const SUPPORTED_WATCHLIST_ITEM_TYPES = ['Movie', 'Series', 'Season', 'Episode', 'Video', 'BoxSet', 'Playlist'];
-
 	// Playback monitoring for watchlist cleanup
 	let playbackMonitorInitialized = false;
 
@@ -34,40 +33,60 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 
 	// Data optimization functions for localStorage storage
 	function optimizeProgressDataForStorage(progressDataArray) {
-		return progressDataArray.map(progress => ({
-			// Series info (minimal)
-			series: {
-				Id: progress.series.Id,
-				Name: progress.series.Name,
-				ImageTags: progress.series.ImageTags,
-				Status: progress.series.Status,
-				ProductionYear: progress.series.ProductionYear
-			},
-			
-			// Progress metrics (pre-calculated statistics only)
-			watchedCount: progress.watchedCount,
-			totalEpisodes: progress.totalEpisodes,
-			remainingCount: progress.remainingCount,
-			percentage: progress.percentage,
-			totalRuntime: progress.totalRuntime,
-			watchedRuntime: progress.watchedRuntime,
-			remainingRuntime: progress.remainingRuntime,
-			
-			// Last watched episode (minimal)
-			lastWatchedEpisode: progress.lastWatchedEpisode ? {
-				Id: progress.lastWatchedEpisode.Id,
-				Name: progress.lastWatchedEpisode.Name,
-				IndexNumber: progress.lastWatchedEpisode.IndexNumber,
-				ParentIndexNumber: progress.lastWatchedEpisode.ParentIndexNumber,
-				UserData: progress.lastWatchedEpisode.UserData,
-				ImageTags: progress.lastWatchedEpisode.ImageTags
-			} : null,
-			
-			// Binary progress data for instant rendering (compact storage)
-			binaryProgress: progress.binaryProgress || {}
-			
-			// Episodes array completely removed - will be fetched on-demand
-		}));
+		return progressDataArray.map(progress => {
+			const episodeSource = progress.episodes || progress.playEvents || [];
+			const playEvents = episodeSource
+				.filter((ep) => {
+					if (ep.UserData?.Played && ep.UserData?.LastPlayedDate) return true;
+					// Restored compact playEvents already have LastPlayedDate at top level
+					return !!(ep.LastPlayedDate && (ep.Id || ep.Name));
+				})
+				.map((ep) => ({
+					Id: ep.Id,
+					Name: ep.Name,
+					LastPlayedDate: ep.UserData?.LastPlayedDate || ep.LastPlayedDate,
+					RunTimeTicks: ep.RunTimeTicks || 0,
+					ParentIndexNumber: ep.ParentIndexNumber != null ? ep.ParentIndexNumber : null,
+					IndexNumber: ep.IndexNumber != null ? ep.IndexNumber : null
+				}));
+
+			const seriesUserData = progress.series?.UserData
+				? {
+					IsFavorite: !!progress.series.UserData.IsFavorite,
+					LastPlayedDate: progress.series.UserData.LastPlayedDate || null,
+					PlayCount: progress.series.UserData.PlayCount || 0,
+					Played: !!progress.series.UserData.Played
+				}
+				: undefined;
+
+			return {
+				series: {
+					Id: progress.series.Id,
+					Name: progress.series.Name,
+					ImageTags: progress.series.ImageTags,
+					Status: progress.series.Status,
+					ProductionYear: progress.series.ProductionYear,
+					...(seriesUserData ? { UserData: seriesUserData } : {})
+				},
+				watchedCount: progress.watchedCount,
+				totalEpisodes: progress.totalEpisodes,
+				remainingCount: progress.remainingCount,
+				percentage: progress.percentage,
+				totalRuntime: progress.totalRuntime,
+				watchedRuntime: progress.watchedRuntime,
+				remainingRuntime: progress.remainingRuntime,
+				lastWatchedEpisode: progress.lastWatchedEpisode ? {
+					Id: progress.lastWatchedEpisode.Id,
+					Name: progress.lastWatchedEpisode.Name,
+					IndexNumber: progress.lastWatchedEpisode.IndexNumber,
+					ParentIndexNumber: progress.lastWatchedEpisode.ParentIndexNumber,
+					UserData: progress.lastWatchedEpisode.UserData,
+					ImageTags: progress.lastWatchedEpisode.ImageTags
+				} : null,
+				binaryProgress: progress.binaryProgress || {},
+				playEvents
+			};
+		});
 	}
 
 	function optimizeMovieDataForStorage(movieDataArray) {		
@@ -178,12 +197,17 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			try {
 				// Clear localStorage cache
 				if (cacheName === 'progress') {
-					localStorageCache.clear(`progress`);
+					localStorageCache.clear(`progress_v2`);
+					localStorageCache.clear(`progress`); // legacy key
 					// Clear in-memory cache
 					progressCache.data = [];
 					progressCache.allDataLoaded = false;
 					progressCache.totalPages = 0;
 					tabStates.progress.isDataFetched = false;
+					tabStates.statistics.isDataFetched = false;
+					if (window.KefinWatchlistStats?.destroy) {
+						window.KefinWatchlistStats.destroy();
+					}
 				} else if (cacheName === 'movies') {
 					localStorageCache.clear(`movies`);
 					// Clear in-memory cache
@@ -191,13 +215,13 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 					movieCache.allDataLoaded = false;
 					movieCache.totalPages = 0;
 					tabStates.history.isDataFetched = false;
-				} else if (cacheName === 'watchlist') {					
-					// Clear all watchlist sections
-					const sections = ['movies', 'series', 'seasons', 'episodes'];
-					sections.forEach(section => {
-						localStorageCache.clear(`watchlist_${section}`);
-						watchlistCache[section].data = [];
-					});
+					tabStates.statistics.isDataFetched = false;
+					if (window.KefinWatchlistStats?.destroy) {
+						window.KefinWatchlistStats.destroy();
+					}
+				} else if (cacheName === 'watchlist') {
+					await invalidateAllWatchlistQueries();
+					resetWatchlistItemsByType();
 				}
 				
 				// Re-fetch data
@@ -206,7 +230,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				} else if (cacheName === 'movies') {
 					await initHistoryTab();
 				} else if (cacheName === 'watchlist') {
-					await initWatchlistTab();
+					await initWatchlistTab(true);
 				}
 				
 				// Show success feedback with checkmark
@@ -902,27 +926,86 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		});
 	}
 
-	// Show all shows modal
-	function showAllShowsModal() {
-		// Get all progress data and sort it the same way as top 5
-		const progressData = progressCache.data;
-		const allShows = progressData
-			.map(progress => ({
-				name: progress.series.Name,
-				episodesWatched: progress.watchedCount,
-				totalEpisodes: progress.totalEpisodes,
-				percentage: progress.percentage,
-				seriesId: progress.series.Id
+	/** Sum played-episode RunTimeTicks for a progress row (watchedRuntime is seconds when set). */
+	function getSeriesWatchedRuntimeTicks(progress) {
+		if (!progress) return 0;
+		const source = Array.isArray(progress.episodes) && progress.episodes.length
+			? progress.episodes
+			: (progress.playEvents || []);
+		if (source.length) {
+			let totalTicks = 0;
+			source.forEach((ep) => {
+				const key = ep?.UserData?.LastPlayedDate || ep?.LastPlayedDate;
+				const played = ep?.UserData ? ep.UserData.Played === true : !!key;
+				if (!played) return;
+				totalTicks += Number(ep.RunTimeTicks) || 0;
+			});
+			return totalTicks;
+		}
+		if (typeof progress.watchedRuntime === 'number' && progress.watchedRuntime > 0) {
+			return Math.round(progress.watchedRuntime * 10000000);
+		}
+		return 0;
+	}
+
+	function formatWatchedRuntimeLabel(ticks) {
+		const seconds = (Number(ticks) || 0) / 10000000;
+		const hours = seconds / 3600;
+		if (hours >= 1) return `${hours.toFixed(1)} hours`;
+		const mins = Math.round(seconds / 60);
+		return `${mins} min`;
+	}
+
+	function escapeHtmlWatchlist(str) {
+		return String(str || '')
+			.replace(/&/g, '&amp;')
+			.replace(/</g, '&lt;')
+			.replace(/>/g, '&gt;')
+			.replace(/"/g, '&quot;');
+	}
+
+	/** Map progress rows to top-show entries sorted by total watch time. */
+	function mapProgressToTopShows(progressData, limit = null) {
+		const mapped = (progressData || [])
+			.map((progress) => ({
+				name: progress.series?.Name || 'Unknown',
+				episodesWatched: progress.watchedCount || 0,
+				totalEpisodes: progress.totalEpisodes || 0,
+				percentage: progress.percentage || 0,
+				seriesId: progress.series?.Id,
+				watchedRuntimeTicks: getSeriesWatchedRuntimeTicks(progress)
 			}))
 			.sort((a, b) => {
-				// Primary sort: completion percentage (highest first)
-				const percentageDiff = b.percentage - a.percentage;
-				if (percentageDiff !== 0) {
-					return percentageDiff;
-				}
-				// Tiebreaker: episode count (most episodes first)
-				return b.totalEpisodes - a.totalEpisodes;
+				const tickDiff = b.watchedRuntimeTicks - a.watchedRuntimeTicks;
+				if (tickDiff !== 0) return tickDiff;
+				return (b.episodesWatched || 0) - (a.episodesWatched || 0);
 			});
+		return limit != null ? mapped.slice(0, limit) : mapped;
+	}
+
+	function bindShowAllShowsButton(root) {
+		const scope = root && root.querySelector ? root : document;
+		const showAllBtn = scope.querySelector?.('#show-all-shows-btn')
+			|| getElementByIdSafe('show-all-shows-btn');
+		if (!showAllBtn || showAllBtn.dataset.showAllBound === 'true') return;
+		showAllBtn.dataset.showAllBound = 'true';
+		showAllBtn.addEventListener('click', (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			showAllShowsModal();
+		});
+	}
+
+	// Show all shows modal
+	function showAllShowsModal() {
+		if (!window.ModalSystem) {
+			WARN('ModalSystem not available');
+			return;
+		}
+
+		// Get all progress data and sort by total watch time (same as Top Shows)
+		const progressData = progressCache.data || [];
+		const allShows = mapProgressToTopShows(progressData);
 		
 		let showsHtml = '';
 		if (allShows.length === 0) {
@@ -936,8 +1019,8 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 					<div class="all-show-item">
 						<div class="show-rank">${rank}</div>
 						<div class="show-info">
-							<div class="show-name">${show.name}</div>
-							<div class="show-episodes">${show.episodesWatched} of ${show.totalEpisodes} ${episodesText} (${show.percentage}%)</div>
+							<div class="show-name">${escapeHtmlWatchlist(show.name)}</div>
+							<div class="show-episodes">${formatWatchedRuntimeLabel(show.watchedRuntimeTicks)} · ${show.episodesWatched} of ${show.totalEpisodes} ${episodesText} (${show.percentage}%)</div>
 						</div>
 					</div>
 				`;
@@ -963,9 +1046,19 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		});
 	}
     
-	// Centralized selector function for visible library page
+	// Centralized selector function for visible library / custom page
 	function getVisibleLibraryPage() {
-		return document.querySelector('.homePage:not(.hide)');
+		return document.querySelector('.libraryPage:not(.hide), .customPage:not(.hide), .homePage:not(.hide)');
+	}
+
+	// Safe element getter that targets the visible library page
+	function getElementByIdSafe(elementId) {
+		const libraryPage = getVisibleLibraryPage();
+		if (libraryPage) {
+			const scoped = libraryPage.querySelector(`#${CSS.escape ? CSS.escape(elementId) : elementId}`);
+			if (scoped) return scoped;
+		}
+		return document.getElementById(elementId);
 	}
 
 	// Tab state tracking to avoid unnecessary re-rendering
@@ -1039,7 +1132,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	}
 
 	function getWatchlistSection() {
-		const visibleWatchlistSections = document.querySelectorAll('.libraryPage:not(.hide) .sections.watchlist');
+		const visibleWatchlistSections = document.querySelectorAll('.libraryPage:not(.hide) .sections.watchlist, div[id^="customTab_"] .sections.watchlist');
 
 		if (!visibleWatchlistSections || visibleWatchlistSections.length === 0) {
 			return null;
@@ -1050,12 +1143,6 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		}
 
 		return visibleWatchlistSections[0];
-	}
-	
-	// Safe element getter that targets the visible library page
-	function getElementByIdSafe(elementId) {
-		const libraryPage = getVisibleLibraryPage();
-		return libraryPage ? libraryPage.querySelector(`#${elementId}`) : getElementByIdSafe(elementId);
 	}
 	
 	// Add custom CSS for watchlist icon
@@ -1263,13 +1350,13 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		
 		try {
 			const episodeUrl = `${serverUrl}/Items/${episodeId}?UserId=${userId}&Fields=ParentId`;
-			const episodeRes = await fetch(episodeUrl, { headers: { "Authorization": apiHelper.getAuthHeader() } });
+			const episodeRes = await fetch(episodeUrl, { headers: { "Authorization": window.apiHelper.getAuthHeader() } });
 			const episodeData = await episodeRes.json();
 			
 			// Get the series ID from the episode's parent (season) parent
 			if (episodeData.ParentId) {
 				const seasonUrl = `${serverUrl}/Items/${episodeData.ParentId}?UserId=${userId}&Fields=ParentId`;
-				const seasonRes = await fetch(seasonUrl, { headers: { "Authorization": apiHelper.getAuthHeader() } });
+				const seasonRes = await fetch(seasonUrl, { headers: { "Authorization": window.apiHelper.getAuthHeader() } });
 				const seasonData = await seasonRes.json();
 				
 				return seasonData.ParentId || null;
@@ -1351,7 +1438,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			try {
 				// Fetch the series item
 				const seriesUrl = `${serverUrl}/Items/${seriesId}?UserId=${userId}&Fields=UserData,RecursiveItemCount&EnableImageTypes=Primary,Banner`;
-				const seriesRes = await fetch(seriesUrl, { headers: { "Authorization": apiHelper.getAuthHeader() } });
+				const seriesRes = await fetch(seriesUrl, { headers: { "Authorization": window.apiHelper.getAuthHeader() } });
 				const series = await seriesRes.json();
 				
 				if (!series || !series.Id) {
@@ -1413,6 +1500,15 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			cachedProgress.watchedCount = watchedCount;
 			cachedProgress.remainingCount = totalEpisodes - watchedCount;
 			cachedProgress.totalEpisodes = totalEpisodes;
+		
+			// Get the last watched episode based on the cachedProgress.episodes
+			const lastWatchedEpisode = cachedProgress.episodes
+				.filter(ep => ep.UserData && ep.UserData.LastPlayedDate)
+				.sort((a, b) => new Date(b.UserData.LastPlayedDate) - new Date(a.UserData.LastPlayedDate))[0];
+	
+			if (lastWatchedEpisode) {
+				cachedProgress.lastWatchedEpisode = lastWatchedEpisode;
+			}
 		}
 		
 		// Recalculate percentage
@@ -1423,15 +1519,6 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		// Regenerate binaryProgress from episodes if available
 		if (Array.isArray(cachedProgress.episodes) && cachedProgress.episodes.length > 0) {
 			cachedProgress.binaryProgress = generateBinaryProgressData(cachedProgress.episodes);
-		}
-		
-		// Get the last watched episode based on the cachedProgress.episodes
-		const lastWatchedEpisode = cachedProgress.episodes
-			.filter(ep => ep.UserData && ep.UserData.LastPlayedDate)
-			.sort((a, b) => new Date(b.UserData.LastPlayedDate) - new Date(a.UserData.LastPlayedDate))[0];
-
-		if (lastWatchedEpisode) {
-			cachedProgress.lastWatchedEpisode = lastWatchedEpisode;
 		}
 		
 		// Update the cache
@@ -1626,7 +1713,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			const optimizedData = optimizeProgressDataForStorage(progressCache.data);
 			
 			// Update localStorage with the new data
-			const success = localStorageCache.set('progress', optimizedData);
+			const success = localStorageCache.set('progress_v2', optimizedData);
 			if (success) {
 				LOG('Updated progress data in localStorage');
 			} else {
@@ -2139,43 +2226,51 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		LOG(`Hash updated: pageTab=${pageTab}, page=${page}, search="${search}", movieSearch="${movieSearch}"`, newUrl);
 	}
 
-	// Hash change listener for browser navigation
+	// Hash change listener for browser navigation / in-page tab URL sync
 	function setupHashChangeListener() {
-		window.addEventListener('hashchange', () => {
-			if (!window.location.hash.includes('#/home')) {
+		window.addEventListener('hashchange', async () => {
+			const [path, search = ''] = String(window.location.hash || '').split('?');
+			const [watchlistPath, watchlistSearch = ''] = String(window.KefinTweaksUtils._watchlistUrl || '').split('?');
+			const currentParams = new URLSearchParams(search);
+			const requiredParams = new URLSearchParams(watchlistSearch);
+			if (
+				!watchlistPath ||
+				path !== watchlistPath ||
+				Array.from(requiredParams).some(([key, value]) => currentParams.get(key) !== value)
+			) {
 				return;
 			}
 
-			LOG('Hash changed, checking watchlist tab');
+			LOG('Hash changed, syncing watchlist state');
+			await renderWatchlist();
+
 			const params = getUrlParams();
-			
-			// Check if we're on any watchlist tab and render accordingly
-			if (params.pageTab === 'progress' || params.pageTab === 'history' || params.pageTab === 'watchlist' || params.pageTab === 'statistics') {
-				// Find the watchlist section and switch to the appropriate tab
+			const pageTab = params.pageTab || 'watchlist';
+
+			// Switch sub-tab UI from URL (pageTab query)
+			if (pageTab === 'progress' || pageTab === 'history' || pageTab === 'watchlist' || pageTab === 'statistics') {
 				const watchlistSection = getWatchlistSection();
 				if (watchlistSection) {
-					// Update tab UI
 					const buttons = watchlistSection.querySelectorAll('.watchlist-tabs button');
 					buttons.forEach(button => button.classList.remove('active'));
-					
+
 					const tabContents = watchlistSection.querySelectorAll('div[data-tab]:not(.watchlist-tabs)');
 					tabContents.forEach(content => content.style.display = 'none');
-					
-					const activeButton = watchlistSection.querySelector(`.watchlist-tabs button[data-tab="${params.pageTab}"]`);
-					const activeContent = watchlistSection.querySelector(`div[data-tab="${params.pageTab}"]:not(.watchlist-tabs)`);
-					
+
+					const activeButton = watchlistSection.querySelector(`.watchlist-tabs button[data-tab="${pageTab}"]`);
+					const activeContent = watchlistSection.querySelector(`div[data-tab="${pageTab}"]:not(.watchlist-tabs)`);
+
 					if (activeButton) activeButton.classList.add('active');
 					if (activeContent) activeContent.style.display = 'block';
-					
-					// Render content based on active tab
-					if (params.pageTab === 'progress') {
-						renderProgressContent();
-					} else if (params.pageTab === 'watchlist') {
+
+					if (pageTab === 'progress') {
+						initProgressTab().then(() => renderProgressContent()).catch((err) => ERR('Progress tab init failed:', err));
+					} else if (pageTab === 'watchlist') {
 						renderWatchlistContent();
-					} else if (params.pageTab === 'history') {
-						renderHistoryContent();
-					} else if (params.pageTab === 'statistics') {
-						renderStatisticsContent();
+					} else if (pageTab === 'history') {
+						initHistoryTab().then(() => renderHistoryContent()).catch((err) => ERR('History tab init failed:', err));
+					} else if (pageTab === 'statistics') {
+						initStatisticsTab().then(() => renderStatisticsContent()).catch((err) => ERR('Statistics tab init failed:', err));
 					}
 				}
 			}
@@ -2266,54 +2361,12 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		}
 	}
 
-	// Initialize a specific watchlist section
+	// Initialize a specific watchlist section (legacy no-op; progressive path owns section loading)
 	async function initWatchlistSection(section, type) {
-		LOG(`Initializing ${section} section`);
-		
-		// Check localStorage cache first
-		const userId = window.ApiClient.getCurrentUserId();
-		const cachedData = localStorageCache.get(`watchlist_${section}`);
-		if (cachedData && false) {
-			LOG(`Using localStorage cache for watchlist ${section}`);
-			watchlistCache[section].data = cachedData;
-			return;
-		}
-		
-		try {
-			const items = watchlistCache[section].data;
-			
-			// Sort items by release date descending (newest first)
-			const sortedItems = items.sort((a, b) => {
-				const dateA = new Date(a.PremiereDate || a.ProductionYear || 0);
-				const dateB = new Date(b.PremiereDate || b.ProductionYear || 0);
-				return dateB - dateA; // Descending order (newest first)
-			});
-			
-			// Store in cache
-			//watchlistCache[section].data = sortedItems;
-			
-			// Store in localStorage for next time (optimized)
-			const optimizedData = optimizeWatchlistDataForStorage(sortedItems);
-			localStorageCache.set(`watchlist_${section}`, optimizedData, ApiClient._currentUser.Id, WATCHLIST_CACHE_TTL);
-			LOG(`Stored optimized watchlist ${section} data in localStorage`);
-			
-			// Sync watched status for this section (remove played items)
-			const playedItems = sortedItems.filter(item => item.UserData && item.UserData.Played);
-			if (playedItems.length > 0) {
-				LOG(`Found ${playedItems.length} played items in ${section} section, removing from watchlist`);
-				for (const item of playedItems) {
-					await removeItemFromWatchlist(item.Id, item.Type);
-				}
-			}
-			
-			LOG(`${section} section initialization complete: ${sortedItems.length} items`);
-		} catch (err) {
-			ERR(`Error initializing ${section} section:`, err);
-			watchlistCache[section].data = [];
-		}
+		LOG(`initWatchlistSection skipped for ${section}/${type} (progressive render)`);
 	}
 
-	async function initWatchlistTab() {
+	async function initWatchlistTab(forceRefresh = false) {
 		if (tabStates.watchlist.isFetching) {
 			LOG('Watchlist tab is fetching');
 			return;
@@ -2323,48 +2376,21 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		tabStates.watchlist.isFetching = true;
 		tabStates.watchlist.isDataFetched = false;
 		
-		renderWatchlistContent();
-		
 		try {
-			// Fetch watchlist data
-			const watchlistData = await window.apiHelper.getWatchlistItems({ IncludeItemTypes: SUPPORTED_WATCHLIST_ITEM_TYPES.join(',') });
-			localStorageCache.set('watchlist_movies', watchlistData.Items.filter(item => item.Type === 'Movie'));
-			localStorageCache.set('watchlist_series', watchlistData.Items.filter(item => item.Type === 'Series'));
-			localStorageCache.set('watchlist_seasons', watchlistData.Items.filter(item => item.Type === 'Season'));
-			localStorageCache.set('watchlist_episodes', watchlistData.Items.filter(item => item.Type === 'Episode'));
-			localStorageCache.set('watchlist_videos', watchlistData.Items.filter(item => item.Type === 'Video'));
-			localStorageCache.set('watchlist_boxsets', watchlistData.Items.filter(item => item.Type === 'BoxSet'));
-			localStorageCache.set('watchlist_playlists', watchlistData.Items.filter(item => item.Type === 'Playlist'));
-			watchlistCache.movies.data = watchlistData.Items.filter(item => item.Type === 'Movie');
-			watchlistCache.series.data = watchlistData.Items.filter(item => item.Type === 'Series');
-			watchlistCache.seasons.data = watchlistData.Items.filter(item => item.Type === 'Season');
-			watchlistCache.episodes.data = watchlistData.Items.filter(item => item.Type === 'Episode');
-			watchlistCache.videos.data = watchlistData.Items.filter(item => item.Type === 'Video');
-			watchlistCache.boxsets.data = watchlistData.Items.filter(item => item.Type === 'BoxSet');
-			watchlistCache.playlists.data = watchlistData.Items.filter(item => item.Type === 'Playlist');
-
-			// Initialize all watchlist sections in parallel
-			await Promise.all([
-				initWatchlistSection('movies', 'Movie'),
-				initWatchlistSection('series', 'Series'),
-				initWatchlistSection('seasons', 'Season'),
-				initWatchlistSection('episodes', 'Episode'),
-				initWatchlistSection('videos', 'Video'),
-				initWatchlistSection('boxsets', 'BoxSet'),
-				initWatchlistSection('playlists', 'Playlist')
-			]);
-			
+			if (forceRefresh) {
+				await invalidateAllWatchlistQueries();
+			}
+			await renderWatchlistProgressive(forceRefresh);
 			tabStates.watchlist.isDataFetched = true;
-			tabStates.watchlist.isFetching = false;
 			
 			// Sync watched status to remove played items
 			await syncWatchedStatusToWatchlist();
 			
-			renderWatchlistContent();
-			
 			LOG('Watchlist tab initialization complete');
 		} catch (err) {
 			ERR('Error initializing watchlist tab:', err);
+			tabStates.watchlist.isDataFetched = false;
+		} finally {
 			tabStates.watchlist.isFetching = false;
 		}
 	}
@@ -2374,44 +2400,60 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			LOG('Statistics tab already initialized or fetching');
 			return;
 		}
-		
-		// Statistics depends on progress and history data
-		if (!tabStates.progress.isDataFetched || !tabStates.history.isDataFetched) {
-			LOG('Statistics tab waiting for progress and history data');
-			return;
-		}
-		
+
 		LOG('Initializing statistics tab');
 		tabStates.statistics.isFetching = true;
-		
-		try {
-			// Statistics are calculated from existing cache data
-			tabStates.statistics.isDataFetched = true;
-			tabStates.statistics.isFetching = false;
 
+		try {
 			await renderStatisticsContent();
+			tabStates.statistics.isDataFetched = true;
 			LOG('Statistics tab initialization complete');
 		} catch (err) {
 			ERR('Error initializing statistics tab:', err);
+		} finally {
 			tabStates.statistics.isFetching = false;
 		}
 	}
 
-	// Initialize all tabs with proper dependencies
+	// Initialize tabs lazily — only the active/default tab; progress/history on demand
 	async function initializeAllTabs() {
 		LOG('Starting tab initialization');
-		
-		// Independent tabs can run in parallel
-		const watchlistPromise = initWatchlistTab();
-		
-		// Dependent tabs: progress and history first, then statistics
-		const progressPromise = initProgressTab();
-		const historyPromise = initHistoryTab();
-		
-		// Wait for progress and history, then init statistics
-		await Promise.all([watchlistPromise, progressPromise, historyPromise]);
-		await initStatisticsTab();
-		LOG('All tabs initialized');
+		const params = getUrlParams();
+		const pageTab = params.pageTab || 'watchlist';
+
+		await initWatchlistTab();
+
+		if (pageTab === 'progress') {
+			await initProgressTab();
+		} else if (pageTab === 'history') {
+			await initHistoryTab();
+		} else if (pageTab === 'statistics') {
+			await initStatisticsTab();
+		}
+
+		LOG('Tab initialization complete (active:', pageTab, ')');
+	}
+
+	/** Run async work over items with a fixed concurrency limit. */
+	async function mapWithConcurrency(items, concurrency, mapper) {
+		const list = Array.isArray(items) ? items : [];
+		const limit = Math.max(1, Number(concurrency) || 1);
+		const results = new Array(list.length);
+		let nextIndex = 0;
+
+		async function worker() {
+			while (nextIndex < list.length) {
+				const i = nextIndex++;
+				results[i] = await mapper(list[i], i);
+			}
+		}
+
+		const workers = [];
+		for (let w = 0; w < Math.min(limit, list.length); w++) {
+			workers.push(worker());
+		}
+		await Promise.all(workers);
+		return results;
 	}
 
 	function sortInProgressSeries(series) {
@@ -2483,7 +2525,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 
 		// Check localStorage cache if in-memory cache is empty
 		if (useCache && !progressCache.allDataLoaded) {
-			const cachedData = localStorageCache.get(`progress`);
+			const cachedData = localStorageCache.get(`progress_v2`);
 			if (cachedData) {
 				LOG('Using localStorage cache for progress data');
 				progressCache.data = cachedData;
@@ -2501,12 +2543,14 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		const serverUrl = apiClient.serverAddress();
 		const token = apiClient.accessToken();
 
-		// Fetch series from API directly
-		const seriesUrl = `${serverUrl}/Items?IncludeItemTypes=Series&UserId=${userId}&Recursive=true&Fields=UserData,RecursiveItemCount&EnableImageTypes=Primary,Banner`;
-		
+		// Fetch series via apiHelper
 		try {
-			const seriesRes = await fetch(seriesUrl, { headers: { "Authorization": apiHelper.getAuthHeader() } });
-			const seriesData = await seriesRes.json();
+			const seriesData = await window.apiHelper.getItems({
+				IncludeItemTypes: 'Series',
+				Recursive: true,
+				Fields: 'UserData,RecursiveItemCount',
+				EnableImageTypes: 'Primary,Banner'
+			}, false);
 			const series = seriesData.Items || [];
 
 			if (series.length === 0) {
@@ -2524,14 +2568,11 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			LOG(`Found ${inProgressSeries.length} series with PlayedPercentage > 0`);
 
 
-			LOG(`Fetching progress data for all ${inProgressSeries.length} series`);
+			LOG(`Fetching progress data for ${inProgressSeries.length} series (concurrency 4)`);
 
-			// Fetch progress data for all series in parallel
-			const progressData = await Promise.all(
-				inProgressSeries.map(async (seriesItem) => {
-					return await fetchSeriesProgressWithMissingEpisodes(seriesItem, userId, serverUrl, token);
-				})
-			);
+			const progressData = await mapWithConcurrency(inProgressSeries, 4, async (seriesItem) => {
+				return await fetchSeriesProgressWithMissingEpisodes(seriesItem, userId, serverUrl, token);
+			});
 
 			// Filter out series with no valid progress data
 			const validProgressData = progressData.filter(data => data !== null);
@@ -2547,7 +2588,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 
 			// Store in localStorage for next time (optimized)
 			const optimizedData = optimizeProgressDataForStorage(sortedProgressData);
-			localStorageCache.set(`progress`, optimizedData);
+			localStorageCache.set(`progress_v2`, optimizedData);
 			LOG('Stored optimized progress data in localStorage');
 
 			LOG(`All progress data loaded and sorted: ${sortedProgressData.length} items, ${progressCache.totalPages} pages`);
@@ -2560,7 +2601,8 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			// Always clear the fetching flag, even on error
 			tabStates.progress.isFetching = false;
 			LOG('Progress data fetch completed');
-			renderStatisticsContent();
+			// Do not call renderStatisticsContent here — nested re-entry while the
+			// stats panel is still data-ready=false leaves Chart.js with a 0-size canvas.
 		}
 	}
 
@@ -2595,8 +2637,8 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			}
 			
 			// Get all episodes including missing ones to get accurate TotalRecordCount
-			const episodesUrl = `${serverUrl}/Shows/${series.Id}/Episodes?UserId=${userId}&Fields=UserData&EnableImageTypes=Primary`;
-			const episodesRes = await fetch(episodesUrl, { headers: { "Authorization": apiHelper.getAuthHeader() } });
+			const episodesUrl = `${serverUrl}/Shows/${series.Id}/Episodes?UserId=${userId}&Fields=UserData,RunTimeTicks&EnableImageTypes=Primary`;
+			const episodesRes = await fetch(episodesUrl, { headers: { "Authorization": window.apiHelper.getAuthHeader() } });
 			const episodesData = await episodesRes.json();
 			let episodes = episodesData.Items || [];
 
@@ -2736,7 +2778,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			const toggleRes = await fetch(toggleUrl, {
 				method: method,
 				headers: { 
-					"Authorization": apiHelper.getAuthHeader()
+					"Authorization": window.apiHelper.getAuthHeader()
 				}
 			});
 			
@@ -2764,6 +2806,25 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	}
 
 	// Statistics calculation functions
+	function sumWatchedRuntimeHours(progressData, movies) {
+		let totalTicks = 0;
+		(movies || []).forEach((movie) => {
+			totalTicks += Number(movie.RunTimeTicks) || 0;
+		});
+		(progressData || []).forEach((progress) => {
+			const source = Array.isArray(progress.episodes) && progress.episodes.length
+				? progress.episodes
+				: (progress.playEvents || []);
+			source.forEach((ep) => {
+				const key = ep?.UserData?.LastPlayedDate || ep?.LastPlayedDate;
+				const played = ep?.UserData ? ep.UserData.Played === true : !!key;
+				if (!played) return;
+				totalTicks += Number(ep.RunTimeTicks) || 0;
+			});
+		});
+		return Math.round(totalTicks / 10000000 / 3600);
+	}
+
 	async function calculateProgressStatistics(progressData) {
 		if (!progressData || progressData.length === 0) {
 			// Still try to get movie count even if no series data
@@ -2773,6 +2834,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				seriesWatched: 0,
 				episodesWatched: 0,
 				moviesWatched: movieCache.data.length,
+				hoursWatched: sumWatchedRuntimeHours([], movieCache.data),
 				topShows: []
 			};
 		}
@@ -2785,32 +2847,17 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		// Get movie count from cache
 		await fetchWatchedMovies(true); // Use cached data
 		const moviesWatched = movieCache.data.length;
+		const hoursWatched = sumWatchedRuntimeHours(progressData, movieCache.data);
 
-		// Calculate top 5 shows by completion percentage, then by episode count
-		const topShows = progressData
-			.map(progress => ({
-				name: progress.series.Name,
-				episodesWatched: progress.watchedCount,
-				totalEpisodes: progress.totalEpisodes,
-				percentage: progress.percentage,
-				seriesId: progress.series.Id
-			}))
-			.sort((a, b) => {
-				// Primary sort: completion percentage (highest first)
-				const percentageDiff = b.percentage - a.percentage;
-				if (percentageDiff !== 0) {
-					return percentageDiff;
-				}
-				// Tiebreaker: episode count (most episodes first)
-				return b.totalEpisodes - a.totalEpisodes;
-			})
-			.slice(0, 5);
+		// Top 5 shows by total watch time (RunTimeTicks), then episode count
+		const topShows = mapProgressToTopShows(progressData, 5);
 
 		return {
 			seriesStarted,
 			seriesWatched,
 			episodesWatched,
 			moviesWatched,
+			hoursWatched,
 			topShows
 		};
 	}
@@ -2823,16 +2870,18 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		const seriesWatchedEl = getElementByIdSafe('stat-series-watched');
 		const episodesWatchedEl = getElementByIdSafe('stat-episodes-watched');
 		const moviesWatchedEl = getElementByIdSafe('stat-movies-watched');
+		const hoursWatchedEl = getElementByIdSafe('stat-hours-watched');
 		
 		if (seriesStartedEl) seriesStartedEl.textContent = stats.seriesStarted.toLocaleString();
 		if (seriesWatchedEl) seriesWatchedEl.textContent = stats.seriesWatched.toLocaleString();
 		if (episodesWatchedEl) episodesWatchedEl.textContent = stats.episodesWatched.toLocaleString();
 		if (moviesWatchedEl) moviesWatchedEl.textContent = stats.moviesWatched.toLocaleString();
+		if (hoursWatchedEl) hoursWatchedEl.textContent = stats.hoursWatched.toLocaleString();
 		
 		// Update top shows list
 		updateTopShowsList(stats.topShows);
 		
-		LOG(`Statistics updated: ${stats.seriesStarted} started, ${stats.seriesWatched} watched, ${stats.episodesWatched} episodes, ${stats.moviesWatched} movies`);
+		LOG(`Statistics updated: ${stats.seriesStarted} started, ${stats.seriesWatched} watched, ${stats.episodesWatched} episodes, ${stats.moviesWatched} movies, ${stats.hoursWatched} hours`);
 	}
 
 	function updateTopShowsList(topShows) {
@@ -2846,13 +2895,16 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		
 		const showsHtml = topShows.map((show, index) => {
 			const rank = index + 1;
+			const rankClass = rank <= 3 ? ` rank-${rank}` : '';
 			const episodesText = show.episodesWatched === 1 ? 'episode' : 'episodes';
+			const timeLabel = formatWatchedRuntimeLabel(show.watchedRuntimeTicks);
+			const progressLabel = window.innerWidth >= 900 ? `${timeLabel} · ${show.episodesWatched} of ${show.totalEpisodes} ${episodesText} (${show.percentage}%)` : `${timeLabel}`;
 			
 			return `
-				<div class="top-show-item">
+				<div class="top-show-item${rankClass}">
 					<div class="show-rank">${rank}</div>
-					<div class="top-show-name" title="${show.name}">${show.name}</div>
-					<div class="top-show-episodes">${show.episodesWatched} of ${show.totalEpisodes} ${episodesText} (${show.percentage}%)</div>
+					<div class="top-show-name" title="${escapeHtmlWatchlist(show.name)}">${escapeHtmlWatchlist(show.name)}</div>
+					<div class="top-show-episodes">${progressLabel}</div>
 				</div>
 			`;
 		}).join('');
@@ -3059,26 +3111,386 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	const progressPagination = createPaginationSystem(progressCache);
 	const moviePagination = createPaginationSystem(movieCache);
 
-	// Watchlist cache for different sections
-	const watchlistCache = {
-		movies: { data: [] },
-		series: { data: [] },
-		seasons: { data: [] },
-		episodes: { data: [] },
-		videos: { data: [] },
-		boxsets: { data: [] },
-		playlists: { data: [] }
+	// Lightweight in-memory index of last progressive watchlist paint (for stats / membership checks)
+	const watchlistItemsByType = {
+		Movie: [],
+		Series: [],
+		Season: [],
+		Episode: [],
+		BoxSet: [],
+		Playlist: [],
+		Video: []
 	};
 
-	const watchlistCacheTypeMap = {
-		'Movie': 'movies',
-		'Series': 'series',
-		'Season': 'seasons',
-		'Episode': 'episodes',
-		'Video': 'videos',
-		'BoxSet': 'boxsets',
-		'Playlist': 'playlists'
-	};
+	const WATCHLIST_SECTION_TYPES = [
+		{ type: 'Movie', key: 'movies', label: 'Movies' },
+		{ type: 'Series', key: 'series', label: 'Shows' },
+		{ type: 'Season', key: 'seasons', label: 'Seasons' },
+		{ type: 'Episode', key: 'episodes', label: 'Episodes' },
+		{ type: 'BoxSet', key: 'boxsets', label: 'Collections' },
+		{ type: 'Playlist', key: 'playlists', label: 'Playlists' },
+		{ type: 'Video', key: 'homevideos', label: 'Home Videos' }
+	];
+
+	const WATCHLIST_SUPPORTED_TYPES = WATCHLIST_SECTION_TYPES.map(({ type }) => type);
+	const WATCHLIST_SUPPORTED_TYPES_CSV = WATCHLIST_SUPPORTED_TYPES.join(',');
+
+	/** Session Id set for overlay button state only (not Watchlist tab rendering). */
+	const watchlistLikedIds = new Set();
+	let watchlistLikedIdsLoaded = false;
+	let watchlistLikedIdsLoadPromise = null;
+	let watchlistLikedIdsBaselineScheduled = false;
+	const WATCHLIST_LIKED_IDS_SETTLE_DELAY_MS = 15000;
+
+	function isWatchlistSupportedType(itemType) {
+		return WATCHLIST_SUPPORTED_TYPES.includes(itemType);
+	}
+
+	function normalizeServerAddressForStorage(serverAddress) {
+		if (!serverAddress) return '';
+		return String(serverAddress).replace(/\/+$/, '');
+	}
+
+	function getLikedIdsStorageKey() {
+		const userId = window.ApiClient?.getCurrentUserId?.();
+		const serverAddress = normalizeServerAddressForStorage(window.ApiClient?.serverAddress?.());
+		if (!userId || !serverAddress) return null;
+		return `kefinTweaks_watchlistLikedIds_${userId}_${encodeURIComponent(serverAddress)}`;
+	}
+
+	function readLikedIdsFromStorage() {
+		const key = getLikedIdsStorageKey();
+		if (!key) return null;
+		try {
+			const raw = localStorage.getItem(key);
+			if (!raw) return null;
+			const parsed = JSON.parse(raw);
+			if (!Array.isArray(parsed)) return null;
+			return parsed.filter((id) => typeof id === 'string' && id);
+		} catch (err) {
+			WARN('Failed to read watchlist liked Ids from localStorage:', err);
+			return null;
+		}
+	}
+
+	function writeLikedIdsToStorage() {
+		const key = getLikedIdsStorageKey();
+		if (!key) return;
+		try {
+			localStorage.setItem(key, JSON.stringify([...watchlistLikedIds]));
+		} catch (err) {
+			WARN('Failed to write watchlist liked Ids to localStorage:', err);
+		}
+	}
+
+	function hydrateWatchlistLikedIdsFromStorage() {
+		const ids = readLikedIdsFromStorage();
+		if (!ids) return false;
+		watchlistLikedIds.clear();
+		ids.forEach((id) => watchlistLikedIds.add(id));
+		watchlistLikedIdsLoaded = true;
+		LOG(`Hydrated watchlist liked Id cache from localStorage: ${watchlistLikedIds.size} items`);
+		return true;
+	}
+
+	function waitForDocumentComplete() {
+		if (document.readyState === 'complete') return Promise.resolve();
+		return new Promise((resolve) => {
+			window.addEventListener('load', () => resolve(), { once: true });
+		});
+	}
+
+	function isItemInLikedIdCache(itemId) {
+		return !!itemId && watchlistLikedIds.has(itemId);
+	}
+
+	function setLikedIdInCache(itemId, isLiked) {
+		if (!itemId) return;
+		if (isLiked) watchlistLikedIds.add(itemId);
+		else watchlistLikedIds.delete(itemId);
+		writeLikedIdsToStorage();
+	}
+
+	function mergeLikedIdsFromItems(items) {
+		const list = Array.isArray(items) ? items : (items?.Items || []);
+		list.forEach((item) => {
+			if (item?.Id) watchlistLikedIds.add(item.Id);
+		});
+		writeLikedIdsToStorage();
+	}
+
+	function applyWatchlistButtonActiveState(button, isActive) {
+		if (!button) return;
+		button.dataset.active = isActive ? 'true' : 'false';
+		button.title = isActive ? 'Remove from Watchlist' : 'Add to Watchlist';
+	}
+
+	function syncOverlayWatchlistButtons() {
+		document.querySelectorAll('.watchlist-button[data-id]').forEach((button) => {
+			const itemId = button.getAttribute('data-id');
+			applyWatchlistButtonActiveState(button, isItemInLikedIdCache(itemId));
+		});
+	}
+
+	/** Network refresh of liked-Id set (always runs when scheduled; not skipped after hydrate). */
+	async function refreshWatchlistLikedIdsFromNetwork() {
+		if (watchlistLikedIdsLoadPromise) return watchlistLikedIdsLoadPromise;
+
+		watchlistLikedIdsLoadPromise = (async () => {
+			try {
+				if (window.userHelper?.waitForLogin) {
+					await window.userHelper.waitForLogin();
+				}
+				const apiHelper = window.apiHelper;
+				if (!apiHelper?.getWatchlistItems) {
+					WARN('apiHelper.getWatchlistItems unavailable; liked Id cache empty');
+					return watchlistLikedIds;
+				}
+				const result = await apiHelper.getWatchlistItems({
+					IncludeItemTypes: WATCHLIST_SUPPORTED_TYPES_CSV,
+					Limit: 1000
+				}, true);
+				watchlistLikedIds.clear();
+				mergeLikedIdsFromItems(result);
+				watchlistLikedIdsLoaded = true;
+				writeLikedIdsToStorage();
+				LOG(`Loaded watchlist liked Id cache: ${watchlistLikedIds.size} items`);
+				syncOverlayWatchlistButtons();
+				processExistingOverlayContainers();
+			} catch (err) {
+				ERR('Failed to load watchlist liked Id baseline:', err);
+			} finally {
+				watchlistLikedIdsLoadPromise = null;
+			}
+			return watchlistLikedIds;
+		})();
+
+		return watchlistLikedIdsLoadPromise;
+	}
+
+	async function scheduleWatchlistLikedIdsBaseline() {
+		if (watchlistLikedIdsBaselineScheduled) return;
+		watchlistLikedIdsBaselineScheduled = true;
+
+		try {
+			if (window.userHelper?.waitForLogin) {
+				await window.userHelper.waitForLogin();
+			}
+
+			if (hydrateWatchlistLikedIdsFromStorage()) {
+				syncOverlayWatchlistButtons();
+				processExistingOverlayContainers();
+			}
+
+			await waitForDocumentComplete();
+			await new Promise((resolve) => setTimeout(resolve, WATCHLIST_LIKED_IDS_SETTLE_DELAY_MS));
+			await refreshWatchlistLikedIdsFromNetwork();
+		} catch (err) {
+			ERR('Failed to schedule watchlist liked Id baseline:', err);
+		}
+	}
+
+	let watchlistRenderGeneration = 0;
+
+	function resetWatchlistItemsByType() {
+		WATCHLIST_SECTION_TYPES.forEach(({ type }) => {
+			watchlistItemsByType[type] = [];
+		});
+	}
+
+	/**
+	 * Keep paint-snapshot membership + header counts in sync on like/unlike without re-rendering sections.
+	 * Ghost cards may remain in the DOM; counts reflect liked membership.
+	 */
+	function patchWatchlistItemsByTypeMembership(itemId, itemType, isAdded) {
+		if (!itemId) return;
+
+		const removeFromType = (type) => {
+			const list = watchlistItemsByType[type];
+			if (!Array.isArray(list) || !list.length) return false;
+			const next = list.filter((item) => item?.Id !== itemId);
+			if (next.length === list.length) return false;
+			watchlistItemsByType[type] = next;
+			return true;
+		};
+
+		if (isAdded) {
+			const type = itemType && isWatchlistSupportedType(itemType) ? itemType : null;
+			if (!type) return;
+			const list = watchlistItemsByType[type] || (watchlistItemsByType[type] = []);
+			if (list.some((item) => item?.Id === itemId)) return;
+			list.push({ Id: itemId });
+		} else if (itemType && isWatchlistSupportedType(itemType)) {
+			removeFromType(itemType);
+		} else {
+			WATCHLIST_SECTION_TYPES.forEach(({ type }) => removeFromType(type));
+		}
+
+		updateWatchlistHeaderStats();
+	}
+
+	function getWatchlistProgressiveHost() {
+		const watchlistSection = getWatchlistSection();
+		if (!watchlistSection) return null;
+		let host = watchlistSection.querySelector('.watchlist-progressive-results');
+		if (!host) {
+			const tab = watchlistSection.querySelector('div[data-tab="watchlist"]');
+			if (!tab) return null;
+			host = document.createElement('div');
+			host.className = 'watchlist-progressive-results';
+			const emptyMsg = tab.querySelector('.watchlist-empty-message');
+			if (emptyMsg) tab.insertBefore(host, emptyMsg);
+			else tab.appendChild(host);
+		}
+		return host;
+	}
+
+	function postProcessWatchlistItems(data) {
+		const items = Array.isArray(data)
+			? data.slice()
+			: (Array.isArray(data?.Items) ? data.Items.slice() : []);
+		return items.sort((a, b) => {
+			const dateA = new Date(a.PremiereDate || a.ProductionYear || 0);
+			const dateB = new Date(b.PremiereDate || b.ProductionYear || 0);
+			return dateB - dateA;
+		});
+	}
+
+	async function buildWatchlistProgressiveSection(itemType, label, order, forceRefresh = false) {
+		const apiHelper = window.apiHelper;
+		if (!apiHelper?.getWatchlistQuery) {
+			throw new Error('apiHelper.getWatchlistQuery unavailable');
+		}
+
+		// Same Fields as apiHelper.buildWatchlistQueryDef so invalidate hits this fetch URL
+		const queryOptions = {
+			IncludeItemTypes: itemType,
+			Fields: apiHelper.WATCHLIST_PROGRESSIVE_FIELDS
+				|| 'PrimaryImageAspectRatio,DateCreated,ProductionYear,PremiereDate,ProviderIds,UserData'
+		};
+		const queryResult = await apiHelper.getWatchlistQuery(queryOptions, {
+			ttl: WATCHLIST_CACHE_TTL,
+			forceRefresh
+		});
+
+		const sectionConfig = {
+			id: `watchlist-${itemType}`,
+			name: label,
+			enabled: true,
+			order,
+			ttl: WATCHLIST_CACHE_TTL,
+			userConfigurable: false,
+			queries: [{
+				queryOptions: {
+					Filters: 'Likes',
+					IncludeItemTypes: itemType,
+					Recursive: true,
+					ImageTypeLimit: 1,
+					EnableImageTypes: 'Primary,Backdrop,Thumb',
+					...queryOptions,
+					SortBy: 'PremiereDate',
+					SortOrder: 'Descending'
+				}
+			}]
+		};
+
+		let mappedDataPromise = null;
+		const ensureData = () => {
+			if (!mappedDataPromise) {
+				const raw = typeof queryResult.ensureData === 'function'
+					? queryResult.ensureData()
+					: queryResult.dataPromise;
+				mappedDataPromise = Promise.resolve(raw)
+					.then((data) => postProcessWatchlistItems(data))
+					.catch((err) => {
+						ERR('watchlist ensureData failed for', itemType, err);
+						return [];
+					});
+			}
+			return mappedDataPromise;
+		};
+
+		const result = {
+			data: postProcessWatchlistItems(queryResult.data),
+			isStale: queryResult.isStale === true,
+			isStalePromise: queryResult.isStalePromise,
+			ensureData
+		};
+		Object.defineProperty(result, 'dataPromise', {
+			configurable: true,
+			enumerable: true,
+			get() {
+				return ensureData();
+			}
+		});
+
+		return { config: sectionConfig, result, itemType };
+	}
+
+	async function invalidateAllWatchlistQueries() {
+		const apiHelper = window.apiHelper;
+		if (!apiHelper?.invalidateWatchlistQueries) return;
+		await Promise.all(
+			WATCHLIST_SECTION_TYPES.map(({ type }) =>
+				apiHelper.invalidateWatchlistQueries({ IncludeItemTypes: type })
+			)
+		);
+	}
+
+	async function renderWatchlistProgressive(forceRefresh = false) {
+		const host = getWatchlistProgressiveHost();
+		if (!host) {
+			ERR('Watchlist progressive host not found');
+			return;
+		}
+		if (!window.cardBuilder?.renderProgressiveSections) {
+			ERR('cardBuilder.renderProgressiveSections unavailable');
+			return;
+		}
+
+		const generation = ++watchlistRenderGeneration;
+		hideEmptyWatchlistMessage();
+
+		const sectionPromises = WATCHLIST_SECTION_TYPES.map(({ type, label }, index) =>
+			buildWatchlistProgressiveSection(type, label, index, forceRefresh).catch((err) => {
+				ERR('Failed to build watchlist section for', type, err);
+				return null;
+			})
+		);
+
+		const sections = await Promise.all(sectionPromises);
+		if (generation !== watchlistRenderGeneration) {
+			LOG('Skipping stale watchlist render', { generation, watchlistRenderGeneration });
+			return;
+		}
+
+		const validSections = sections.filter(Boolean);
+		host.innerHTML = '';
+		await window.cardBuilder.renderProgressiveSections(
+			host,
+			validSections.map((section) => Promise.resolve(section)),
+			{ showStaleDataBeforeRefresh: true }
+		);
+
+		resetWatchlistItemsByType();
+		await Promise.all(validSections.map(async (section) => {
+			const items = await section.result.ensureData();
+			const list = Array.isArray(items) ? items : (items?.Items || []);
+			watchlistItemsByType[section.itemType] = list;
+			mergeLikedIdsFromItems(list);
+		}));
+		syncOverlayWatchlistButtons();
+
+		if (generation !== watchlistRenderGeneration) return;
+
+		updateWatchlistHeaderStats();
+		const totalItems = WATCHLIST_SECTION_TYPES.reduce(
+			(sum, { type }) => sum + (watchlistItemsByType[type]?.length || 0),
+			0
+		);
+		if (totalItems === 0) showEmptyWatchlistMessage();
+		else hideEmptyWatchlistMessage();
+	}
 
 	// Function to render the complete watchlist HTML structure
 	function renderWatchlistHtml() {
@@ -3121,19 +3533,22 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 						<div class="watchlist-header-stats" id="watchlist-stats-movies" style="display: none;">
 							<span id="watchlist-movies-count">0 Movies</span>
 						</div>
+						<div class="watchlist-header-stats" id="watchlist-stats-boxsets" style="display: none;">
+							<span id="watchlist-boxsets-count">0 Box Sets</span>
+						</div>
+						<div class="watchlist-header-stats" id="watchlist-stats-playlists" style="display: none;">
+							<span id="watchlist-playlists-count">0 Playlists</span>
+						</div>
+						<div class="watchlist-header-stats" id="watchlist-stats-homevideos" style="display: none;">
+							<span id="watchlist-homevideos-count">0 Home Videos</span>
+						</div>
 					</div>
 					<button class="layout-toggle-btn" id="watchlist-layout-toggle" title="Toggle layout">
 						<span class="material-icons view_module"></span>
 					</button>
 				</div>
 			</div>
-			<div class="watchlist-movies"></div>
-			<div class="watchlist-series"></div>
-			<div class="watchlist-seasons"></div>
-			<div class="watchlist-episodes"></div>
-			<div class="watchlist-videos"></div>
-			<div class="watchlist-boxsets"></div>
-			<div class="watchlist-playlists"></div>
+			<div class="watchlist-progressive-results"></div>
 			<div class="watchlist-empty-message" style="display: none;">
 				<div class="empty-message-icon">
 					<span class="material-icons bookmark_border"></span>
@@ -3219,11 +3634,11 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 					<div class="progress-stats-grid">
 						<div class="stat-card">
 							<div class="stat-icon">
-								<span class="material-icons play_circle"></span>
+								<span class="material-icons movie"></span>
 							</div>
 							<div class="stat-content">
-								<div class="stat-value" id="stat-series-started">0</div>
-								<div class="stat-label">Series Started</div>
+								<div class="stat-value" id="stat-movies-watched">0</div>
+								<div class="stat-label">Movies Watched</div>
 							</div>
 						</div>
 						<div class="stat-card">
@@ -3246,11 +3661,20 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 						</div>
 						<div class="stat-card">
 							<div class="stat-icon">
-								<span class="material-icons movie"></span>
+								<span class="material-icons play_circle"></span>
 							</div>
 							<div class="stat-content">
-								<div class="stat-value" id="stat-movies-watched">0</div>
-								<div class="stat-label">Movies Watched</div>
+								<div class="stat-value" id="stat-series-started">0</div>
+								<div class="stat-label">Series Started</div>
+							</div>
+						</div>
+						<div class="stat-card">
+							<div class="stat-icon">
+								<span class="material-icons schedule"></span>
+							</div>
+							<div class="stat-content">
+								<div class="stat-value" id="stat-hours-watched">0</div>
+								<div class="stat-label">Hours Watched</div>
 							</div>
 						</div>
 					</div>
@@ -3275,6 +3699,9 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		watchlistSection.dataset.htmlRendered = 'true';
 		// Reset listeners setup flag since we have new DOM elements
 		watchlistSection.dataset.listenersSetup = 'false';
+
+		// Bind Show All immediately on the fresh button (does not wait for tab listener pass)
+		bindShowAllShowsButton(watchlistSection);
 
 		// Add refresh buttons after HTML is rendered
 		addRefreshButtons();
@@ -3803,7 +4230,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		const url = `${serverUrl}/Users/${userId}/Items?IncludeItemTypes=Playlist&Recursive=true&Fields=ChildCount`;
 		const response = await fetch(url, {
 			headers: {
-				'Authorization': apiHelper.getAuthHeader()
+				'Authorization': window.apiHelper.getAuthHeader()
 			}
 		});
 
@@ -4039,7 +4466,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		const response = await fetch(`${serverUrl}/Playlists?${params.toString()}`, {
 			method: 'POST',
 			headers: {
-				'Authorization': apiHelper.getAuthHeader()
+				'Authorization': window.apiHelper.getAuthHeader()
 			}
 		});
 
@@ -4062,7 +4489,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		// Remove existing entries
 		const existingItemsResponse = await fetch(`${serverUrl}/Playlists/${playlistId}/Items`, {
 			headers: {
-				'Authorization': apiHelper.getAuthHeader()
+				'Authorization': window.apiHelper.getAuthHeader()
 			}
 		});
 
@@ -4082,7 +4509,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			const deleteResponse = await fetch(`${serverUrl}/Playlists/${playlistId}/Items?${params.toString()}`, {
 				method: 'DELETE',
 				headers: {
-					'Authorization': apiHelper.getAuthHeader()
+					'Authorization': window.apiHelper.getAuthHeader()
 				}
 			});
 			if (!deleteResponse.ok) {
@@ -4102,7 +4529,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			const response = await fetch(`${serverUrl}/Playlists/${playlistId}/Items?${params.toString()}`, {
 				method: 'POST',
 				headers: {
-					'Authorization': apiHelper.getAuthHeader()
+					'Authorization': window.apiHelper.getAuthHeader()
 				}
 			});
 			if (!response.ok) {
@@ -4269,7 +4696,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 					if (item.ParentId) {
 						try {
 							const seasonUrl = `${serverUrl}/Items/${item.ParentId}?UserId=${userId}&Fields=Name`;
-							const seasonRes = await fetch(seasonUrl, { headers: { "Authorization": apiHelper.getAuthHeader() } });
+							const seasonRes = await fetch(seasonUrl, { headers: { "Authorization": window.apiHelper.getAuthHeader() } });
 							const seasonData = await seasonRes.json();
 							if (seasonData.Name) {
 								exportItem.SeasonName = seasonData.Name;
@@ -4405,7 +4832,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		let allLibraryItems = [];
 		try {
 			const url = `${serverUrl}/Items?${queryParams.toString()}`;
-			const res = await fetch(url, { headers: { "Authorization": apiHelper.getAuthHeader() } });
+			const res = await fetch(url, { headers: { "Authorization": window.apiHelper.getAuthHeader() } });
 			const libraryData = await res.json();
 			allLibraryItems = libraryData.Items || [];
 			LOG(`Fetched ${allLibraryItems.length} items from library matching import criteria`);
@@ -4439,7 +4866,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		for (const type of watchlistTypes) {
 			try {
 				const url = `${serverUrl}/Items?Filters=Likes&IncludeItemTypes=${type}&UserId=${userId}&Recursive=true&Fields=ProviderIds`;
-				const res = await fetch(url, { headers: { "Authorization": apiHelper.getAuthHeader() } });
+				const res = await fetch(url, { headers: { "Authorization": window.apiHelper.getAuthHeader() } });
 				const watchlistData = await res.json();
 				const items = watchlistData.Items || [];
 				for (const item of items) {
@@ -4546,9 +4973,12 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 
 		for (const type of types) {
 			try {
-				const url = `${serverUrl}/Items?Filters=Likes&IncludeItemTypes=${type}&UserId=${userId}&Recursive=true&Fields=Id`;
-				const res = await fetch(url, { headers: { "Authorization": apiHelper.getAuthHeader() } });
-				const data = await res.json();
+				const data = await window.apiHelper.getItems({
+					Filters: 'Likes',
+					IncludeItemTypes: type,
+					Recursive: true,
+					Fields: 'Id'
+				}, false);
 				const items = data.Items || [];
 
 				for (const item of items) {
@@ -4564,153 +4994,107 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			}
 		}
 
-		// Clear cache
-		const sections = ['movies', 'series', 'seasons', 'episodes'];
-		sections.forEach(section => {
-			localStorageCache.clear(`watchlist_${section}`);
-			watchlistCache[section].data = [];
-		});
+		// Clear query cache + in-memory index
+		await invalidateAllWatchlistQueries();
+		resetWatchlistItemsByType();
+		watchlistLikedIds.clear();
+		watchlistLikedIdsLoaded = true;
+		writeLikedIdsToStorage();
+		syncOverlayWatchlistButtons();
 
 		// Refresh watchlist
-		await initWatchlistTab();
-		renderWatchlistContent();
+		await initWatchlistTab(true);
 
 		alert(`Watchlist cleared: ${cleared} item(s) removed.`);
 	}
 
-	// Update watchlist cache when an item is toggled
+	/**
+	 * Membership changed: update liked-Id cache + invalidate Likes query URL.
+	 * Do not full-rebuild the Watchlist tab (avoids scroll jump / stale re-paint races).
+	 * Cards stay as ghosts until next visit; cardBuilder owns overlay button UI via UserDataChanged.
+	 */
 	async function updateWatchlistCacheOnToggle(itemId, itemType, isAdded) {
 		try {
-			// Determine which cache section this item belongs to
-			let sectionName;
-			sectionName = watchlistCacheTypeMap[itemType];
-			if (!sectionName) {
-				LOG('Unknown item type for cache update:', itemType);
-				return;
+			LOG(`Watchlist membership changed for ${itemType || 'unknown'} ${itemId} (added=${isAdded}); invalidating query cache`);
+			setLikedIdInCache(itemId, isAdded === true);
+			patchWatchlistItemsByTypeMembership(itemId, itemType, isAdded === true);
+
+			if (itemType && isWatchlistSupportedType(itemType)) {
+				await window.apiHelper?.invalidateWatchlistQueries?.({ IncludeItemTypes: itemType });
+			} else {
+				await invalidateAllWatchlistQueries();
 			}
 
-			if (isAdded) {
-				// Item was added to watchlist - fetch the item and add to cache
-				const item = await ApiClient.getItem(ApiClient.getCurrentUserId(), itemId);
-				if (item) {
-					// Add to cache if not already present
-					const existingIndex = watchlistCache[sectionName].data.findIndex(cachedItem => cachedItem.Id === itemId);
-					if (existingIndex === -1) {
-						watchlistCache[sectionName].data.push(item);
-						
-						// Sort by release date descending (newest first)
-						watchlistCache[sectionName].data.sort((a, b) => {
-							const dateA = new Date(a.PremiereDate || a.ProductionYear || 0);
-							const dateB = new Date(b.PremiereDate || b.ProductionYear || 0);
-							return dateB - dateA;
-						});
-						
-						// Update localStorage cache
-						const optimizedData = optimizeWatchlistDataForStorage(watchlistCache[sectionName].data);
-						localStorageCache.set(`watchlist_${sectionName}`, optimizedData, ApiClient._currentUser.Id, WATCHLIST_CACHE_TTL);
-						
-						LOG(`Added ${itemType} to watchlist cache: ${item.Name}`);
-					}
-				}
-			} else {
-				// Item was removed from watchlist - remove from cache
-				const existingIndex = watchlistCache[sectionName].data.findIndex(cachedItem => cachedItem.Id === itemId);
-				if (existingIndex !== -1) {
-					const removedItem = watchlistCache[sectionName].data.splice(existingIndex, 1)[0];
-					
-					// Update localStorage cache
-					const optimizedData = optimizeWatchlistDataForStorage(watchlistCache[sectionName].data);
-					localStorageCache.set(`watchlist_${sectionName}`, optimizedData, ApiClient._currentUser.Id, WATCHLIST_CACHE_TTL);
-					
-					LOG(`Removed ${itemType} from watchlist cache: ${removedItem.Name}`);
-				}
-			}
+			tabStates.watchlist.isDataFetched = false;
 		} catch (err) {
-			ERR('Error updating watchlist cache:', err);
+			ERR('Error refreshing watchlist cache after toggle:', err);
+		}
+	}
+
+	/**
+	 * Sync liked-Id cache + invalidate progressive Likes queries from UserData.Likes.
+	 * Idempotent for the Set when cardBuilder already applied Likes; always invalidate
+	 * so a remote/Library like is visible on the next Watchlist visit.
+	 */
+	async function handleItemWatchlistChange(itemId, isLiked, itemType) {
+		if (!itemId || typeof isLiked !== 'boolean') return;
+
+		if (isItemInLikedIdCache(itemId) !== isLiked) {
+			setLikedIdInCache(itemId, isLiked);
+		}
+		// Keep header counts aligned even if liked-Id Set was already updated by cardBuilder
+		patchWatchlistItemsByTypeMembership(itemId, itemType, isLiked);
+
+		try {
+			if (itemType && isWatchlistSupportedType(itemType)) {
+				await window.apiHelper?.invalidateWatchlistQueries?.({ IncludeItemTypes: itemType });
+			} else {
+				await invalidateAllWatchlistQueries();
+			}
+			tabStates.watchlist.isDataFetched = false;
+		} catch (err) {
+			ERR('Error invalidating watchlist after Likes change:', err);
 		}
 	}
 
 	// Initialize monitoring to remove watched items from watchlist (playback + manual)
-	function initializePlaybackMonitoring() {
+	async function initializePlaybackMonitoring() {
 		if (playbackMonitorInitialized) {
 			return;
 		}
 
-		const maxRetries = 10;
-		let retries = 0;
-		// Use WebSocket to listen for UserDataChanged messages instead of intercepting fetch
-		// This is more reliable and doesn't interfere with fetch requests
-		function setupWebSocketMonitoring() {
-			try {
-				// Grab the actual socket
-				const socket = (window.ApiClient && (window.ApiClient.webSocket || window.ApiClient._webSocket)) || null;
+		await window.userHelper.waitForLogin();
 
-				if (!socket) {
-					if (retries >= maxRetries) {
-						ERR('Max retries reached, giving up on WebSocket monitoring');
-						return false;
+		function startWatchlistUserDataListener() {
+			if (playbackMonitorInitialized) {
+				return;
+			}
+
+			if (window.websocketHelper?.listen) {
+				window.websocketHelper.listen('UserDataChanged', (msg) => {
+					const entries = msg?.Data?.UserDataList;
+					if (!Array.isArray(entries) || !entries.length) return;
+
+					for (const userData of entries) {
+						if (!userData?.ItemId) continue;
+						LOG(`Detected UserDataChanged for item: ${userData.ItemId}, Played: ${userData.Played}, Likes: ${userData.Likes}`);
+						(async () => {
+							await handleItemWatchlistChange(userData.ItemId, userData.Likes);
+							await handleItemWatchedStatusChange(userData.ItemId, userData.Played, userData.Likes);
+						})().catch(err => {
+							ERR('Error handling UserDataChanged event:', err);
+						});
 					}
-					retries++;
-					setTimeout(() => {
-						if (!playbackMonitorInitialized) {
-							setupWebSocketMonitoring();
-						}
-					}, 1000);
-					return;
-				}
-
-				// Store original handler if it exists
-				const originalHandler = socket.onmessage;
-
-				// Hook into onmessage
-				socket.onmessage = function(event) {
-					try {
-						// Pass it through so Jellyfin still works normally
-						if (originalHandler) {
-							originalHandler.call(this, event);
-						}
-
-						const messageData = event.Data || event.data;
-						const data = typeof messageData === 'string' ? JSON.parse(messageData) : messageData;
-
-						// Check if this is a UserDataChanged message
-						if (data.MessageType === 'UserDataChanged' && data.Data && data.Data.UserDataList && data.Data.UserDataList.length > 0) {
-							const userData = data.Data.UserDataList[0];
-							if (userData.ItemId) {
-								LOG(`Detected UserDataChanged for item: ${userData.ItemId}, Played: ${userData.Played}`);
-								// Handle the watched status change (works for both played and unplayed)
-								handleItemWatchedStatusChange(userData.ItemId, userData.Played, userData.Likes).catch(err => {
-									ERR('Error handling UserDataChanged event:', err);
-								});
-							}
-						}
-					} catch (err) {
-						// Log parse errors but don't break the original handler
-						WARN('WebSocket message parse error:', err);
-					}
-				};
-
+				});
 				playbackMonitorInitialized = true;
 				LOG('Playback and watch status monitoring initialized via WebSocket');
-				return true;
-			} catch (err) {
-				ERR('Error setting up WebSocket monitoring:', err);
-				return false;
+				return;
 			}
+
+			setTimeout(startWatchlistUserDataListener, 1000);
 		}
 
-		//setupWebSocketMonitoring();
-
-		// Try to set up immediately
-		if (!setupWebSocketMonitoring()) {
-			// If WebSocket isn't available yet, retry after a short delay
-			// This can happen if the page loads before the WebSocket connection is established
-			setTimeout(() => {
-				if (!playbackMonitorInitialized) {
-					setupWebSocketMonitoring();
-				}
-			}, 1000);
-		}
+		startWatchlistUserDataListener();
 	}
 
 	let watchedItems = [];
@@ -4850,7 +5234,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	// Update episode in localStorage when progress cache is not fully loaded
 	async function updateEpisodeInLocalStorage(episode) {
 		try {
-			const cachedProgress = localStorageCache.get('progress');
+			const cachedProgress = localStorageCache.get('progress_v2');
 			if (!cachedProgress) {
 				LOG('No progress data in localStorage to update');
 				return;
@@ -4869,7 +5253,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				try {
 					// Fetch the series item
 					const seriesUrl = `${serverUrl}/Items/${seriesId}?UserId=${userId}&Fields=UserData,RecursiveItemCount&EnableImageTypes=Primary,Banner`;
-					const seriesRes = await fetch(seriesUrl, { headers: { "Authorization": apiHelper.getAuthHeader() } });
+					const seriesRes = await fetch(seriesUrl, { headers: { "Authorization": window.apiHelper.getAuthHeader() } });
 					const series = await seriesRes.json();
 					
 					if (!series || !series.Id) {
@@ -4907,7 +5291,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 					LOG(`Updated episode ${episode.IndexNumber} in season ${season} as watched in localStorage`);
 					
 					// Save back to localStorage
-					localStorageCache.set('progress', cachedProgress);
+					localStorageCache.set('progress_v2', cachedProgress);
 				}
 			}
 		} catch (err) {
@@ -4946,7 +5330,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	// Update episode as unwatched in localStorage when progress cache is not fully loaded
 	async function updateEpisodeInLocalStorageUnwatched(episode) {
 		try {
-			const cachedProgress = localStorageCache.get('progress');
+			const cachedProgress = localStorageCache.get('progress_v2');
 			if (!cachedProgress) {
 				LOG('No progress data in localStorage to update');
 				return;
@@ -4973,7 +5357,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 					LOG(`Updated episode ${episode.IndexNumber} in season ${season} as unwatched in localStorage`);
 					
 					// Save back to localStorage
-					localStorageCache.set('progress', cachedProgress);
+					localStorageCache.set('progress_v2', cachedProgress);
 				}
 			}
 		} catch (err) {
@@ -5117,26 +5501,26 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		try {
 			LOG('Syncing watched status to watchlist...');
 			let removedCount = 0;
-			
-			// Check all watchlist sections
-			const sections = ['movies', 'series', 'seasons', 'episodes'];
-			for (const section of sections) {
-				const items = watchlistCache[section].data;
+
+			for (const { type } of WATCHLIST_SECTION_TYPES) {
+				const items = watchlistItemsByType[type] || [];
 				const playedItems = items.filter(item => item.UserData && item.UserData.Played);
-				
+
 				if (playedItems.length > 0) {
-					LOG(`Found ${playedItems.length} played items in ${section} section`);
-					
-					// Remove each played item
+					LOG(`Found ${playedItems.length} played items in ${type} section`);
 					for (const item of playedItems) {
-						await removeItemFromWatchlist(item.Id, item.Type);
+						await ApiClient.updateUserItemRating(ApiClient.getCurrentUserId(), item.Id, 'false');
+						setLikedIdInCache(item.Id, false);
 						removedCount++;
 					}
 				}
 			}
-			
+
 			if (removedCount > 0) {
-				LOG(`Sync complete: removed ${removedCount} played items from watchlist`);
+				LOG(`Sync complete: removed ${removedCount} played items from watchlist; refreshing`);
+				syncOverlayWatchlistButtons();
+				await invalidateAllWatchlistQueries();
+				await renderWatchlistProgressive(true);
 			} else {
 				LOG('Sync complete: no played items found in watchlist');
 			}
@@ -5190,24 +5574,21 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		}
 	}
 
-	// Check if an item is in the user's watchlist via API
+	// Check if an item is in the user's watchlist via in-memory index or API
 	async function checkIfItemInWatchlist(itemId) {
 		try {
-			// First check if we have the item in our cache (faster)
-			const sections = ['movies', 'series', 'seasons', 'episodes'];
-			for (const section of sections) {
-				if (watchlistCache[section].data.some(item => item.Id === itemId)) {
+			for (const { type } of WATCHLIST_SECTION_TYPES) {
+				if ((watchlistItemsByType[type] || []).some(item => item.Id === itemId)) {
 					return true;
 				}
 			}
-			
-			// If not in cache, check via API
+
 			const item = await ApiClient.getItem(ApiClient.getCurrentUserId(), itemId);
 			if (item && item.UserData && item.UserData.Likes) {
 				LOG(`Item ${itemId} is in watchlist (via API check)`);
 				return true;
 			}
-			
+
 			LOG(`Item ${itemId} is not in watchlist (via API check)`);
 			return false;
 		} catch (err) {
@@ -5247,12 +5628,18 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		const serverUrl = apiClient.serverAddress();
 		const token = apiClient.accessToken();
 
-		// Fetch movies that have been played
-		const url = `${serverUrl}/Items?IncludeItemTypes=Movie&UserId=${userId}&Recursive=true&Filters=IsPlayed&Fields=UserData,ProviderIds&EnableImageTypes=Primary,Backdrop,Thumb&ImageTypeLimit=1&SortBy=DatePlayed&SortOrder=Descending`;
-
+		// Fetch movies that have been played via apiHelper
 		try {
-			const res = await fetch(url, { headers: { "Authorization": apiHelper.getAuthHeader() } });
-			const data = await res.json();
+			const data = await window.apiHelper.getItems({
+				IncludeItemTypes: 'Movie',
+				Recursive: true,
+				Filters: 'IsPlayed',
+				Fields: 'UserData,ProviderIds,People',
+				EnableImageTypes: 'Primary,Backdrop,Thumb',
+				ImageTypeLimit: 1,
+				SortBy: 'DatePlayed',
+				SortOrder: 'Descending'
+			}, false);
 			const movies = data.Items || [];
 
 			// Filter out movie duplicates
@@ -5478,43 +5865,64 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		}
 	}
 
+	let statisticsRenderPromise = null;
+
 	async function renderStatisticsContent() {
-		LOG('Rendering Statistics content');
-		
-		try {
-			// Check if both data sources are fully loaded
-			const progressDataReady = progressCache.allDataLoaded;
-			const historyDataReady = movieCache.allDataLoaded;
-			
+		// Coalesce concurrent calls (e.g. init + switchTab both firing)
+		if (statisticsRenderPromise) {
+			return statisticsRenderPromise;
+		}
+
+		statisticsRenderPromise = (async () => {
+			LOG('Rendering Statistics content');
+
 			const watchlistSection = getWatchlistSection();
 			const statisticsTab = watchlistSection ? watchlistSection.querySelector('div[data-tab="statistics"]') : null;
-			
 			if (!statisticsTab) return;
-			
-			if (!progressDataReady || !historyDataReady) {
-				// Set data-ready="false" to show loading container
+
+			try {
 				statisticsTab.setAttribute('data-ready', 'false');
-				return;
-			}
-			
-			// Both data sources are ready, set data-ready="true" to show content
-			statisticsTab.setAttribute('data-ready', 'true');
-			
-			// Both data sources are ready, proceed with statistics rendering
-			// Ensure we have all progress data loaded
-			await fetchAllProgressData(true);
-			
-			// Update statistics with all progress data
-			await updateProgressStatistics(progressCache.data);
-			
-			LOG('Statistics content rendered successfully');
-		} catch (err) {
-			ERR('Error rendering statistics content:', err);
-			// Set data-ready="false" on error
-			if (statisticsTab) {
+
+				await Promise.all([
+					fetchAllProgressData(true),
+					fetchWatchedMovies(true)
+				]);
+
+				tabStates.progress.isDataFetched = true;
+				tabStates.history.isDataFetched = true;
+
+				// Reveal layout before Chart.js measures canvas size (hidden → 0-height blank charts)
+				statisticsTab.setAttribute('data-ready', 'true');
+				await new Promise((resolve) => {
+					requestAnimationFrame(() => requestAnimationFrame(resolve));
+				});
+
+				if (window.KefinWatchlistStats && typeof window.KefinWatchlistStats.render === 'function') {
+					window.KefinWatchlistStats.render(statisticsTab, {
+						progress: progressCache.data,
+						movies: movieCache.data
+					});
+					if (typeof window.KefinWatchlistStats.resize === 'function') {
+						window.KefinWatchlistStats.resize();
+						requestAnimationFrame(() => window.KefinWatchlistStats.resize());
+					}
+				} else {
+					WARN('KefinWatchlistStats unavailable; falling back to summary cards only');
+					await updateProgressStatistics(progressCache.data);
+				}
+
+				bindShowAllShowsButton(statisticsTab);
+
+				LOG('Statistics content rendered successfully');
+			} catch (err) {
+				ERR('Error rendering statistics content:', err);
 				statisticsTab.setAttribute('data-ready', 'false');
 			}
-		}
+		})().finally(() => {
+			statisticsRenderPromise = null;
+		});
+
+		return statisticsRenderPromise;
 	}
 
 	function renderPaginationControls(currentPage, totalPages, tabName = 'progress') {
@@ -5714,7 +6122,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		if (lastWatchedEpisode) {
 			const timeAgo = formatTimeAgo(lastWatchedEpisode.UserData.LastPlayedDate);
 			const formattedDate = formatLastWatchedDate(lastWatchedEpisode.UserData.LastPlayedDate);
-			const episodeInfo = lastWatchedEpisode.ParentIndexNumber && lastWatchedEpisode.IndexNumber ? `${lastWatchedEpisode.ParentIndexNumber}x${lastWatchedEpisode.IndexNumber.toString().padStart(2, '0')} ${lastWatchedEpisode.Name}` : lastWatchedEpisode.Name;
+			const episodeInfo = `${lastWatchedEpisode.ParentIndexNumber}x${lastWatchedEpisode.IndexNumber.toString().padStart(2, '0')} "${lastWatchedEpisode.Name}"`;
 			lastWatchedInfo = `Last watched <strong>${episodeInfo}</strong> ${timeAgo} on ${formattedDate}.`;
 		}
 
@@ -6032,8 +6440,8 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		
 		try {
 			LOG(`Fetching episodes from API for series: ${seriesId}`);
-			const episodesUrl = `${serverUrl}/Shows/${seriesId}/Episodes?UserId=${userId}&Fields=UserData&EnableImageTypes=Primary`;
-			const episodesRes = await fetch(episodesUrl, { headers: { "Authorization": apiHelper.getAuthHeader() } });
+			const episodesUrl = `${serverUrl}/Shows/${seriesId}/Episodes?UserId=${userId}&Fields=UserData,RunTimeTicks&EnableImageTypes=Primary`;
+			const episodesRes = await fetch(episodesUrl, { headers: { "Authorization": window.apiHelper.getAuthHeader() } });
 			const episodesData = await episodesRes.json();
 			let episodes = episodesData.Items || [];
 
@@ -6203,7 +6611,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			const response = await fetch(markPlayedUrl, {
 				method: isWatched ? 'POST' : 'DELETE',
 				headers: { 
-					"Authorization": apiHelper.getAuthHeader(),
+					"Authorization": window.apiHelper.getAuthHeader(),
 					"Content-Type": "application/json"
 				}
 			});
@@ -6328,7 +6736,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				const response = await fetch(markPlayedUrl, {
 					method: 'POST',
 					headers: { 
-						"Authorization": apiHelper.getAuthHeader(),
+						"Authorization": window.apiHelper.getAuthHeader(),
 						"Content-Type": "application/json"
 					}
 				});
@@ -6426,44 +6834,39 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		return existingIds.every((id, index) => id === newIds[index]);
 	}
 
-	// Render cards from cached data
+	// Render cards from in-memory index (legacy helper; progressive path is preferred)
 	async function renderCardsFromCache(container, sectionName, type) {
 		if (!container) {
 			WARN("Container not found for type:", type);
 			return { type, itemCount: 0 };
 		}
-		
-		const items = watchlistCache[sectionName].data;
-		
-		// Hide section if no items
-		if (!items || items.length === 0) {
+
+		const items = watchlistItemsByType[type] || [];
+
+		if (!items.length) {
 			container.style.display = 'none';
 			return { type, itemCount: 0 };
 		}
-		
-		// Check if content has changed by comparing data-ids
+
 		if (compareDataIds(container, items)) {
 			LOG(`Skipping ${type} render - content unchanged (${items.length} items)`);
 			container.style.display = '';
 			return { type, itemCount: items.length };
 		}
-		
-		// Show section and use cardBuilder to create scrollable container
+
 		container.style.display = '';
-		
-		// Use cardBuilder to create scrollable container
+
 		if (typeof window.cardBuilder !== 'undefined' && window.cardBuilder.renderCards) {
 			const scrollableContainer = window.cardBuilder.renderCards(items, getTypeDisplayName(type), null);
 			container.innerHTML = '';
 			container.appendChild(scrollableContainer);
-			
 			LOG(`Rendered ${items.length} ${type} items using cardBuilder from cache`);
 		} else {
 			ERR("cardBuilder not available - this should not happen with proper dependency management");
 			container.style.display = 'none';
 			return { type, itemCount: 0 };
 		}
-		
+
 		return { type, itemCount: items.length };
 	}
 
@@ -6522,15 +6925,15 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		
 		updateUrlParams(activeTab, currentPage, currentSort, currentSortDirection, currentMovieSort, currentMovieSortDirection);
 		
-		// Render content based on active tab
+		// Render content based on active tab (lazy-init progress/history/statistics)
 		if (activeTab === 'progress') {
-			renderProgressContent();
+			initProgressTab().then(() => renderProgressContent()).catch((err) => ERR('Progress tab init failed:', err));
 		} else if (activeTab === 'watchlist') {
 			renderWatchlistContent();
 		} else if (activeTab === 'history') {
-			renderHistoryContent();
+			initHistoryTab().then(() => renderHistoryContent()).catch((err) => ERR('History tab init failed:', err));
 		} else if (activeTab === 'statistics') {
-			renderStatisticsContent();
+			initStatisticsTab().then(() => renderStatisticsContent()).catch((err) => ERR('Statistics tab init failed:', err));
 		}
 		
 		LOG(`Switched to ${activeTab} tab`);
@@ -6601,14 +7004,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		setupMovieSearch();
 		
 		// Setup "Show All" button for top shows
-		const showAllBtn = getElementByIdSafe('show-all-shows-btn');
-		if (showAllBtn) {
-			showAllBtn.addEventListener('click', (e) => {
-				e.preventDefault();
-				e.stopPropagation();
-				showAllShowsModal();
-			});
-		}
+		bindShowAllShowsButton(watchlistSection);
 		
 		// Mark as setup to prevent duplicates
 		watchlistSection.dataset.listenersSetup = 'true';
@@ -6744,60 +7140,12 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 	// Function to render watchlist content when .sections.watchlist is found
 	async function renderWatchlistContent() {
 		try {
-			const watchlistSection = getWatchlistSection();
-			if (!watchlistSection) {
-				ERR('Watchlist section not found');
-				return;
-			}
-
-			const watchlistSections = ['.watchlist-movies', '.watchlist-series', '.watchlist-seasons', '.watchlist-episodes', '.watchlist-videos', '.watchlist-boxsets', '.watchlist-playlists'];
-			
-			// Check if we're currently fetching data or data hasn't been fetched yet
 			if (!tabStates.watchlist.isDataFetched) {
-				//Hide empty message
 				hideEmptyWatchlistMessage();
-
-				watchlistSections.forEach(section => {
-					const container = watchlistSection.querySelector(section);
-					if (container) {
-						container.innerHTML = '';
-					}
-				});
-				
-				// Show loading state for watchlist tab
-				const container = watchlistSection.querySelector('.watchlist-movies');
-				
-				if (container) {
-					container.innerHTML = '<div class="loading-message"><div class="loading-spinner"></div><div>Loading watchlist...</div></div>';
-					container.style.display = '';
-				}
+				await initWatchlistTab();
 				return;
 			}
-			
-			// Render all sections using cached data
-			const results = await Promise.all([
-				renderCardsFromCache(watchlistSection.querySelector('.watchlist-movies'), 'movies', 'Movie'),
-				renderCardsFromCache(watchlistSection.querySelector('.watchlist-series'), 'series', 'Series'),
-				renderCardsFromCache(watchlistSection.querySelector('.watchlist-seasons'), 'seasons', 'Season'),
-				renderCardsFromCache(watchlistSection.querySelector('.watchlist-episodes'), 'episodes', 'Episode'),
-				renderCardsFromCache(watchlistSection.querySelector('.watchlist-videos'), 'videos', 'Video'),
-				renderCardsFromCache(watchlistSection.querySelector('.watchlist-boxsets'), 'boxsets', 'BoxSet'),
-				renderCardsFromCache(watchlistSection.querySelector('.watchlist-playlists'), 'playlists', 'Playlist')
-			]);
-			
-			// Update watchlist stats in header
-			updateWatchlistHeaderStats();
-			
-			// Check if all sections are empty
-			const totalItems = results.reduce((sum, result) => sum + result.itemCount, 0);
-			
-			if (totalItems === 0) {
-				// Show empty state message
-				showEmptyWatchlistMessage();
-			} else {
-				// Hide empty state message if it exists
-				hideEmptyWatchlistMessage();
-			}
+			await renderWatchlistProgressive(false);
 		} catch (err) {
 			ERR('Error rendering watchlist cards:', err);
 		}
@@ -6806,18 +7154,23 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 
 	// Function to check if watchlist section exists and render content
 	async function renderWatchlist() {
+		// Wait for user to be logged in
+		if (window.userHelper?.waitForLogin) {
+			await window.userHelper.waitForLogin();
+		}
+
 		const watchlistSection = getWatchlistSection();
 		
 		if (watchlistSection) {
 			// Check if this is a new watchlist section (no HTML structure)
-			const hasTabs = watchlistSection.querySelector('.watchlist-tabs');
+/* 			const hasTabs = watchlistSection.querySelector('.watchlist-tabs');
 			const isNewSection = !hasTabs;
 			
 			// Check if this is a recreated section by comparing content to cache
-			const isRecreatedSection = hasTabs && !isWatchlistContentValid(watchlistSection);
+			const isRecreatedSection = hasTabs && !isWatchlistContentValid(watchlistSection); */
 			
-			if (isNewSection || isRecreatedSection) {
-				LOG(`Watchlist section ${isNewSection ? 'found' : 'recreated'}, initializing...`);
+			if (!watchlistSection.dataset.watchlistRendered) {
+				LOG(`Watchlist section found and not rendered, initializing...`);
 				
 				// Mark as rendered to prevent duplicate initialization
 				watchlistSection.dataset.watchlistRendered = 'true';
@@ -6845,51 +7198,18 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		}
 	}
 
-	// Function to validate if watchlist content matches cache expectations
+	// Function to validate if watchlist progressive host is present
 	function isWatchlistContentValid(watchlistSection) {
 		try {
-			// Check if all expected containers exist
-			const moviesContainer = watchlistSection.querySelector('.watchlist-movies');
-			const seriesContainer = watchlistSection.querySelector('.watchlist-series');
-			const seasonsContainer = watchlistSection.querySelector('.watchlist-seasons');
-			const episodesContainer = watchlistSection.querySelector('.watchlist-episodes');
-			
-			if (!moviesContainer || !seriesContainer || !seasonsContainer || !episodesContainer) {
-				LOG('Watchlist containers missing, content invalid');
+			const host = watchlistSection.querySelector('.watchlist-progressive-results');
+			if (!host) {
+				LOG('Watchlist progressive host missing, content invalid');
 				return false;
 			}
 
-			const moviesItemsContainer = moviesContainer.querySelector('.itemsContainer');
-			const seriesItemsContainer = seriesContainer.querySelector('.itemsContainer');
-			const seasonsItemsContainer = seasonsContainer.querySelector('.itemsContainer');
-			const episodesItemsContainer = episodesContainer.querySelector('.itemsContainer');
-			
-			// Check if content matches cache expectations
-			const expectedMovies = watchlistCache.movies.data.length;
-			const expectedSeries = watchlistCache.series.data.length;
-			const expectedSeasons = watchlistCache.seasons.data.length;
-			const expectedEpisodes = watchlistCache.episodes.data.length;
-			
-			const actualMovies = moviesItemsContainer ? moviesItemsContainer.children.length : 0;
-			const actualSeries = seriesItemsContainer ? seriesItemsContainer.children.length : 0;
-			const actualSeasons = seasonsItemsContainer ? seasonsItemsContainer.children.length : 0;
-			const actualEpisodes = episodesItemsContainer ? episodesItemsContainer.children.length : 0;			
-			
-			const contentMatches = actualMovies === expectedMovies && 
-								actualSeries === expectedSeries && 
-								actualSeasons === expectedSeasons && 
-								actualEpisodes === expectedEpisodes;
-			
-			if (!contentMatches) {
-				LOG(`Watchlist content mismatch - Expected: ${expectedMovies}M/${expectedSeries}S/${expectedSeasons}Se/${expectedEpisodes}E, Actual: ${actualMovies}M/${actualSeries}S/${actualSeasons}Se/${actualEpisodes}E`);
-				watchlistSection.dataset.htmlRendered = 'false';
-				return false;
-			}
-			
 			LOG('Watchlist content is valid');
 			watchlistSection.dataset.htmlRendered = 'true';
 			return true;
-			
 		} catch (err) {
 			ERR('Error validating watchlist content:', err);
 			watchlistSection.dataset.htmlRendered = 'false';
@@ -6897,65 +7217,106 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		}
 	}
 
-	// Set up observer to watch for home page navigation
+	// Page-scoped observer for watchlist section remount (attributes+class required)
 	function setupWatchlistSectionObserver() {
-		// Check immediately in case we're already on home page
-		if (window.location.href.includes('#/home')) {
-			renderWatchlist();
+		function isVisibleLibraryOrCustomPage(el) {
+			return el &&
+				el.nodeType === Node.ELEMENT_NODE &&
+				el.classList &&
+				!el.classList.contains('hide') &&
+				(el.classList.contains('libraryPage') || el.classList.contains('customPage') || el.classList.contains('homePage'));
 		}
-		
-		// Create a MutationObserver to watch for empty watchlist containers
-		const observer = new MutationObserver((mutations) => {
-			mutations.forEach((mutation) => {
-				// Check for added nodes
-				if (mutation.type === 'childList') {
-					mutation.addedNodes.forEach((node) => {
-						if (node.nodeType === Node.ELEMENT_NODE) {
-							// Check if this is a library page that became visible
-							if (node.classList && node.classList.contains('homePage') && !node.classList.contains('hide')) {
-								checkForEmptyWatchlist();
-							}
-							
-							// Also check any library pages within the added node
-							const libraryPages = node.querySelectorAll ? node.querySelectorAll('.homePage:not(.hide)') : [];
-							libraryPages.forEach(libraryPage => {
-								checkForEmptyWatchlist();
-							});
-						}
-					});
-				}
-				
-				// Check for attribute changes (like removing 'hide' class)
-				if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
-					const target = mutation.target;
-					if (target.classList && target.classList.contains('homePage') && !target.classList.contains('hide')) {
-						checkForEmptyWatchlist();
-					}
-				}
-			});
-		});
-		
-		// Start observing
-		observer.observe(document.body, {
-			childList: true,
-			subtree: true,
-			attributes: true,
-			attributeFilter: ['class']
-		});
-		
-		// Function to check for empty watchlist container
+
+		function nodeMayContainWatchlist(node) {
+			if (!node || node.nodeType !== Node.ELEMENT_NODE) return false;
+			if (node.classList && node.classList.contains('sections') && node.classList.contains('watchlist')) return true;
+			if (node.querySelector && node.querySelector('.sections.watchlist')) return true;
+			return isVisibleLibraryOrCustomPage(node);
+		}
+
+		let emptyWatchlistObserver = null;
+
+		function disconnectEmptyWatchlistObserver() {
+			if (!emptyWatchlistObserver) return;
+			emptyWatchlistObserver.disconnect();
+			emptyWatchlistObserver = null;
+		}
+
 		function checkForEmptyWatchlist() {
+			const onWatchlistPage = window.location.pathname.includes(window.KefinTweaksUtils._watchlistUrl) || window.location.hash.includes(window.KefinTweaksUtils._watchlistUrl);
+
+			if (!onWatchlistPage) {
+				return;
+			}
+
 			const visibleWatchlistSections = document.querySelectorAll('.libraryPage:not(.hide) .sections.watchlist');
 
-			visibleWatchlistSections.forEach(section => {
-				if (section.children.length === 0) {
-					LOG('Empty watchlist container found, initializing...');
+			visibleWatchlistSections.forEach((section) => {
+				if (!section.dataset.watchlistRendered) {
+					LOG('Watchlist container found and needs render, initializing...');
+					renderWatchlist();
+				} else if (section.children.length === 0) {
+					LOG('Watchlist container empty after remount, re-initializing...');
+					delete section.dataset.watchlistRendered;
 					renderWatchlist();
 				}
 			});
 		}
-	}
 
+		function armEmptyWatchlistObserver() {
+			const onWatchlistPage = window.location.pathname.includes(window.KefinTweaksUtils._watchlistUrl) || window.location.hash.includes(window.KefinTweaksUtils._watchlistUrl);
+			if (!onWatchlistPage) {
+				disconnectEmptyWatchlistObserver();
+				return;
+			}
+
+			checkForEmptyWatchlist();
+
+			const pageRoot =
+				document.querySelector('.libraryPage:not(.hide)') ||
+				document.querySelector('.customPage:not(.hide)') ||
+				document.querySelector('.homePage:not(.hide)');
+			const target = pageRoot || document.body;
+
+			if (emptyWatchlistObserver && emptyWatchlistObserver.__kefinTarget === target) {
+				return;
+			}
+			disconnectEmptyWatchlistObserver();
+
+			emptyWatchlistObserver = new MutationObserver((mutations) => {
+				let shouldCheck = false;
+				for (const mutation of mutations) {
+					if (mutation.type === 'childList') {
+						for (const node of mutation.addedNodes) {
+							if (nodeMayContainWatchlist(node)) {
+								shouldCheck = true;
+								break;
+							}
+						}
+					} else if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+						if (isVisibleLibraryOrCustomPage(mutation.target)) shouldCheck = true;
+					}
+					if (shouldCheck) break;
+				}
+				if (shouldCheck) checkForEmptyWatchlist();
+			});
+			emptyWatchlistObserver.__kefinTarget = target;
+			emptyWatchlistObserver.observe(target, {
+				childList: true,
+				subtree: true,
+				attributes: true,
+				attributeFilter: ['class']
+			});
+		}
+
+		const utils = window.KefinTweaksUtils;
+		if (utils?.onViewPage) {
+			utils.onViewPage(() => {
+				armEmptyWatchlistObserver();
+			});
+		}
+		armEmptyWatchlistObserver();
+	}
 
 	// Initialize the watchlist section observer
 	setupWatchlistSectionObserver();
@@ -6978,12 +7339,15 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		}
 	}
 
-	// Update watchlist header stats based on current cache data
+	// Update watchlist header stats based on current progressive paint
 	function updateWatchlistHeaderStats() {
-		const showsCount = watchlistCache.series.data.length;
-		const seasonsCount = watchlistCache.seasons.data.length;
-		const episodesCount = watchlistCache.episodes.data.length;
-		const moviesCount = watchlistCache.movies.data.length;
+		const showsCount = watchlistItemsByType.Series.length;
+		const seasonsCount = watchlistItemsByType.Season.length;
+		const episodesCount = watchlistItemsByType.Episode.length;
+		const moviesCount = watchlistItemsByType.Movie.length;
+		const boxsetsCount = watchlistItemsByType.BoxSet.length;
+		const playlistsCount = watchlistItemsByType.Playlist.length;
+		const homevideosCount = watchlistItemsByType.Video.length;
 
 		// Update or hide shows stats
 		const showsStats = getElementByIdSafe('watchlist-stats-shows');
@@ -7026,6 +7390,39 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				getElementByIdSafe('watchlist-movies-count').textContent = `${moviesCount} Movie${moviesCount === 1 ? '' : 's'}`;
 			} else {
 				moviesStats.style.display = 'none';
+			}
+		}
+
+		// Update or hide boxsets stats
+		const boxsetsStats = getElementByIdSafe('watchlist-stats-boxsets');
+		if (boxsetsStats) {
+			if (boxsetsCount > 0) {
+				boxsetsStats.style.display = 'flex';
+				getElementByIdSafe('watchlist-boxsets-count').textContent = `${boxsetsCount} Box Set${boxsetsCount === 1 ? '' : 's'}`;
+			} else {
+				boxsetsStats.style.display = 'none';
+			}
+		}
+
+		// Update or hide playlists stats
+		const playlistsStats = getElementByIdSafe('watchlist-stats-playlists');
+		if (playlistsStats) {
+			if (playlistsCount > 0) {
+				playlistsStats.style.display = 'flex';
+				getElementByIdSafe('watchlist-playlists-count').textContent = `${playlistsCount} Playlist${playlistsCount === 1 ? '' : 's'}`;
+			} else {
+				playlistsStats.style.display = 'none';
+			}
+		}
+
+		// Update or hide homevideos stats
+		const homevideosStats = getElementByIdSafe('watchlist-stats-homevideos');
+		if (homevideosStats) {
+			if (homevideosCount > 0) {
+				homevideosStats.style.display = 'flex';
+				getElementByIdSafe('watchlist-homevideos-count').textContent = `${homevideosCount} Home Video${homevideosCount === 1 ? '' : 's'}`;
+			} else {
+				homevideosStats.style.display = 'none';
 			}
 		}
 	}
@@ -7118,13 +7515,21 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			return _watchlistTabIndex;
 		}
 
+		const api = (typeof ApiClient !== 'undefined' && ApiClient) || window.ApiClient || null;
+		const serverAddress = api && (api._serverAddress || (typeof api.serverAddress === 'function' ? api.serverAddress() : null));
+		if (!api || !serverAddress) {
+			return _watchlistTabIndex;
+		}
+
+		const authHeader = apiHelper.getAuthHeader();
+
 		// Fetch the tab index as we do in addCustomMenuLink
 		try {
-			const response = await fetch(`${ApiClient._serverAddress}/CustomTabs/Config`, {
+			const response = await fetch(`${serverAddress}/CustomTabs/Config`, {
 				method: "GET",
 				headers: {
 					"Content-Type": "application/json",
-					"Authorization": apiHelper.getAuthHeader(),
+					"Authorization": authHeader
 				},
 			});
 			const data = await response.json();
@@ -7135,7 +7540,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				}
 			});
 		} catch (err) {
-			ERR('Failed to fetch watchlist tab index:', err);
+			WARN('CustomTabs plugin not found.');
 		}
 
 		return _watchlistTabIndex;
@@ -7191,195 +7596,257 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		}
 	}
 
-	// Register onViewPage handler to call setActiveTab
-	if (window.KefinTweaksUtils && window.KefinTweaksUtils.onViewPage) {
-		window.KefinTweaksUtils.onViewPage(async (view, element, hash) => {
-			LOG('onViewPage handler triggered for view:', view);
-			renderWatchlist();
-
-			// Check if we're on the watchlist tab
-			const watchlistTabIndex = await getWatchlistTabIndex();
-			if (watchlistTabIndex !== null && hash) {
-				// Get current tab from URL
-				const hashParams = hash.includes('?') ? hash.split('?')[1] : '';
-				const urlParams = new URLSearchParams(hashParams);
-				const currentTab = urlParams.get('tab');
-				const currentTabIndex = currentTab ? parseInt(currentTab, 10) : 0;
-
-				if (currentTabIndex === watchlistTabIndex) {
-					LOG('On watchlist tab, enhancing progress bars with episode details');
-					// Small delay to let initial render complete
-					setTimeout(() => {
-						//fetchEpisodesAndEnhanceProgressBar();
-					}, 100);
+	async function addWatchlistPageHandler() {
+		// Primary init is addCustomPage onShow + kefin:custompage-show; keep onViewPage as backup for home-tab URLs
+		if (window.KefinTweaksUtils && window.KefinTweaksUtils.onViewPage) {
+			window.KefinTweaksUtils.onViewPage(async (view, element, hash) => {
+				const watchlistUrl = await window.KefinTweaksUtils.getWatchlistUrl();
+				if (watchlistUrl && hash.includes(watchlistUrl)) {
+					LOG('onViewPage: Watchlist (backup)');
+					renderWatchlist();
 				}
-			}
-		}, {
-			pages: ['home', 'home.html'] // Only trigger for home page where watchlist tabs are
-		});
-		LOG('Registered onViewPage handler for setActiveTab');
-	} else {
-		WARN('KefinTweaksUtils.onViewPage not available');
-	}
-
-	function addCustomMenuLink() {
-		LOG('Adding custom menu link for Watchlist tab');
-		if (window.KefinTweaksUtils && window.KefinTweaksUtils.addCustomMenuLink) {
-			fetch(`${ApiClient._serverAddress}/CustomTabs/Config`, {
-				method: "GET",
-				headers: {
-				"Content-Type": "application/json",
-				"Authorization": apiHelper.getAuthHeader(),
-				},
-			})
-			.then((r) => r.json())
-			.then((data) => {
-				console.log(data);
-				data.forEach((tab, index) => {
-					if (tab.ContentHtml.indexOf('sections watchlist') !== -1) {
-						const watchlistTabIndex = index + 2;
-						_watchlistTabIndex = watchlistTabIndex; // Store the tab index
-						let homePageSuffix = '.html';
-						if (ApiClient._serverInfo.Version?.split('.')[1] > 10) {
-							homePageSuffix = '';
-						}
-						window.KefinTweaksUtils.addCustomMenuLink(
-							'Watchlist', 
-							'bookmark', 
-							`#/home${homePageSuffix}?tab=${watchlistTabIndex}`
-						);
-						LOG('Added custom menu link to side menu for Watchlist tab');
-					}
-				});
-			})
-			.catch(console.error);
+			}, {
+				pages: []
+			});
+			LOG('Registered onViewPage handler for Watchlist');
+		} else {
+			WARN('KefinTweaksUtils.onViewPage not available');
 		}
 	}
 
-	addCustomMenuLink();
+	let watchlistCustomPageShowBound = false;
+
+	async function addCustomWatchlistPage() {
+		if (!window.KefinTweaksUtils?.addCustomPage) {
+			WARN('addCustomPage not available yet');
+			return false;
+		}
+		const watchlistUrl = await window.KefinTweaksUtils.getWatchlistUrl();
+		window.KefinTweaksUtils.addCustomPage(
+			watchlistUrl,
+			'Watchlist',
+			'<div class="sections watchlist"></div>',
+			() => {
+				LOG('onShow: Watchlist');
+				renderWatchlist();
+			}
+		);
+
+		if (!watchlistCustomPageShowBound) {
+			watchlistCustomPageShowBound = true;
+			document.addEventListener('kefin:custompage-show', async (e) => {
+				const hrefPath = e.detail?.hrefPath;
+				if (!hrefPath) return;
+				const url = await window.KefinTweaksUtils.getWatchlistUrl();
+				const normalized = url && String(url).split('?')[0];
+				if (hrefPath === normalized || (url && hrefPath === url)) {
+					LOG('kefin:custompage-show: Watchlist');
+					renderWatchlist();
+				}
+			});
+		}
+
+		LOG('Registered custom page Watchlist');
+		return true;
+	}
+
+	async function addCustomMenuLink() {
+		LOG('Adding custom menu link for Watchlist');
+		if (!window.KefinTweaksUtils?.addCustomMenuLink) {
+			WARN('addCustomMenuLink not available');
+			return;
+		}
+
+		const watchlistCfg = window.KefinTweaksFeatureConfigs?.watchlist?.normalizeConfig?.(
+			window.KefinTweaksConfig?.watchlist
+		) || {
+			sideMenu: window.KefinTweaksConfig?.watchlist?.sideMenu !== false,
+			topNavigation: window.KefinTweaksConfig?.watchlist?.topNavigation === undefined ? 'main' : window.KefinTweaksConfig?.watchlist?.topNavigation,
+			userMenu: window.KefinTweaksConfig?.watchlist?.userMenu !== false,
+			order: window.KefinTweaksConfig?.watchlist?.order !== undefined ? window.KefinTweaksConfig?.watchlist?.order : 2
+		};
+
+		const watchlistUrl = await window.KefinTweaksUtils.getWatchlistUrl();
+		const isCustomTabUrl = watchlistUrl.includes('/home?tab=');
+
+		const options = {
+			sideMenu: isCustomTabUrl ? false : watchlistCfg.sideMenu !== false,
+			userMenu: watchlistCfg.userMenu === true,
+			topNavigation: isCustomTabUrl ? 'none' : watchlistCfg.topNavigation,
+			order: watchlistCfg.order
+		};
+
+		window.KefinTweaksUtils.addCustomMenuLink(
+			'Watchlist',
+			'bookmark',
+			watchlistUrl,
+			false,
+			options
+		);
+		LOG('Added Watchlist menu link (#/watchlist)');
+	}
+
+	function waitForUtilsAndRegisterWatchlist() {
+		const ready = () => {
+			if (!window.KefinTweaksUtils?.addCustomPage || !window.KefinTweaksUtils?.addCustomMenuLink || !window.KefinTweaksUtils?.onViewPage) {
+				return false;
+			}
+			return true;
+		};
+
+		const run = async () => {
+			if (window.userHelper?.waitForLogin) {
+				await window.userHelper.waitForLogin();
+			}
+			
+			await addCustomWatchlistPage();
+			await addCustomMenuLink();
+			await addWatchlistPageHandler();
+		};
+
+		if (ready()) {
+			run();
+			return;
+		}
+
+		LOG('Waiting for KefinTweaksUtils and ApiClient…');
+		const checkInterval = setInterval(() => {
+			if (ready()) {
+				clearInterval(checkInterval);
+				run();
+			}
+		}, 100);
+
+		setTimeout(() => {
+			clearInterval(checkInterval);
+			if (!ready()) {
+				WARN('KefinTweaksUtils/ApiClient not available after 10 seconds');
+			}
+		}, 10000);
+	}
+
+	waitForUtilsAndRegisterWatchlist();
 
 	// Initialize playback monitoring
 	initializePlaybackMonitoring();
 
 	/************ Watchlist Button Observer ************/
 
+	function bindWatchlistButton(button, itemId, itemType) {
+		if (!button || !itemId) return;
+		if (!button.getAttribute('data-id')) {
+			button.setAttribute('data-id', itemId);
+		}
+		if (button.dataset.watchlistBound === 'true') return;
+		button.dataset.watchlistBound = 'true';
+		button.addEventListener('click', async (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+
+			const newRating = button.dataset.active === 'false' ? 'true' : 'false';
+			await ApiClient.updateUserItemRating(ApiClient.getCurrentUserId(), itemId, newRating);
+			const isActive = newRating === 'true';
+			applyWatchlistButtonActiveState(button, isActive);
+			await updateWatchlistCacheOnToggle(itemId, itemType, isActive);
+		});
+	}
+
+	function bindSpotlightWatchlistButtons(root) {
+		const scope = root && root.nodeType === Node.ELEMENT_NODE ? root : document;
+		const buttons = new Set();
+		if (
+			scope.classList?.contains('watchlist-button') &&
+			scope.getAttribute('data-id') &&
+			(scope.classList.contains('spotlight-watchlist-button') || scope.closest?.('.spotlight-section'))
+		) {
+			buttons.add(scope);
+		}
+		scope.querySelectorAll?.(
+			'.spotlight-section .watchlist-button[data-id], .watchlist-button.spotlight-watchlist-button[data-id]'
+		)?.forEach((button) => buttons.add(button));
+
+		buttons.forEach((button) => {
+			const itemId = button.getAttribute('data-id');
+			if (!itemId) return;
+			const host = button.closest('[data-item-type], [data-type]');
+			const itemType =
+				button.getAttribute('data-type') ||
+				host?.getAttribute('data-item-type') ||
+				host?.getAttribute('data-type') ||
+				'';
+			bindWatchlistButton(button, itemId, itemType);
+		});
+	}
+
 	// Function to add watchlist button to a card overlay container
 	function addWatchlistButton(overlayContainer) {
-		// Check if watchlist button already exists
-		if (overlayContainer && overlayContainer.querySelector('.watchlist-button')) {
-			return;
-		}
-		
-		// Find the card parent to get the item ID
+		if (!overlayContainer) return;
+
 		const card = overlayContainer.closest('.card');
 		if (!card) {
 			WARN('Could not find card parent for overlay container');
 			return;
 		}
-		
+
 		const itemId = card.getAttribute('data-id');
 		if (!itemId) {
 			WARN('Could not find data-id on card element');
 			return;
 		}
-		
-		// Check if card has data-type attribute - if not, don't add watchlist button
+
 		const itemType = card.getAttribute('data-type');
 		if (!itemType) {
 			LOG('Card has no data-type, skipping watchlist button');
 			return;
 		}
-		
-		// Find the .cardOverlayButton-br container
+
+		if (!isWatchlistSupportedType(itemType)) {
+			return;
+		}
+
+		if (!ApiClient._loggedIn) {
+			LOG('User is not logged in, skipping watchlist button');
+			return;
+		}
+
 		const buttonContainer = overlayContainer.querySelector('.cardOverlayButton-br');
 		if (!buttonContainer) {
 			WARN('Could not find .cardOverlayButton-br container');
 			return;
 		}
-		
-		// Create watchlist button
-		const watchlistButton = document.createElement('button');
-		watchlistButton.type = 'button';
-		watchlistButton.className = 'watchlist-button cardOverlayButton cardOverlayButton-hover itemAction paper-icon-button-light emby-button button-flat';
-		watchlistButton.setAttribute('data-action', 'none');
-		watchlistButton.setAttribute('data-id', itemId);
-		watchlistButton.setAttribute('data-active', 'false');
-		watchlistButton.title = 'Add to Watchlist';
-		
-		// Create the bookmark icon
-		const watchlistIcon = document.createElement('span');
-		watchlistIcon.className = 'material-icons cardOverlayButtonIcon cardOverlayButtonIcon-hover watchlist';
-		watchlistIcon.setAttribute('aria-hidden', 'true');
-		
-		watchlistButton.appendChild(watchlistIcon);
-		
-		// Add click event listener
-		watchlistButton.addEventListener('click', async (e) => {
-			e.preventDefault();
-			e.stopPropagation();
-			
-			// Toggle watchlist status
-			const newRating = watchlistButton.dataset.active === 'false' ? 'true' : 'false';
-			await ApiClient.updateUserItemRating(ApiClient.getCurrentUserId(), itemId, newRating);
-			watchlistButton.dataset.active = newRating;
-			
-			// Update icon and title based on state
-			const isActive = watchlistButton.dataset.active === 'true';
-			// Icon state is handled by CSS class, no need to change textContent
-			watchlistButton.title = isActive ? 'Remove from Watchlist' : 'Add to Watchlist';
-			
-			// Update watchlist cache immediately
-			await updateWatchlistCacheOnToggle(itemId, itemType, isActive);
-		});
-		
-		// Check if item type is supported for watchlist
-		if (!SUPPORTED_WATCHLIST_ITEM_TYPES.includes(itemType)) {
-			return;
+
+		let watchlistButton = overlayContainer.querySelector('.watchlist-button');
+		const createdNew = !watchlistButton;
+
+		if (createdNew) {
+			watchlistButton = document.createElement('button');
+			watchlistButton.type = 'button';
+			watchlistButton.className = 'watchlist-button cardOverlayButton cardOverlayButton-hover itemAction paper-icon-button-light emby-button button-flat';
+			watchlistButton.setAttribute('data-action', 'none');
+			watchlistButton.setAttribute('data-id', itemId);
+
+			const watchlistIcon = document.createElement('span');
+			watchlistIcon.className = 'material-icons cardOverlayButtonIcon cardOverlayButtonIcon-hover watchlist';
+			watchlistIcon.setAttribute('aria-hidden', 'true');
+			watchlistButton.appendChild(watchlistIcon);
+
+			const playStateButton = buttonContainer.querySelector('button[is="emby-playstatebutton"]')
+				|| buttonContainer.querySelector('button:has([data-testid="CheckIcon"])');
+			if (playStateButton) {
+				buttonContainer.insertBefore(watchlistButton, playStateButton);
+			} else {
+				buttonContainer.appendChild(watchlistButton);
+			}
+		} else {
+			watchlistButton.setAttribute('data-id', itemId);
 		}
 
-        if (!ApiClient._loggedIn) {
-			LOG('User is not logged in, skipping watchlist button');
-			return;
+		// Prefer liked-Id cache once loaded; until then keep cardBuilder UserData.Likes state
+		if (watchlistLikedIdsLoaded || createdNew) {
+			applyWatchlistButtonActiveState(watchlistButton, isItemInLikedIdCache(itemId));
 		}
-		
-		// Check item's current watchlist status from cache only (no server fetch)
-		// Map itemType to section name
-		let sectionName;
-		sectionName = watchlistCacheTypeMap[itemType];
-		if (!sectionName) {
-			LOG('Unknown item type for cache update:', itemType);
-			return;
-		}
-		
-		if (sectionName) {
-			// First check in-memory cache
-			let isInWatchlist = false;
-			if (watchlistCache[sectionName] && watchlistCache[sectionName].data) {
-				isInWatchlist = watchlistCache[sectionName].data.some(item => item.Id === itemId);
-			}
-			
-			// If not in memory cache, check localStorage cache
-			if (!isInWatchlist) {
-				const cachedData = localStorageCache.get(`watchlist_${sectionName}`);
-				if (cachedData && Array.isArray(cachedData)) {
-					isInWatchlist = cachedData.some(item => item.Id === itemId);
-				}
-			}
-			
-			// Set button state if item is in watchlist
-			if (isInWatchlist) {
-				watchlistButton.dataset.active = 'true';
-				watchlistButton.title = 'Remove from Watchlist';
-			}
-		}
-		
-		// Add the watchlist button to the button container, right before the play state button if it exists
-		const playStateButton = buttonContainer.querySelector('button[is="emby-playstatebutton"]');
-		if (playStateButton) {
-			buttonContainer.insertBefore(watchlistButton, playStateButton);
-		} else {
-			buttonContainer.appendChild(watchlistButton);
-		}
+
+		bindWatchlistButton(watchlistButton, itemId, itemType);
 	}
 
 	// Function to process all existing overlay containers
@@ -7392,137 +7859,174 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 				addWatchlistButton(overlayContainer);
 			}
 		});
+		bindSpotlightWatchlistButtons(document);
 	}
 
-	// Set up MutationObserver to watch for new overlay containers
+	function processWatchlistOverlaysInRoot(root) {
+		if (!root || root.nodeType !== Node.ELEMENT_NODE) return;
+		bindSpotlightWatchlistButtons(root);
+		if (root.classList?.contains('cardOverlayContainer')) {
+			const buttonContainer = root.querySelector('.cardOverlayButton-br');
+			if (buttonContainer) addWatchlistButton(root);
+			return;
+		}
+		const overlayContainers = root.querySelectorAll?.('.cardOverlayContainer');
+		if (!overlayContainers?.length) return;
+		overlayContainers.forEach((overlayContainer) => {
+			const buttonContainer = overlayContainer.querySelector('.cardOverlayButton-br');
+			if (buttonContainer) addWatchlistButton(overlayContainer);
+		});
+	}
+	
 	function setupWatchlistButtonObserver() {
-		const observer = new MutationObserver((mutations) => {
-			mutations.forEach((mutation) => {
-				if (mutation.type === 'childList') {
-					// Check for added nodes
-					mutation.addedNodes.forEach((node) => {
-						if (node.nodeType === Node.ELEMENT_NODE) {
-							// Check if the added node is an overlay container
-							if (node.classList && node.classList.contains('cardOverlayContainer')) {
-								const buttonContainer = node.querySelector('.cardOverlayButton-br');
-								if (buttonContainer) {
-									addWatchlistButton(node);
-								}
-							}
-							
-							// Check for overlay containers within the added node
-							const overlayContainers = node.querySelectorAll && node.querySelectorAll('.cardOverlayContainer');
-							if (overlayContainers && overlayContainers.length > 0) {
-								overlayContainers.forEach((overlayContainer) => {
-									const buttonContainer = overlayContainer.querySelector('.cardOverlayButton-br');
-									if (buttonContainer) {
-										addWatchlistButton(overlayContainer);
-									}
-								});
-							}
-						}
-					});
+		/** @type {WeakMap<Element, MutationObserver>} */
+		const itemsContainerObservers = new WeakMap();
+		/** @type {WeakSet<Element>} */
+		const observedContainers = new WeakSet();
+
+		function attachItemsContainerObserver(itemsContainer) {
+			if (!itemsContainer || observedContainers.has(itemsContainer)) return;
+			observedContainers.add(itemsContainer);
+
+			const shallow = new MutationObserver((mutations) => {
+				for (const mutation of mutations) {
+					for (const node of mutation.addedNodes) {
+						if (node.nodeType !== Node.ELEMENT_NODE) continue;
+						processWatchlistOverlaysInRoot(node);
+					}
 				}
 			});
-		});
-		
-		// Start observing
-		observer.observe(document.body, {
-			childList: true,
-			subtree: true
-		});
-		
-		// Process any existing overlay containers
+			shallow.observe(itemsContainer, { childList: true, subtree: false });
+			itemsContainerObservers.set(itemsContainer, shallow);
+			processWatchlistOverlaysInRoot(itemsContainer);
+		}
+
+		function discoverItemsContainers(root) {
+			if (!root || root.nodeType !== Node.ELEMENT_NODE) return;
+			if (root.classList?.contains('itemsContainer')) {
+				attachItemsContainerObserver(root);
+			}
+			root.querySelectorAll?.('.itemsContainer').forEach(attachItemsContainerObserver);
+		}
+
+		function onDiscoveryMutations(mutations) {
+			for (const mutation of mutations) {
+				for (const node of mutation.addedNodes) {
+					if (node.nodeType !== Node.ELEMENT_NODE) continue;
+					bindSpotlightWatchlistButtons(node);
+					// Skip deep card-internal inserts (handled by shallow itemsContainer observers)
+					if (node.closest?.('.card') && !node.classList?.contains('itemsContainer')) {
+						continue;
+					}
+					discoverItemsContainers(node);
+				}
+			}
+		}
+
+		const utils = window.KefinTweaksUtils;
+		if (utils?.onBodyMutation) {
+			utils.onBodyMutation('watchlist-overlay-discovery', onDiscoveryMutations);
+		} else if (typeof MutationObserver !== 'undefined' && document.body) {
+			const discoveryObserver = new MutationObserver(onDiscoveryMutations);
+			discoveryObserver.observe(document.body, { childList: true, subtree: true });
+		}
+
+		discoverItemsContainers(document.body);
 		processExistingOverlayContainers();
 	}
 
 	// Initialize the observer
 	setupWatchlistButtonObserver();
 
+	// Hydrate liked-Id cache from localStorage; network refresh after settle + 5s
+	scheduleWatchlistLikedIdsBaseline();
+
+	// Expose helpers so cardBuilder can keep overlay buttons / Set aligned on UserData.Likes
+	window.KefinWatchlistLikedIds = {
+		has: isItemInLikedIdCache,
+		set: setLikedIdInCache,
+		syncOverlayButtons: syncOverlayWatchlistButtons,
+		bindWatchlistButton,
+		isSupportedType: isWatchlistSupportedType
+	};
+
 	/************ Item Detail Page Observer ************/
 
-	// Function to add watchlist button to item detail page
+	// Function to add watchlist button to item detail page.
+	// Visibility vs native Play is gated in watchlist.css via :has(.btnPlay:not(.hide)).
 	function addDetailPageWatchlistButton(item = null) {
 		const trailerButton = document.querySelector('.itemDetailPage:not(.hide) .btnPlayTrailer');
-		
 		if (!trailerButton) {
 			return;
 		}
-		
+
 		// Check if watchlist button already exists
 		const existingButton = document.querySelector('.itemDetailPage:not(.hide) .watchlist-icon');
 		if (existingButton) {
 			return;
 		}
 
-		const isTVLayout = document.getRootNode().documentElement.className.includes('layout-tv')
-		
+		const isTVLayout = document.getRootNode().documentElement.className.includes('layout-tv');
+
 		const watchlistIcon = document.createElement('button');
-		watchlistIcon.setAttribute("is", "emby-button");
-		watchlistIcon.className = `watchlist-icon detailButton emby-button button-flat${isTVLayout ? ' show-focus' : ''}`;	
-		watchlistIcon.title = "Add to Watchlist";
+		watchlistIcon.setAttribute('is', 'emby-button');
+		watchlistIcon.className = `watchlist-icon detailButton emby-button button-flat${isTVLayout ? ' show-focus' : ''}`;
+		watchlistIcon.title = 'Add to Watchlist';
 		watchlistIcon.dataset.active = 'false';
-		
-		// Add the content wrapper and icon span inside the button
+
 		const contentWrapper = document.createElement('div');
 		contentWrapper.className = 'detailButton-content';
-		
+
 		const iconSpan = document.createElement('span');
 		iconSpan.className = 'material-icons detailButton-icon watchlist';
 		iconSpan.setAttribute('aria-hidden', 'true');
-		
+
 		contentWrapper.appendChild(iconSpan);
 		watchlistIcon.appendChild(contentWrapper);
-		
-		// Get item ID from URL
-		const itemId = window.location.href.substring(window.location.href.indexOf("id=") + 3, window.location.href.indexOf("id=") + 35);
-		
+
+		const itemId = item?.Id
+			|| window.location.href.substring(window.location.href.indexOf('id=') + 3, window.location.href.indexOf('id=') + 35);
+
 		watchlistIcon.addEventListener('click', async () => {
 			const newRating = watchlistIcon.dataset.active === 'false' ? 'true' : 'false';
 			await ApiClient.updateUserItemRating(ApiClient.getCurrentUserId(), itemId, newRating);
 			watchlistIcon.dataset.active = newRating;
-			
-			// Update title based on state
+
 			const isActive = watchlistIcon.dataset.active === 'true';
 			watchlistIcon.title = isActive ? 'Remove from Watchlist' : 'Add to Watchlist';
-			
-			// Update watchlist cache immediately
-			// Get item type from the item data we already have
-			const item = await ApiClient.getItem(ApiClient.getCurrentUserId(), itemId);
-			if (item) {
-				await updateWatchlistCacheOnToggle(itemId, item.Type, isActive);
+
+			const toggledItem = await ApiClient.getItem(ApiClient.getCurrentUserId(), itemId);
+			if (toggledItem) {
+				await updateWatchlistCacheOnToggle(itemId, toggledItem.Type, isActive);
 			}
-		});	
-		
-		if (item) {
-			// Set initial state based on current watchlist status
-			if (item.UserData && item.UserData.Likes) {
+		});
+
+		const applyItemState = (resolvedItem) => {
+			if (!resolvedItem) return;
+			if (resolvedItem.Type !== 'Movie' && resolvedItem.Type !== 'Series' && resolvedItem.Type !== 'Season'
+				&& resolvedItem.Type !== 'Episode' && resolvedItem.Type !== 'BoxSet'
+				&& resolvedItem.Type !== 'Playlist' && resolvedItem.Type !== 'Video') {
+				watchlistIcon.style.display = 'none';
+				return;
+			}
+			if (resolvedItem.UserData && resolvedItem.UserData.Played) {
+				watchlistIcon.style.display = 'none';
+				return;
+			}
+			if (resolvedItem.UserData && resolvedItem.UserData.Likes) {
 				watchlistIcon.dataset.active = 'true';
 				watchlistIcon.title = 'Remove from Watchlist';
 			}
-		} else {
-			// Get item data to check if it should be shown and current state
-			ApiClient.getItem(ApiClient.getCurrentUserId(), itemId).then((item) => {
-				// Only show for Movies, Series, Seasons, and Episodes
-				if (item.Type !== "Movie" && item.Type !== "Series" && item.Type !== "Season" && item.Type !== "Episode") {
-					watchlistIcon.style.display = "none";
-				}
+		};
 
-				if (item.UserData && item.UserData.Played) {
-					watchlistIcon.style.display = "none";
-				}
-				
-				// Set initial state based on current watchlist status
-				if (item.UserData && item.UserData.Likes) {
-					watchlistIcon.dataset.active = 'true';
-					watchlistIcon.title = 'Remove from Watchlist';
-				}
-			}).catch(err => {
+		if (item) {
+			applyItemState(item);
+		} else {
+			ApiClient.getItem(ApiClient.getCurrentUserId(), itemId).then(applyItemState).catch((err) => {
 				ERR('Error fetching item data:', err);
 			});
 		}
 
-		// Add button after trailer button
 		trailerButton.after(watchlistIcon);
 	}
 
@@ -7537,32 +8041,35 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		LOG('Registering item detail page handler with KefinTweaksUtils');
 
 		window.KefinTweaksUtils.onViewPage(async (view, element, hash, itemPromise) => {
-			// Await the item promise to get the actual item data
 			const item = await itemPromise;
-			
-			// Small delay to ensure details DOM is ready
-			setTimeout(() => {
-				const visibleItemDetailPage = document.querySelector('.itemDetailPage:not(.hide)');
-				if (!visibleItemDetailPage) {
-					return;
-				}
+			const visibleItemDetailPage = document.querySelector('.itemDetailPage:not(.hide)');
+			if (!visibleItemDetailPage) {
+				return;
+			}
 
-				if (visibleItemDetailPage.dataset.watchlistButtonAdded === 'true') {
-					return;
-				}
-				
-				// Check if watchlist button already exists
-				const existingButton = document.querySelector('.itemDetailPage:not(.hide) .watchlist-icon');
-				if (existingButton) {
-					return;
-				}
+			const itemId = item?.Id || '';
+			if (itemId && visibleItemDetailPage.dataset.watchlistButtonAdded === itemId) {
+				return;
+			}
+			if (!itemId && visibleItemDetailPage.dataset.watchlistButtonAdded === 'true') {
+				return;
+			}
 
-				// Check if item is provided and if item type is supported for watchlist
-				if (item && (item.Type === "Movie" || item.Type === "Series" || item.Type === "Season" || item.Type === "Episode")) {
-					visibleItemDetailPage.dataset.watchlistButtonAdded = 'true';
-					addDetailPageWatchlistButton(item);
-				}
-			}, 100);
+			const existingButton = document.querySelector('.itemDetailPage:not(.hide) .watchlist-icon');
+			if (existingButton && itemId && existingButton.dataset.itemId === itemId) {
+				return;
+			}
+			if (existingButton && itemId && existingButton.dataset.itemId !== itemId) {
+				existingButton.remove();
+			}
+
+			if (item && (item.Type === 'Movie' || item.Type === 'Series' || item.Type === 'Season'
+				|| item.Type === 'Episode' || item.Type === 'BoxSet' || item.Type === 'Playlist' || item.Type === 'Video')) {
+				visibleItemDetailPage.dataset.watchlistButtonAdded = itemId || 'true';
+				await addDetailPageWatchlistButton(item);
+				const btn = document.querySelector('.itemDetailPage:not(.hide) .watchlist-icon');
+				if (btn && itemId) btn.dataset.itemId = itemId;
+			}
 		}, {
 			pages: ['details']
 		});
@@ -7658,72 +8165,57 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 
 	// Function to monitor slides container for MediaBar Plugin
 	function monitorSlidesContainer() {
-		const observer = new MutationObserver((mutations) => {
-			mutations.forEach((mutation) => {
-				if (mutation.type === 'childList') {
-					// Check for added nodes
-					mutation.addedNodes.forEach((node) => {
-						if (node.nodeType === Node.ELEMENT_NODE) {
-							// Check if the added node is a slide
-							if (node.classList && node.classList.contains('slide')) {
-								addSlideWatchlistButton(node);
-							}
-
-							// Check for slides within the added node
-							const slides = node.querySelectorAll && node.querySelectorAll('.slide');
-							if (slides && slides.length > 0) {
-								slides.forEach((slide) => {
-									addSlideWatchlistButton(slide);
-								});
-							}
-						}
+		const slidesObserver = new MutationObserver((mutations) => {
+			for (const mutation of mutations) {
+				if (mutation.type !== 'childList') continue;
+				for (const node of mutation.addedNodes) {
+					if (node.nodeType !== Node.ELEMENT_NODE) continue;
+					if (node.classList?.contains('slide')) {
+						addSlideWatchlistButton(node);
+					}
+					node.querySelectorAll?.('.slide')?.forEach((slide) => {
+						addSlideWatchlistButton(slide);
 					});
 				}
-			});
+			}
 		});
 
-		// Check if slides container already exists
-		const slidesContainer = document.querySelector('#slides-container');
-		if (slidesContainer) {
-			// Process existing slides
-			const existingSlides = slidesContainer.querySelectorAll('.slide');
-			existingSlides.forEach((slide) => {
+		function bindSlidesContainer(slidesContainer) {
+			if (!slidesContainer) return;
+			slidesContainer.querySelectorAll('.slide').forEach((slide) => {
 				addSlideWatchlistButton(slide);
 			});
-
-			// Start observing the slides container
-			observer.observe(slidesContainer, {
+			slidesObserver.observe(slidesContainer, {
 				childList: true,
 				subtree: true
 			});
 		}
 
-		// Also watch for slides container to be added
-		const containerObserver = new MutationObserver(() => {
-			const slidesContainer = document.querySelector('#slides-container');
-			if (slidesContainer) {
-				// Process existing slides
-				const existingSlides = slidesContainer.querySelectorAll('.slide');
-				existingSlides.forEach((slide) => {
-					addSlideWatchlistButton(slide);
-				});
+		const existing = document.querySelector('#slides-container');
+		if (existing) {
+			bindSlidesContainer(existing);
+			return;
+		}
 
-				// Start observing the slides container
-				observer.observe(slidesContainer, {
-					childList: true,
-					subtree: true
-				});
+		const utils = window.KefinTweaksUtils;
+		if (utils?.waitForElement) {
+			utils.waitForElement('#slides-container', { timeout: 60000, quiet: true }).then((el) => {
+				bindSlidesContainer(el);
+			});
+			return;
+		}
 
-				// Disconnect the container observer since we've found it
-				containerObserver.disconnect();
+		// Fallback: short TTL poll if shared wait helper unavailable
+		const start = Date.now();
+		const pollId = setInterval(() => {
+			const el = document.querySelector('#slides-container');
+			if (el) {
+				clearInterval(pollId);
+				bindSlidesContainer(el);
+			} else if (Date.now() - start > 60000) {
+				clearInterval(pollId);
 			}
-		});
-
-		// Start observing the entire document body for the slides container
-		containerObserver.observe(document.body, {
-			childList: true,
-			subtree: true
-		});
+		}, 250);
 	}
 
 	// Initialize the slides container observer
@@ -7750,23 +8242,21 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
             return;
         }
         
-        const containers = [
-            { name: 'Movies', el: watchlistSection.querySelector('.watchlist-movies') },
-            { name: 'Series', el: watchlistSection.querySelector('.watchlist-series') },
-            { name: 'Seasons', el: watchlistSection.querySelector('.watchlist-seasons') },
-            { name: 'Episodes', el: watchlistSection.querySelector('.watchlist-episodes') }
-        ];
-        
-        containers.forEach(({ name, el }) => {
-            if (el) {
-                const dataIds = Array.from(el.querySelectorAll('[data-id]'))
-                    .map(card => card.getAttribute('data-id'))
-                    .sort();
-                const childCount = el.children.length;
-                LOG(`${name}: ${childCount} children, data-ids=[${dataIds.join(', ')}]`);
-            } else {
-                LOG(`${name}: container not found`);
-            }
+        const host = watchlistSection.querySelector('.watchlist-progressive-results');
+        if (!host) {
+            LOG('Progressive host not found');
+            return;
+        }
+        const sections = host.querySelectorAll('.emby-scroller-container, .custom-scroller-container, [data-section-id]');
+        LOG(`Progressive host has ${host.children.length} children / ${sections.length} sections`);
+        sections.forEach((el, index) => {
+            const dataIds = Array.from(el.querySelectorAll('[data-id]'))
+                .map(card => card.getAttribute('data-id'))
+                .sort();
+            LOG(`Section ${index} (${el.getAttribute('data-section-id') || el.className}): ${dataIds.length} cards, data-ids=[${dataIds.join(', ')}]`);
+        });
+        WATCHLIST_SECTION_TYPES.forEach(({ type, label }) => {
+            LOG(`${label} index: ${(watchlistItemsByType[type] || []).length} items`);
         });
     };
 
@@ -7795,7 +8285,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
         const token = apiClient.accessToken();
         
         const url = `${serverUrl}/Items?IncludeItemTypes=Series&UserId=${userId}&Recursive=true&Fields=UserData,RecursiveItemCount`;
-        const res = await fetch(url, { headers: { "Authorization": apiHelper.getAuthHeader() } });
+        const res = await fetch(url, { headers: { "Authorization": window.apiHelper.getAuthHeader() } });
         const data = await res.json();
         const series = data.Items || [];
         
@@ -7823,7 +8313,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
         const token = apiClient.accessToken();
         
         fetch(`${serverUrl}/Items?IncludeItemTypes=Series&UserId=${userId}&Recursive=true&Fields=UserData,ChildCount,RecursiveItemCount`, { 
-            headers: { "Authorization": apiHelper.getAuthHeader() } 
+            headers: { "Authorization": window.apiHelper.getAuthHeader() } 
         })
         .then(res => res.json())
         .then(data => {
@@ -8009,3 +8499,4 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 
     LOG('Initialized successfully');
 })();
+

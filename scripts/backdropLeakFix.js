@@ -9,15 +9,11 @@
     
     LOG('Script loaded - JS Injector mode');
 
-    // Step 1: watch for .backdropContainer to appear
-    const waitForContainer = new MutationObserver(() => {
-        const container = document.querySelector('.backdropContainer');
-        if (!container) return;
+    function attachPruneObserver(container) {
+        if (!container || container.dataset.kefinBackdropPrune === 'true') return;
+        container.dataset.kefinBackdropPrune = 'true';
 
         LOG('Found .backdropContainer, attaching prune observer');
-        waitForContainer.disconnect();
-
-        // Step 2: prune children as needed
         const pruneObserver = new MutationObserver(() => {
             LOG('Mutation detected, checking children count:', container.children.length);
             while (container.children.length > 2) {
@@ -25,16 +21,35 @@
                 container.removeChild(container.firstElementChild);
             }
         });
-
         pruneObserver.observe(container, { childList: true });
         LOG('Prune observer is now active');
-    });
+    }
 
-    waitForContainer.observe(document.body, {
-        childList: true,
-        subtree: true
-    });
+    function startWait() {
+        const utils = window.KefinTweaksUtils;
+        const existing = document.querySelector('.backdropContainer');
+        if (existing) {
+            attachPruneObserver(existing);
+            return;
+        }
 
+        if (utils?.waitForElement) {
+            utils.waitForElement('.backdropContainer', { timeout: 60000, quiet: true }).then((container) => {
+                if (container) attachPruneObserver(container);
+                else WARN_MISSING();
+            });
+            return;
+        }
+
+        // Fallback if utils not ready yet
+        setTimeout(startWait, 500);
+    }
+
+    function WARN_MISSING() {
+        console.warn('[KefinTweaks BackdropLeakFix] .backdropContainer not found within timeout');
+    }
+
+    startWait();
     LOG('Waiting for .backdropContainer to appear...');
     LOG('Backdrop leak fix functionality initialized');
 })();

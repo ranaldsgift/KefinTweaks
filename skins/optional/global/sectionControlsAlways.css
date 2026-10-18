@@ -1,0 +1,11 @@
+/* Kept for compatibility; fade reveal is handled in cardBuilder.css. */
+button.show-all-button,
+.section-refresh-button,
+.section-configure-button,
+button.show-all-button,
+.section-refresh-button,
+.section-configure-button {
+	opacity: 0.65;
+	visibility: visible;
+	pointer-events: auto;
+}

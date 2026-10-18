@@ -22,9 +22,9 @@
         { key: 'directedByTopDirector', label: 'Directed by [Top Director]', defaultName: 'Directed by [Director]' },
         { key: 'writtenByTopWriter', label: 'Written by [Top Writer]', defaultName: 'Written by [Writer]' },
         { key: 'becauseYouRecentlyWatched', label: 'Because you recently watched [Movie]', defaultName: 'Because you recently watched [Movie]' },
-        { key: 'starringActorRecentlyWatched', label: 'Starring [Actor] because you recently watched [Movie]', defaultName: 'Starring [Actor] because you recently watched [Movie]' },
-        { key: 'directedByDirectorRecentlyWatched', label: 'Directed by [Director] because you recently watched [Movie]', defaultName: 'Directed by [Director] because you recently watched [Movie]' },
-        { key: 'writtenByWriterRecentlyWatched', label: 'Written by [Writer] because you recently watched [Movie]', defaultName: 'Written by [Writer] because you recently watched [Movie]' }
+        { key: 'starringActorRecentlyWatched', label: 'Starring [Person]', defaultName: 'Starring {Person}', extras: { caption: 'because you recently watched {Title}' } },
+        { key: 'directedByDirectorRecentlyWatched', label: 'Directed by [Person]', defaultName: 'Directed by {Person}', extras: { caption: 'because you recently watched {Title}' } },
+        { key: 'writtenByWriterRecentlyWatched', label: 'Written by [Person]', defaultName: 'Written by {Person}', extras: { caption: 'because you recently watched {Title}' } }
     ];
 
     const SUPPORTED_CUSTOM_SECTION_PARAMS = {
@@ -145,55 +145,67 @@
         });
     }
 
+    // Migrate legacy homeScreen config to new homeScreenConfig format
+    async function migrateLegacyHomeScreenConfig() {
+        return await window.migrateHomeScreenConfig();
+    }
+
     // Get KefinTweaks configuration from JS Injector or load defaults
     async function getKefinTweaksConfig() {
         try {
+            await migrateLegacyHomeScreenConfig();
             // First, try to get config from JS Injector
-            const pluginId = await findJavaScriptInjectorPlugin();
+/*             const pluginId = await findJavaScriptInjectorPlugin();
             const injectorConfig = await getJavaScriptInjectorConfig(pluginId);
             
             // Find KefinTweaks-Config script
             const kefinTweaksScript = injectorConfig.CustomJavaScripts?.find(
                 script => script.Name === 'KefinTweaks-Config'
-            );
+            ); */
             
-            if (kefinTweaksScript && kefinTweaksScript.Script) {
+/*             if (kefinTweaksScript && kefinTweaksScript.Script) {
                 // Extract config from script content
                 // The script should contain: window.KefinTweaksConfig = {...};
                 const scriptMatch = kefinTweaksScript.Script.match(/window\.KefinTweaksConfig\s*=\s*({[\s\S]*});/);
                 if (scriptMatch && scriptMatch[1]) {
                     try {
-                        const config = JSON.parse(scriptMatch[1]);
+                        let config = JSON.parse(scriptMatch[1]);
                         // Store enabled state globally for use in modal (defaults to true if not set)
                         window.KefinTweaksConfigEnabled = config.enabled !== false;
                         console.log('[KefinTweaks Configuration] Loaded config from JS Injector:', config);
+                        
+                        // Run migration if needed
+                        config = await migrateLegacyHomeScreenConfig();
+                        
                         return config;
                     } catch (parseError) {
                         console.error('[KefinTweaks Configuration] Error parsing config from script:', parseError);
                     }
                 }
-        }
+            } */
 
             // If no config found in JS Injector, load defaults
-            console.log('[KefinTweaks Configuration] No config found in JS Injector, loading defaults');
-        const rawDefaultConfig = await loadDefaultConfig();
-        const defaultConfig = JSON.parse(JSON.stringify(rawDefaultConfig));
+/*             console.log('[KefinTweaks Configuration] No config found in JS Injector, loading defaults');
+            const rawDefaultConfig = await loadDefaultConfig();
+            const defaultConfig = JSON.parse(JSON.stringify(rawDefaultConfig));
 
-        const currentConfigSource = currentLoadedConfig || window.KefinTweaksCurrentConfig || window.KefinTweaksConfig || {};
-        const currentKefinRoot = currentConfigSource.kefinTweaksRoot || defaultConfig.kefinTweaksRoot;
-        defaultConfig.kefinTweaksRoot = currentKefinRoot;
-        // Ensure enabled field is set (defaults to true if not present)
-        if (defaultConfig.enabled === undefined) {
-            defaultConfig.enabled = true;
-        }
-        // Store enabled state globally for use in modal
-        window.KefinTweaksConfigEnabled = defaultConfig.enabled !== false;
-        // Note: scriptRoot is no longer used - scripts are loaded from kefinTweaksRoot + '/scripts/'
+            const currentConfigSource = currentLoadedConfig || window.KefinTweaksCurrentConfig || window.KefinTweaksConfig || {};
+            const currentKefinRoot = currentConfigSource.kefinTweaksRoot || defaultConfig.kefinTweaksRoot;
+            defaultConfig.kefinTweaksRoot = currentKefinRoot;
+            // Ensure enabled field is set (defaults to true if not present)
+            if (defaultConfig.enabled === undefined) {
+                defaultConfig.enabled = true;
+            }
+            // Store enabled state globally for use in modal
+            window.KefinTweaksConfigEnabled = defaultConfig.enabled !== false;
 
-            // Save defaults to JS Injector for future use
-            await KefinTweaksUtils.saveConfigToJavaScriptInjector(defaultConfig);
+            // Run migration if needed
+            const migratedConfig = await migrateLegacyHomeScreenConfig(defaultConfig);
             
-            return defaultConfig;
+            // Save migrated config to JS Injector for future use
+            await saveConfigToJavaScriptInjector(migratedConfig); */
+            
+            return window.KefinTweaksConfig;
         } catch (error) {
             console.error('[KefinTweaks Configuration] Error getting config, falling back to defaults:', error);
             // Fallback to defaults if anything fails
@@ -206,7 +218,6 @@
                     kefinTweaksRoot: '',
                     scripts: {},
                     homeScreen: {},
-                    exclusiveElsewhere: {},
                     search: {},
                     skins: [],
                     defaultSkin: null,
@@ -217,6 +228,432 @@
         }
     }
 
+    // Import/Export Logic
+    async function showExportDialog(config) {
+        const customSections = config.homeScreen?.customSections || [];
+        const seasonalSeasons = config.homeScreen?.seasonal?.seasons || [];
+        
+        if (customSections.length === 0 && seasonalSeasons.length === 0) {
+            alert('No custom sections or seasonal configurations found to export.');
+            return;
+        }
+
+        const content = document.createElement('div');
+        content.innerHTML = `
+            <div class="content-primary">
+                <div class="listItemBodyText" style="margin-bottom: 1em;">Select sections to export:</div>
+                
+                ${customSections.length > 0 ? `
+                <div style="margin-bottom: 1.5em;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5em;">
+                        <h3 class="listItemBodyText" style="margin: 0;">Custom Sections</h3>
+                        <div>
+                            <button type="button" class="emby-button" onclick="this.closest('.content-primary').querySelectorAll('.export-custom-check').forEach(c => c.checked = true)" style="font-size: 0.9em;">Select All</button>
+                            <button type="button" class="emby-button" onclick="this.closest('.content-primary').querySelectorAll('.export-custom-check').forEach(c => c.checked = false)" style="font-size: 0.9em;">Deselect All</button>
+                        </div>
+                    </div>
+                    <div style="background: rgba(0,0,0,0.2); border-radius: 4px; padding: 0.5em;">
+                        ${customSections.map((section, i) => `
+                            <label class="checkboxContainer" style="display: flex; align-items: center; padding: 0.5em;">
+                                <input type="checkbox" class="export-custom-check" data-index="${i}" checked>
+                                <span class="listItemBodyText" style="margin-left: 0.5em;">${section.name || 'Unnamed Section'}</span>
+                            </label>
+                        `).join('')}
+                    </div>
+                </div>` : ''}
+
+                ${seasonalSeasons.length > 0 ? `
+                <div style="margin-bottom: 1.5em;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5em;">
+                        <h3 class="listItemBodyText" style="margin: 0;">Seasonal Seasons</h3>
+                        <div>
+                            <button type="button" class="emby-button" onclick="this.closest('.content-primary').querySelectorAll('.export-seasonal-check').forEach(c => c.checked = true)" style="font-size: 0.9em;">Select All</button>
+                            <button type="button" class="emby-button" onclick="this.closest('.content-primary').querySelectorAll('.export-seasonal-check').forEach(c => c.checked = false)" style="font-size: 0.9em;">Deselect All</button>
+                        </div>
+                    </div>
+                    <div style="background: rgba(0,0,0,0.2); border-radius: 4px; padding: 0.5em;">
+                        ${seasonalSeasons.map((season, i) => `
+                            <label class="checkboxContainer" style="display: flex; align-items: center; padding: 0.5em;">
+                                <input type="checkbox" class="export-seasonal-check" data-index="${i}" checked>
+                                <span class="listItemBodyText" style="margin-left: 0.5em;">${season.name || 'Unnamed Season'}</span>
+                            </label>
+                        `).join('')}
+                    </div>
+                </div>` : ''}
+                
+                <div id="exportOutputContainer" style="display: none; margin-top: 1.5em;">
+                    <div class="listItemBodyText" style="margin-bottom: 0.5em;">Export JSON:</div>
+                    <textarea id="exportOutput" class="fld emby-textarea" readonly style="width: 100%; height: 200px; font-family: monospace;"></textarea>
+                    <div style="display: flex; gap: 1em; margin-top: 0.5em;">
+                        <button type="button" class="emby-button raised" id="copyExportBtn">Copy to Clipboard</button>
+                        <button type="button" class="emby-button raised" id="downloadExportBtn">Download .json</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        const footer = document.createElement('div');
+        footer.style.display = 'flex';
+        footer.style.gap = '0.75em';
+        footer.innerHTML = `
+            <button class="emby-button raised button-submit" id="generateExportBtn" style="padding: 0.75em 2em;">Generate JSON</button>
+            <button class="emby-button raised" onclick="window.ModalSystem.close('kefinTweaksExportModal')">Close</button>
+        `;
+
+        window.ModalSystem.create({
+            id: 'kefinTweaksExportModal',
+            title: 'Export Custom Sections',
+            content: content,
+            footer: footer,
+            closeOnBackdrop: true,
+            closeOnEscape: true,
+            onOpen: (modalInstance) => {
+                const generateBtn = modalInstance.dialogFooter.querySelector('#generateExportBtn');
+                generateBtn.addEventListener('click', () => {
+                    const selectedCustomIndices = Array.from(content.querySelectorAll('.export-custom-check:checked')).map(c => parseInt(c.dataset.index));
+                    const selectedSeasonalIndices = Array.from(content.querySelectorAll('.export-seasonal-check:checked')).map(c => parseInt(c.dataset.index));
+                    
+                    if (selectedCustomIndices.length === 0 && selectedSeasonalIndices.length === 0) {
+                        alert('Please select at least one item to export.');
+                        return;
+                    }
+
+                    const exportData = {
+                        meta: {
+                            version: '1.0',
+                            date: new Date().toISOString(),
+                            source: 'KefinTweaks'
+                        },
+                        customSections: selectedCustomIndices.map(i => customSections[i]),
+                        seasonalSeasons: selectedSeasonalIndices.map(i => seasonalSeasons[i])
+                    };
+
+                    const json = JSON.stringify(exportData, null, 2);
+                    const outputContainer = content.querySelector('#exportOutputContainer');
+                    const output = content.querySelector('#exportOutput');
+                    
+                    output.value = json;
+                    outputContainer.style.display = 'block';
+                    generateBtn.style.display = 'none';
+                    
+                    content.querySelector('#copyExportBtn').addEventListener('click', () => {
+                        output.select();
+                        document.execCommand('copy');
+                        if (window.KefinTweaksToaster && window.KefinTweaksToaster.toast) {
+                            window.KefinTweaksToaster.toast('Copied to clipboard');
+                        }
+                    });
+                    
+                    content.querySelector('#downloadExportBtn').addEventListener('click', () => {
+                        const blob = new Blob([json], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `kefin-tweaks-export-${new Date().toISOString().slice(0,10)}.json`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    });
+                });
+            }
+        });
+    }
+
+
+    async function showCommunityImportDialog(config, saveConfigCallback) {
+        // Ensure community config is available
+        if (!window.KefinCommunityConfig) {
+            alert('Community configuration not loaded. Please ensure homeScreenConfig-community.js is loaded.');
+            return;
+        }
+
+        const communityCollections = window.KefinCommunityConfig.collections || [];
+        
+        const content = document.createElement('div');
+        content.innerHTML = `
+            <div class="content-primary">
+                <div class="listItemBodyText" style="margin-bottom: 1em;">Select Home Screen Sections to import:</div>
+                <div class="listItemBodyText" style="margin-bottom: 1em;">These sections are created and submitted by community members like you!</div>
+                <div class="listItemBodyText secondary" style="margin-bottom: 1.5em;">Submit your own Home Screen Sections <a href="https://github.com/ranaldsgift/KefinTweaks/discussions/64" target="_blank" class="button-link">here.</a></div>
+                
+                <div style="margin-bottom: 1.5em;">
+                    <select id="communityCollectionSelect" class="emby-select-withcolor emby-select" style="width: 100%; padding: 0.5em; background: rgba(255,255,255,0.1); color: inherit; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px;">
+                        <option value="">Select a collection...</option>
+                        ${communityCollections.map((c, i) => `<option value="${i}">${c.name} by ${c.author}</option>`).join('')}
+                    </select>
+                </div>
+                
+                <div id="collectionDescription" style="margin-bottom: 1.5em; font-style: italic; color: #ccc; display: none; padding: 1em; background: rgba(0,0,0,0.2); border-radius: 4px;"></div>
+
+                <div id="importSelectionContainer" style="display: none; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 1em;">
+                    <div class="listItemBodyText" style="margin-bottom: 1em; font-weight: bold;">Sections in this collection:</div>
+                    <div id="importSelectionList"></div>
+                </div>
+            </div>
+        `;
+
+        const footer = document.createElement('div');
+        footer.style.display = 'flex';
+        footer.style.gap = '0.75em';
+        footer.innerHTML = `
+            <button class="emby-button raised button-submit" id="confirmCommunityImportBtn" style="padding: 0.75em 2em; display: none;">Import Selected</button>
+            <button class="emby-button raised" onclick="window.ModalSystem.close('kefinTweaksCommunityImportModal')">Cancel</button>
+        `;
+
+        let selectedCollection = null;
+
+        window.ModalSystem.create({
+            id: 'kefinTweaksCommunityImportModal',
+            title: 'Import Community Sections',
+            content: content,
+            footer: footer,
+            closeOnBackdrop: false,
+            closeOnEscape: true,
+            onOpen: (modalInstance) => {
+                const select = content.querySelector('#communityCollectionSelect');
+                const descContainer = content.querySelector('#collectionDescription');
+                const selectionContainer = content.querySelector('#importSelectionContainer');
+                const selectionList = content.querySelector('#importSelectionList');
+                const confirmBtn = modalInstance.dialogFooter.querySelector('#confirmCommunityImportBtn');
+
+                select.addEventListener('change', () => {
+                    const index = select.value;
+                    if (index === '') {
+                        selectedCollection = null;
+                        descContainer.style.display = 'none';
+                        selectionContainer.style.display = 'none';
+                        confirmBtn.style.display = 'none';
+                        return;
+                    }
+
+                    selectedCollection = communityCollections[parseInt(index)];
+                    
+                    // Show description
+                    descContainer.textContent = selectedCollection.description || 'No description.';
+                    descContainer.style.display = 'block';
+
+                    // Render sections list
+                    let html = '';
+                    if (selectedCollection.sections && selectedCollection.sections.length > 0) {
+                        html += `
+                            <div style="background: rgba(0,0,0,0.2); border-radius: 4px; padding: 0.5em;">
+                                ${selectedCollection.sections.map((s, i) => `
+                                    <label class="checkboxContainer" style="display: flex; align-items: center; padding: 0.5em;">
+                                        <input type="checkbox" class="import-community-check" data-index="${i}" checked>
+                                        <span class="listItemBodyText" style="margin-left: 0.5em;">${s.name || 'Unnamed'} (${s.type})</span>
+                                    </label>
+                                `).join('')}
+                            </div>`;
+                    } else {
+                        html = '<div class="listItemBodyText secondary">No sections found in this collection.</div>';
+                    }
+
+                    selectionList.innerHTML = html;
+                    selectionContainer.style.display = 'block';
+                    confirmBtn.style.display = 'inline-block';
+                });
+
+                confirmBtn.addEventListener('click', async () => {
+                    if (!selectedCollection) return;
+
+                    const selectedIndices = Array.from(content.querySelectorAll('.import-community-check:checked')).map(c => parseInt(c.dataset.index));
+                    
+                    if (selectedIndices.length === 0) {
+                        alert('Please select at least one section to import.');
+                        return;
+                    }
+
+                    // Import logic
+                    if (!config.homeScreen) config.homeScreen = {};
+                    if (!config.homeScreen.customSections) config.homeScreen.customSections = [];
+                    
+                    let importedCount = 0;
+                    selectedIndices.forEach(i => {
+                        const section = JSON.parse(JSON.stringify(selectedCollection.sections[i])); // Deep copy
+                        // Regenerate ID to avoid collision
+                        if (section.id) section.id = `${section.id}_community_${Date.now()}_${Math.floor(Math.random()*1000)}`;
+                        config.homeScreen.customSections.push(section);
+                        importedCount++;
+                    });
+
+                    if (importedCount > 0) {
+                        await saveConfigCallback(config);
+                        alert(`Successfully imported ${importedCount} sections. The page will reload.`);
+                        window.location.reload();
+                    } else {
+                        window.ModalSystem.close('kefinTweaksCommunityImportModal');
+                    }
+                });
+            }
+        });
+    }
+
+    async function showImportDialog(config, saveConfigCallback) {
+        const content = document.createElement('div');
+        content.innerHTML = `
+            <div class="content-primary">
+                <div class="listItemBodyText" style="margin-bottom: 1em;">Paste JSON content or a URL (Raw GitHub, Gist, Pastebin):</div>
+                <textarea id="importInput" class="fld emby-textarea" style="width: 100%; height: 150px; font-family: monospace;" placeholder='{"customSections": [...]} or https://...'></textarea>
+                
+                <div id="importSelectionContainer" style="display: none; margin-top: 1.5em; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 1em;">
+                    <div class="listItemBodyText" style="margin-bottom: 1em; font-weight: bold;">Found items to import:</div>
+                    <div id="importSelectionList"></div>
+                </div>
+            </div>
+        `;
+
+        const footer = document.createElement('div');
+        footer.style.display = 'flex';
+        footer.style.gap = '0.75em';
+        footer.innerHTML = `
+            <button class="emby-button raised button-submit" id="loadImportBtn" style="padding: 0.75em 2em;">Load</button>
+            <button class="emby-button raised button-submit" id="confirmImportBtn" style="padding: 0.75em 2em; display: none;">Import Selected</button>
+            <button class="emby-button raised" onclick="window.ModalSystem.close('kefinTweaksImportModal')">Cancel</button>
+        `;
+
+        let parsedData = null;
+
+        window.ModalSystem.create({
+            id: 'kefinTweaksImportModal',
+            title: 'Import Custom Sections',
+            content: content,
+            footer: footer,
+            closeOnBackdrop: false,
+            closeOnEscape: true,
+            onOpen: (modalInstance) => {
+                const loadBtn = modalInstance.dialogFooter.querySelector('#loadImportBtn');
+                const confirmBtn = modalInstance.dialogFooter.querySelector('#confirmImportBtn');
+                const input = content.querySelector('#importInput');
+                const selectionContainer = content.querySelector('#importSelectionContainer');
+                const selectionList = content.querySelector('#importSelectionList');
+
+                loadBtn.addEventListener('click', async () => {
+                    const rawInput = input.value.trim();
+                    if (!rawInput) return;
+
+                    loadBtn.disabled = true;
+                    loadBtn.textContent = 'Loading...';
+
+                    try {
+                        let jsonStr = rawInput;
+                        // Check if URL
+                        if (rawInput.startsWith('http://') || rawInput.startsWith('https://')) {
+                            const res = await fetch(rawInput);
+                            if (!res.ok) throw new Error(`Failed to fetch URL: ${res.status}`);
+                            jsonStr = await res.text();
+                        }
+
+                        parsedData = JSON.parse(jsonStr);
+                        if (!parsedData.customSections && !parsedData.seasonalSeasons && !Array.isArray(parsedData)) {
+                            throw new Error('Invalid format: No sections found.');
+                        }
+                        
+                        // Handle legacy/array-only format if necessary (assume customSections)
+                        if (Array.isArray(parsedData)) {
+                            parsedData = { customSections: parsedData };
+                        }
+
+                        // Render selection
+                        let html = '';
+                        if (parsedData.customSections && parsedData.customSections.length > 0) {
+                            html += `
+                                <div style="margin-bottom: 1em;">
+                                    <h3 class="listItemBodyText">Custom Sections</h3>
+                                    <div style="background: rgba(0,0,0,0.2); border-radius: 4px; padding: 0.5em;">
+                                        ${parsedData.customSections.map((s, i) => `
+                                            <label class="checkboxContainer" style="display: flex; align-items: center; padding: 0.5em;">
+                                                <input type="checkbox" class="import-custom-check" data-index="${i}" checked>
+                                                <span class="listItemBodyText" style="margin-left: 0.5em;">${s.name || 'Unnamed'}</span>
+                                            </label>
+                                        `).join('')}
+                                    </div>
+                                </div>`;
+                        }
+                        if (parsedData.seasonalSeasons && parsedData.seasonalSeasons.length > 0) {
+                            html += `
+                                <div style="margin-bottom: 1em;">
+                                    <h3 class="listItemBodyText">Seasonal Seasons</h3>
+                                    <div style="background: rgba(0,0,0,0.2); border-radius: 4px; padding: 0.5em;">
+                                        ${parsedData.seasonalSeasons.map((s, i) => `
+                                            <label class="checkboxContainer" style="display: flex; align-items: center; padding: 0.5em;">
+                                                <input type="checkbox" class="import-seasonal-check" data-index="${i}" checked>
+                                                <span class="listItemBodyText" style="margin-left: 0.5em;">${s.name || 'Unnamed'}</span>
+                                            </label>
+                                        `).join('')}
+                                    </div>
+                                </div>`;
+                        }
+
+                        if (!html) throw new Error('No valid sections found in data.');
+
+                        selectionList.innerHTML = html;
+                        selectionContainer.style.display = 'block';
+                        loadBtn.style.display = 'none';
+                        confirmBtn.style.display = 'inline-block';
+                        input.disabled = true;
+
+                    } catch (err) {
+                        alert('Error loading data: ' + err.message);
+                        loadBtn.disabled = false;
+                        loadBtn.textContent = 'Load';
+                    }
+                });
+
+                confirmBtn.addEventListener('click', async () => {
+                    if (!parsedData) return;
+
+                    const selectedCustomIndices = Array.from(content.querySelectorAll('.import-custom-check:checked')).map(c => parseInt(c.dataset.index));
+                    const selectedSeasonalIndices = Array.from(content.querySelectorAll('.import-seasonal-check:checked')).map(c => parseInt(c.dataset.index));
+
+                    // Import logic
+                    if (!config.homeScreen) config.homeScreen = {};
+                    
+                    let importedCount = 0;
+
+                    // Import Custom Sections
+                    if (selectedCustomIndices.length > 0 && parsedData.customSections) {
+                        if (!config.homeScreen.customSections) config.homeScreen.customSections = [];
+                        
+                        selectedCustomIndices.forEach(i => {
+                            const section = parsedData.customSections[i];
+                            // Regenerate ID to avoid collision
+                            if (section.id) section.id = `${section.id}_imported_${Date.now()}_${Math.floor(Math.random()*1000)}`;
+                            config.homeScreen.customSections.push(section);
+                            importedCount++;
+                        });
+                    }
+
+                    // Import Seasonal Seasons
+                    if (selectedSeasonalIndices.length > 0 && parsedData.seasonalSeasons) {
+                        if (!config.homeScreen.seasonal) config.homeScreen.seasonal = {};
+                        if (!config.homeScreen.seasonal.seasons) config.homeScreen.seasonal.seasons = [];
+                        
+                        selectedSeasonalIndices.forEach(i => {
+                            const season = parsedData.seasonalSeasons[i];
+                            // Regenerate IDs for internal sections if needed?
+                            if (season.sections) {
+                                season.sections.forEach(s => {
+                                    if (s.id) s.id = `${s.id}_imported_${Date.now()}_${Math.floor(Math.random()*1000)}`;
+                                });
+                            }
+                            config.homeScreen.seasonal.seasons.push(season);
+                            importedCount++;
+                        });
+                    }
+
+                    if (importedCount > 0) {
+                        await saveConfigCallback(config);
+                        alert(`Successfully imported ${importedCount} items. The page will reload.`);
+                        window.location.reload();
+                    } else {
+                        window.ModalSystem.close('kefinTweaksImportModal');
+                    }
+                });
+            }
+        });
+    }
+
     // Inject responsive CSS for the configuration modal
     function injectConfigModalCSS() {
         const styleId = 'kefintweaks-config-modal-css';
@@ -225,7 +662,7 @@
         const style = document.createElement('style');
         style.id = styleId;
         style.textContent = `
-            #${MODAL_ID} .modal-content-wrapper {
+            :not(.layout-mobile) #${MODAL_ID} .modal-content-wrapper {
                 max-width: 90vw;
                 width: 1400px;
                 max-height: 90vh;
@@ -434,48 +871,11 @@
     // Build the configuration page content
     function buildConfigPageContent(config, libraries = []) {
         const scripts = config.scripts || {};
-        const homeScreen = config.homeScreen || {};
-        const exclusiveElsewhere = config.exclusiveElsewhere || {};
-        const search = config.search || {};
-        const flattenSingleSeasonShows = config.flattenSingleSeasonShows || {};
-        const customMenuLinks = config.customMenuLinks || [];
-        // Reconstruct full skin list (enabled + disabled) for configuration
-        // We can't use window.KefinTweaksSkinConfig directly because it filters out disabled skins
-        const defaultSkins = window.KefinTweaksDefaultSkinsConfig?.skins || [];
-        const adminSkins = config.skins || [];
-        
-        const mergedSkins = [];
-        
-        // 1. Add all default skins first
-        defaultSkins.forEach(skin => {
-            mergedSkins.push({ ...skin, enabled: true });
-        });
-        
-        // 2. Override/Add with admin skins
-        adminSkins.forEach(adminSkin => {
-            const existingIndex = mergedSkins.findIndex(s => s.name === adminSkin.name);
-            if (existingIndex >= 0) {
-                // Override existing default skin
-                mergedSkins[existingIndex] = { ...mergedSkins[existingIndex], ...adminSkin };
-            } else {
-                // Add new admin skin
-                mergedSkins.push({ ...adminSkin });
-            }
-        });
-        
-        const skins = mergedSkins;
-        const themes = config.themes || [];
 
-        // Get all skin names for autocomplete
-        const allSkinNames = skins.map(skin => skin.name).filter(Boolean);
-        
-        // Get skin source info for visual distinctions
-        const skinSources = window.KefinTweaksSkinManager?.getAllSkinSources?.() || {};
-
-        const isEnabled = window.KefinTweaksConfigEnabled !== false;
+        const isEnabled = window.KefinTweaksConfig?.enabled !== false;
         
         return `
-            <div class="paperList" style="margin-bottom: 2em;">
+            <div class="paperList" style="padding: 0.2em 1em;">
                 <div class="listItem">
                     <div class="listItemContent" style="display: flex; gap: 1em; align-items: center; flex-wrap: wrap;">
                         <label class="checkboxContainer" style="display: flex; align-items: center; gap: 0.75em; cursor: pointer;">
@@ -485,11 +885,14 @@
                         <button class="emby-button raised" id="changeKefinTweaksSourceBtn" style="padding: 0.75em 2em; font-size: 1em;" title="Switch between the Latest, Development, Version specific branches or point to your own self hosted location!">
                             <span>Plugin Settings</span>
                         </button>
+                        <button class="emby-button raised" id="manageConfigBtn" style="padding: 0.75em 2em; font-size: 1em;" title="Manage backups, export, import, and resets">
+                            <span>Manage</span>
+                        </button>
                     </div>
                 </div>
             </div>
 
-            <div class="paperList" style="margin-bottom: 2em;">
+            <div class="paperList" style="margin-bottom: 1em;">
                 <div class="listItem" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 1em; margin-bottom: 1em;">
                     <div class="listItemContent">
                         <h3 class="listItemBodyText" style="margin-bottom: 0.25em;">Feature Configuration</h3>
@@ -501,211 +904,6 @@
                 </div>
             </div>
 
-            <div class="paperList" style="margin-bottom: 2em;">
-                <div class="listItem" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 1em; margin-bottom: 1em;">
-                    <div class="listItemContent">
-                        <h3 class="listItemBodyText" style="margin-bottom: 0.25em;">Home Screen Configuration</h3>
-                        <div class="listItemBodyText secondary">Configure custom home screen sections and discovery features</div>
-                    </div>
-                </div>
-                <div style="display: grid; grid-template-columns: 1fr; gap: 0.5em;">
-                    ${buildHomeScreenConfig(homeScreen, libraries)}
-                </div>
-            </div>
-
-            <div class="paperList" id="configSection_exclusiveElsewhere" style="margin-bottom: 2em; ${scripts.exclusiveElsewhere === false ? 'display: none;' : ''}">
-                <div class="listItem" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 1em; margin-bottom: 1em;">
-                    <div class="listItemContent">
-                        <h3 class="listItemBodyText" style="margin-bottom: 0.25em;">Exclusive Elsewhere Configuration</h3>
-                        <div class="listItemBodyText secondary">Configure exclusive elsewhere branding behavior</div>
-                    </div>
-                </div>
-                ${buildExclusiveElsewhereConfig(exclusiveElsewhere)}
-            </div>
-
-            <div class="paperList" id="configSection_search" style="margin-bottom: 2em; ${scripts.search === false ? 'display: none;' : ''}">
-                <div class="listItem" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 1em; margin-bottom: 1em;">
-                    <div class="listItemContent">
-                        <h3 class="listItemBodyText" style="margin-bottom: 0.25em;">Search Configuration</h3>
-                        <div class="listItemBodyText secondary">Configure search functionality</div>
-                    </div>
-                </div>
-                ${buildSearchConfig(search)}
-            </div>
-
-            <div class="paperList" id="configSection_flattenSingleSeasonShows" style="margin-bottom: 2em; ${scripts.flattenSingleSeasonShows === false ? 'display: none;' : ''}">
-                <div class="listItem" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 1em; margin-bottom: 1em;">
-                    <div class="listItemContent">
-                        <h3 class="listItemBodyText" style="margin-bottom: 0.25em;">Episodes On Series Page Configuration</h3>
-                        <div class="listItemBodyText secondary">Configure episodes display on series pages</div>
-                    </div>
-                </div>
-                ${buildFlattenShowsConfig(flattenSingleSeasonShows)}
-            </div>
-
-            <div class="paperList" id="configSection_skin" style="margin-bottom: 2em; ${scripts.skinManager === false ? 'display: none;' : ''}">
-                <div class="listItem" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 1em; margin-bottom: 1em;">
-                    <div class="listItemContent">
-                        <h3 class="listItemBodyText" style="margin-bottom: 0.25em;">Skin Configuration</h3>
-                        <div class="listItemBodyText secondary">Configure default skin and available skins for all users</div>
-                    </div>
-                </div>
-                <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
-                    <div class="listItemContent">
-                        <div class="listItemBodyText" style="margin-bottom: 0.5em;">Default Skin</div>
-                        <select id="defaultSkin" class="fld emby-select-withcolor emby-select emby-select-withcolor emby-select-withcolor" style="width: 100%; max-width: 400px;">
-                            ${allSkinNames.map(name => `<option value="${name}" ${config.defaultSkin === name ? 'selected' : ''}>${name}</option>`).join('')}
-                            ${allSkinNames.length === 0 ? '<option value="">No skins available</option>' : ''}
-                        </select>
-                        <div class="listItemBodyText secondary" style="margin-top: 0.5em; font-size: 0.9em;">Select a default skin for all users</div>
-                    </div>
-                </div>
-                <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
-                    <div class="listItemContent" style="width: 100%;">
-                        <h3 class="listItemBodyText" style="margin-bottom: 0.5em;">Enable/Disable Skins</h3>
-                        <div class="listItemBodyText secondary" style="margin-bottom: 1em; font-size: 0.9em;">Disabled skins will not appear in the appearance dropdowns for users</div>
-                        <div class="listItemBodyText secondary" style="margin-bottom: 1em; font-size: 0.85em; color: rgba(255,255,255,0.7); line-height: 1.5;">
-                            All themes are created with love by community members like you. Don't forget to thank them for their work and time if you appreciate their creations.
-                            KefinTweaks has not contributed to the creation of any of the skins below and is only attempting to facilitate their accessibility.
-                        </div>
-                        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.5em;">
-                            ${buildSkinToggles(skins, skinSources)}
-                        </div>
-                    </div>
-                </div>
-                ${(() => {
-                    // Check if there are any overridden default skins
-                    const hasOverriddenSkins = Object.values(skinSources).some(source => source === 'overridden');
-                    if (hasOverriddenSkins) {
-                        return `
-                            <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
-                                <div class="listItemContent">
-                                    <div class="listItemBodyText secondary" style="margin-bottom: 0.75em; font-size: 0.9em;">Some default skins have been overridden by custom configurations. Click the button below to remove custom skins that override defaults.</div>
-                                    <button type="button" id="removeDuplicateDefaultsBtn" class="emby-button raised" style="padding: 0.5em 1.5em; font-size: 0.9em;">
-                                        <span>Remove Custom Skins Overriding Defaults</span>
-                                    </button>
-                                </div>
-                            </div>
-                        `;
-                    }
-                    return '';
-                })()}
-                <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
-                    <div class="listItemContent">
-                        <h3 class="listItemBodyText" style="margin-bottom: 0.25em;">Optional CSS Modules</h3>
-                        <div class="listItemBodyText secondary" style="margin-bottom: 1em; font-size: 0.9em;">Configure default enabled/disabled state for optional CSS modules. These settings will be used when users haven't specified their own preferences.</div>
-                        <div class="listItemBodyText" style="margin-bottom: 0.5em;">Select Skin</div>
-                        <select id="optionalIncludesCategory" class="fld emby-select-withcolor emby-select emby-select-withcolor emby-select-withcolor" style="width: 100%; max-width: 400px; margin-bottom: 1em;">
-                            <option value="global">Global (applies to all skins)</option>
-                            ${buildOptionalIncludesSkinOptions(skins)}
-                        </select>
-                        <div id="optionalIncludesEditor" style="margin-top: 1em;">
-                            ${buildOptionalIncludesEditor('global', config, skins)}
-                        </div>
-                    </div>
-                </div>
-                <details class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0; margin-bottom: 1em; display: grid;">
-                    <summary class="listItemBodyText" style="font-weight: 500; cursor: pointer; padding: 0.75em; display: flex; align-items: center; gap: 0.5em; list-style: none; user-select: none;">
-                        <span class="material-icons" style="font-size: 1.2em; transition: transform 0.2s;">chevron_right</span>
-                        <span>Skins JSON</span>
-                    </summary>
-                    <div style="padding: 0.75em; border-top: 1px solid rgba(255,255,255,0.1);">
-                        <div class="listItemContent">
-                            <div class="listItemBodyText secondary" style="margin-bottom: 0.75em; font-size: 0.9em;">Add additional skins that will be available to all users. Each skin can have multiple CSS files for different server versions. You can override the Default skins from KefinTweaks by specifying a custom configuration with that Skin Name in the configuration JSON below. Any skins that appear in this JSON and are named the same as the KefinTweaks default skins will override the default functionality. Default skins are not shown here as they are managed separately.</div>
-                            <textarea id="skinsJson" class="fld emby-textarea" rows="15" placeholder='[{"name":"Skin Name","author":"Author","url":[...]}]' style="width: 100%; font-family: monospace; font-size: 0.9em; line-height: 1.5;">${JSON.stringify(config.skins || [], null, 2)}</textarea>
-                            <details style="margin-top: 0.75em;">
-                                <summary class="listItemBodyText secondary" style="font-size: 0.9em; color: #4a9eff;">View Example Format</summary>
-                                <pre style="background: rgba(0,0,0,0.3); padding: 1em; border-radius: 4px; margin-top: 0.5em; overflow-x: auto; font-size: 0.85em; line-height: 1.6;">[
-  {
-    "name": "Custom Skin",
-    "author": "username",
-    "url": [
-      {
-        "majorServerVersions": [10, 11],
-        "urls": ["https://cdn.jsdelivr.net/gh/username/custom-theme.css"]
-      }
-    ],
-    "colorSchemes": []
-  },
-  {
-    "name": "Custom Skin 2",
-    "author": "username 2",
-    "url": [
-      {
-        "majorServerVersions": [10],
-        "urls": ["https://cdn.jsdelivr.net/gh/username/custom-theme2.css"]
-      }
-    ],
-    "colorSchemes": []
-  }
-]</pre>
-                            </details>
-                        </div>
-                    </div>
-                </details>
-            </div>
-
-            <div class="paperList" id="configSection_theme" style="margin-bottom: 2em; ${scripts.skinManager === false ? 'display: none;' : ''}">
-                <div class="listItem" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 1em; margin-bottom: 1em;">
-                    <div class="listItemContent">
-                        <h3 class="listItemBodyText" style="margin-bottom: 0.25em;">Theme Configuration</h3>
-                        <div class="listItemBodyText secondary">Configure additional themes available to all users</div>
-                    </div>
-                </div>
-                <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
-                    <div class="listItemContent">
-                        <div class="listItemBodyText" style="margin-bottom: 0.5em;">Themes JSON</div>
-                        <div class="listItemBodyText secondary" style="margin-bottom: 0.75em; font-size: 0.9em;">Add additional themes that will be available to all users. Each theme should have a name and URL pointing to a CSS file.</div>
-                        <textarea id="themesJson" class="fld emby-textarea" rows="12" placeholder='[{"name":"Theme Name","url":"https://..."}]' style="width: 100%; font-family: monospace; font-size: 0.9em; line-height: 1.5;">${JSON.stringify(themes, null, 2)}</textarea>
-                        <details style="margin-top: 0.75em;">
-                            <summary class="listItemBodyText secondary" style="font-size: 0.9em; color: #4a9eff;">View Example Format</summary>
-                            <pre style="background: rgba(0,0,0,0.3); padding: 1em; border-radius: 4px; margin-top: 0.5em; overflow-x: auto; font-size: 0.85em; line-height: 1.6;">[
-  {
-    "name": "Custom Dark Theme",
-    "url": "https://cdn.jsdelivr.net/gh/username/custom-dark-theme.css"
-  },
-  {
-    "name": "Custom Light Theme",
-    "url": "https://cdn.jsdelivr.net/gh/username/custom-light-theme.css"
-  }
-]</pre>
-                        </details>
-                    </div>
-                </div>
-            </div>
-
-            <div class="paperList" id="configSection_customMenuLinks" style="margin-bottom: 2em; ${scripts.customMenuLinks === false ? 'display: none;' : ''}">
-                <div class="listItem" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 1em; margin-bottom: 1em;">
-                    <div class="listItemContent">
-                        <h3 class="listItemBodyText" style="margin-bottom: 0.25em;">Custom Menu Links</h3>
-                        <div class="listItemBodyText secondary">Configure custom menu links to be added to the custom menu</div>
-                    </div>
-                </div>
-                <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
-                    <div class="listItemContent">
-                        <div class="listItemBodyText" style="margin-bottom: 0.5em;">Custom Menu Links JSON</div>
-                        <div class="listItemBodyText secondary" style="margin-bottom: 0.75em; font-size: 0.9em;">Add custom menu links that will appear in the custom menu. Use Material icon names for icons.</div>
-                        <textarea id="customMenuLinksJson" class="fld emby-textarea" rows="12" placeholder='[{"name":"Link Name","icon":"link","url":"#/..."}]' style="width: 100%; font-family: monospace; font-size: 0.9em; line-height: 1.5;">${JSON.stringify(customMenuLinks, null, 2)}</textarea>
-                        <details style="margin-top: 0.75em;">
-                            <summary class="listItemBodyText secondary" style="font-size: 0.9em; color: #4a9eff;">View Example Format</summary>
-                            <pre style="background: rgba(0,0,0,0.3); padding: 1em; border-radius: 4px; margin-top: 0.5em; overflow-x: auto; font-size: 0.85em; line-height: 1.6;">[
-  {
-    "name": "My Custom Link",
-    "icon": "link",
-    "url": "#/userpluginsettings.html?pageUrl=https://domain.com/custom-page",
-    "openInNewTab": false
-  },
-  {
-    "name": "External Link",
-    "icon": "open_in_new",
-    "url": "https://example.com",
-    "openInNewTab": true
-  }
-]</pre>
-                        </details>
-                    </div>
-                </div>
-            </div>
 
         `;
     }
@@ -975,6 +1173,9 @@
 
     // Build script toggle switches
     function buildScriptToggles(scripts) {
+        // Features that have configuration options (not just toggles)
+        const featuresWithConfig = new Set(['homeScreen', 'search', 'flattenSingleSeasonShows', 'skinManager', 'customMenuLinks', 'seriesInfo', 'versionPreferences', 'thumbnailScrubber', 'watchTogether', 'watchlist', 'userManager']);
+        
         const scriptNames = [
             { key: 'watchlist', label: 'Watchlist', desc: 'Allows your users to add items to their Watchlist. The Watchlist page shows an overview of all items on a user\'s Watchlist, as well as their Series Progress and Movie History. It also includes a Statistics page with an overview of your user watched stats.' },
             { key: 'homeScreen', label: 'Enhanced Home Screen', desc: 'Add custom home screen sections and a "discovery engine" to your Home Page. Create sections based on Genre, Tags, Playlists, Collections or Search Terms for specific Item Types. Use the "Spotlight" feature to highlight specific sections with an image carousel/slideshow.' },
@@ -984,26 +1185,56 @@
             { key: 'skinManager', label: 'Skin Manager', desc: 'Skin selection and management - adds skin dropdown to header and display preferences' },
             { key: 'headerTabs', label: 'Header Tabs', desc: 'Allows direct navigation to specific Tab sections of a given library page. Full support for default Jellyfin landing pages.' },
             { key: 'customMenuLinks', label: 'Custom Menu Links', desc: 'Add custom menu links to the left side navigation menu' },
+            { key: 'hamburgerMenu', label: 'Desktop Hamburger Menu', desc: 'Shows an Open Menu button on desktop (900px+) that opens a left navigation drawer like the mobile layout, including libraries and custom menu links.' },
+            { key: 'games', label: 'Games', desc: 'Add a Games link to the side menu for Movie LUT and other library games' },
             { key: 'breadcrumbs', label: 'Breadcrumbs', desc: 'Breadcrumb navigation for Movies, TV and Music. Allows quick navigation between Seasons/Episodes and Albums/Songs.' },
             { key: 'playlist', label: 'Playlist UX', desc: 'Improved Playlist page navigation: Items only play when the Play button is pressed. Clicking an item navigates to the item\'s page.' },
             { key: 'itemDetailsCollections', label: 'Collections on Details Page', desc: 'Displays collections on item details pages (Included In section)' },
             { key: 'flattenSingleSeasonShows', label: 'Episodes On Series Page', desc: 'Displays episodes directly on series page. For single-season shows, shows all episodes. For multi-season shows, shows episodes from the season with Next Up episode (or Season 1 if no Next Up).' },
             { key: 'seriesInfo', label: 'Series Info+', desc: 'Adds Season and Episode counts to the Series and Season pages. Also adds an "Ends at" time similar to the Episode page.' },
+            { key: 'versionPreferences', label: 'Item Version Preferences', desc: 'Manage how different versions and editions of your items are displayed. Reorders and sanitizes the media source dropdown on item details pages by prioritized version and edition terms.' },
             { key: 'collections', label: 'Collection Sorting', desc: 'Collection sorting functionality on the Collection page' },
             { key: 'subtitleSearch', label: 'Subtitle Search', desc: 'Search and download subtitles directly from the video OSD' },
-            { key: 'exclusiveElsewhere', label: 'Exclusive Elsewhere', desc: 'Custom branding when items aren\'t available on streaming services' },
             { key: 'backdropLeakFix', label: 'Backdrop Leak Fix', desc: 'Fixes memory leaks from backdrop images when tab isn\'t focused' },
-            { key: 'dashboardButtonFix', label: 'Dashboard Button Fix', desc: 'Improved back button behavior on dashboard - prevents navigating back to the new tab browser page' }
+            { key: 'dashboardButtonFix', label: 'Dashboard Button Fix', desc: 'Improved back button behavior on dashboard - prevents navigating back to the new tab browser page' },
+            { key: 'thumbnailScrubber', label: 'Thumbnail Scrubber', desc: 'Shows trickplay thumbnail preview when hovering in the bottom 20px of a video card similar to Youtube' },
+            { key: 'watchTogether', label: 'Watch Together', desc: 'Link additional Jellyfin accounts to a Watch Together group, then sync watched / in-progress playstate to selected accounts on this device.' },
+            { key: 'userManager', label: 'User Manager', desc: 'Create reusable user policy templates and apply them when adding users or bulk-editing existing accounts. Import/export comes later.' }
         ];
 
-        return scriptNames.map(script => {
-            const isEnabled = scripts[script.key] !== false; // Default to true if not set
+        const defsByName = new Map(
+            (window.KefinTweaks?.getScripts?.() || []).map((def) => [def.name, def])
+        );
+        // Prefer cache warmed by await getJellyfinMajorVersion() before opening the modal
+        const major = window.KefinTweaks?._jellyfinMajorVersion ?? null;
+
+        const visibleScripts = scriptNames.filter((script) => {
+            const def = defsByName.get(script.key);
+            if (!def?.versions?.length) return true;
+            if (major == null) return false;
+            return def.versions.includes(major);
+        });
+
+        return visibleScripts.map(script => {
+            // Match injector defaults: most scripts on unless set false; opt-in scripts require true
+            const defaultDisabled = script.key === 'thumbnailScrubber' || script.key === 'watchTogether' || script.key === 'userManager';
+            const isEnabled = defaultDisabled
+                ? scripts[script.key] === true
+                : scripts[script.key] !== false;
+            const hasConfig = featuresWithConfig.has(script.key);
+            const configKey = script.key === 'flattenSingleSeasonShows' ? 'seriesEpisodes' : script.key;
+            
             return `
-                <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; background: rgba(255,255,255,0.02);">
+                <div class="listItem feature-card${hasConfig ? ' feature-card--editable' : ''}" data-feature-key="${script.key}" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; background: rgba(255,255,255,0.02);" ${hasConfig ? `onclick="openFeatureConfigurationModal(event, '${script.key}')"` : ''}>
                     <div class="listItemContent">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75em;">
                             <div class="listItemBodyText" style="font-weight: 500;">${script.label}</div>
-                            ${buildJellyfinCheckbox(`script_${script.key}`, isEnabled, '', { 'data-script-key': script.key })}
+                            <div style="display: flex; align-items: center; gap: 0.5em;">
+                                ${hasConfig ? `<button class="emby-button raised" data-feature-edit="${configKey}" style="padding: 0.35em 0.75em; font-size: 0.85em; min-width: auto;" title="Configure ${script.label}">
+                                    <span class="material-icons" style="font-size: 1.1em; vertical-align: middle;">edit</span>
+                                </button>` : ''}
+                                ${buildJellyfinCheckbox(`script_${script.key}`, isEnabled, '', { 'data-script-key': script.key })}
+                            </div>
                         </div>
                         <div class="listItemBodyText secondary" style="font-size: 0.9em; line-height: 1.4; width: 100%;">${script.desc}</div>
                     </div>
@@ -1011,6 +1242,54 @@
             `;
         }).join('');
     }
+
+    function openFeatureConfigurationModal(event, featureKey) {
+        // Check if the click target is the toggle switch or edit button
+        const target = event.target;
+        
+        // Check if clicking on the toggle switch (checkbox, label, or container)
+        const isCheckbox = target.closest('.checkboxContainer') || 
+                               target.closest('.emby-checkbox-label') || 
+                               target.closest('.emby-checkbox') ||
+                               target.getAttribute('is') === 'emby-checkbox' ||
+                               target.hasAttribute('data-embycheckbox');
+        
+        // Don't open modal if clicking on toggle switch or edit button
+        if (isCheckbox) {
+            return;
+        }
+        
+        // Get the feature key from the card if not provided
+        if (!featureKey) {
+            const featureCard = event.target.closest('.feature-card');
+            if (featureCard) {
+                featureKey = featureCard.getAttribute('data-feature-key');
+            }
+        }
+        
+        if (!featureKey) {
+            console.warn('[KefinTweaks Configuration] Could not determine feature key');
+            return;
+        }
+        
+        // Map feature key to config key (for flattenSingleSeasonShows -> seriesEpisodes)
+        const configKey = featureKey === 'flattenSingleSeasonShows' ? 'seriesEpisodes' : featureKey;
+        
+        // Open the appropriate configuration modal
+        if (window.KefinTweaksFeatureConfigs && window.KefinTweaksFeatureConfigs[configKey]) {
+            const configModule = window.KefinTweaksFeatureConfigs[configKey];
+            if (configModule.openConfigModal) {
+                configModule.openConfigModal();
+            } else {
+                console.warn(`[KefinTweaks Configuration] No openConfigModal function found for ${configKey}`);
+            }
+        } else {
+            console.warn(`[KefinTweaks Configuration] No configuration module found for ${configKey}`);
+        }
+    }
+    
+    // Expose function globally so it can be called from inline onclick handlers
+    window.openFeatureConfigurationModal = openFeatureConfigurationModal;
 
     // Helper function to build Include Item Types badge field
     function buildIncludeItemTypesField(prefix, sectionIndex, sanitizedPrefix, currentTypes, sourceType) {
@@ -1427,6 +1706,9 @@
         if (definition.extras?.minimumItems !== undefined) {
             defaults.minimumItems = definition.extras.minimumItems;
         }
+        if (definition.extras?.caption !== undefined) {
+            defaults.caption = definition.extras.caption;
+        }
 
         let normalized = { ...defaults };
 
@@ -1714,7 +1996,7 @@
             recentlyAddedInLibraryHtml = libraries.map(library => {
                 const libConfig = recentlyAddedInLibrary[library.Id] || {};
                 const prefix = `homeScreen_recentlyAddedInLibrary_${library.Id}`;
-                const defaultName = `Recently Added in ${library.Name}`;
+                const defaultName = `Recently Added ${library.Name}`;
                 
                 return `
                     <details class="listItem" style="display: grid; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0; gap: 0.5em;">
@@ -1986,7 +2268,7 @@
                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 0.75em; margin-bottom: 0.75em;">
             <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
                 <div class="listItemContent">
-                                    <div class="listItemBodyText" style="margin-bottom: 0.5em;">Infinite Scroll / Load More Button</div>
+                                    <div class="listItemBodyText" style="margin-bottom: 0.5em;">Infinite Scroll / Discover More</div>
                                     ${buildJellyfinCheckbox('homeScreen_discovery_infiniteScroll', discovery.infiniteScroll !== false, 'Infinite Scroll')}
                 </div>
             </div>
@@ -2085,6 +2367,28 @@
                     </button>
             </div>
             </details>
+
+            <!-- Import/Export Custom Sections -->
+            <details style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em; margin-bottom: 1em;">
+                <summary class="listItemBodyText" style="font-weight: 500; cursor: pointer; margin-bottom: 0.5em; display: flex; align-items: center; gap: 0.5em; border-radius: 0px !important;">
+                    <span class="material-icons" style="font-size: 1.2em; transition: transform 0.2s;">import_export</span>
+                    Import / Export Custom Sections
+                </summary>
+                <div style="padding: 0.75em 0 0 0;">
+                    <div class="listItemBodyText secondary" style="margin-bottom: 1em;">Share your custom home screen sections or import configurations from others.</div>
+                    <div style="display: flex; gap: 1em;">
+                        <button type="button" class="emby-button raised export-custom-sections-btn" style="padding: 0.75em 1.5em;">
+                            <span>Export Sections</span>
+                        </button>
+                        <button type="button" class="emby-button raised import-custom-sections-btn" style="padding: 0.75em 1.5em;">
+                            <span>Import Sections</span>
+                        </button>
+                        <button type="button" class="emby-button raised import-community-sections-btn" style="padding: 0.75em 1.5em;">
+                            <span>Import from Community</span>
+                        </button>
+                    </div>
+                </div>
+            </details>
         `;
     }
 
@@ -2106,8 +2410,8 @@
         return `
             <div class="listItem" style="border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 0.75em;">
                 <div class="listItemContent">
-                    <div class="listItemBodyText" style="margin-bottom: 0.5em;">Enable Jellyseerr</div>
-                    <div class="listItemBodyText secondary" style="margin-bottom: 0.75em; font-size: 0.9em;">Enable Jellyseerr integration for request functionality</div>
+                    <div class="listItemBodyText" style="margin-bottom: 0.5em;">Enable Seerr results from JellyfinEnhanced</div>
+                    <div class="listItemBodyText secondary" style="margin-bottom: 0.75em; font-size: 0.9em;">If you are using Seerr from Jellyfin Enhanced, you can enable this to add an additional search toggle for Requests</div>
                     ${buildJellyfinCheckbox('search_enableJellyseerr', search.enableJellyseerr === true, 'Enabled')}
                 </div>
             </div>
@@ -2171,8 +2475,14 @@
         currentLoadedConfig = config;
         window.KefinTweaksCurrentConfig = config;
 
-        // Fetch libraries for configuration
-        const libraries = await fetchLibraries();
+        // Ensure Jellyfin major is cached so version-gated feature cards filter correctly
+        try {
+            if (typeof window.KefinTweaks?.getJellyfinMajorVersion === 'function') {
+                await window.KefinTweaks.getJellyfinMajorVersion();
+            }
+        } catch (e) {
+            console.warn('[KefinTweaks Configuration] Could not resolve Jellyfin major version:', e);
+        }
 
         // Build the content (without title, as ModalSystem adds it)
         const content = document.createElement('div');
@@ -2180,30 +2490,18 @@
         content.id = MODAL_ID;
         content.innerHTML = `
             <div class="kefin-config-wrapper">
-                ${buildConfigPageContent(config, libraries)}
+                ${buildConfigPageContent(config)}
             </div>
         `;
 
-        // Create footer with save, export, and import buttons
+        // Create footer with save (reset actions live in Manage)
         const footer = document.createElement('div');
         footer.style.display = 'flex';
         footer.style.gap = '0.75em';
         footer.style.alignItems = 'center';
         footer.innerHTML = `
-            <button class="emby-button raised block button-submit" id="saveConfigBtn" style="padding: 0.75em 2em; font-size: 1em; font-weight: 500;">
+            <button class="emby-button raised button-submit" id="saveConfigBtn" style="padding: 0.75em 2em; font-size: 1em; font-weight: 500;">
                 <span>Save</span>
-            </button>
-            <button class="emby-button raised" id="resetConfigBtn" style="padding: 0.75em 2em; font-size: 1em;">
-                <span>Defaults</span>
-            </button>
-            <button class="emby-button raised" id="exportConfigBtn" style="padding: 0.75em 2em; font-size: 1em;">
-                <span>Export</span>
-            </button>
-            <button class="emby-button raised" id="importConfigBtn" style="padding: 0.75em 2em; font-size: 1em;">
-                <span>Import</span>
-            </button>
-            <button class="emby-button raised block button-delete" id="resetAllUsersBtn" style="padding: 0.75em 2em; font-size: 1em; font-weight: 500;">
-                <span>Reset All Users Local Settings</span>
             </button>
         `;
 
@@ -2221,14 +2519,10 @@
             footer: footer,
             closeOnBackdrop: true,
             closeOnEscape: true,
+            dialogStyle: window.innerWidth >= 900
+                ? { maxWidth: '90vw', width: '1400px', maxHeight: '90vh' }
+                : undefined,
             onOpen: (modalInstance) => {
-                // Update modal dialog styling for large size
-                if (modalInstance && modalInstance.dialog) {
-                    modalInstance.dialog.style.maxWidth = '90vw';
-                    modalInstance.dialog.style.width = '1400px';
-                    modalInstance.dialog.style.maxHeight = '90vh';
-                }
-
                 // Add event handlers
                 setupConfigModalHandlers(modalInstance, config);
                 }
@@ -2381,6 +2675,34 @@
             const addBtn = e.target.closest('.add-custom-section-btn');
             if (addBtn) {
                 addCustomSection();
+            }
+        });
+
+        // Export custom sections
+        modalInstance.dialogContent.addEventListener('click', (e) => {
+            const exportBtn = e.target.closest('.export-custom-sections-btn');
+            if (exportBtn) {
+                showExportDialog(config);
+            }
+        });
+
+        // Import custom sections
+        modalInstance.dialogContent.addEventListener('click', (e) => {
+            const importBtn = e.target.closest('.import-custom-sections-btn');
+            if (importBtn) {
+                showImportDialog(config, async (newConfig) => {
+                    await KefinTweaksUtils.saveConfigToJavaScriptInjector(newConfig);
+                });
+            }
+        });
+
+        // Import community sections
+        modalInstance.dialogContent.addEventListener('click', (e) => {
+            const importBtn = e.target.closest('.import-community-sections-btn');
+            if (importBtn) {
+                showCommunityImportDialog(config, async (newConfig) => {
+                    await KefinTweaksUtils.saveConfigToJavaScriptInjector(newConfig);
+                });
             }
         });
         
@@ -3490,12 +3812,10 @@
                     }
                 });
             }
-            
-            // Hide suggestions when clicking outside
-            document.addEventListener('click', (e) => {
-                if (!badgeContainer.contains(e.target) && !suggestionsDiv.contains(e.target)) {
-                    suggestionsDiv.style.display = 'none';
-                }
+
+            // Hide suggestions when focus leaves the input
+            input.addEventListener('blur', () => {
+                suggestionsDiv.style.display = 'none';
             });
         }
         
@@ -3782,7 +4102,7 @@
                 const token = window.ApiClient.accessToken();
                 
                 const response = await fetch(`${serverAddress}/Users/${userId}/Items?IncludeItemTypes=BoxSet,CollectionFolder&Recursive=true&Fields=ItemCounts`, {
-                    headers: { 'Authorization': apiHelper.getAuthHeader() }
+                    headers: { 'Authorization': window.apiHelper.getAuthHeader() }
                 });
                 
                 if (!response.ok) {
@@ -3902,7 +4222,7 @@
                 const token = window.ApiClient.accessToken();
                 
                 const response = await fetch(`${serverAddress}/Users/${userId}/Items?IncludeItemTypes=Playlist&Recursive=true&Fields=ItemCounts`, {
-                    headers: { 'Authorization': apiHelper.getAuthHeader() }
+                    headers: { 'Authorization': window.apiHelper.getAuthHeader() }
                 });
                 
                 if (!response.ok) {
@@ -4022,7 +4342,7 @@
                 const token = window.ApiClient.accessToken();
                 
                 const response = await fetch(`${serverAddress}/Users/${userId}/Items?IncludeItemTypes=BoxSet,CollectionFolder&Recursive=true&Fields=ItemCounts`, {
-                    headers: { 'Authorization': apiHelper.getAuthHeader() }
+                    headers: { 'Authorization': window.apiHelper.getAuthHeader() }
                 });
                 
                 if (!response.ok) {
@@ -4160,7 +4480,7 @@
                 const token = window.ApiClient.accessToken();
                 
                 const response = await fetch(`${serverAddress}/Users/${userId}/Items?IncludeItemTypes=Playlist&Recursive=true&Fields=ItemCounts`, {
-                    headers: { 'Authorization': apiHelper.getAuthHeader() }
+                    headers: { 'Authorization': window.apiHelper.getAuthHeader() }
                 });
                 
                 if (!response.ok) {
@@ -4435,26 +4755,10 @@
             });
         }
 
-        const resetBtn = modalInstance.dialogFooter?.querySelector('#resetConfigBtn');
-        if (resetBtn) {
-            resetBtn.addEventListener('click', () => handleResetConfig(modalInstance));
-        }
-
-        const resetAllUsersBtn = modalInstance.dialogFooter?.querySelector('#resetAllUsersBtn');
-        if (resetAllUsersBtn) {
-            resetAllUsersBtn.addEventListener('click', () => handleResetAllUsersConfig(modalInstance));
-        }
-
-        // Export button handler
-        const exportBtn = modalInstance.dialogFooter?.querySelector('#exportConfigBtn');
-        if (exportBtn) {
-            exportBtn.addEventListener('click', () => handleExportConfig(config));
-        }
-
-        // Import button handler
-        const importBtn = modalInstance.dialogFooter?.querySelector('#importConfigBtn');
-        if (importBtn) {
-            importBtn.addEventListener('click', () => handleImportConfig(modalInstance));
+        // Manage button handler (Backups / Export / Import / Resets)
+        const manageBtn = modalInstance.dialog?.querySelector('#manageConfigBtn');
+        if (manageBtn) {
+            manageBtn.addEventListener('click', () => openManageConfigModal(config, modalInstance));
         }
 
         // Remove duplicate defaults button handler
@@ -4505,24 +4809,760 @@
         }
     }
 
-    // Export configuration to clipboard
+    function toastMsg(message, timeout) {
+        if (window.KefinTweaksToaster?.toast) {
+            window.KefinTweaksToaster.toast(message, timeout);
+        } else {
+            alert(message);
+        }
+    }
+
+    function getExportClipboardFlags() {
+        const isHttps =
+            (typeof ApiClient !== 'undefined' &&
+                ApiClient._serverAddress &&
+                ApiClient._serverAddress.startsWith('https://')) ||
+            (typeof location !== 'undefined' && location.protocol === 'https:');
+        const supportsClipboard = !!(navigator.clipboard && navigator.clipboard.writeText);
+        return { canUseClipboard: isHttps && supportsClipboard };
+    }
+
+    function buildManageExportPanelHtml(canUseClipboard) {
+        return `
+            <div class="manage-io-panel">
+                <div class="listItemBodyText" style="margin-bottom: 1em; flex-shrink: 0;">
+                    Your current configuration is shown below as JSON. Select and copy this text to back up or share your configuration.
+                    ${canUseClipboard ? '' : ' Clipboard access requires an HTTPS connection, so manual copying is required.'}
+                </div>
+                <textarea id="manageExportConfigTextarea" class="fld emby-textarea manage-io-textarea" rows="16"
+                    readonly></textarea>
+                ${canUseClipboard ? `
+                <div style="margin-top: 1em; flex-shrink: 0;">
+                    <button type="button" class="emby-button raised button-submit" id="manageCopyExportConfigBtn"
+                        style="padding: 0.75em 2em; font-size: 1em; font-weight: 500;">
+                        <span>Copy to Clipboard</span>
+                    </button>
+                </div>` : ''}
+            </div>
+        `;
+    }
+
+    function buildManageImportPanelHtml() {
+        return `
+            <div class="manage-io-panel">
+                <div class="listItemBodyText" style="margin-bottom: 1em; flex-shrink: 0;">
+                    Paste your configuration JSON below. This will completely replace your current configuration.
+                </div>
+                <textarea id="manageImportConfigTextarea" class="fld emby-textarea manage-io-textarea" rows="16"
+                    placeholder="Paste your configuration JSON here..."></textarea>
+                <div style="margin-top: 1em; flex-shrink: 0;">
+                    <button type="button" class="emby-button raised button-submit" id="manageConfirmImportBtn"
+                        style="padding: 0.75em 2em; font-size: 1em; font-weight: 500;">
+                        <span>Import</span>
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    function backupsSettingsDescription(scheduledEnabled, keepCount) {
+        const x = Math.max(1, Math.floor(Number(keepCount) || 5));
+        if (scheduledEnabled) {
+            return `KefinTweaks will backup your configuration once per day and keep up to ${x} previous scheduled backups. Backups are only created from an admin account that is logged in.`;
+        }
+        return 'KefinTweaks will never automatically backup your configuration unless necessary during a migration task or other operations.';
+    }
+
+    function buildManageBackupsPanelHtml(settings) {
+        const scheduledEnabled = settings.scheduledEnabled === true;
+        const keepCount = Math.max(1, Math.floor(Number(settings.keepCount) || 5));
+        const toggleHtml = window.KefinTweaksUI?.buildToggleCard
+            ? window.KefinTweaksUI.buildToggleCard(
+                'manageScheduledBackups',
+                scheduledEnabled,
+                'Scheduled Backups',
+                backupsSettingsDescription(scheduledEnabled, keepCount)
+            )
+            : `
+                <label class="checkboxContainer" style="display:flex;align-items:center;gap:0.75em;">
+                    <input type="checkbox" id="manageScheduledBackups" ${scheduledEnabled ? 'checked' : ''}>
+                    <span>Scheduled Backups</span>
+                </label>
+                <div class="listItemBodyText secondary" id="manageScheduledBackupsDesc">${backupsSettingsDescription(scheduledEnabled, keepCount)}</div>
+            `;
+
+        return `
+            <div class="manage-backups-settings" style="display:flex;flex-direction:column;gap:1.25em;">
+                <div>${toggleHtml}</div>
+                <div>
+                    <label class="listItemBodyText" for="manageBackupKeepCount" style="display:block;margin-bottom:0.35em;">Number of Backups to Keep</label>
+                    <input type="number" id="manageBackupKeepCount" class="fld emby-input" min="1" step="1" value="${keepCount}" style="max-width:8em;">
+                    <div class="listItemBodyText secondary" style="margin-top:0.35em;">KefinTweaks will overwrite the oldest scheduled Backup once you get to this limit.</div>
+                </div>
+                <div>
+                    <h3 class="listItemBodyText" style="margin:0 0 0.75em;">Manage Backups</h3>
+                    <div id="manageBackupsTableHost">
+                        <div class="listItemBodyText secondary">Loading backups…</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderBackupsTableRows(backups) {
+        if (!backups.length) {
+            return `<div class="listItemBodyText secondary">No backups found.</div>`;
+        }
+        const rows = backups.map((b) => `
+            <tr data-backup-name="${escapeHtmlAttr(b.name)}" data-backup-kind="${escapeHtmlAttr(b.kind || 'manual')}">
+                <td style="padding:0.5em 0.4em;vertical-align:middle;width:2.5em;">
+                    <input type="checkbox" class="checkbox manage-backup-row-check" data-backup-name="${escapeHtmlAttr(b.name)}" aria-label="Select ${escapeHtmlAttr(b.name)}">
+                </td>
+                <td style="padding:0.5em 0.75em;vertical-align:middle;">
+                    <div class="listItemBodyText" style="word-break:break-all;">${escapeHtmlAttr(b.name)}</div>
+                    <div class="listItemBodyText secondary" style="font-size:0.9em;">
+                        ${escapeHtmlAttr(b.kindLabel || 'Manual')} · ${escapeHtmlAttr(b.dateLabel || 'Unknown date')}
+                    </div>
+                </td>
+                <td style="padding:0.5em 0.75em;white-space:nowrap;text-align:right;vertical-align:middle;">
+                    <button type="button" class="emby-button paper-icon-button-light manage-backup-restore-btn" title="Restore" aria-label="Restore">
+                        <span class="material-icons" aria-hidden="true">settings_backup_restore</span>
+                    </button>
+                    <button type="button" class="emby-button paper-icon-button-light manage-backup-delete-btn" title="Delete" aria-label="Delete">
+                        <span class="material-icons" aria-hidden="true">delete</span>
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+        return `
+            <div style="display:flex;flex-wrap:wrap;gap:0.5em;align-items:center;margin-bottom:0.75em;">
+                <button type="button" class="emby-button raised" id="manageBackupsCreateBtn" style="padding:0.4em 1em;">Create</button>
+                <button type="button" class="emby-button raised" id="manageBackupsSelectAllBtn" style="padding:0.4em 1em;">Select all</button>
+                <button type="button" class="emby-button raised" id="manageBackupsDeselectAllBtn" style="padding:0.4em 1em;">Deselect all</button>
+                <button type="button" class="emby-button raised" id="manageBackupsDeleteSelectedBtn" style="padding:0.4em 1em;" disabled>Delete selected</button>
+            </div>
+            <div style="overflow:auto;max-height:320px;border:1px solid rgba(255,255,255,0.1);border-radius:4px;">
+                <table style="width:100%;border-collapse:collapse;">
+                    <thead>
+                        <tr style="border-bottom:1px solid rgba(255,255,255,0.1);text-align:left;">
+                            <th style="padding:0.5em 0.4em;width:2.5em;" class="listItemBodyText">
+                                <input type="checkbox" class="checkbox" id="manageBackupsSelectAllHeader" title="Select all" aria-label="Select all">
+                            </th>
+                            <th style="padding:0.5em 0.75em;" class="listItemBodyText">Backup</th>
+                            <th style="padding:0.5em 0.75em;text-align:right;" class="listItemBodyText">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    function escapeHtmlAttr(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    async function refreshManageBackupsTable(host) {
+        if (!host) return;
+        host.innerHTML = `<div class="listItemBodyText secondary">Loading backups…</div>`;
+        const listFn = window.KefinTweaksUtils?.listKefinConfigBackups;
+        if (!listFn) {
+            host.innerHTML = `<div class="listItemBodyText secondary">Backup helpers unavailable.</div>`;
+            return;
+        }
+        const backups = await listFn();
+        host.innerHTML = renderBackupsTableRows(backups);
+    }
+
+    function confirmDeleteBackup(name) {
+        return confirmDeleteBackups([name]);
+    }
+
+    function confirmCreateBackup() {
+        return new Promise((resolve) => {
+            if (!window.ModalSystem) {
+                const label = window.prompt('Optional backup name (leave blank for default):', '') || '';
+                resolve(window.confirm('Create a configuration backup now?')
+                    ? { create: true, label: String(label).trim() }
+                    : { create: false });
+                return;
+            }
+            window.ModalSystem.create({
+                id: 'manageCreateBackupConfirm',
+                title: 'Create Backup',
+                content: `
+                    <div class="listItemBodyText" style="margin-bottom:1em;">
+                        Create a backup of your current KefinTweaks configuration?
+                    </div>
+                    <label class="listItemBodyText" for="manageCreateBackupName" style="display:block;margin-bottom:0.35em;">
+                        Optional name
+                    </label>
+                    <input type="text" id="manageCreateBackupName" class="fld emby-input" placeholder="e.g. PreRelease"
+                        style="width:100%;" autocomplete="off">
+                    <div class="listItemBodyText secondary" style="margin-top:0.35em;">
+                        When set, the backup is named KefinTweaks-Config-Backup-[Name]-Timestamp. Leave blank for the default name.
+                    </div>
+                `,
+                footer: `
+                    <button class="emby-button raised button-submit" id="manageCreateBackupConfirmBtn" style="padding:0.75em 2em;margin-right:1em;">Create</button>
+                    <button class="emby-button raised" id="manageCreateBackupCancelBtn" style="padding:0.75em 2em;">Cancel</button>
+                `,
+                closeOnBackdrop: true,
+                closeOnEscape: true,
+                onOpen: (mi) => {
+                    const input = mi.dialogContent?.querySelector('#manageCreateBackupName');
+                    setTimeout(() => input?.focus(), 100);
+                    mi.dialogFooter?.querySelector('#manageCreateBackupConfirmBtn')?.addEventListener('click', () => {
+                        const label = (input?.value || '').trim();
+                        mi.close();
+                        resolve({ create: true, label });
+                    });
+                    mi.dialogFooter?.querySelector('#manageCreateBackupCancelBtn')?.addEventListener('click', () => {
+                        mi.close();
+                        resolve({ create: false });
+                    });
+                }
+            });
+        });
+    }
+
+    function confirmDeleteBackups(names) {
+        const list = (Array.isArray(names) ? names : []).filter(Boolean);
+        return new Promise((resolve) => {
+            if (!list.length) {
+                resolve(false);
+                return;
+            }
+            const title = list.length === 1 ? 'Delete Backup' : `Delete ${list.length} Backups`;
+            const body = list.length === 1
+                ? `<div class="listItemBodyText">Remove backup <strong>${escapeHtmlAttr(list[0])}</strong>? This cannot be undone.</div>`
+                : `<div class="listItemBodyText" style="margin-bottom:0.75em;">Remove <strong>${list.length}</strong> selected backups? This cannot be undone.</div>
+                   <ul style="margin:0;padding-left:1.25em;max-height:180px;overflow:auto;">
+                     ${list.map((n) => `<li class="listItemBodyText secondary" style="word-break:break-all;">${escapeHtmlAttr(n)}</li>`).join('')}
+                   </ul>`;
+
+            if (!window.ModalSystem) {
+                resolve(window.confirm(list.length === 1
+                    ? `Delete backup "${list[0]}"?`
+                    : `Delete ${list.length} selected backups?`));
+                return;
+            }
+            window.ModalSystem.create({
+                id: 'manageDeleteBackupConfirm',
+                title,
+                content: body,
+                footer: `
+                    <button class="emby-button raised button-submit" id="manageDeleteBackupConfirmBtn" style="padding:0.75em 2em;margin-right:1em;">Delete</button>
+                    <button class="emby-button raised" id="manageDeleteBackupCancelBtn" style="padding:0.75em 2em;">Cancel</button>
+                `,
+                closeOnBackdrop: true,
+                closeOnEscape: true,
+                onOpen: (mi) => {
+                    mi.dialogFooter?.querySelector('#manageDeleteBackupConfirmBtn')?.addEventListener('click', () => {
+                        mi.close();
+                        resolve(true);
+                    });
+                    mi.dialogFooter?.querySelector('#manageDeleteBackupCancelBtn')?.addEventListener('click', () => {
+                        mi.close();
+                        resolve(false);
+                    });
+                }
+            });
+        });
+    }
+
+    function confirmRestoreBackup(name) {
+        return new Promise((resolve) => {
+            if (!window.ModalSystem) {
+                const backupFirst = window.confirm(`Backup current config before restoring "${name}"?`);
+                resolve(window.confirm(`Restore "${name}"?`) ? { restore: true, backupCurrentFirst: backupFirst } : { restore: false });
+                return;
+            }
+            window.ModalSystem.create({
+                id: 'manageRestoreBackupConfirm',
+                title: 'Restore Backup',
+                content: `
+                    <div class="listItemBodyText" style="margin-bottom:1em;">
+                        Restore configuration from <strong>${escapeHtmlAttr(name)}</strong>? This will overwrite your current active configuration.
+                    </div>
+                `,
+                footer: `
+                    <button class="emby-button raised button-submit" id="manageRestoreWithBackupBtn" style="padding:0.75em 1.5em;margin-right:0.5em;">Backup before Restore</button>
+                    <button class="emby-button raised button-submit" id="manageRestoreOnlyBtn" style="padding:0.75em 1.5em;margin-right:0.5em;">Restore</button>
+                    <button class="emby-button raised" id="manageRestoreCancelBtn" style="padding:0.75em 1.5em;">Cancel</button>
+                `,
+                closeOnBackdrop: true,
+                closeOnEscape: true,
+                onOpen: (mi) => {
+                    mi.dialogFooter?.querySelector('#manageRestoreWithBackupBtn')?.addEventListener('click', () => {
+                        mi.close();
+                        resolve({ restore: true, backupCurrentFirst: true });
+                    });
+                    mi.dialogFooter?.querySelector('#manageRestoreOnlyBtn')?.addEventListener('click', () => {
+                        mi.close();
+                        resolve({ restore: true, backupCurrentFirst: false });
+                    });
+                    mi.dialogFooter?.querySelector('#manageRestoreCancelBtn')?.addEventListener('click', () => {
+                        mi.close();
+                        resolve({ restore: false });
+                    });
+                }
+            });
+        });
+    }
+
+    async function persistBackupsSettings(config, settings) {
+        config.backups = {
+            scheduledEnabled: settings.scheduledEnabled === true,
+            keepCount: Math.max(1, Math.floor(Number(settings.keepCount) || 5)),
+            lastScheduledAt: settings.lastScheduledAt || config.backups?.lastScheduledAt || null
+        };
+        if (window.KefinTweaksConfig) {
+            window.KefinTweaksConfig.backups = { ...config.backups };
+        }
+        await KefinTweaksUtils.saveConfigToJavaScriptInjector(config);
+        if (config.backups.scheduledEnabled) {
+            await window.KefinTweaksUtils.maybeRunScheduledBackup?.(config);
+        }
+    }
+
+    function bindManageBackupsPanel(root, config) {
+        const settings = window.KefinTweaksUtils?.normalizeBackupsSettings
+            ? window.KefinTweaksUtils.normalizeBackupsSettings(config)
+            : { scheduledEnabled: false, keepCount: 5, lastScheduledAt: null };
+
+        const scheduledCb = root.querySelector('#manageScheduledBackups');
+        const keepInput = root.querySelector('#manageBackupKeepCount');
+        const descEl = root.querySelector('#manageScheduledBackupsDesc')
+            || root.querySelector('.kefin-toggle-card-desc');
+        const tableHost = root.querySelector('#manageBackupsTableHost');
+
+        if (window.KefinTweaksUI?.bindToggleCards) {
+            window.KefinTweaksUI.bindToggleCards(root);
+        }
+
+        const syncDesc = () => {
+            if (!descEl) return;
+            const enabled = scheduledCb?.checked === true;
+            const keep = Math.max(1, Math.floor(Number(keepInput?.value) || 5));
+            descEl.textContent = backupsSettingsDescription(enabled, keep);
+        };
+
+        scheduledCb?.addEventListener('change', async () => {
+            syncDesc();
+            try {
+                await persistBackupsSettings(config, {
+                    ...settings,
+                    scheduledEnabled: scheduledCb.checked === true,
+                    keepCount: Math.max(1, Math.floor(Number(keepInput?.value) || 5))
+                });
+                toastMsg(`Scheduled backups ${scheduledCb.checked ? 'enabled' : 'disabled'}`);
+                await refreshManageBackupsTable(tableHost);
+            } catch (e) {
+                console.error('[KefinTweaks Configuration] Error saving backup settings:', e);
+                toastMsg('Failed to save backup settings', '5');
+            }
+        });
+
+        keepInput?.addEventListener('change', async () => {
+            const keep = Math.max(1, Math.floor(Number(keepInput.value) || 5));
+            keepInput.value = String(keep);
+            syncDesc();
+            try {
+                await persistBackupsSettings(config, {
+                    ...settings,
+                    scheduledEnabled: scheduledCb?.checked === true,
+                    keepCount: keep
+                });
+                await window.KefinTweaksUtils.pruneKefinConfigBackups?.(keep);
+                await refreshManageBackupsTable(tableHost);
+                toastMsg(`Keeping up to ${keep} backups`);
+            } catch (e) {
+                console.error('[KefinTweaks Configuration] Error saving keep count:', e);
+                toastMsg('Failed to save backup keep count', '5');
+            }
+        });
+
+        tableHost?.addEventListener('click', async (e) => {
+            const createBtn = e.target.closest?.('#manageBackupsCreateBtn');
+            const selectAllBtn = e.target.closest?.('#manageBackupsSelectAllBtn');
+            const deselectAllBtn = e.target.closest?.('#manageBackupsDeselectAllBtn');
+            const deleteSelectedBtn = e.target.closest?.('#manageBackupsDeleteSelectedBtn');
+
+            const syncSelectionUi = () => {
+                const selected = tableHost.querySelectorAll('.manage-backup-row-check:checked');
+                const all = tableHost.querySelectorAll('.manage-backup-row-check');
+                const btn = tableHost.querySelector('#manageBackupsDeleteSelectedBtn');
+                if (btn) btn.disabled = selected.length === 0;
+                const header = tableHost.querySelector('#manageBackupsSelectAllHeader');
+                if (header && all.length) {
+                    header.checked = selected.length === all.length;
+                    header.indeterminate = selected.length > 0 && selected.length < all.length;
+                }
+            };
+
+            const setAllChecked = (checked) => {
+                tableHost.querySelectorAll('.manage-backup-row-check').forEach((cb) => {
+                    cb.checked = checked;
+                });
+                const header = tableHost.querySelector('#manageBackupsSelectAllHeader');
+                if (header) {
+                    header.checked = checked;
+                    header.indeterminate = false;
+                }
+                syncSelectionUi();
+            };
+
+            if (createBtn) {
+                const choice = await confirmCreateBackup();
+                if (!choice?.create) return;
+                const result = await window.KefinTweaksUtils?.createKefinConfigBackup?.(config, {
+                    reason: 'manual',
+                    kind: 'manual',
+                    label: choice.label || ''
+                });
+                if (result?.ok) {
+                    toastMsg(`Backup created: ${result.name}`);
+                    await refreshManageBackupsTable(tableHost);
+                } else {
+                    toastMsg('Failed to create backup', '5');
+                }
+                return;
+            }
+            if (selectAllBtn) {
+                setAllChecked(true);
+                return;
+            }
+            if (deselectAllBtn) {
+                setAllChecked(false);
+                return;
+            }
+            if (deleteSelectedBtn) {
+                const names = Array.from(tableHost.querySelectorAll('.manage-backup-row-check:checked'))
+                    .map((cb) => cb.getAttribute('data-backup-name'))
+                    .filter(Boolean);
+                if (!names.length) return;
+                const confirmed = await confirmDeleteBackups(names);
+                if (!confirmed) return;
+                const result = await window.KefinTweaksUtils.deleteKefinConfigBackups?.(names);
+                if (result?.ok) {
+                    toastMsg(`Deleted ${result.removed} backup${result.removed === 1 ? '' : 's'}`);
+                    await refreshManageBackupsTable(tableHost);
+                } else {
+                    toastMsg('Failed to delete selected backups', '5');
+                }
+                return;
+            }
+
+            // Ignore row-checkbox clicks here (handled by change); don't treat as row actions
+            if (e.target?.classList?.contains('manage-backup-row-check')
+                || e.target?.id === 'manageBackupsSelectAllHeader') {
+                return;
+            }
+
+            const restoreBtn = e.target.closest?.('.manage-backup-restore-btn');
+            const deleteBtn = e.target.closest?.('.manage-backup-delete-btn');
+            const row = e.target.closest?.('tr[data-backup-name]');
+            const name = row?.getAttribute('data-backup-name');
+            if (!name) return;
+
+            if (restoreBtn) {
+                const choice = await confirmRestoreBackup(name);
+                if (!choice.restore) return;
+                const ok = await window.KefinTweaksUtils.restoreKefinConfigBackup?.(name, {
+                    backupCurrentFirst: choice.backupCurrentFirst === true
+                });
+                if (ok) {
+                    toastMsg('Configuration restored. Reloading…');
+                    setTimeout(() => window.location.reload(), 600);
+                } else {
+                    toastMsg('Failed to restore backup', '5');
+                }
+                return;
+            }
+
+            if (deleteBtn) {
+                const confirmed = await confirmDeleteBackup(name);
+                if (!confirmed) return;
+                const result = await window.KefinTweaksUtils.deleteKefinConfigBackups?.([name]);
+                if (result?.ok) {
+                    toastMsg('Backup deleted');
+                    await refreshManageBackupsTable(tableHost);
+                } else {
+                    toastMsg('Failed to delete backup', '5');
+                }
+            }
+        });
+
+        tableHost?.addEventListener('change', (e) => {
+            const target = e.target;
+            if (!target) return;
+
+            if (target.id === 'manageBackupsSelectAllHeader') {
+                const checked = target.checked === true;
+                tableHost.querySelectorAll('.manage-backup-row-check').forEach((cb) => {
+                    cb.checked = checked;
+                });
+                target.indeterminate = false;
+            } else if (!target.classList?.contains('manage-backup-row-check')) {
+                return;
+            }
+
+            const selected = tableHost.querySelectorAll('.manage-backup-row-check:checked');
+            const all = tableHost.querySelectorAll('.manage-backup-row-check');
+            const btn = tableHost.querySelector('#manageBackupsDeleteSelectedBtn');
+            if (btn) btn.disabled = selected.length === 0;
+            const header = tableHost.querySelector('#manageBackupsSelectAllHeader');
+            if (header && all.length && target.id !== 'manageBackupsSelectAllHeader') {
+                header.checked = selected.length === all.length;
+                header.indeterminate = selected.length > 0 && selected.length < all.length;
+            }
+        });
+
+        refreshManageBackupsTable(tableHost);
+    }
+
+    function openManageConfigModal(config, parentModalInstance) {
+        if (!window.ModalSystem) {
+            alert('Modal system not available');
+            return;
+        }
+
+        const { canUseClipboard } = getExportClipboardFlags();
+        const settings = window.KefinTweaksUtils?.normalizeBackupsSettings
+            ? window.KefinTweaksUtils.normalizeBackupsSettings(config)
+            : { scheduledEnabled: false, keepCount: 5, lastScheduledAt: null };
+        const configJson = JSON.stringify(config, null, 2);
+
+        window.ModalSystem.create({
+            id: 'kefinTweaksManageModal',
+            title: 'Manage',
+            dialogStyle: {
+                width: 'min(720px, 95vw)',
+                height: 'min(780px, 90vh)',
+                maxHeight: '90vh'
+            },
+            content: `
+                <div class="manage-config-shell">
+                    <div class="manage-config-tabs" style="display:flex;gap:0.5em;margin-bottom:1em;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:0.5em;flex-shrink:0;flex-wrap:wrap;">
+                        <button type="button" class="emby-button raised manage-tab-btn active" data-manage-tab="backups" style="padding:0.5em 1.25em;">Backups</button>
+                        <button type="button" class="emby-button raised manage-tab-btn" data-manage-tab="export" style="padding:0.5em 1.25em;">Export</button>
+                        <button type="button" class="emby-button raised manage-tab-btn" data-manage-tab="import" style="padding:0.5em 1.25em;">Import</button>
+                        <button type="button" class="emby-button raised" id="manageRestoreDefaultsBtn" style="padding:0.5em 1.25em;">Restore Defaults</button>
+                        <button type="button" class="emby-button raised button-delete" id="manageResetAllUsersBtn" style="padding:0.5em 1.25em;">Reset All Users</button>
+                    </div>
+                    <div class="manage-tab-panels">
+                        <div class="manage-tab-panel is-active" data-manage-panel="backups">
+                            ${buildManageBackupsPanelHtml(settings)}
+                        </div>
+                        <div class="manage-tab-panel" data-manage-panel="export">
+                            ${buildManageExportPanelHtml(canUseClipboard)}
+                        </div>
+                        <div class="manage-tab-panel" data-manage-panel="import">
+                            ${buildManageImportPanelHtml()}
+                        </div>
+                    </div>
+                </div>
+            `,
+            footer: `
+                <button class="emby-button raised" id="closeManageConfigBtn" style="padding:0.75em 2em;font-size:1em;">
+                    <span>Close</span>
+                </button>
+            `,
+            closeOnBackdrop: true,
+            closeOnEscape: true,
+            onOpen: (manageModal) => {
+                const content = manageModal.dialogContent;
+                manageModal.dialogFooter?.querySelector('#closeManageConfigBtn')?.addEventListener('click', () => manageModal.close());
+
+                const setTab = (tab) => {
+                    content.querySelectorAll('.manage-tab-btn').forEach((btn) => {
+                        btn.classList.toggle('active', btn.dataset.manageTab === tab);
+                    });
+                    content.querySelectorAll('.manage-tab-panel').forEach((panel) => {
+                        panel.classList.toggle('is-active', panel.dataset.managePanel === tab);
+                    });
+                };
+                content.querySelectorAll('.manage-tab-btn').forEach((btn) => {
+                    btn.addEventListener('click', () => setTab(btn.dataset.manageTab));
+                });
+
+                content.querySelector('#manageRestoreDefaultsBtn')?.addEventListener('click', async () => {
+                    const didReset = await handleResetConfig(parentModalInstance || manageModal);
+                    if (didReset) {
+                        manageModal.close();
+                    }
+                });
+                content.querySelector('#manageResetAllUsersBtn')?.addEventListener('click', () => {
+                    handleResetAllUsersConfig();
+                });
+
+                // Export panel
+                const exportTa = content.querySelector('#manageExportConfigTextarea');
+                if (exportTa) {
+                    exportTa.value = configJson;
+                    setTimeout(() => {
+                        exportTa.focus();
+                        exportTa.select();
+                    }, 100);
+                }
+                content.querySelector('#manageCopyExportConfigBtn')?.addEventListener('click', async () => {
+                    try {
+                        await navigator.clipboard.writeText(configJson);
+                        toastMsg('Configuration copied to clipboard!');
+                    } catch (copyError) {
+                        console.error('[KefinTweaks Configuration] Error copying config:', copyError);
+                        toastMsg('Error copying configuration to clipboard', '5');
+                    }
+                });
+
+                // Import panel
+                content.querySelector('#manageConfirmImportBtn')?.addEventListener('click', async () => {
+                    const jsonText = content.querySelector('#manageImportConfigTextarea')?.value.trim() || '';
+                    if (!jsonText) {
+                        toastMsg('Please paste configuration JSON', '3');
+                        return;
+                    }
+                    let importedConfig;
+                    try {
+                        importedConfig = JSON.parse(jsonText);
+                    } catch (parseError) {
+                        toastMsg('Invalid JSON format', '5');
+                        return;
+                    }
+                    if (!importedConfig || typeof importedConfig !== 'object' || Array.isArray(importedConfig)) {
+                        toastMsg('Configuration must be a JSON object', '5');
+                        return;
+                    }
+                    const confirmed = await showImportConfirmation();
+                    if (!confirmed) return;
+                    manageModal.close();
+                    await applyImportedConfig(importedConfig, parentModalInstance || manageModal);
+                });
+
+                bindManageBackupsPanel(content.querySelector('[data-manage-panel="backups"]') || content, config);
+            }
+        });
+    }
+
+    // Export configuration via modal (with optional clipboard copy on HTTPS)
     async function handleExportConfig(config) {
         try {
             const configJson = JSON.stringify(config, null, 2);
-            await navigator.clipboard.writeText(configJson);
-            
-            if (window.KefinTweaksToaster && window.KefinTweaksToaster.toast) {
-                window.KefinTweaksToaster.toast('Configuration exported to clipboard!');
+
+            // Prefer modal-based export so it works even on unsecured servers
+            if (window.ModalSystem) {
+                const { canUseClipboard } = getExportClipboardFlags();
+
+                window.ModalSystem.create({
+                    id: 'exportConfigModal',
+                    title: 'Export Configuration',
+                    content: `
+                        <div class="listItemBodyText" style="margin-bottom: 1em;">
+                            Your current configuration is shown below as JSON. Select and copy this text to back up or share your configuration.
+                            ${canUseClipboard ? '' : ' Clipboard access requires an HTTPS connection, so manual copying is required.'}
+                        </div>
+                        <textarea id="exportConfigTextarea" class="fld emby-textarea" rows="20"
+                            readonly
+                            style="width: 100%; font-family: monospace; font-size: 0.9em; line-height: 1.5;"></textarea>
+                    `,
+                    footer: `
+                        ${
+                            canUseClipboard
+                                ? `
+                        <button class="emby-button raised button-submit" id="copyExportConfigBtn"
+                            style="padding: 0.75em 2em; font-size: 1em; font-weight: 500; margin-right: 1em;">
+                            <span>Copy to Clipboard</span>
+                        </button>
+                        `
+                                : ''
+                        }
+                        <button class="emby-button raised" id="closeExportConfigBtn"
+                            style="padding: 0.75em 2em; font-size: 1em;">
+                            <span>Close</span>
+                        </button>
+                    `,
+                    closeOnBackdrop: true,
+                    closeOnEscape: true,
+                    onOpen: (modalInstance) => {
+                        const textarea = modalInstance.dialogContent.querySelector('#exportConfigTextarea');
+                        if (textarea) {
+                            textarea.value = configJson;
+                            // Select text to make manual copying easier
+                            setTimeout(() => {
+                                textarea.focus();
+                                textarea.select();
+                            }, 100);
+                        }
+
+                        const closeBtn = modalInstance.dialogFooter?.querySelector('#closeExportConfigBtn');
+                        if (closeBtn) {
+                            closeBtn.addEventListener('click', () => modalInstance.close());
+                        }
+
+                        if (canUseClipboard) {
+                            const copyBtn = modalInstance.dialogFooter?.querySelector('#copyExportConfigBtn');
+                            if (copyBtn) {
+                                copyBtn.addEventListener('click', async () => {
+                                    try {
+                                        await navigator.clipboard.writeText(configJson);
+                                        if (window.KefinTweaksToaster && window.KefinTweaksToaster.toast) {
+                                            window.KefinTweaksToaster.toast('Configuration copied to clipboard!');
+                                        } else {
+                                            alert('Configuration copied to clipboard!');
+                                        }
+                                    } catch (copyError) {
+                                        console.error(
+                                            '[KefinTweaks Configuration] Error copying config to clipboard:',
+                                            copyError
+                                        );
+                                        if (window.KefinTweaksToaster && window.KefinTweaksToaster.toast) {
+                                            window.KefinTweaksToaster.toast(
+                                                'Error copying configuration to clipboard',
+                                                '5'
+                                            );
+                                        } else {
+                                            alert('Error copying configuration to clipboard');
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                    }
+                });
+            } else if (navigator.clipboard && navigator.clipboard.writeText) {
+                // Fallback: no modal system, but clipboard is available
+                await navigator.clipboard.writeText(configJson);
+
+                if (window.KefinTweaksToaster && window.KefinTweaksToaster.toast) {
+                    window.KefinTweaksToaster.toast('Configuration exported to clipboard!');
+                } else {
+                    alert('Configuration exported to clipboard!');
+                }
             } else {
-                alert('Configuration exported to clipboard!');
+                // Last-resort fallback: log to console
+                console.log('[KefinTweaks Configuration] Exported configuration:', configJson);
+                if (window.KefinTweaksToaster && window.KefinTweaksToaster.toast) {
+                    window.KefinTweaksToaster.toast(
+                        'Unable to open export modal or access clipboard; configuration logged to console',
+                        '3'
+                    );
+                } else {
+                    alert(
+                        'Unable to open export modal or access clipboard. Check the browser console for the exported configuration.'
+                    );
+                }
             }
         } catch (error) {
             console.error('[KefinTweaks Configuration] Error exporting config:', error);
-            
             if (window.KefinTweaksToaster && window.KefinTweaksToaster.toast) {
-                window.KefinTweaksToaster.toast('Error exporting configuration to clipboard', '5');
+                window.KefinTweaksToaster.toast('Error exporting configuration', '5');
             } else {
-                alert('Error exporting configuration to clipboard');
+                alert('Error exporting configuration');
             }
         }
     }
@@ -4683,73 +5723,55 @@
 
     // Apply imported configuration
     async function applyImportedConfig(importedConfig, modalInstance) {
-        // Save to JavaScript Injector
+        // Update in-memory config before reopen (getKefinTweaksConfig reads window.KefinTweaksConfig)
+        window.KefinTweaksConfig = importedConfig;
+        window.KefinTweaksCurrentConfig = importedConfig;
+        currentLoadedConfig = importedConfig;
+        window.KefinTweaksConfigEnabled = importedConfig.enabled !== false;
+
         await KefinTweaksUtils.saveConfigToJavaScriptInjector(importedConfig);
-        
-        // Reload the modal with new config
+
         modalInstance.close();
-        
-        // Show success message
+
         if (window.KefinTweaksToaster && window.KefinTweaksToaster.toast) {
             window.KefinTweaksToaster.toast('Configuration imported successfully! Reloading...');
         }
-        
-        // Reopen modal with new config after a short delay
+
         setTimeout(() => {
             openConfigurationModal();
         }, 500);
     }
 
-    // Find JavaScript Injector plugin
+    const JS_INJECTOR_ALIASES = ['JavaScript Injector', 'JS Injector'];
+
+    // Find JavaScript Injector plugin (delegates to shared utils cache)
     async function findJavaScriptInjectorPlugin() {
         try {
-            if (!window.ApiClient || !window.ApiClient._serverAddress || !window.ApiClient.accessToken) {
-                throw new Error('ApiClient not available');
+            if (!window.KefinTweaksUtils?.resolvePluginId) {
+                throw new Error('KefinTweaksUtils.resolvePluginId is not available');
             }
 
-            const plugins = await apiHelper.getPlugins();
-            console.log('[KefinTweaks Configuration] Active Plugins:', plugins);
-
-            // Handle both array and object with Items property
-            const pluginsList = Array.isArray(plugins) ? plugins : (plugins.Items || []);
-            
-            // Find JavaScript Injector plugin
-            const injectorPlugin = pluginsList.find(plugin => 
-                plugin.Name === 'JavaScript Injector' || plugin.Name === 'JS Injector'
-            );
-
-            if (!injectorPlugin) {
+            const pluginId = await window.KefinTweaksUtils.resolvePluginId(JS_INJECTOR_ALIASES);
+            if (!pluginId) {
                 throw new Error('JavaScript Injector plugin not found. Please ensure it is installed.');
             }
 
-            console.log('[KefinTweaks Configuration] Found JavaScript Injector plugin:', injectorPlugin);
-            return injectorPlugin.Id;
+            console.log('[KefinTweaks Configuration] Found JavaScript Injector plugin:', pluginId);
+            return pluginId;
         } catch (error) {
             console.error('[KefinTweaks Configuration] Error finding JavaScript Injector plugin:', error);
             throw error;
         }
     }
 
-    // Get current JavaScript Injector configuration
+    // Get current JavaScript Injector configuration (delegates to shared utils)
     async function getJavaScriptInjectorConfig(pluginId) {
         try {
-            if (!window.ApiClient || !window.ApiClient._serverAddress || !window.ApiClient.accessToken) {
-                throw new Error('ApiClient not available');
+            if (!window.KefinTweaksUtils?.getPluginConfiguration) {
+                throw new Error('KefinTweaksUtils.getPluginConfiguration is not available');
             }
 
-            const server = ApiClient._serverAddress;
-
-            const response = await fetch(`${server}/Plugins/${pluginId}/Configuration`, {
-                headers: {
-                    'Authorization': apiHelper.getAuthHeader()
-                }
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-
-            const config = await response.json();
+            const config = await window.KefinTweaksUtils.getPluginConfiguration(pluginId || JS_INJECTOR_ALIASES);
             console.log('[KefinTweaks Configuration] Current JS Injector config:', config);
             return config;
         } catch (error) {
@@ -4757,6 +5779,34 @@
             throw error;
         }
     }
+
+    // Save configuration to JavaScript Injector plugin (delegates to shared utils)
+    async function saveConfigToJavaScriptInjector(config) {
+        try {
+            if (!window.KefinTweaksUtils?.saveConfigToJavaScriptInjector) {
+                throw new Error('KefinTweaksUtils.saveConfigToJavaScriptInjector is not available');
+            }
+
+            const success = await window.KefinTweaksUtils.saveConfigToJavaScriptInjector(config);
+            if (!success) {
+                throw new Error('Failed to save configuration to JavaScript Injector');
+            }
+
+            console.log('[KefinTweaks Configuration] Configuration saved successfully');
+            return true;
+        } catch (error) {
+            console.error('[KefinTweaks Configuration] Error saving configuration:', error);
+            throw error;
+        }
+    }
+
+    // Expose injector helpers for feature-config fallbacks
+    window.KefinTweaksConfiguration = Object.assign(window.KefinTweaksConfiguration || {}, {
+        findJavaScriptInjectorPlugin,
+        getJavaScriptInjectorConfig,
+        saveConfigToJavaScriptInjector,
+        openConfigurationModal
+    });
 
     function getSectionConfigFromUI(rootElement, prefix, sectionIndex) {
         const scope = rootElement || document;
@@ -4988,18 +6038,8 @@
         
         // Collect all form values
         // Preserve existing kefinTweaksRoot from current config (no longer editable in UI)
-        const currentConfig = window.KefinTweaksCurrentConfig || {};
-        const config = {
-            kefinTweaksRoot: currentConfig.kefinTweaksRoot || '',
-            scripts: {},
-            homeScreen: {},
-            exclusiveElsewhere: {},
-            search: {},
-            defaultSkin: document.getElementById('defaultSkin')?.value || null,
-            skins: [],
-            themes: [],
-            customMenuLinks: []
-        };
+        const currentConfig = window.KefinTweaksCurrentConfig || window.KefinTweaksConfig || {};
+        const config = currentConfig;
         config.enabled = modalInstance.dialogContent.querySelector('#kefinTweaksEnabled')?.checked !== false;
         
         // Remove scriptRoot if it exists (legacy field, no longer used)
@@ -5012,312 +6052,6 @@
             const key = checkbox.getAttribute('data-script-key');
             config.scripts[key] = checkbox.checked;
         });
-
-        // Helper function to get section config
-        function getSectionConfig(prefix, includeSortOrderOrOptions = true, includeOrderFlag = true) {
-            let includeSortOrder = true;
-            let includeOrder = true;
-            let includeName = false;
-            let defaultName = '';
-
-            if (typeof includeSortOrderOrOptions === 'object') {
-                const opts = includeSortOrderOrOptions || {};
-                includeSortOrder = opts.includeSortOrder !== undefined ? opts.includeSortOrder : true;
-                includeOrder = opts.includeOrder !== undefined ? opts.includeOrder : true;
-                includeName = opts.includeName === true;
-                defaultName = opts.defaultName || '';
-            } else {
-                includeSortOrder = includeSortOrderOrOptions !== false;
-                includeOrder = includeOrderFlag !== false;
-            }
-
-            const config = {
-                itemLimit: parseInt(document.getElementById(`${prefix}_itemLimit`)?.value || '16', 10)
-            };
-
-            if (includeName) {
-                config.name = document.getElementById(`${prefix}_name`)?.value || defaultName || '';
-            }
-
-            if (includeSortOrder) {
-                config.sortOrder = document.getElementById(`${prefix}_sortOrder`)?.value || 'Random';
-                config.sortOrderDirection = document.getElementById(`${prefix}_sortOrderDirection`)?.value || 'Ascending';
-            }
-
-            config.cardFormat = document.getElementById(`${prefix}_cardFormat`)?.value || 'Poster';
-
-            if (includeOrder) {
-                config.order = parseInt(document.getElementById(`${prefix}_order`)?.value || '100', 10);
-            }
-
-            // Check for IsPlayed configuration
-            const isPlayedEnabledCheckbox = document.getElementById(`${prefix}_isPlayed_enabled`);
-            if (isPlayedEnabledCheckbox) {
-                if (isPlayedEnabledCheckbox.checked) {
-                    const isPlayedValueSelect = document.getElementById(`${prefix}_isPlayed_value`);
-                    config.isPlayed = isPlayedValueSelect?.value === 'true';
-                } else {
-                    config.isPlayed = null;
-                }
-            }
-
-            // Handle Min/Max Age In Days for Recently Released
-            if (prefix === 'homeScreen_recentlyReleased_movies') {
-                const minAge = document.getElementById(`${prefix}_minAgeInDays`)?.value;
-                const maxAge = document.getElementById(`${prefix}_maxAgeInDays`)?.value;
-                config.minAgeInDays = minAge !== '' ? parseInt(minAge, 10) : null;
-                config.maxAgeInDays = maxAge !== '' ? parseInt(maxAge, 10) : null;
-            }
-            if (prefix === 'homeScreen_recentlyReleased_episodes') {
-                const minAge = document.getElementById(`${prefix}_minAgeInDays`)?.value;
-                const maxAge = document.getElementById(`${prefix}_maxAgeInDays`)?.value;
-                config.minAgeInDays = minAge !== '' ? parseInt(minAge, 10) : null;
-                config.maxAgeInDays = maxAge !== '' ? parseInt(maxAge, 10) : null;
-            }
-
-            return config;
-        }
-        
-        // Collect seasonal seasons
-        function getSeasonalSeasons() {
-            const seasons = [];
-            const seasonItems = modalInstance.dialogContent.querySelectorAll('.seasonal-season-item');
-            seasonItems.forEach((item, seasonIndex) => {
-                // Try to find checkbox by ID first, then fall back to class selector
-                const enabledCheckbox = item.querySelector(`#seasonal-season-enabled-${seasonIndex}`) || item.querySelector('.seasonal-season-enabled[data-index="${seasonIndex}"]');
-                const enabled = enabledCheckbox?.checked !== false;
-                const name = item.querySelector('.seasonal-season-name')?.value || '';
-                const startDate = item.querySelector('.seasonal-season-startDate')?.value || '';
-                const endDate = item.querySelector('.seasonal-season-endDate')?.value || '';
-                const orderInput = item.querySelector(`.seasonal-season-order-input[data-index="${seasonIndex}"]`);
-                const order = orderInput ? parseInt(orderInput.value || '100', 10) : 100;
-                
-                // Collect nested sections
-                const sectionsList = item.querySelector(`.seasonal_season_sections_list[data-season-index="${seasonIndex}"]`);
-                const sections = [];
-                if (sectionsList) {
-                    const sectionItems = sectionsList.querySelectorAll('.seasonal_season_section_item');
-                    sectionItems.forEach((sectionItem, sectionItemIndex) => {
-                        const fullIndex = `${seasonIndex}_${sectionItemIndex}`;
-                        const sectionConfig = getSectionConfigFromUI(modalInstance.dialogContent, 'seasonal_season', fullIndex);
-                        if (sectionConfig) {
-                            sections.push(sectionConfig);
-                        }
-                    });
-                }
-                
-                const seasonConfig = {
-                    id: name.toLowerCase().replace(/\s+/g, '-') || `season-${seasonIndex}`,
-                    name: name,
-                    enabled: enabled,
-                    startDate: startDate,
-                    endDate: endDate,
-                    order: order,
-                    sections: sections
-                };
-                seasons.push(seasonConfig);
-            });
-            return seasons;
-        }
-        
-        // Collect custom sections
-        function getCustomSections() {
-            const sectionsList = modalInstance.dialogContent.querySelector('#customSections_list');
-            const sections = [];
-            
-            if (!sectionsList) {
-                return sections;
-            }
-            
-            const sectionItems = sectionsList.querySelectorAll('.customSection_section_item');
-            sectionItems.forEach((sectionItem, index) => {
-                const sectionIndex = sectionItem.getAttribute('data-section-index') ?? index;
-                const sectionConfig = getSectionConfigFromUI(modalInstance.dialogContent, 'customSection', sectionIndex);
-                if (sectionConfig) {
-                    sections.push(sectionConfig);
-                }
-            });
-            
-            return sections;
-        }
-
-        // Collect home screen config
-        config.homeScreen = {
-            defaultItemLimit: 16,
-            defaultSortOrder: 'Random',
-            defaultCardFormat: 'Poster',
-            recentlyReleased: {
-                enabled: document.getElementById('homeScreen_recentlyReleased_enabled')?.checked !== false,
-                movies: {
-                    enabled: document.getElementById('homeScreen_recentlyReleased_movies_enabled')?.checked !== false,
-                    ...getSectionConfig('homeScreen_recentlyReleased_movies', { includeName: true, defaultName: 'Recently Released Movies', includeSortOrder: true, includeOrder: true, includeIsPlayed: true, includePremiereDays: true })
-                },
-                episodes: {
-                    enabled: document.getElementById('homeScreen_recentlyReleased_episodes_enabled')?.checked !== false,
-                    ...getSectionConfig('homeScreen_recentlyReleased_episodes', { includeName: true, defaultName: 'Recently Aired Episodes', includeSortOrder: true, includeOrder: true, includeIsPlayed: true, includePremiereDays: true })
-                }
-            },
-            recentlyAddedInLibrary: (() => {
-                const libraryConfigs = {};
-                const libraryCheckboxes = modalInstance.dialogContent.querySelectorAll('.recently-added-library-enabled');
-                libraryCheckboxes.forEach(checkbox => {
-                    const libraryId = checkbox.getAttribute('data-library-id');
-                    if (libraryId) {
-                        const prefix = `homeScreen_recentlyAddedInLibrary_${libraryId}`;
-                        libraryConfigs[libraryId] = {
-                            enabled: checkbox.checked !== false,
-                            ...getSectionConfig(prefix, { 
-                                includeName: true, 
-                                defaultName: '', 
-                                includeSortOrder: false, 
-                                includeOrder: true
-                            })
-                        };
-                    }
-                });
-                return libraryConfigs;
-            })(),
-            trending: {
-                enabled: document.getElementById('homeScreen_trending_enabled')?.checked === true,
-                ...getSectionConfig('homeScreen_trending', { includeName: true, defaultName: 'Trending' })
-            },
-            popularTVNetworks: {
-                enabled: document.getElementById('homeScreen_popularTVNetworks_enabled')?.checked === true,
-                minimumShowsForNetwork: parseInt(document.getElementById('homeScreen_popularTVNetworks_minimumShowsForNetwork')?.value || '5'),
-                ...getSectionConfig('homeScreen_popularTVNetworks', { includeName: true, defaultName: 'Popular TV Networks' })
-            },
-            watchlist: {
-                enabled: document.getElementById('homeScreen_watchlist_enabled')?.checked === true,
-                ...getSectionConfig('homeScreen_watchlist', { includeName: true, defaultName: 'Watchlist' })
-            },
-            watchAgain: {
-                enabled: document.getElementById('homeScreen_watchAgain_enabled')?.checked === true,
-                ...getSectionConfig('homeScreen_watchAgain', { includeName: true, defaultName: 'Watch Again' })
-            },
-            upcoming: {
-                enabled: document.getElementById('homeScreen_upcoming_enabled')?.checked !== false,
-                ...getSectionConfig('homeScreen_upcoming', { includeSortOrder: false, includeName: true, defaultName: 'Upcoming' })
-            },
-            imdbTop250: {
-                enabled: document.getElementById('homeScreen_imdbTop250_enabled')?.checked !== false,
-                ...getSectionConfig('homeScreen_imdbTop250', { includeName: true, defaultName: 'IMDb Top 250' })
-            },
-            seasonal: {
-                enabled: document.getElementById('homeScreen_seasonal_enabled')?.checked !== false,
-                enableSeasonalAnimations: document.getElementById('homeScreen_seasonal_enableSeasonalAnimations')?.checked !== false,
-                enableSeasonalBackground: document.getElementById('homeScreen_seasonal_enableSeasonalBackground')?.checked !== false,
-                defaultItemLimit: 16,
-                defaultSortOrder: 'Random',
-                defaultCardFormat: 'Poster',
-                seasons: getSeasonalSeasons()
-            },
-            discovery: {
-                enabled: document.getElementById('homeScreen_discovery_enabled')?.checked !== false,
-                infiniteScroll: document.getElementById('homeScreen_discovery_infiniteScroll')?.checked !== false,
-                randomizeOrder: document.getElementById('homeScreen_discovery_randomizeOrder')?.checked === true,
-                minPeopleAppearances: parseInt(document.getElementById('homeScreen_discovery_minPeopleAppearances')?.value || '10'),
-                minGenreMovieCount: parseInt(document.getElementById('homeScreen_discovery_minGenreMovieCount')?.value || '50'),
-                spotlightDiscoveryChance: parseFloat(document.getElementById('homeScreen_discovery_spotlightDiscoveryChance')?.value || '0.5'),
-                renderSpotlightAboveMatching: document.getElementById('homeScreen_discovery_renderSpotlightAboveMatching')?.checked === true,
-                defaultItemLimit: parseInt(document.getElementById('homeScreen_discovery_itemLimit')?.value || '16'),
-                defaultSortOrder: document.getElementById('homeScreen_discovery_sortOrder')?.value || 'Random',
-                defaultCardFormat: document.getElementById('homeScreen_discovery_cardFormat')?.value || 'Poster',
-                sectionTypes: (() => {
-                    const sectionConfigs = {};
-                    DISCOVERY_SECTION_DEFINITIONS.forEach(section => {
-                        const prefix = `homeScreen_discovery_sectionTypes_${section.key}`;
-                        const collectedConfig = getSectionConfig(prefix, { includeName: true, includeOrder: true, includeSortOrder: false, defaultName: section.defaultName });
-                        collectedConfig.enabled = document.getElementById(`${prefix}_enabled`)?.checked !== false;
-                        if (section.extras?.minimumItems !== undefined) {
-                            const minimumValue = parseInt(document.getElementById(`${prefix}_minimumItems`)?.value || `${section.extras.minimumItems}`, 10);
-                            collectedConfig.minimumItems = Number.isFinite(minimumValue) ? minimumValue : section.extras.minimumItems;
-                        }
-                        sectionConfigs[section.key] = collectedConfig;
-                    });
-                    return sectionConfigs;
-                })()
-            },
-            customSections: getCustomSections()
-        };
-
-        // Collect exclusive elsewhere config
-        config.exclusiveElsewhere = {
-            hideServerName: document.getElementById('exclusiveElsewhere_hideServerName')?.checked === true
-        };
-
-        // Collect search config
-        config.search = {
-            enableJellyseerr: document.getElementById('search_enableJellyseerr')?.checked === true
-        };
-
-        // Collect flattenSingleSeasonShows config
-        config.flattenSingleSeasonShows = {
-            hideSingleSeasonContainer: document.getElementById('flattenSingleSeasonShows_hideSingleSeasonContainer')?.checked === true
-        };
-
-        // Parse JSON fields
-        const skinsFromJson = parseJSONField('skinsJson', []);
-        config.themes = parseJSONField('themesJson', []);
-        config.customMenuLinks = parseJSONField('customMenuLinksJson', []);
-        
-        // Collect optional includes configuration
-        if (overrideOptionalIncludes) {
-            config.optionalIncludes = overrideOptionalIncludes;
-        } else {
-            // Fallback: Use existing config.optionalIncludes to prevent data loss
-            // DOM scraping caused partial overwrites because it only found visible checkboxes for the current category
-            console.warn('[KefinTweaks Configuration] handleSaveConfig called without overrideOptionalIncludes - preserving existing optionalIncludes');
-            if (!config.optionalIncludes) {
-                config.optionalIncludes = [];
-            }
-        }
-
-        // Collect skin enabled toggles and merge with JSON skins
-        // Only save admin-configured skins (not defaults)
-        // Get default skin names to filter them out
-        const defaultSkinNames = new Set((window.KefinTweaksDefaultSkinsConfig?.skins || []).map(s => s.name));
-        
-        // Collect enabled states from toggles (for all skins, including defaults)
-        const skinEnabledStates = {};
-        modalInstance.dialogContent.querySelectorAll('[data-skin-name]').forEach(checkbox => {
-            const skinName = checkbox.getAttribute('data-skin-name');
-            skinEnabledStates[skinName] = checkbox.checked;
-        });
-
-        // Only save admin skins (from JSON textarea) - filter out any that match default names
-        // This ensures we don't accidentally save default skins
-        const customSkins = skinsFromJson
-            .filter(skin => !defaultSkinNames.has(skin.name)) // Exclude defaults
-            .map(skin => ({
-                ...skin,
-                enabled: skinEnabledStates[skin.name] !== false, // Default to true if not set
-                hidden: false // Explicitly set for admin skins
-            }));
-
-        // Handle disabled default skins
-        // We need to explicitly save them in config.skins with enabled: false to override the default
-        const disabledDefaultSkins = [];
-        defaultSkinNames.forEach(name => {
-            // If explicitly disabled in UI
-            if (skinEnabledStates[name] === false) {
-                disabledDefaultSkins.push({
-                    name: name,
-                    enabled: false
-                });
-            }
-        });
-
-        // Combine custom skins and disabled default skins
-        config.skins = [...customSkins, ...disabledDefaultSkins];
-        
-        // Note: Enabled states for default skins are collected but not saved in config.skins
-        // Default skins will use their default enabled state from skinConfig.js
-        // If we need to save enabled states for defaults, we'd need a separate field (future enhancement)
-
-        // Handle defaultSkin
-        if (config.defaultSkin === '') {
-            config.defaultSkin = null;
-        }
 
         console.log('[KefinTweaks Configuration] Configuration collected:', config);
 
@@ -5347,16 +6081,19 @@
         }
     }
 
+    /**
+     * @returns {Promise<boolean>} true if defaults were restored
+     */
     async function handleResetConfig(modalInstance) {
         const userIsAdmin = await isAdmin();
         if (!userIsAdmin) {
             alert('You must be an administrator to reset configuration.');
-            return;
+            return false;
         }
 
         const confirmed = confirm('This will restore the KefinTweaks configuration to its defaults. It cannot be undone. Are you sure you want to continue?');
         if (!confirmed) {
-            return;
+            return false;
         }
 
         try {
@@ -5366,6 +6103,11 @@
             const existingConfig = await getKefinTweaksConfig();
             defaultConfig.kefinTweaksRoot = existingConfig.kefinTweaksRoot;
             // Note: scriptRoot is no longer used - scripts are loaded from kefinTweaksRoot + '/scripts/'
+
+            window.KefinTweaksConfig = defaultConfig;
+            window.KefinTweaksCurrentConfig = defaultConfig;
+            currentLoadedConfig = defaultConfig;
+            window.KefinTweaksConfigEnabled = defaultConfig.enabled !== false;
 
             await KefinTweaksUtils.saveConfigToJavaScriptInjector(defaultConfig);
 
@@ -5379,6 +6121,7 @@
                 modalInstance.close();
             }
             openConfigurationModal();
+            return true;
         } catch (error) {
             console.error('[KefinTweaks Configuration] Error resetting config:', error);
             if (window.KefinTweaksToaster && window.KefinTweaksToaster.toast) {
@@ -5386,25 +6129,27 @@
             } else {
                 alert(`Error resetting configuration: ${error.message}`);
             }
+            return false;
         }
     }
 
-    async function handleResetAllUsersConfig(modalInstance) {
+    /**
+     * Bump configVersion so clients clear kefinTweaks* localStorage on next load (see injector.js).
+     */
+    async function handleResetAllUsersConfig() {
         const userIsAdmin = await isAdmin();
         if (!userIsAdmin) {
             alert('You must be an administrator to reset configuration for all users.');
             return;
         }
 
-        const confirmed = confirm('WARNING: This will force ALL users to reset their KefinTweaks settings to the default configuration on their next visit. This action cannot be undone. Are you sure you want to continue?');
+        const confirmed = confirm('WARNING: This will force ALL users to reset their KefinTweaks local settings on their next visit. This action cannot be undone. Are you sure you want to continue?');
         if (!confirmed) {
             return;
         }
 
         try {
             const config = await getKefinTweaksConfig();
-            // Update the configVersion to current timestamp
-            // This will trigger the reset logic in injector.js for all clients
             config.configVersion = Date.now();
 
             await KefinTweaksUtils.saveConfigToJavaScriptInjector(config);
@@ -5439,8 +6184,174 @@
         }
     }
 
+    function getKefinTweaksRoot() {
+        const raw = window.KefinTweaksConfig?.kefinTweaksRoot || '';
+        return raw.endsWith('/') ? raw : `${raw}/`;
+    }
+
+    function getKefinTweaksLogoCssValue() {
+        const root = getKefinTweaksRoot();
+        if (!root) return 'none';
+        return `url('${root}logo.png')`;
+    }
+
+    function ensureKefinTweaksLogoVar() {
+        document.documentElement.style.setProperty(
+            '--kefinTweaksLogo',
+            getKefinTweaksLogoCssValue()
+        );
+    }
+
+    function closeAppUserMenu() {
+        const menu = document.getElementById('app-user-menu');
+        if (!menu) return;
+        const backdrop = menu.querySelector('.MuiBackdrop-root, .MuiModal-backdrop');
+        if (backdrop) {
+            backdrop.click();
+            return;
+        }
+        document.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Escape',
+            code: 'Escape',
+            keyCode: 27,
+            which: 27,
+            bubbles: true
+        }));
+    }
+
+    /**
+     * Create KefinTweaks menu item for Jellyfin v12 #app-user-menu
+     * @returns {HTMLAnchorElement}
+     */
+    function createAppUserMenuConfigButton() {
+        ensureKefinTweaksLogoVar();
+
+        const link = document.createElement('a');
+        link.className = 'MuiButtonBase-root MuiMenuItem-root MuiMenuItem-gutters MuiMenuItem-root MuiMenuItem-gutters css-mbeig7';
+        link.setAttribute('tabindex', '-1');
+        link.setAttribute('role', 'menuitem');
+        link.href = '#';
+        link.setAttribute('data-kefintweaks-user-menu-config-button', 'true');
+
+        const icon = document.createElement('div');
+        icon.className = 'MuiListItemIcon-root';
+        const iconSpan = document.createElement('span');
+        iconSpan.className = 'material-icons MuiSvgIcon-root MuiSvgIcon-fontSizeMedium';
+        iconSpan.setAttribute('aria-hidden', 'true');
+        icon.appendChild(iconSpan);
+
+        const text = document.createElement('div');
+        text.className = 'MuiListItemText-root';
+        const span = document.createElement('span');
+        span.className = 'MuiTypography-root MuiTypography-body1 MuiListItemText-primary';
+        span.textContent = 'KefinTweaks';
+        text.appendChild(span);
+
+        const ripple = document.createElement('span');
+        ripple.className = 'MuiTouchRipple-root';
+
+        link.appendChild(icon);
+        link.appendChild(text);
+        link.appendChild(ripple);
+
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            closeAppUserMenu();
+            openConfigurationModal();
+        });
+
+        return link;
+    }
+
+    /**
+     * Insert KefinTweaks into #app-user-menu before the first HR after Dashboard.
+     * @returns {boolean} true if button is present after this call
+     */
+    function addConfigButtonToAppUserMenu() {
+        if (document.querySelector('[data-kefintweaks-user-menu-config-button]')) {
+            return true;
+        }
+
+        const appUserMenu = document.getElementById('app-user-menu');
+        if (!appUserMenu) {
+            return false;
+        }
+
+        const menuList = appUserMenu.querySelector('ul[role="menu"]');
+        if (!menuList) {
+            return false;
+        }
+
+        const dashboardLink = menuList.querySelector('a[href="#/dashboard"]')
+            || menuList.querySelector('a[href*="#/dashboard"]');
+        if (!dashboardLink) {
+            console.log('[KefinTweaks Configuration] #app-user-menu Dashboard link not found');
+            return false;
+        }
+
+        let divider = dashboardLink.nextElementSibling;
+        while (divider && !(divider.matches('hr') || divider.classList.contains('MuiDivider-root'))) {
+            divider = divider.nextElementSibling;
+        }
+        if (!divider) {
+            console.log('[KefinTweaks Configuration] #app-user-menu divider after Dashboard not found');
+            return false;
+        }
+
+        const button = createAppUserMenuConfigButton();
+        divider.parentNode.insertBefore(button, divider);
+        console.log('[KefinTweaks Configuration] Configuration button added to #app-user-menu');
+        return true;
+    }
+
+    let appUserMenuConfigObserver = null;
+
+    /**
+     * Permanent observer: keep re-injecting if #app-user-menu remounts and our button is lost.
+     */
+    function setupAppUserMenuConfigButtonObserver() {
+        addConfigButtonToAppUserMenu();
+
+        if (appUserMenuConfigObserver) {
+            return;
+        }
+
+        const utils = window.KefinTweaksUtils;
+        let scheduled = false;
+        const onMutations = () => {
+            if (document.querySelector('[data-kefintweaks-user-menu-config-button]')) {
+                return;
+            }
+            if (scheduled) return;
+            scheduled = true;
+            requestAnimationFrame(() => {
+                scheduled = false;
+                addConfigButtonToAppUserMenu();
+            });
+        };
+
+        if (utils?.onBodyMutation) {
+            appUserMenuConfigObserver = utils.onBodyMutation('config-appUserMenu', onMutations);
+            return;
+        }
+
+        if (typeof MutationObserver === 'undefined' || !document.body) {
+            console.log('[KefinTweaks Configuration] Cannot observe #app-user-menu (MutationObserver/body unavailable)');
+            return;
+        }
+
+        appUserMenuConfigObserver = new MutationObserver(onMutations);
+        appUserMenuConfigObserver.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+    }
+
     // Create configuration button for Administration section
     function createConfigButton() {
+        ensureKefinTweaksLogoVar();
+
         const button = document.createElement('div');
         button.style.display = 'block';
         button.style.padding = '0';
@@ -5454,9 +6365,9 @@
 
         button.innerHTML = `
             <div class="listItem">
-                <span class="material-icons listItemIcon listItemIcon-transparent build" aria-hidden="true"></span>
+                <span class="material-icons listItemIcon listItemIcon-transparent" aria-hidden="true"></span>
                 <div class="listItemBody">
-                    <div class="listItemBodyText">Configure KefinTweaks</div>
+                    <div class="listItemBodyText">KefinTweaks</div>
                 </div>
             </div>
         `;
@@ -5466,13 +6377,18 @@
 
     // Create dashboard side menu button
     function createDashboardConfigButton() {
+        ensureKefinTweaksLogoVar();
+
         // Check if button already exists
         if (document.querySelector('[data-kefintweaks-dashboard-config-button]')) {
             return null;
         }
 
+        // Get an existing native button
+        const nativeButton = document.querySelector('.MuiButtonBase-root.MuiListItemButton-root.MuiListItemButton-gutters.MuiListItemButton-root.MuiListItemButton-gutters');
+
         const div = document.createElement('div');
-        div.className = 'MuiButtonBase-root MuiListItemButton-root MuiListItemButton-gutters MuiListItemButton-root MuiListItemButton-gutters kefin-config-button';
+        div.className = 'MuiButtonBase-root MuiListItemButton-root MuiListItemButton-gutters MuiListItemButton-root MuiListItemButton-gutters css-yknuxp';
         div.setAttribute('tabindex', '0');
         div.setAttribute('data-kefintweaks-dashboard-config-button', 'true');
         div.onclick = () => {
@@ -5481,24 +6397,24 @@
         
         // Create icon with Material icon
         const icon = document.createElement('div');
-        icon.className = 'MuiListItemIcon-root css-37qkju';
+        icon.className = 'MuiListItemIcon-root css-37qkju css-5pks8q';
         const iconSpan = document.createElement('span');
-        iconSpan.className = 'material-icons build MuiSvgIcon-root MuiSvgIcon-fontSizeMedium';
+        iconSpan.className = 'material-icons MuiSvgIcon-root MuiSvgIcon-fontSizeMedium';
         iconSpan.style.marginRight = '12px';
         iconSpan.setAttribute('aria-hidden', 'true');
         icon.appendChild(iconSpan);
 
         // Create text
         const text = document.createElement('div');
-        text.className = 'MuiListItemText-root css-f696uz';
+        text.className = 'MuiListItemText-root css-f696uz css-t3p1pa';
         const span = document.createElement('span');
-        span.className = 'MuiTypography-root MuiTypography-body1 MuiListItemText-primary css-hlxkyz';
+        span.className = 'MuiTypography-root MuiTypography-body1 MuiListItemText-primary css-hlxkyz css-pl8nxc';
         span.textContent = 'KefinTweaks';
         text.appendChild(span);
 
         // Create ripple effect span
         const ripple = document.createElement('span');
-        ripple.className = 'MuiTouchRipple-root css-w0pj6f';
+        ripple.className = 'MuiTouchRipple-root css-w0pj6f css-4mb1j7';
 
         div.appendChild(icon);
         div.appendChild(text);
@@ -5518,7 +6434,7 @@
         const pluginsSection = document.querySelector('ul[aria-labelledby="plugins-subheader"]');
         if (!pluginsSection) {
             console.log('[KefinTweaks Configuration] Plugins section not found, retrying...');
-            setTimeout(addConfigButtonToDashboard, 500);
+            //setTimeout(addConfigButtonToDashboard, 500);
             return;
         }
 
@@ -5536,6 +6452,7 @@
 
     // Add configuration button to Administration section
     function addConfigButtonToAdminSection() {
+        return;
         // Check if button already exists (check for admin section button specifically)
         if (document.querySelector('.adminSection [data-kefintweaks-config-button]')) {
             return;
@@ -5545,7 +6462,7 @@
         const adminSection = document.querySelector('.adminSection.verticalSection');
         if (!adminSection) {
             console.log('[KefinTweaks Configuration] Administration section not found, retrying...');
-            setTimeout(addConfigButtonToAdminSection, 500);
+            //setTimeout(addConfigButtonToAdminSection, 500);
             return;
         }
 
@@ -5611,41 +6528,22 @@
             return;
         }
 
-        // Use a special URL that we can intercept
-        const configUrl = '#';
-        
-        // Add the menu link
+        // Admin-only: user menu admin section + default side menu; open via JS action
         const success = await window.KefinTweaksUtils.addCustomMenuLink(
-            'Configure',
+            'KefinTweaks',
             'build',
-            configUrl,
+            '',
             false,
-            '.adminMenuOptions'
+            {
+                userMenu: true,
+                isAdminLink: true,
+                action: 'KefinTweaksConfiguration.openConfigurationModal'
+            }
         );
 
         if (success) {
             console.log('[KefinTweaks Configuration] Configuration link added to custom menu');
-            
-            // Set up click handler to intercept navigation and open modal instead
-            setupConfigLinkClickHandler();
         }
-    }
-
-    // Set up click handler for configuration menu link
-    function setupConfigLinkClickHandler() {
-        // Find the config button
-        const configButton = document.querySelector('.navMenuOption[data-name="configure"]');
-        if (!configButton) {
-            console.log('[KefinTweaks Configuration] Configuration button not found, retrying...');
-            setTimeout(setupConfigLinkClickHandler, 1000);
-            return;
-        }
-
-        // Add click handler to the config button
-        configButton.addEventListener('click', (e) => {
-            e.preventDefault();
-            openConfigurationModal();
-        });
     }
 
     // Handle direct navigation to config URL
@@ -5679,6 +6577,14 @@
             return;
         }
 
+        // Run migration check during initialization
+        try {
+            const config = await getKefinTweaksConfig();
+            // Migration is handled inside getKefinTweaksConfig
+        } catch (error) {
+            console.warn('[KefinTweaks Configuration] Error during initialization migration check:', error);
+        }
+
         // Register view page handler
         registerViewPageHandler();
 
@@ -5696,6 +6602,8 @@
         const userIsAdmin = await isAdmin();
         
         if (userIsAdmin) {
+            // User-menu KefinTweaks entry is owned by addCustomMenuLink(userMenu + isAdminLink + action)
+
             if (hash && (hash.includes('mypreferencesmenu') || hash.includes('userpreferences') || hash.includes('preferences'))) {
                 setTimeout(() => {
                     addConfigButtonToAdminSection();

@@ -1,0 +1,37 @@
+/* ================= MOBILE TOUCH FIX ================= */
+
+  /* Top left menu button */
+  .headerButton,
+  .headerButton.headerButtonLeft,
+  .headerButton.headerButtonRight {
+      width: 36px !important;
+      height: 36px !important;
+      min-width: 36px !important;
+      min-height: 36px !important;
+      margin: 0 6px !important;
+  }
+
+  /* Icons inside header buttons */
+  .headerButton i,
+  .headerButton .material-icons,
+  .headerButton .material-icons-round {
+      font-size: 26px !important;
+  }
+
+  /* Profile picture tap area */
+  .headerUserButton {
+      width: 36px !important;
+      height: 36px !important;
+  }
+
+  .headerUserButton img {
+      width: 36px !important;
+      height: 36px !important;
+  }
+
+  /* Cast & group watch buttons */
+  .headerCastButton,
+  .headerSyncButton {
+      width: 36px !important;
+      height: 36px !important;
+  }

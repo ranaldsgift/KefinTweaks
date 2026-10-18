@@ -452,6 +452,42 @@
     }
 
     /**
+     * Play playlist items in sort order, optionally resuming from first unplayed.
+     * @param {string} playlistId
+     * @param {{ resume?: boolean }} [options]
+     */
+    async function playPlaylistItems(playlistId, options = {}) {
+        const resume = options.resume === true;
+        const sortedItems = await getSortedPlaylistItems(playlistId, resume);
+        const sortedIds = sortedItems.map(item => item.Id);
+
+        if (sortedIds.length === 0) {
+            WARN(resume ? 'No items to resume for playlist:' : 'No items to play for playlist:', playlistId);
+            return;
+        }
+
+        LOG(
+            resume
+                ? `Resuming ${sortedIds.length} sorted items from playlist:`
+                : `Playing ${sortedIds.length} items from playlist:`,
+            playlistId
+        );
+
+        const playOptions = {};
+        if (resume && sortedItems[0].UserData?.PlaybackPositionTicks > 0) {
+            playOptions.startPositionTicks = sortedItems[0].UserData.PlaybackPositionTicks;
+        }
+
+        if (window.apiHelper && window.apiHelper.playItem) {
+            await window.apiHelper.playItem(sortedIds, playOptions);
+        } else if (window.ApiClient && typeof window.ApiClient.play === 'function') {
+            await window.ApiClient.play({ ids: sortedIds, ...playOptions });
+        } else {
+            ERR('No play method available');
+        }
+    }
+
+    /**
      * Override play button to use sorted playlist items
      * @param {HTMLElement} mainDetailButtons - Main detail buttons container
      * @param {string} playlistId - Playlist item ID
@@ -514,33 +550,10 @@
         clonedButton.onclick = async (e) => {
             e.preventDefault();
             e.stopPropagation();
-            e.stopImmediatePropagation(); // Prevent any other handlers
+            e.stopImmediatePropagation();
 
             try {
-                // Get sorted item IDs with resume mode (skip played items from start)
-                const sortedItems = await getSortedPlaylistItems(playlistId, true);
-                const sortedIds = sortedItems.map(item => item.Id);
-                
-                if (sortedIds.length === 0) {
-                    WARN('No items to resume for playlist:', playlistId);
-                    return;
-                }                
-
-                LOG(`Resuming ${sortedIds.length} sorted items from playlist:`, playlistId);
-
-                let options = {};
-                // Check if the first item has playback progress
-                if (sortedItems[0].UserData?.PlaybackPositionTicks > 0) {
-                    // Add the playback position to the options
-                    options.startPositionTicks = sortedItems[0].UserData?.PlaybackPositionTicks;
-                }
-
-                // Use apiHelper if available, otherwise fallback to ApiClient
-                if (window.apiHelper && window.apiHelper.playItem) {
-                    await window.apiHelper.playItem(sortedIds, options);
-                } else {
-                    ERR('No play method available');
-                }
+                await playPlaylistItems(playlistId, { resume: true });
             } catch (error) {
                 ERR('Error resuming sorted playlist:', error);
             }
@@ -693,30 +706,7 @@
             e.stopImmediatePropagation();
 
             try {
-                // Get sorted item IDs without resume mode (play all items from beginning)
-                const sortedItems = await getSortedPlaylistItems(playlistId, false);
-                const sortedIds = sortedItems.map(item => item.Id);
-
-                if (sortedIds.length === 0) {
-                    WARN('No items to play for playlist:', playlistId);
-                    return;
-                }
-
-                LOG(`Playing from beginning ${sortedIds.length} items from playlist:`, playlistId);
-
-                // Use apiHelper if available, otherwise fallback to ApiClient
-                if (window.apiHelper && window.apiHelper.playItem) {
-                    await window.apiHelper.playItem(sortedIds);
-                } else if (window.ApiClient && typeof window.ApiClient.play === 'function') {
-                    await window.ApiClient.play({ ids: sortedIds });
-                } else if (window.PlaybackManager && window.PlaybackManager.play) {
-                    await window.PlaybackManager.play({
-                        ids: sortedIds,
-                        serverId: window.ApiClient.serverId()
-                    });
-                } else {
-                    ERR('No play method available');
-                }
+                await playPlaylistItems(playlistId, { resume: false });
             } catch (error) {
                 ERR('Error playing from beginning:', error);
             }
@@ -757,21 +747,13 @@
             return;
         }
 
-        let playlistItemsContainer = activePage.querySelector('.childrenItemsContainer');
+        let playlistItemsContainer = activePage.querySelector('.childrenItemsContainer') || activePage.querySelector('#listChildrenCollapsible .itemsContainer');
         if (!playlistItemsContainer) {
-            playlistItemsContainer = activePage.querySelector('#listChildrenCollapsible');
-            if (!playlistItemsContainer) {
-                WARN('Playlist items container not found');
-                return;
-            }
+            WARN('Playlist items container not found');
+            return;
         }
-
-        // Find items container
-        const itemsContainer = playlistItemsContainer.querySelector('.childrenItemsContainer') || 
-                              playlistItemsContainer.querySelector('#listChildrenCollapsible') ||
-                              playlistItemsContainer;
-
-        return itemsContainer;
+        
+        return playlistItemsContainer;
     }
 
     /**
@@ -825,17 +807,7 @@
         let debounceTimer = null;
 
         playlistObserver = new MutationObserver((mutations) => {
-            if (ignoreNextMutation) {
-                ignoreNextMutation = false;
-                return;
-            }
-
             const sortKey = getCurrentSort(playlistId);
-
-            if (sortKey === 'default') {
-                return;
-            }
-
             let shouldReapply = false;
 
             mutations.forEach((mutation) => {
@@ -846,13 +818,10 @@
                         mutation.addedNodes.forEach((node) => {
                             if (node.nodeType === Node.ELEMENT_NODE) {
                                 // If listItem was added, we need to reapply
-                                if (node.classList?.contains('listItem') || 
-                                    node.classList?.contains('childrenItemsContainer') ||
-                                    node.classList?.contains('listChildrenCollapsible') ||
-                                    node.querySelector?.('.listItem[data-playlistitemid]') ||
-                                    node.querySelector?.('.childrenItemsContainer') ||
-                                    node.querySelector?.('#listChildrenCollapsible')) {
-                                    shouldReapply = true;
+                                if (node.classList?.contains('listItem')) {
+                                        LOG('Playlist container re-rendered, re-applying sort for:', playlistId);
+                                        node.setAttribute('data-action', 'link');
+                                        shouldReapply = true;
                                 }
                             }
                         });
@@ -860,7 +829,7 @@
                 }
             });
 
-            if (shouldReapply) {
+            if (sortKey !== 'default' && shouldReapply) {
                 // Debounce to avoid multiple rapid re-applications
                 clearTimeout(debounceTimer);
                 debounceTimer = setTimeout(() => {
@@ -870,10 +839,12 @@
             }
         });
 
-        // Observe the playlist items container with childList changes
+        // Observe the playlist items container for childList and data-action attribute changes
         playlistObserver.observe(playlistItemsContainer, {
             childList: true,
-            subtree: true
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['data-action']
         });
 
         LOG('MutationObserver set up for playlist:', playlistId);
@@ -895,13 +866,10 @@
         }
 
         // Find playlist items container
-        let playlistItemsContainer = activePage.querySelector('.childrenItemsContainer');
+        let playlistItemsContainer = getPlaylistItemsContainer();
         if (!playlistItemsContainer) {
-            playlistItemsContainer = activePage.querySelector('#listChildrenCollapsible');
-            if (!playlistItemsContainer) {
-                WARN('Playlist items container not found');
-                return;
-            }
+            WARN('Playlist items container not found');
+            return;
         }
 
         // Check if already processed (but allow re-processing if button is missing)
@@ -921,16 +889,6 @@
             return;
         }
 
-        // Find items container
-        const itemsContainer = playlistItemsContainer.querySelector('.childrenItemsContainer') || 
-                              playlistItemsContainer.querySelector('#listChildrenCollapsible') ||
-                              playlistItemsContainer;
-        
-        if (!itemsContainer) {
-            WARN('Items container not found');
-            return;
-        }
-
         LOG('Adding playlist sorting for:', playlistId);
 
         // Fetch playlist children
@@ -943,8 +901,33 @@
         // Store playlist data
         playlistData.set(playlistId, {
             items: children,
-            itemsContainer: itemsContainer
+            itemsContainer: playlistItemsContainer
         });
+
+        // Updated played item count
+        const playedItemCount = children.filter(item => item.UserData?.Played === true).length;
+
+        const itemMiscInfoPrimary = document.querySelector('.libraryPage:not(.hide) .itemMiscInfo-primary');
+        if (itemMiscInfoPrimary && playedItemCount > 0) {
+            const isAudioPlaylist = children.every(item => item.MediaType === 'Audio');
+            const isBookPlaylist = children.every(item => item.MediaType === 'Book');
+            const progressText = isAudioPlaylist ? 'played' : isBookPlaylist ? 'read' : 'watched';
+            const incompleteText = isAudioPlaylist ? 'unplayed' : isBookPlaylist ? 'unread' : 'unwatched';
+
+            // Add CSS Var --played-item-count
+            itemMiscInfoPrimary.dataset.playedItemCount = playedItemCount;
+            itemMiscInfoPrimary.dataset.totalItemCount = children.length;
+
+            const mediaInfoItem = document.createElement('div');
+            mediaInfoItem.className = 'mediaInfoItem';
+            mediaInfoItem.textContent = `${playedItemCount} ${progressText}`;
+            itemMiscInfoPrimary.appendChild(mediaInfoItem);
+
+            const mediaInfoItemIncomplete = document.createElement('div');
+            mediaInfoItemIncomplete.className = 'mediaInfoItem';
+            mediaInfoItemIncomplete.textContent = `${children.length - playedItemCount} ${incompleteText}`;
+            itemMiscInfoPrimary.appendChild(mediaInfoItemIncomplete);
+        }
 
         // Add sort button (only if it doesn't exist)
         if (!sortButton) {
@@ -977,67 +960,23 @@
             return;
         }
         
-        let childrenItemsContainer = libraryPage.querySelector('.childrenItemsContainer');
+        let childrenItemsContainer = getPlaylistItemsContainer();
         if (!childrenItemsContainer) {
-            childrenItemsContainer = libraryPage.querySelector('#listChildrenCollapsible');
-            if (!childrenItemsContainer) {
-                WARN('Children items container not found');
-                return;
-            }
+            WARN('Children items container not found');
+            return;
         }
-        
+
         const playlistItems = childrenItemsContainer.querySelectorAll('.listItem[data-playlistitemid]');
         LOG(`Found ${playlistItems.length} playlist items`);
-        
         playlistItems.forEach((item, index) => {
-            if (item.dataset.customPlaylistButton === 'true') {
-                LOG(`Playlist item ${index} already has a custom button, skipping`);
-                return;
-            }
-
             const playlistItemId = item.getAttribute('data-playlistitemid');
-            const serverId = ApiClient.serverId();
-            
             if (!playlistItemId) {
                 WARN(`Playlist item ${index} has no data-playlistitemid`);
                 return;
             }
-            
-            // Remove existing click handlers
-            item.removeAttribute('data-action');
+            item.setAttribute('data-action', 'link');
             item.style.cursor = 'pointer';
-            
-            // Add new click handler to navigate to details page
-            item.addEventListener('click', (e) => {
-                handlePlaylistItemClick(e, item, playlistItemId, serverId);
-            });
-
-            item.dataset.customPlaylistButton = 'true';
         });
-    }
-
-    function handlePlaylistItemClick(e, item, playlistItemId, serverId) {
-        // Check if the click target is within the listViewUserDataButtons container
-        const buttonsContainer = item.querySelector('.listViewUserDataButtons');
-        if (buttonsContainer && buttonsContainer.contains(e.target)) {
-            LOG(`Click on button detected, not navigating for item: ${playlistItemId}`);
-            return; // Don't navigate when clicking on buttons
-        }
-        
-        e.preventDefault();
-        e.stopPropagation();
-        
-        const detailsUrl = `/details?id=${playlistItemId}&serverId=${serverId}`;
-        LOG(`Navigating to: ${detailsUrl}`);
-        
-        // Use Jellyfin's navigation method
-        if (Dashboard) {
-            Dashboard.navigate(detailsUrl);
-        } else {
-            // Fallback to direct navigation
-            const fullDetailsUrl = `${ApiClient.serverAddress()}/web/#${detailsUrl}`;
-            window.location.href = fullDetailsUrl;
-        }
     }
     
     /**
@@ -1050,13 +989,10 @@
             return;
         }
         
-        let childrenItemsContainer = libraryPage.querySelector('.childrenItemsContainer');
+        let childrenItemsContainer = getPlaylistItemsContainer();
         if (!childrenItemsContainer) {
-            childrenItemsContainer = libraryPage.querySelector('#listChildrenCollapsible');
-            if (!childrenItemsContainer) {
-                WARN('Children items container not found for play buttons');
-                return;
-            }
+            WARN('Children items container not found for play buttons');
+            return;
         }
         
         const playlistItems = childrenItemsContainer.querySelectorAll('.listItem[data-playlistitemid]');
@@ -1185,17 +1121,10 @@
                 return;
             }
             
-            let childrenItemsContainer = libraryPage.querySelector('.childrenItemsContainer');
+            let childrenItemsContainer = getPlaylistItemsContainer();
             if (!childrenItemsContainer) {
-                childrenItemsContainer = libraryPage.querySelector('#listChildrenCollapsible');
-                if (!childrenItemsContainer) {
-                    if (attempts < maxAttempts) {
-                        setTimeout(pollForElements, pollInterval);
-                    } else {
-                        WARN('Children items container not found after 10 seconds');
-                    }
-                    return;
-                }
+                WARN('Children items container not found after 10 seconds');
+                return;
             }
 
             const playlistItems = childrenItemsContainer.querySelectorAll('.listItem[data-playlistitemid]');
@@ -1231,9 +1160,10 @@
 
 
         const css = `
-        .itemsContainer:not([data-sort-key="default"]) .listViewDragHandle {
-            pointer-events: none;
-        }
+        [data-kefin-playlist="true"]:has(#listChildrenCollapsible[data-sort-key]:not([data-sort-key="default"])) .listViewDragHandle,
+[data-kefin-playlist="true"]:has(.childrenItemsContainer[data-sort-key]:not([data-sort-key="default"])) .listViewDragHandle {
+    display: none;
+}
         `;
 
         const style = document.createElement('style');
@@ -1242,6 +1172,102 @@
         document.head.appendChild(style);
     }
     
+    /**
+     * Override overlay Play on Playlist cards so play resumes mid-playlist.
+     * @param {HTMLElement} overlayContainer
+     */
+    function overridePlaylistCardPlayButton(overlayContainer) {
+        if (!overlayContainer) return;
+
+        const card = overlayContainer.closest('.card');
+        if (!card || card.getAttribute('data-type') !== 'Playlist') return;
+
+        const playlistId = card.getAttribute('data-id');
+        if (!playlistId) {
+            WARN('Playlist card missing data-id');
+            return;
+        }
+
+        let playButton = overlayContainer.querySelector('.cardOverlayFab-primary') ||
+            overlayContainer.querySelector('button[data-action="resume"]') ||
+            overlayContainer.querySelector('button[data-action="play"]');
+
+        if (!playButton) {
+            const buttons = overlayContainer.querySelectorAll('button');
+            playButton = Array.from(buttons).find(btn => {
+                const icon = btn.querySelector('.material-icons');
+                if (!icon) return false;
+                const iconText = icon.textContent.trim();
+                return iconText === 'play_arrow' || iconText === 'play';
+            });
+        }
+
+        if (!playButton) return;
+
+        if (playButton.dataset.ktPlaylistCardOverridden === 'true') return;
+
+        LOG('Overriding card overlay play for playlist:', playlistId);
+
+        const clonedButton = playButton.cloneNode(true);
+        clonedButton.className = playButton.className;
+        clonedButton.id = playButton.id;
+        clonedButton.title = 'Resume';
+        clonedButton.setAttribute('is', playButton.getAttribute('is') || '');
+        clonedButton.type = playButton.type || 'button';
+        clonedButton.removeAttribute('data-action');
+        clonedButton.removeAttribute('onclick');
+        clonedButton.onclick = null;
+
+        playButton.parentNode.replaceChild(clonedButton, playButton);
+
+        clonedButton.onclick = async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+
+            try {
+                await playPlaylistItems(playlistId, { resume: true });
+            } catch (error) {
+                ERR('Error resuming playlist from card:', error);
+            }
+        };
+
+        clonedButton.dataset.ktPlaylistCardOverridden = 'true';
+    }
+
+    function processExistingPlaylistCardOverlays() {
+        document.querySelectorAll('.cardOverlayContainer').forEach((overlayContainer) => {
+            overridePlaylistCardPlayButton(overlayContainer);
+        });
+    }
+
+    function setupPlaylistCardPlayObserver() {
+        const processNode = (node) => {
+            if (!node || node.nodeType !== Node.ELEMENT_NODE) return;
+            if (node.classList?.contains('cardOverlayContainer')) {
+                overridePlaylistCardPlayButton(node);
+            }
+            node.querySelectorAll?.('.cardOverlayContainer').forEach(overridePlaylistCardPlayButton);
+        };
+
+        const onMutations = (mutations) => {
+            for (const mutation of mutations) {
+                if (mutation.type !== 'childList') continue;
+                mutation.addedNodes.forEach(processNode);
+            }
+        };
+
+        const utils = window.KefinTweaksUtils;
+        if (utils?.onBodyMutation) {
+            utils.onBodyMutation('playlist-cardPlay', onMutations);
+        } else if (typeof MutationObserver !== 'undefined' && document.body) {
+            const observer = new MutationObserver(onMutations);
+            observer.observe(document.body, { childList: true, subtree: true });
+        }
+
+        processExistingPlaylistCardOverlays();
+    }
+
     /**
      * Initialize playlist hook using utils
      */
@@ -1255,23 +1281,25 @@
         addPlaylistCSS();
 
         LOG('Registering playlist handler with KefinTweaksUtils');
+
+        setupPlaylistCardPlayObserver();
         
         // Register handler for details pages
         window.KefinTweaksUtils.onViewPage(async (view, element, hash, itemPromise) => {
             // Await the item promise to get the actual item data
-            const testItem = Emby.Page.promiseShow ? await Emby.Page.promiseShow() : null;
             const item = await itemPromise;
             if (item && item.Type === 'Playlist') {
                 // Run both original functionality and sorting functionality
                 modifyPlaylistPage();
+                await addPlaylistSorting(item);
                 
                 // Small delay to ensure details DOM is ready for sorting
-                setTimeout(async () => {
+/*                 setTimeout(async () => {
                     if (item && item.Id) {
                         await addPlaylistSorting(item);
                     }
                 }, 100);
-                return;
+                return; */
             }
         }, {
             pages: ['details']

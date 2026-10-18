@@ -277,7 +277,6 @@
                  data-history="true" data-removeonclose="true" 
                  style="animation: 140ms ease-out 0s 1 normal both running scaleup; position: fixed; margin: 0px;">
                 <div class="actionSheetContent">
-                    <span style="padding: 10px 20px;margin: -6px auto 10px;max-width: 450px;background: #c1c1c1;border-radius: 0 0 10px 10px;color: #000000;">If you have ${serverName} open in multiple tabs the subtitle will be downloaded, but the player will not switch to the subtitle and it will appear as if the download is hanging.</span>
                     <h1 class="actionSheetTitle">Subtitle Search Results</h1>
                     <div class="actionSheetScroller scrollY" id="subtitleSearchResults">
                         <div class="listItem">
@@ -331,14 +330,13 @@
                 throw new Error('ApiClient not available for authorization');
             }
             
-            const token = ApiClient.accessToken();
             const serverUrl = ApiClient.serverAddress();
             
             const response = await fetch(`${serverUrl}/Items/${itemId}/RemoteSearch/Subtitles/${language}`, {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',
-                    'Authorization': apiHelper.getAuthHeader()
+                    'Authorization': window.apiHelper.getAuthHeader()
                 }
             });
             
@@ -418,14 +416,13 @@
                 throw new Error('ApiClient not available');
             }
             
-            const token = ApiClient.accessToken();
             const serverUrl = ApiClient.serverAddress();
             
             const response = await fetch(`${serverUrl}/Items/${itemId}`, {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',
-                    'Authorization': apiHelper.getAuthHeader()
+                    'Authorization': window.apiHelper.getAuthHeader()
                 }
             });
             
@@ -505,14 +502,13 @@
                 throw new Error('ApiClient not available');
             }
             
-            const token = ApiClient.accessToken();
             const serverUrl = ApiClient.serverAddress();
             
             const response = await fetch(`${serverUrl}/Items/${itemId}`, {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',
-                    'Authorization': apiHelper.getAuthHeader()
+                    'Authorization': window.apiHelper.getAuthHeader()
                 }
             });
             
@@ -569,7 +565,6 @@
                 throw new Error('ApiClient not available');
             }
             
-            const token = ApiClient.accessToken();
             const serverUrl = ApiClient.serverAddress();
             const deviceId = ApiClient.deviceId();
             
@@ -588,7 +583,7 @@
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',
-                    'Authorization': apiHelper.getAuthHeader()
+                    'Authorization': window.apiHelper.getAuthHeader()
                 }
             });
             
@@ -625,7 +620,6 @@
                 throw new Error('ApiClient not available');
             }
             
-            const token = ApiClient.accessToken();
             const serverUrl = ApiClient.serverAddress();
             const userId = ApiClient.getCurrentUserId();
             
@@ -638,7 +632,7 @@
             const response = await fetch(`${serverUrl}/Sessions/${sessionId}/Command`, {
                 method: 'POST',
                 headers: {
-                    'Authorization': apiHelper.getAuthHeader(),
+                    'Authorization': window.apiHelper.getAuthHeader(),
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
@@ -758,7 +752,6 @@
                 throw new Error('No play state found in session');
             }
             
-            const token = ApiClient.accessToken();
             const serverUrl = ApiClient.serverAddress();
             
             // Get current item ID
@@ -788,7 +781,7 @@
             const commandResponse = await fetch(`${serverUrl}/Sessions/${sessionId}/Playing?${params.toString()}`, {
                 method: 'POST',
                 headers: {
-                    'Authorization': apiHelper.getAuthHeader()
+                    'Authorization': window.apiHelper.getAuthHeader()
                 }
             });
             
@@ -897,13 +890,12 @@
             // Get existing subtitle streams before download
             const existingStreams = await getExistingSubtitleStreams(itemId);
             
-            const token = ApiClient.accessToken();
             const serverUrl = ApiClient.serverAddress();
             
             const response = await fetch(`${serverUrl}/Items/${itemId}/RemoteSearch/Subtitles/${subId}`, {
                 method: 'POST',
                 headers: {
-                    'Authorization': apiHelper.getAuthHeader()
+                    'Authorization': window.apiHelper.getAuthHeader()
                 }
             });
             
@@ -1097,11 +1089,13 @@
         }
         
         try {
-            // Check if ApiClient is available first
-            if (!isApiClientAvailable()) {
-                LOG('ApiClient not available, skipping initialization');
+            // Wait for login to complete
+            if (!window.userHelper?.waitForLogin) {
+                LOG('userHelper.waitForLogin not available, waiting');
+                setTimeout(initialize, 1000);
                 return;
             }
+            await window.userHelper.waitForLogin();
             
             // Check permissions first
             const hasPermission = await checkSubtitlePermissions();
