@@ -141,8 +141,9 @@
 	max-width: initial !important;
 	white-space: nowrap;
 }
-.MuiToolbar-root:has(.kefinTweaks-breadcrumbs-wrapper) {
-	display: grid;
-	grid-template-columns: auto 1fr auto;
-	grid-template-rows: 1fr auto;
+header > .MuiToolbar-root:has(.kefinTweaks-breadcrumbs-wrapper) {
+	flex-wrap: wrap;
+}
+header > .MuiToolbar-root:has(.kefinTweaks-breadcrumbs-wrapper) #kefinTweaks-breadcrumbs-wrapper {
+	width: 100%;
 }
