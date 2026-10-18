@@ -4930,48 +4930,42 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                 });
 
                 confirmBtn?.addEventListener('click', async () => {
-                    const selectedIndices = Array.from(dialog.querySelectorAll('.import-community-check:checked'))
+                    const selectedIndices = Array.from(dialog.querySelectorAll('.import-community-check:checked:not(:disabled)'))
                         .map(c => parseInt(c.dataset.index, 10));
 
                     if (selectedIndices.length === 0) {
-                        showToast('Please select at least one section to import.');
+                        showToast('Please select at least one new section to import.');
                         return;
                     }
-
-                    if (!currentConfig.CUSTOM_SECTION_GROUPS) currentConfig.CUSTOM_SECTION_GROUPS = [];
 
                     const selectedSections = selectedIndices.map(i => {
                         const section = JSON.parse(JSON.stringify(collection.sections[i]));
                         return convertToHomeScreenSection(section);
                     });
 
-                    const importedGroup = {
-                        name: collection.name || 'Imported Collection',
-                        author: collection.author,
-                        description: collection.description,
-                        sections: selectedSections.map(section => {
-                            if (section.id && sectionIdExists(currentConfig, section.id)) {
-                                section.id = `${section.id}_community_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-                            }
-                            return section;
-                        })
-                    };
+                    const { importedCount, skippedCount } = importCommunitySectionsIntoConfig(
+                        collection,
+                        selectedSections
+                    );
 
-                    currentConfig.CUSTOM_SECTION_GROUPS.push(importedGroup);
-                    const importedCount = selectedSections.length;
+                    if (importedCount === 0) {
+                        showToast(skippedCount > 0
+                            ? 'Selected sections are already imported.'
+                            : 'Nothing new to import.');
+                        return;
+                    }
 
-                    if (importedCount > 0) {
-                        confirmBtn.disabled = true;
-                        try {
-                            await saveConfig(currentConfig);
-                            window.ModalSystem.close(COMMUNITY_IMPORT_MODAL_ID);
-                            showToast(`Successfully imported ${importedCount} sections. Refreshing...`);
-                            refreshMainModal();
-                        } catch (e) {
-                            ERR('Error importing community sections:', e);
-                            showToast('Error importing sections');
-                            confirmBtn.disabled = false;
-                        }
+                    confirmBtn.disabled = true;
+                    try {
+                        await saveConfig(currentConfig);
+                        window.ModalSystem.close(COMMUNITY_IMPORT_MODAL_ID);
+                        const skipNote = skippedCount > 0 ? ` (${skippedCount} already present)` : '';
+                        showToast(`Successfully imported ${importedCount} section${importedCount !== 1 ? 's' : ''}${skipNote}. Refreshing...`);
+                        refreshMainModal();
+                    } catch (e) {
+                        ERR('Error importing community sections:', e);
+                        showToast('Error importing sections');
+                        confirmBtn.disabled = false;
                     }
                 });
             }
@@ -4992,19 +4986,28 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             return;
         }
 
+        const existingGroup = findCommunityImportGroup(currentConfig.CUSTOM_SECTION_GROUPS || [], collection);
+        let availableCount = 0;
+
         sectionsList.innerHTML = `
             <div style="background: rgba(0,0,0,0.2); border-radius: 4px; padding: 0.5em;">
                 ${collection.sections.map((s, i) => {
                     const name = escapeHtml(s.name || 'Unnamed');
+                    const alreadyImported = isCommunitySectionInGroup(existingGroup, s);
+                    if (!alreadyImported) availableCount++;
                     const desc = s.description
                         ? `<div class="listItemBodyText secondary" style="font-size: 0.85em; margin-top: 0.25em;">${escapeHtml(String(s.description))}</div>`
                         : '';
+                    const importedNote = alreadyImported
+                        ? `<div class="listItemBodyText secondary" style="font-size: 0.8em; margin-top: 0.25em; opacity: 0.7;">Already imported</div>`
+                        : '';
                     return `
-                    <label class="checkboxContainer" style="display: flex; align-items: flex-start; padding: 0.5em; margin-bottom: 0.25em;">
-                        <input type="checkbox" class="import-community-check" data-index="${i}" checked style="margin-top: 0.2em;">
+                    <label class="checkboxContainer" style="display: flex; align-items: flex-start; padding: 0.5em; margin-bottom: 0.25em; ${alreadyImported ? 'opacity: 0.55;' : ''}">
+                        <input type="checkbox" class="import-community-check" data-index="${i}" ${alreadyImported ? 'disabled' : 'checked'} style="margin-top: 0.2em;">
                         <div style="margin-left: 0.5em; flex: 1; min-width: 0;">
                             <span class="listItemBodyText">${name}</span>
                             ${desc}
+                            ${importedNote}
                         </div>
                     </label>
                 `;
@@ -5014,7 +5017,11 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
 
         if (sectionsContainer) sectionsContainer.style.display = 'block';
         if (sectionsEmpty) sectionsEmpty.style.display = 'none';
-        if (confirmBtn) confirmBtn.style.display = 'inline-block';
+        if (confirmBtn) {
+            confirmBtn.style.display = 'inline-block';
+            confirmBtn.disabled = availableCount === 0;
+            confirmBtn.textContent = availableCount === 0 ? 'Already Imported' : 'Import Selected';
+        }
     }
 
     /**
@@ -5148,6 +5155,82 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
     }
 
     /**
+     * Find an existing custom group matching a community collection (name + author).
+     */
+    function findCommunityImportGroup(groups, collection) {
+        const name = collection?.name || 'Imported Collection';
+        const author = collection?.author;
+        return (groups || []).find((g) => {
+            if (g.name !== name) return false;
+            if (author) return g.author === author;
+            return !g.author;
+        }) || null;
+    }
+
+    /**
+     * Whether a community section is already present in a target group.
+     * Matches exact id, prior community re-import ids, or same section name.
+     */
+    function isCommunitySectionInGroup(group, section) {
+        if (!group?.sections?.length || !section) return false;
+        const id = section.id;
+        const name = section.name;
+        return group.sections.some((s) => {
+            if (id && s.id === id) return true;
+            if (id && s.id && String(s.id).startsWith(`${id}_community_`)) return true;
+            if (name && s.name === name) return true;
+            return false;
+        });
+    }
+
+    /**
+     * Import selected community sections into CUSTOM_SECTION_GROUPS,
+     * merging into an existing name+author group and skipping duplicates.
+     * @returns {{ importedCount: number, skippedCount: number, group: Object|null }}
+     */
+    function importCommunitySectionsIntoConfig(collection, selectedSections) {
+        if (!currentConfig.CUSTOM_SECTION_GROUPS) currentConfig.CUSTOM_SECTION_GROUPS = [];
+
+        const existingGroup = findCommunityImportGroup(currentConfig.CUSTOM_SECTION_GROUPS, collection);
+        const toAdd = [];
+        let skippedCount = 0;
+
+        selectedSections.forEach((section) => {
+            if (isCommunitySectionInGroup(existingGroup, section)) {
+                skippedCount++;
+                return;
+            }
+            if (section.id && sectionIdExists(currentConfig, section.id)) {
+                section.id = `${section.id}_community_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+            }
+            toAdd.push(section);
+        });
+
+        if (toAdd.length === 0) {
+            return { importedCount: 0, skippedCount, group: existingGroup };
+        }
+
+        let targetGroup = existingGroup;
+        if (!targetGroup) {
+            targetGroup = {
+                name: collection.name || 'Imported Collection',
+                author: collection.author,
+                description: collection.description,
+                sections: []
+            };
+            currentConfig.CUSTOM_SECTION_GROUPS.push(targetGroup);
+        } else if (collection.description && !targetGroup.description) {
+            targetGroup.description = collection.description;
+        }
+
+        if (!targetGroup.sections) targetGroup.sections = [];
+        targetGroup.sections.push(...toAdd);
+        targetGroup.sections.sort((a, b) => (a.order || 0) - (b.order || 0));
+
+        return { importedCount: toAdd.length, skippedCount, group: targetGroup };
+    }
+
+    /**
      * Show community import dialog
      */
     async function showCommunityImportDialog() {
@@ -5229,15 +5312,24 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
 
                     // Render sections list
                     let html = '';
+                    let availableCount = 0;
                     if (selectedCollection.sections && selectedCollection.sections.length > 0) {
+                        const existingGroup = findCommunityImportGroup(
+                            currentConfig.CUSTOM_SECTION_GROUPS || [],
+                            selectedCollection
+                        );
                         html += `
                             <div style="background: rgba(0,0,0,0.2); border-radius: 4px; padding: 0.5em;">
-                                ${selectedCollection.sections.map((s, i) => `
-                                    <label class="checkboxContainer" style="display: flex; align-items: center; padding: 0.5em;">
-                                        <input type="checkbox" class="import-community-check" data-index="${i}" checked>
-                                        <span class="listItemBodyText" style="margin-left: 0.5em;">${s.name || 'Unnamed'}</span>
+                                ${selectedCollection.sections.map((s, i) => {
+                                    const alreadyImported = isCommunitySectionInGroup(existingGroup, s);
+                                    if (!alreadyImported) availableCount++;
+                                    return `
+                                    <label class="checkboxContainer" style="display: flex; align-items: center; padding: 0.5em; ${alreadyImported ? 'opacity: 0.55;' : ''}">
+                                        <input type="checkbox" class="import-community-check" data-index="${i}" ${alreadyImported ? 'disabled' : 'checked'}>
+                                        <span class="listItemBodyText" style="margin-left: 0.5em;">${escapeHtml(s.name || 'Unnamed')}${alreadyImported ? ' (already imported)' : ''}</span>
                                     </label>
-                                `).join('')}
+                                `;
+                                }).join('')}
                             </div>`;
                     } else {
                         html = '<div class="listItemBodyText secondary">No sections found in this collection.</div>';
@@ -5246,51 +5338,43 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                     selectionList.innerHTML = html;
                     selectionContainer.style.display = 'block';
                     confirmBtn.style.display = 'inline-block';
+                    confirmBtn.disabled = availableCount === 0;
+                    confirmBtn.textContent = availableCount === 0 ? 'Already Imported' : 'Import Selected';
                 });
 
                 confirmBtn.addEventListener('click', async () => {
                     if (!selectedCollection) return;
 
-                    const selectedIndices = Array.from(content.querySelectorAll('.import-community-check:checked')).map(c => parseInt(c.dataset.index));
-                    
+                    const selectedIndices = Array.from(content.querySelectorAll('.import-community-check:checked:not(:disabled)'))
+                        .map(c => parseInt(c.dataset.index));
+
                     if (selectedIndices.length === 0) {
-                        showToast('Please select at least one section to import.');
+                        showToast('Please select at least one new section to import.');
                         return;
                     }
 
-                    // Import logic - import entire groups to CUSTOM_SECTION_GROUPS
-                    if (!currentConfig.CUSTOM_SECTION_GROUPS) currentConfig.CUSTOM_SECTION_GROUPS = [];
-                    
                     const selectedSections = selectedIndices.map(i => {
-                        const section = JSON.parse(JSON.stringify(selectedCollection.sections[i])); // Deep copy
+                        const section = JSON.parse(JSON.stringify(selectedCollection.sections[i]));
                         return convertToHomeScreenSection(section);
                     });
-                    
-                    // Create a group from the collection
-                    const importedGroup = {
-                        name: selectedCollection.name || 'Imported Collection',
-                        author: selectedCollection.author,
-                        description: selectedCollection.description,
-                        sections: selectedSections.map(section => {
-                            // Check for ID collision - only regenerate if needed
-                            if (section.id && sectionIdExists(currentConfig, section.id)) {
-                                section.id = `${section.id}_community_${Date.now()}_${Math.floor(Math.random()*1000)}`;
-                            }
-                            return section;
-                        })
-                    };
-                    
-                    currentConfig.CUSTOM_SECTION_GROUPS.push(importedGroup);
-                    const importedCount = selectedSections.length;
 
-                    if (importedCount > 0) {
-                        await saveConfig(currentConfig);
-                        showToast(`Successfully imported ${importedCount} sections. Refreshing...`);
-                        refreshMainModal();
-                        window.ModalSystem.close('kefinCommunityImportModal');
-                    } else {
-                        window.ModalSystem.close('kefinCommunityImportModal');
+                    const { importedCount, skippedCount } = importCommunitySectionsIntoConfig(
+                        selectedCollection,
+                        selectedSections
+                    );
+
+                    if (importedCount === 0) {
+                        showToast(skippedCount > 0
+                            ? 'Selected sections are already imported.'
+                            : 'Nothing new to import.');
+                        return;
                     }
+
+                    await saveConfig(currentConfig);
+                    const skipNote = skippedCount > 0 ? ` (${skippedCount} already present)` : '';
+                    showToast(`Successfully imported ${importedCount} section${importedCount !== 1 ? 's' : ''}${skipNote}. Refreshing...`);
+                    refreshMainModal();
+                    window.ModalSystem.close('kefinCommunityImportModal');
                 });
             }
         });
