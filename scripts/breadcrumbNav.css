@@ -142,7 +142,7 @@
 	white-space: nowrap;
 }
 header > .MuiToolbar-root:has(.kefinTweaks-breadcrumbs-wrapper) {
-	flex-wrap: wrap;
+	flex-wrap: wrap !important;
 }
 header > .MuiToolbar-root:has(.kefinTweaks-breadcrumbs-wrapper) #kefinTweaks-breadcrumbs-wrapper {
 	width: 100%;
