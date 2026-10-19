@@ -1380,6 +1380,29 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         return changed;
     }
 
+    // TEMPORARY: one-time liveTv-on-now Limit:1 → 20 migration. Remove in a future release
+    // once existing installs have had time to pick up the patch (see liveTvOnNowLimitPatched).
+    // TODO(remove): patchLiveTvOnNowLimitOnce + call site + liveTvLimitPatch log field
+    function patchLiveTvOnNowLimitOnce(config) {
+        if (!window.KefinTweaksConfig) window.KefinTweaksConfig = {};
+        if (window.KefinTweaksConfig.liveTvOnNowLimitPatched === true) return false;
+
+        for (const group of config.HOME_SECTION_GROUPS || []) {
+            for (const section of group.sections || []) {
+                if (section?.id !== 'liveTv-on-now') continue;
+                const opts = section.queries?.[0]?.queryOptions;
+                if (!opts) continue;
+                // Only bump the bad baked-in default; leave admin-chosen limits alone
+                if (opts.Limit === 1 || opts.Limit === '1') {
+                    opts.Limit = 20;
+                }
+            }
+        }
+
+        window.KefinTweaksConfig.liveTvOnNowLimitPatched = true;
+        return true; // flag always newly stamped → needs save
+    }
+
     async function ensureKefinTweaksDefaultSections() {
         try {
             if (!window.ApiClient || !window.ApiClient._loggedIn) {
@@ -1411,15 +1434,18 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
 
             const defaultSyncChanges = syncKefinTweaksDefaultSections(config);
             const seasonalThemeChanges = syncSeasonalThemesFromDefaults(config);
+            // TEMPORARY / TODO(remove): one-time liveTv-on-now Limit patch
+            const liveTvLimitPatch = patchLiveTvOnNowLimitOnce(config);
 
-            if (libraryChanges || addedDefaults || prunedOrphans || defaultSyncChanges || seasonalThemeChanges) {
+            if (libraryChanges || addedDefaults || prunedOrphans || defaultSyncChanges || seasonalThemeChanges || liveTvLimitPatch) {
                 await saveConfig(config);
                 LOG('KefinTweaks default home sections synced on startup', {
                     libraryChanges,
                     addedDefaults,
                     prunedOrphans,
                     defaultSyncChanges,
-                    seasonalThemeChanges
+                    seasonalThemeChanges,
+                    liveTvLimitPatch
                 });
             }
         } catch (error) {

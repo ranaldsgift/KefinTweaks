@@ -31,7 +31,7 @@
 					enabled: false,
 					order: 5,
 					cardFormat: "Thumb",
-					ttl: CACHE_CONFIG.LONG_TTL,
+					ttl: CACHE_CONFIG.FORCE_REFRESH_TTL,
 					userConfigurable: true,
 					queries: [
 						{
@@ -53,7 +53,7 @@
 					enabled: false,
 					order: 6,
 					cardFormat: "Button",
-					ttl: CACHE_CONFIG.LONG_TTL,
+					ttl: CACHE_CONFIG.FORCE_REFRESH_TTL,
 					userConfigurable: true,
 					queries: [
 						{
@@ -308,7 +308,7 @@
 					enabled: false,
 					order: 17,
 					cardFormat: "Thumb",
-					ttl: CACHE_CONFIG.SHORT_TTL,
+					ttl: CACHE_CONFIG.FORCE_REFRESH_TTL,
 					userConfigurable: true,
 					queries: [
 						{
@@ -330,7 +330,7 @@
 					enabled: false,
 					order: 17,
 					cardFormat: "Thumb",
-					ttl: CACHE_CONFIG.SHORT_TTL,
+					ttl: CACHE_CONFIG.FORCE_REFRESH_TTL,
 					userConfigurable: true,
 					queries: [
 						{
@@ -387,7 +387,7 @@
 					enabled: false,
 					order: 15,
 					cardFormat: "Thumb",
-					ttl: CACHE_CONFIG.VERY_SHORT_TTL,
+					ttl: CACHE_CONFIG.FORCE_REFRESH_TTL,
 					userConfigurable: true,
 					queries: [
 						{
@@ -395,7 +395,7 @@
 							queryOptions: {
 								IsAiring: true,
 								Fields: "ChannelInfo,PrimaryImageAspectRatio",
-								Limit: 1,
+								Limit: 20,
 								ImageTypeLimit: 1,
 								EnableTotalRecordCount: "false",
 							},
@@ -430,7 +430,7 @@
 					order: 19,
 					cardFormat: "Square",
 					hideCardFooter: true,
-					ttl: CACHE_CONFIG.LONG_TTL,
+					ttl: CACHE_CONFIG.FORCE_REFRESH_TTL,
 					userConfigurable: true,
 					queries: [
 						{
@@ -449,7 +449,7 @@
 					enabled: false,
 					order: 20,
 					cardFormat: "Thumb",
-					ttl: CACHE_CONFIG.VERY_SHORT_TTL,
+					ttl: CACHE_CONFIG.FORCE_REFRESH_TTL,
 					userConfigurable: true,
 					queries: [
 						{
@@ -474,7 +474,7 @@
 					enabled: false,
 					order: 20,
 					cardFormat: "Thumb",
-					ttl: CACHE_CONFIG.VERY_SHORT_TTL,
+					ttl: CACHE_CONFIG.FORCE_REFRESH_TTL,
 					userConfigurable: true,
 					queries: [
 						{
@@ -495,7 +495,7 @@
 					enabled: false,
 					order: 20,
 					cardFormat: "Thumb",
-					ttl: CACHE_CONFIG.VERY_SHORT_TTL,
+					ttl: CACHE_CONFIG.FORCE_REFRESH_TTL,
 					userConfigurable: true,
 					queries: [
 						{
@@ -516,7 +516,7 @@
 					enabled: false,
 					order: 20,
 					cardFormat: "Thumb",
-					ttl: CACHE_CONFIG.VERY_SHORT_TTL,
+					ttl: CACHE_CONFIG.FORCE_REFRESH_TTL,
 					userConfigurable: true,
 					queries: [
 						{
@@ -537,7 +537,7 @@
 					enabled: false,
 					order: 20,
 					cardFormat: "Thumb",
-					ttl: CACHE_CONFIG.VERY_SHORT_TTL,
+					ttl: CACHE_CONFIG.FORCE_REFRESH_TTL,
 					userConfigurable: true,
 					queries: [
 						{
