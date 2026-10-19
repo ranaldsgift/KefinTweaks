@@ -768,11 +768,25 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             await persistConfigFromUpdateCheck(config);
         };
 
+        const releaseNotesUrl = tag
+            ? `https://github.com/ranaldsgift/KefinTweaks/releases/tag/${encodeURIComponent(tag)}`
+            : 'https://github.com/ranaldsgift/KefinTweaks/releases/latest';
+        const versionLabel = tag || 'a new version';
+        const openReleaseNotes = () => {
+            try {
+                window.open(releaseNotesUrl, '_blank', 'noopener');
+            } catch (_) { /* ignore */ }
+        };
+
         const handle = toastFn(
-            'An update for KefinTweaks is available.',
+            `KefinTweaks ${versionLabel} is available! Release Notes`,
             '0',
             false,
             {
+                link: {
+                    label: 'Release Notes',
+                    onClick: openReleaseNotes
+                },
                 buttons: [
                     {
                         label: 'Update',
@@ -795,12 +809,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                                 } else {
                                     await persistConfigFromUpdateCheck(config);
                                     handle?.dismiss?.();
-                                    const url = tag
-                                        ? `https://github.com/ranaldsgift/KefinTweaks/releases/tag/${encodeURIComponent(tag)}`
-                                        : 'https://github.com/ranaldsgift/KefinTweaks/releases/latest';
-                                    try {
-                                        window.open(url, '_blank', 'noopener');
-                                    } catch (_) { /* ignore */ }
+                                    openReleaseNotes();
                                 }
                             } catch (e) {
                                 console.error('[KefinTweaks Installer] Update action failed:', e);
