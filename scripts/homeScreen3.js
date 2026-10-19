@@ -2073,6 +2073,38 @@
     }
 
     /**
+     * Build live section cfg from a newly saved server section + current user prefs.
+     * Matches full home load: server base, then applyUserSectionOverrides.
+     * @param {Object} sectionConfig saved server section from the editor
+     * @returns {Promise<{ cfg: Object, serverDefaults: Object }>}
+     */
+    async function buildCfgFromServerSectionWithUserPrefs(sectionConfig) {
+        const serverSection = { ...sectionConfig };
+        const api = window.KefinUserHomeScreenConfig;
+        const serverDefaults = api?.getServerSectionDefaults?.(serverSection) || {};
+
+        if (!api?.applyUserSectionOverrides || !api?.parseKefinTweaksHomeScreen) {
+            return { cfg: serverSection, serverDefaults };
+        }
+
+        let homeScreen;
+        try {
+            const displayPrefs = await fetchDisplayPreferences();
+            homeScreen = api.parseKefinTweaksHomeScreen(displayPrefs?.CustomPrefs);
+        } catch (e) {
+            WARN('refreshHomeSectionById: failed to load user prefs, using server section', e);
+            return { cfg: serverSection, serverDefaults };
+        }
+
+        const serverById = new Map();
+        if (serverSection.id) serverById.set(serverSection.id, serverSection);
+        const [cfg] = api.applyUserSectionOverrides([serverSection], homeScreen, {
+            serverSectionsById: serverById
+        });
+        return { cfg: cfg || serverSection, serverDefaults };
+    }
+
+    /**
      * Full re-render + replace a single mounted home section (admin editor save).
      * If the section is not mounted, no-ops (does not refresh the whole home).
      * @param {string} sectionId
@@ -2096,9 +2128,15 @@
         }
 
         const runtime = window.KefinHomeScreenSectionRuntime?.get?.(sectionId);
-        const cfg = sectionConfig
-            ? { ...(runtime?.effectiveConfig || {}), ...sectionConfig }
-            : (runtime?.effectiveConfig || null);
+        let cfg = null;
+        let serverDefaults = runtime?.serverDefaults || {};
+        if (sectionConfig) {
+            const built = await buildCfgFromServerSectionWithUserPrefs(sectionConfig);
+            cfg = built.cfg;
+            serverDefaults = built.serverDefaults;
+        } else {
+            cfg = runtime?.effectiveConfig || null;
+        }
         if (!cfg) {
             WARN('refreshHomeSectionById: no section config for', sectionId);
             return false;
@@ -2217,6 +2255,7 @@
             runtime.element = newContent;
             runtime.effectiveConfig = cfg;
             runtime.cachedItems = items;
+            runtime.serverDefaults = serverDefaults;
             window.KefinHomeScreenSectionRuntime?.register?.(runtime);
         } else if (window.KefinHomeScreenSectionRuntime?.register) {
             window.KefinHomeScreenSectionRuntime.register({
@@ -2224,7 +2263,7 @@
                 element: newContent,
                 effectiveConfig: cfg,
                 cachedItems: items,
-                serverDefaults: {},
+                serverDefaults,
             });
         }
 
