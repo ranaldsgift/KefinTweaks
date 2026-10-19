@@ -750,7 +750,7 @@
         }
 
         // Use apiHelper to get seasons
-        const response = await window.apiHelper.getQuery(`${ApiClient.serverAddress()}/Shows/${seriesId}/Seasons`, { useCache: true });
+        const response = await window.apiHelper.getQuery(`${ApiClient.serverAddress()}/Shows/${seriesId}/Seasons`);
         if (!response.data) {
             response.data = await response.dataPromise;
         }
