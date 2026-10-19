@@ -777,14 +777,15 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                 window.open(releaseNotesUrl, '_blank', 'noopener');
             } catch (_) { /* ignore */ }
         };
-
+        
+        const updateMessage = `KefinTweaks ${versionLabel} is available!`;
         const handle = toastFn(
-            `KefinTweaks ${versionLabel} is available! Release Notes`,
+            updateMessage,
             '0',
             false,
             {
                 link: {
-                    label: 'Release Notes',
+                    label: updateMessage,
                     onClick: openReleaseNotes
                 },
                 buttons: [
@@ -912,6 +913,82 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         } catch (e) {
             console.warn('[KefinTweaks Installer] Update check failed:', e);
         }
+    }
+
+    /**
+     * Human-readable installed version for config UI (tag, short SHA, branch, or Custom).
+     */
+    function getInstalledVersionLabel(config) {
+        const cfg = config || window.KefinTweaksConfig;
+        const root = cfg?.kefinTweaksRootResolved || cfg?.kefinTweaksRoot || '';
+        if (!root) return 'Unknown';
+
+        if (isSymbolicLatestRoot(root)) return 'latest';
+
+        const ref = parseGithubRootRef(root);
+        if (!ref) {
+            return isGithubJsdelivrKefinRoot(root) ? 'Unknown' : 'Custom';
+        }
+        if (ref.kind === 'semver') return ref.value;
+        if (ref.kind === 'sha') return ref.value.slice(0, 7);
+        if (ref.kind === 'main' || ref.kind === 'experimental') return ref.kind;
+        return 'Custom';
+    }
+
+    /**
+     * Whether GitHub Latest is newer than the current pin (ignores dismiss state).
+     * @returns {Promise<{ available: boolean, latestTag: string }>}
+     */
+    async function isUpdateAvailable(config) {
+        const cfg = config || window.KefinTweaksConfig;
+        const root = cfg?.kefinTweaksRoot;
+        if (!root || isSymbolicLatestRoot(root)) {
+            return { available: false, latestTag: '' };
+        }
+
+        let latest;
+        try {
+            latest = await fetchLatestGithubRelease();
+        } catch (e) {
+            console.warn('[KefinTweaks Installer] isUpdateAvailable: fetch failed:', e);
+            return { available: false, latestTag: '' };
+        }
+        if (!latest?.tag) return { available: false, latestTag: '' };
+
+        let available = false;
+        if (isGithubJsdelivrKefinRoot(root)) {
+            try {
+                available = await isGithubInstallBehindLatest(root, cfg, latest);
+            } catch (e) {
+                console.warn('[KefinTweaks Installer] isUpdateAvailable: compare failed:', e);
+                available = true;
+            }
+        } else {
+            available = true;
+        }
+
+        return { available, latestTag: latest.tag };
+    }
+
+    /**
+     * Force-show the update toast (ignores updateState.dismissed).
+     */
+    async function showUpdateAvailablePrompt(config, latestTag) {
+        const cfg = config || window.KefinTweaksConfig;
+        let tag = normalizeReleaseTag(latestTag);
+        if (!tag) {
+            try {
+                const latest = await fetchLatestGithubRelease();
+                tag = latest?.tag || '';
+            } catch (e) {
+                console.warn('[KefinTweaks Installer] showUpdateAvailablePrompt: fetch failed:', e);
+            }
+        }
+        if (!tag) {
+            console.warn('[KefinTweaks Installer] showUpdateAvailablePrompt: no latest tag');
+            return;
+        }
+        await showPinnedVersionUpdateToast(cfg, tag);
     }
 
     function isKefinInjectorAttachedOnPage() {
@@ -2102,6 +2179,14 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
 
     // Make function globally accessible
     window.openKefinTweaksSourceModal = openKefinTweaksSourceModal;
+    window.KefinTweaksInstaller = window.KefinTweaksInstaller || {};
+    window.KefinTweaksInstaller.getInstalledVersionLabel = getInstalledVersionLabel;
+    window.KefinTweaksInstaller.isUpdateAvailable = isUpdateAvailable;
+    window.KefinTweaksInstaller.showUpdateAvailablePrompt = showUpdateAvailablePrompt;
+    // Also expose flat helpers for simple call sites
+    window.getKefinTweaksInstalledVersionLabel = getInstalledVersionLabel;
+    window.isKefinTweaksUpdateAvailable = isUpdateAvailable;
+    window.showKefinTweaksUpdateAvailablePrompt = showUpdateAvailablePrompt;
 
     // Prevent concurrent card inserts (async config fetch races past DOM checks)
     let pluginCardAddInProgress = false;

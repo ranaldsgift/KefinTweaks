@@ -676,6 +676,43 @@
                 margin: 0 auto;
                 padding: 1.5em;
             }
+
+            #${MODAL_ID} .kefin-config-version-cluster {
+                margin-left: auto;
+                display: inline-flex;
+                align-items: center;
+                gap: 0.6em;
+                flex-wrap: wrap;
+            }
+
+            #${MODAL_ID} .kefin-config-version-label {
+                margin: 0;
+                opacity: 0.75;
+                font-size: 0.95em;
+                white-space: nowrap;
+            }
+
+            #${MODAL_ID} .kefin-config-update-badge {
+                display: none;
+                padding: 0.35em 0.85em;
+                font-size: 0.85em;
+                font-weight: 600;
+                border-radius: 999px;
+                border: 1px solid rgba(82, 196, 26, 0.55);
+                background: rgba(82, 196, 26, 0.18);
+                color: inherit;
+                cursor: pointer;
+                white-space: nowrap;
+            }
+
+            #${MODAL_ID} .kefin-config-update-badge.is-visible {
+                display: inline-flex;
+                align-items: center;
+            }
+
+            #${MODAL_ID} .kefin-config-update-badge:hover {
+                background: rgba(82, 196, 26, 0.28);
+            }
             
             #${MODAL_ID} .paperList {
                 background: rgba(255, 255, 255, 0.03);
@@ -873,6 +910,11 @@
         const scripts = config.scripts || {};
 
         const isEnabled = window.KefinTweaksConfig?.enabled !== false;
+        const versionLabelFn = window.KefinTweaksInstaller?.getInstalledVersionLabel
+            || window.getKefinTweaksInstalledVersionLabel;
+        const installedVersion = (typeof versionLabelFn === 'function'
+            ? versionLabelFn(window.KefinTweaksConfig)
+            : '') || 'Unknown';
         
         return `
             <div class="paperList" style="padding: 0.2em 1em;">
@@ -888,6 +930,12 @@
                         <button class="emby-button raised" id="manageConfigBtn" style="padding: 0.75em 2em; font-size: 1em;" title="Manage backups, export, import, and resets">
                             <span>Manage</span>
                         </button>
+                        <div class="kefin-config-version-cluster">
+                            <span id="kefinTweaksInstalledVersion" class="listItemBodyText secondary kefin-config-version-label" title="Installed KefinTweaks version">${installedVersion.replace(/</g, '&lt;')}</span>
+                            <button type="button" id="kefinTweaksUpdateAvailableBadge" class="kefin-config-update-badge" title="A newer KefinTweaks release is available" aria-label="Update available" hidden>
+                                Update Available!
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2607,6 +2655,42 @@
                     alert(`Failed to open source configuration: ${error.message}`);
                 }
             });
+        }
+
+        // Version label + Update Available badge (force-opens update toast even if dismissed)
+        const updateBadge = modalInstance.dialogContent.querySelector('#kefinTweaksUpdateAvailableBadge');
+        if (updateBadge) {
+            updateBadge.addEventListener('click', async () => {
+                const promptFn = window.KefinTweaksInstaller?.showUpdateAvailablePrompt
+                    || window.showKefinTweaksUpdateAvailablePrompt;
+                if (typeof promptFn !== 'function') {
+                    console.warn('[KefinTweaks Configuration] Update prompt API unavailable');
+                    return;
+                }
+                try {
+                    updateBadge.disabled = true;
+                    await promptFn(window.KefinTweaksConfig, updateBadge.dataset.latestTag || '');
+                } catch (error) {
+                    console.error('[KefinTweaks Configuration] Failed to open update prompt:', error);
+                } finally {
+                    updateBadge.disabled = false;
+                }
+            });
+
+            (async () => {
+                const checkFn = window.KefinTweaksInstaller?.isUpdateAvailable
+                    || window.isKefinTweaksUpdateAvailable;
+                if (typeof checkFn !== 'function') return;
+                try {
+                    const result = await checkFn(window.KefinTweaksConfig);
+                    if (!result?.available) return;
+                    if (result.latestTag) updateBadge.dataset.latestTag = result.latestTag;
+                    updateBadge.hidden = false;
+                    updateBadge.classList.add('is-visible');
+                } catch (error) {
+                    console.warn('[KefinTweaks Configuration] Update availability check failed:', error);
+                }
+            })();
         }
 
         // No validation needed for default skin dropdown - it only allows valid options
