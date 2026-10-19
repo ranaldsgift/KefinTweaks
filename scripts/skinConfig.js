@@ -11,7 +11,12 @@
     // ============================================================================
 
     const getKefinTweaksRoot = () => {
-        return window.KefinTweaksConfig?.kefinTweaksRoot || 'https://ranaldsgift.github.io/KefinTweaks/';
+        const cfg = window.KefinTweaksConfig || {};
+        // Prefer pinned tip (commit/tag); fall back to symbolic root (e.g. @latest)
+        let root = String(cfg.kefinTweaksRootResolved || cfg.kefinTweaksRoot || '').trim();
+        if (!root) root = 'https://ranaldsgift.github.io/KefinTweaks/';
+        if (root.charAt(root.length - 1) !== '/') root += '/';
+        return root;
     }
     
     const KEFIN_TWEAKS_DEFAULT_SKINS_CONFIG = {
