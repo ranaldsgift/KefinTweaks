@@ -1843,8 +1843,7 @@
 					enabled: true,
 					userConfigurable: true,
 					itemLimit: 20,
-					sortOrder: "CommunityRating",
-					sortOrderDirection: "Descending",
+					sortBy: "Random",
 					renderMode: "Spotlight",
 					ttl: CACHE_CONFIG.DISCOVERY_TTL,
 					queries: [
@@ -1852,9 +1851,8 @@
 							queryOptions: {
 								Recursive: true,
 								IncludeItemTypes: ["Movie"],
-								SortBy: "CommunityRating",
-								SortOrder: "Descending",
-								Limit: 20,
+								MinCommunityRating: 7.5,
+								Limit: 100,
 								Fields: DISCOVERY_CONTENT_FIELDS,
 							},
 						},
@@ -2287,8 +2285,7 @@
 					enabled: true,
 					userConfigurable: true,
 					itemLimit: 20,
-					sortOrder: "CommunityRating",
-					sortOrderDirection: "Descending",
+					sortBy: "Random",
 					renderMode: "Spotlight",
 					ttl: CACHE_CONFIG.DISCOVERY_TTL,
 					queries: [
@@ -2296,8 +2293,7 @@
 							queryOptions: {
 								Recursive: true,
 								IncludeItemTypes: ["Series"],
-								SortBy: "CommunityRating",
-								SortOrder: "Descending",
+								MinCommunityRating: 7.5,
 								Limit: 20,
 								Fields: DISCOVERY_CONTENT_FIELDS,
 							},
@@ -2396,8 +2392,7 @@
 					enabled: true,
 					userConfigurable: true,
 					itemLimit: 20,
-					sortOrder: "CommunityRating",
-					sortOrderDirection: "Descending",
+					sortBy: "Random",
 					renderMode: "Spotlight",
 					ttl: CACHE_CONFIG.DISCOVERY_TTL,
 					queries: [
@@ -2405,9 +2400,8 @@
 							queryOptions: {
 								Recursive: true,
 								IncludeItemTypes: ["Series"],
-								SortBy: "CommunityRating",
-								SortOrder: "Descending",
-								Limit: 20,
+								MinCommunityRating: 7.5,
+								Limit: 100,
 								Fields: DISCOVERY_CONTENT_FIELDS,
 							},
 						},
