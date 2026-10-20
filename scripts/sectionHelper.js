@@ -569,7 +569,10 @@
             return `#/tv.html?collectionType=tvshows&tab=4&serverId=${ApiClient.serverId()}`;
         }
 
-        if (id === 'upcoming' || id === 'recentlyReleased.episodes') {
+        // Check for Jellyfin 12, as this universal Upcoming tab is currently broken in Jellyfin 12
+        const isJellyfin12 = await window.KefinTweaks.getJellyfinMajorVersion();
+
+        if (id === 'upcoming' || (id === 'recentlyReleased.episodes' && !isJellyfin12)) {
             return `#/tv.html?collectionType=tvshows&tab=2&serverId=${ApiClient.serverId()}`;
         }
 
@@ -633,7 +636,8 @@
 
             // Check for ParentId
             if (queryOptions.ParentId) {
-                if (sectionConfig.discoveryType === 'Collection' || sectionConfig.discoveryType === 'Playlist') {
+                const detailsParentTypes = ['Collection', 'Playlist'];
+                if (sectionConfig.discoveryType === 'Collection' || sectionConfig.discoveryType === 'Playlist' || detailsParentTypes.includes(activeQuery._parentItemType)) {
                     return `#/details?id=${queryOptions.ParentId}&serverId=${serverId}`;
                 }
 
