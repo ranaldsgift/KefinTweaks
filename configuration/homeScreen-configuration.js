@@ -845,6 +845,8 @@
             let updatedGroups = groups.map(g => ({ ...g, sections: Array.isArray(g.sections) ? [...g.sections] : [] }));
             let hasChanges = false;
 
+            const isJellyfin12 = await window.KefinTweaks.getJellyfinMajorVersion();
+
             if (filteredLibraries.length > 0) {
                 const libraryTemplates = [
                     {
@@ -861,7 +863,22 @@
                                     viewMoreUrl = `#/movies.html?topParentId=${library.Id}&collectionType=movies&tab=1`;
                                 } else if (library.CollectionType === 'tvshows') {
                                     viewMoreUrl = `#/tv.html?topParentId=${library.Id}&collectionType=tvshows&tab=1`;
+                                } else if (library.CollectionType === 'music') {
+                                    viewMoreUrl = `#/music.html?topParentId=${library.Id}&collectionType=music&tab=1`;
+                                } else if (isJellyfin12) {                                
+                                    if (library.CollectionType === 'homevideos') {
+                                        viewMoreUrl = `#/homevideos?topParentId=${library.Id}&collectionType=homevideos&tab=1`;
+                                    } else if (library.CollectionType === 'books') {
+                                        viewMoreUrl = `#/books?topParentId=${library.Id}&collectionType=books&tab=1`;
+                                    } else if (library.CollectionType === 'musicvideos') {
+                                        viewMoreUrl = `#/musicvideos?topParentId=${library.Id}&collectionType=musicvideos&tab=1`;
+                                    } else {
+                                        viewMoreUrl = `#/mixed?topParentId=${library.Id}&collectionType=mixed&tab=1`;
+                                    }
+                                } else {
+                                    viewMoreUrl = `#/list.html?parentId=${library.Id}&collectionType=${library.CollectionType}&tab=1`;
                                 }
+
                                 return {
                                     id: `recently-added-${library.Id}`,
                                     name: `Recently Added ${library.Name}`,
@@ -965,6 +982,30 @@
                         delete newSection.buildSection;
                         group.sections.push(newSection);
                     });
+
+                    if (template.idPrefix === 'recently-added-') {
+                        const librariesById = new Map(filteredLibraries.map(l => [l.Id, l]));
+                        for (const section of group.sections) {
+                            if (!section?.id?.startsWith('recently-added-')) continue;
+                            const libId = section.id.slice('recently-added-'.length);
+                            const library = librariesById.get(libId);
+                            if (!library) continue;
+
+                            const expectedUrl = template.sectionTemplate.buildSection(library)?.viewMoreUrl;
+                            const query = section.queries?.[0];
+                            if (query) {
+                                if (!query.queryOptions) query.queryOptions = {};
+                                if (query.queryOptions.ParentId !== library.Id) {
+                                    query.queryOptions.ParentId = library.Id;
+                                    hasChanges = true;
+                                }
+                            }
+                            if (expectedUrl && section.viewMoreUrl !== expectedUrl) {
+                                section.viewMoreUrl = expectedUrl;
+                                hasChanges = true;
+                            }
+                        }
+                    }
                 }
 
                 // Remove stale library sections from any HOME group (e.g. misplaced sections)
