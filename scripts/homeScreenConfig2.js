@@ -1814,7 +1814,7 @@
 					enabled: true,
 					userConfigurable: true,
 					itemLimit: 20,
-					sortOrder: "Random",
+					sortBy: "Random",
 					cardFormat: "Poster",
 					ttl: CACHE_CONFIG.DISCOVERY_TTL,
 					queries: [
@@ -1881,7 +1881,7 @@
 					enabled: true,
 					userConfigurable: true,
 					itemLimit: 20,
-					sortOrder: "Random",
+					sortBy: "Random",
 					cardFormat: "Poster",
 					ttl: CACHE_CONFIG.DISCOVERY_TTL,
 					queries: [
@@ -1912,7 +1912,7 @@
 					enabled: true,
 					userConfigurable: true,
 					itemLimit: 20,
-					sortOrder: "Random",
+					sortBy: "Random",
 					cardFormat: "Poster",
 					ttl: CACHE_CONFIG.DISCOVERY_TTL,
 					queries: [
@@ -1943,7 +1943,7 @@
 					enabled: true,
 					userConfigurable: true,
 					itemLimit: 20,
-					sortOrder: "Random",
+					sortBy: "Random",
 					cardFormat: "Poster",
 					ttl: CACHE_CONFIG.DISCOVERY_TTL,
 					queries: [
@@ -1989,7 +1989,7 @@
 					enabled: true,
 					userConfigurable: true,
 					itemLimit: 20,
-					sortOrder: "Random",
+					sortBy: "Random",
 					cardFormat: "Poster",
 					ttl: CACHE_CONFIG.DISCOVERY_TTL,
 					queries: [
@@ -2028,7 +2028,7 @@
 					enabled: true,
 					userConfigurable: true,
 					itemLimit: 20,
-					sortOrder: "Random",
+					sortBy: "Random",
 					cardFormat: "Poster",
 					ttl: CACHE_CONFIG.DISCOVERY_TTL,
 					queries: [
@@ -2067,7 +2067,7 @@
 					enabled: true,
 					userConfigurable: true,
 					itemLimit: 20,
-					sortOrder: "Random",
+					sortBy: "Random",
 					cardFormat: "Poster",
 					ttl: CACHE_CONFIG.DISCOVERY_TTL,
 					queries: [
@@ -2110,7 +2110,7 @@
 					enabled: true,
 					userConfigurable: true,
 					itemLimit: 20,
-					sortOrder: "Random",
+					sortBy: "Random",
 					ttl: CACHE_CONFIG.DISCOVERY_TTL,
 					queries: [
 						{
@@ -2144,7 +2144,7 @@
 					enabled: true,
 					userConfigurable: true,
 					itemLimit: 20,
-					sortOrder: "Random",
+					sortBy: "Random",
 					cardFormat: "Poster",
 					ttl: CACHE_CONFIG.DISCOVERY_TTL,
 					queries: [
@@ -2178,7 +2178,7 @@
 					enabled: true,
 					userConfigurable: true,
 					itemLimit: 20,
-					sortOrder: "Random",
+					sortBy: "Random",
 					cardFormat: "Poster",
 					ttl: CACHE_CONFIG.DISCOVERY_TTL,
 					queries: [
@@ -2212,7 +2212,7 @@
 					enabled: true,
 					userConfigurable: true,
 					itemLimit: 20,
-					sortOrder: "Random",
+					sortBy: "Random",
 					cardFormat: "Poster",
 					ttl: CACHE_CONFIG.DISCOVERY_TTL,
 					queries: [
@@ -2251,7 +2251,7 @@
 					enabled: true,
 					userConfigurable: true,
 					itemLimit: 20,
-					sortOrder: "Random",
+					sortBy: "Random",
 					cardFormat: "Poster",
 					ttl: CACHE_CONFIG.DISCOVERY_TTL,
 					queries: [
@@ -2294,7 +2294,7 @@
 								Recursive: true,
 								IncludeItemTypes: ["Series"],
 								MinCommunityRating: 7.5,
-								Limit: 20,
+								Limit: 100,
 								Fields: DISCOVERY_CONTENT_FIELDS,
 							},
 						},
@@ -2328,7 +2328,7 @@
 					enabled: true,
 					userConfigurable: true,
 					itemLimit: 20,
-					sortOrder: "Random",
+					sortBy: "Random",
 					ttl: CACHE_CONFIG.DISCOVERY_TTL,
 					queries: [
 						{
@@ -2363,7 +2363,7 @@
 					enabled: true,
 					userConfigurable: true,
 					itemLimit: 20,
-					sortOrder: "Random",
+					sortBy: "Random",
 					cardFormat: "Poster",
 					ttl: CACHE_CONFIG.DISCOVERY_TTL,
 					queries: [
@@ -2435,7 +2435,7 @@
 					enabled: true,
 					userConfigurable: true,
 					itemLimit: 20,
-					sortOrder: "Random",
+					sortBy: "Random",
 					ttl: CACHE_CONFIG.DISCOVERY_TTL,
 					queries: [
 						{
@@ -2468,7 +2468,7 @@
 					enabled: true,
 					userConfigurable: true,
 					itemLimit: 20,
-					sortOrder: "Random",
+					sortBy: "Random",
 					cardFormat: "Poster",
 					ttl: CACHE_CONFIG.DISCOVERY_TTL,
 					queries: [
@@ -2502,7 +2502,7 @@
 					enabled: true,
 					userConfigurable: true,
 					itemLimit: 20,
-					sortOrder: "Random",
+					sortBy: "Random",
 					cardFormat: "Poster",
 					ttl: CACHE_CONFIG.DISCOVERY_TTL,
 					queries: [
@@ -2536,7 +2536,7 @@
 					enabled: true,
 					userConfigurable: true,
 					itemLimit: 20,
-					sortOrder: "Random",
+					sortBy: "Random",
 					cardFormat: "Poster",
 					ttl: CACHE_CONFIG.DISCOVERY_TTL,
 					queries: [
@@ -2563,7 +2563,7 @@
 					enabled: true,
 					userConfigurable: true,
 					itemLimit: 20,
-					sortOrder: "Random",
+					sortBy: "Random",
 					cardFormat: "Poster",
 					ttl: CACHE_CONFIG.DISCOVERY_TTL,
 					queries: [
@@ -2599,7 +2599,7 @@
 					enabled: false,
 					userConfigurable: true,
 					itemLimit: 20,
-					sortOrder: "Random",
+					sortBy: "Random",
 					cardFormat: "Thumb",
 					ttl: CACHE_CONFIG.DISCOVERY_TTL,
 					queries: [
@@ -2631,7 +2631,7 @@
 					enabled: false,
 					userConfigurable: true,
 					itemLimit: 20,
-					sortOrder: "Random",
+					sortBy: "Random",
 					cardFormat: "Thumb",
 					ttl: CACHE_CONFIG.DISCOVERY_TTL,
 					queries: [
@@ -2663,7 +2663,7 @@
 					enabled: true,
 					userConfigurable: true,
 					itemLimit: 20,
-					sortOrder: "Random",
+					sortBy: "Random",
 					cardFormat: "Poster",
 					ttl: CACHE_CONFIG.DISCOVERY_TTL,
 					queries: [
@@ -2708,7 +2708,7 @@
 					enabled: true,
 					userConfigurable: true,
 					itemLimit: 20,
-					sortOrder: "Random",
+					sortBy: "Random",
 					cardFormat: "Poster",
 					ttl: CACHE_CONFIG.DISCOVERY_TTL,
 					queries: [
@@ -2747,7 +2747,7 @@
 					enabled: true,
 					userConfigurable: true,
 					itemLimit: 20,
-					sortOrder: "Random",
+					sortBy: "Random",
 					cardFormat: "Thumb",
 					ttl: CACHE_CONFIG.DISCOVERY_TTL,
 					queries: [
@@ -2787,7 +2787,7 @@
 					enabled: true,
 					userConfigurable: true,
 					itemLimit: 20,
-					sortOrder: "Random",
+					sortBy: "Random",
 					cardFormat: "Thumb",
 					ttl: CACHE_CONFIG.DISCOVERY_TTL,
 					queries: [
@@ -2834,7 +2834,7 @@
 					enabled: true,
 					userConfigurable: true,
 					itemLimit: 20,
-					sortOrder: "Random",
+					sortBy: "Random",
 					cardFormat: "Thumb",
 					ttl: CACHE_CONFIG.DISCOVERY_TTL,
 					queries: [

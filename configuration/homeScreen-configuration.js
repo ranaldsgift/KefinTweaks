@@ -167,7 +167,7 @@
         'itemsLayout', 'useGaplessCards', 'sectionCssClass', 'hideName'
     ];
     const RESTORE_ADVANCED_KEYS = [
-        'ttl', 'sortBy', 'sortOrder', 'sortOrderDirection',
+        'ttl', 'sortBy', 'sortOrder',
         'minimumItems', 'itemLimit', 'flattenSeries', 'limitBeforeSort', 'hideWatched'
     ];
     const TTL_UNIT_OPTIONS = [
@@ -1444,6 +1444,63 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
         return true; // flag always newly stamped → needs save
     }
 
+    // TEMPORARY: one-time overwrite of saved Kefin discovery sort fields from the new
+    // sortBy + sortOrder defaults. Remove in a future release once existing installs
+    // have picked up the patch (see discoverySortOrdersPatched).
+    // TODO(remove): patchDiscoverySortOrdersOnce + call site + discoverySortPatch log field
+    function patchDiscoverySortOrdersOnce(config) {
+        if (!window.KefinTweaksConfig) window.KefinTweaksConfig = {};
+        if (window.KefinTweaksConfig.discoverySortOrdersPatched === true) return false;
+        if (!Array.isArray(window.KefinHomeConfig2?.DISCOVERY_SECTION_GROUPS)) return false;
+
+        const canonicalMap = buildCanonicalSectionMapForGroups('DISCOVERY_SECTION_GROUPS');
+        const isDirection = (value) => value === 'Ascending' || value === 'Descending';
+        const topRatedQueryResetIds = new Set(['spotlightGenre', 'spotlightGenreSeries', 'spotlightNetwork']);
+
+        const applySortPair = (target, canonical, fieldKey, directionKey) => {
+            if (!target || !canonical) return;
+            if (canonical[fieldKey]) target[fieldKey] = canonical[fieldKey];
+            else delete target[fieldKey];
+
+            if (isDirection(canonical[directionKey])) target[directionKey] = canonical[directionKey];
+            else delete target[directionKey];
+        };
+
+        for (const group of config.DISCOVERY_SECTION_GROUPS || []) {
+            for (const section of group.sections || []) {
+                if (!section?.id) continue;
+                const canonical = canonicalMap.get(section.id);
+                if (!canonical) continue;
+
+                applySortPair(section, canonical, 'sortBy', 'sortOrder');
+                delete section.sortOrderDirection;
+
+                const savedQueries = section.queries || [];
+                const canonicalQueries = canonical.queries || [];
+                const count = Math.min(savedQueries.length, canonicalQueries.length);
+                const replaceQueryOptions = topRatedQueryResetIds.has(section.id);
+                for (let i = 0; i < count; i++) {
+                    const savedQuery = savedQueries[i];
+                    const canonicalQuery = canonicalQueries[i];
+                    if (!savedQuery || !canonicalQuery) continue;
+                    if (replaceQueryOptions) {
+                        savedQuery.queryOptions = JSON.parse(JSON.stringify(canonicalQuery.queryOptions || {}));
+                        continue;
+                    }
+                    const canonicalOpts = canonicalQuery.queryOptions || {};
+                    if (!savedQuery.queryOptions) {
+                        if (!canonicalOpts.SortBy && !isDirection(canonicalOpts.SortOrder)) continue;
+                        savedQuery.queryOptions = {};
+                    }
+                    applySortPair(savedQuery.queryOptions, canonicalOpts, 'SortBy', 'SortOrder');
+                }
+            }
+        }
+
+        window.KefinTweaksConfig.discoverySortOrdersPatched = true;
+        return true; // flag always newly stamped → needs save
+    }
+
     async function ensureKefinTweaksDefaultSections() {
         try {
             if (!window.ApiClient || !window.ApiClient._loggedIn) {
@@ -1477,8 +1534,10 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             const seasonalThemeChanges = syncSeasonalThemesFromDefaults(config);
             // TEMPORARY / TODO(remove): one-time liveTv-on-now Limit patch
             const liveTvLimitPatch = patchLiveTvOnNowLimitOnce(config);
+            // TEMPORARY / TODO(remove): one-time discovery sortBy/sortOrder overwrite
+            const discoverySortPatch = patchDiscoverySortOrdersOnce(config);
 
-            if (libraryChanges || addedDefaults || prunedOrphans || defaultSyncChanges || seasonalThemeChanges || liveTvLimitPatch) {
+            if (libraryChanges || addedDefaults || prunedOrphans || defaultSyncChanges || seasonalThemeChanges || liveTvLimitPatch || discoverySortPatch) {
                 await saveConfig(config);
                 LOG('KefinTweaks default home sections synced on startup', {
                     libraryChanges,
@@ -1486,7 +1545,8 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                     prunedOrphans,
                     defaultSyncChanges,
                     seasonalThemeChanges,
-                    liveTvLimitPatch
+                    liveTvLimitPatch,
+                    discoverySortPatch
                 });
             }
         } catch (error) {
@@ -1919,6 +1979,11 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
                 ...(savedQuery.queryOptions || {}),
                 ...currentQuery.queryOptions
             };
+            ['SortBy', 'SortOrder'].forEach((key) => {
+                if (!Object.prototype.hasOwnProperty.call(currentQuery.queryOptions, key)) {
+                    delete merged.queryOptions[key];
+                }
+            });
         } else if (savedQuery.queryOptions) {
             merged.queryOptions = JSON.parse(JSON.stringify(savedQuery.queryOptions));
         }
@@ -1990,6 +2055,12 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             } else {
                 // For other properties, current config takes precedence
                 merged[key] = currentSection[key];
+            }
+        });
+
+        ['sortBy', 'sortOrder'].forEach((key) => {
+            if (!Object.prototype.hasOwnProperty.call(currentSection, key)) {
+                delete merged[key];
             }
         });
         

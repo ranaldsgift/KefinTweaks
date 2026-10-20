@@ -628,8 +628,25 @@
                     found.section.isPlayed = legacySectionConfig.isPlayed;
                 }
                 if (legacySectionConfig.minimumItems !== undefined) found.section.minimumItems = legacySectionConfig.minimumItems;
-                if (legacySectionConfig.sortOrder !== undefined) found.section.sortOrder = legacySectionConfig.sortOrder;
-                if (legacySectionConfig.sortOrderDirection !== undefined) found.section.sortOrderDirection = legacySectionConfig.sortOrderDirection;
+                if (legacySectionConfig.sortOrder !== undefined) {
+                    const legacySort = String(legacySectionConfig.sortOrder).trim();
+                    if (legacySort === 'Ascending' || legacySort === 'Descending') {
+                        found.section.sortOrder = legacySort;
+                    } else if (legacySort) {
+                        found.section.sortBy = legacySort;
+                        const existingOrder = found.section.sortOrder == null ? '' : String(found.section.sortOrder).trim();
+                        if (existingOrder !== 'Ascending' && existingOrder !== 'Descending') {
+                            delete found.section.sortOrder;
+                        }
+                    }
+                }
+                if (legacySectionConfig.sortOrderDirection !== undefined) {
+                    const legacyDirection = String(legacySectionConfig.sortOrderDirection).trim();
+                    if (legacyDirection === 'Ascending' || legacyDirection === 'Descending') {
+                        found.section.sortOrder = legacyDirection;
+                    }
+                }
+                delete found.section.sortOrderDirection;
 
                 const isRecentlyWatchedPerson = RECENTLY_WATCHED_PERSON_IDS.has(sectionKey);
                 if (legacySectionConfig.name !== undefined) {

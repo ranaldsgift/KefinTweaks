@@ -452,11 +452,26 @@
             .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2');
     }
 
+    const SORT_BY_NONE = 'None';
+
     function toSortBySelectOptions(sortOrders) {
-        return (sortOrders || []).map(value => ({
-            value,
-            label: humanizeSortOrderLabel(value)
-        }));
+        return [
+            { value: SORT_BY_NONE, label: 'None' },
+            ...(sortOrders || []).map(value => ({
+                value,
+                label: humanizeSortOrderLabel(value)
+            }))
+        ];
+    }
+
+    function sortBySelectValue(stored) {
+        const value = stored == null ? '' : String(stored).trim();
+        return value || SORT_BY_NONE;
+    }
+
+    function isSortByNone(value) {
+        const by = value == null ? '' : String(value).trim();
+        return !by || by === SORT_BY_NONE;
     }
 
     function getSectionSortOrderDirectionOptions(directions) {
@@ -484,15 +499,63 @@
         return allowed.includes(profile);
     }
 
+    const SECTION_SORT_DIRECTIONS = new Set(['Ascending', 'Descending']);
+
+    function isSectionSortDirection(value) {
+        return SECTION_SORT_DIRECTIONS.has(String(value || '').trim());
+    }
+
+    /**
+     * Legacy sortOrder stored the field (Random, CommunityRating, …) and
+     * sortOrderDirection stored Ascending/Descending. Current model is
+     * sortBy = field, sortOrder = direction only.
+     */
+    function normalizeSectionSortFields(section) {
+        if (!section || typeof section !== 'object') return section;
+        const order = section.sortOrder == null ? '' : String(section.sortOrder).trim();
+        const legacyDirection = section.sortOrderDirection == null ? '' : String(section.sortOrderDirection).trim();
+
+        if (order && !isSectionSortDirection(order)) {
+            if (!section.sortBy) section.sortBy = order;
+            delete section.sortOrder;
+        }
+        if (isSectionSortDirection(legacyDirection)) {
+            section.sortOrder = legacyDirection;
+        }
+        delete section.sortOrderDirection;
+        return section;
+    }
+
     function applySectionLevelSort(section, sortBy, sortOrder) {
         const by = sortBy == null ? '' : String(sortBy).trim();
         const order = sortOrder == null ? '' : String(sortOrder).trim();
+        delete section.sortOrderDirection;
 
-        if (!by || by === 'Default') delete section.sortBy;
-        else section.sortBy = by;
+        if (isSortByNone(by)) {
+            delete section.sortBy;
+            delete section.sortOrder;
+            return;
+        }
 
-        if (!order || order === 'Default') delete section.sortOrder;
-        else section.sortOrder = order;
+        section.sortBy = by;
+        if (isSectionSortDirection(order)) section.sortOrder = order;
+        else delete section.sortOrder;
+    }
+
+    function applyCollectedQuerySort(queryOptions, sortBy, sortOrder) {
+        if (!queryOptions) return;
+        const by = sortBy == null ? '' : String(sortBy).trim();
+        const order = sortOrder == null ? '' : String(sortOrder).trim();
+
+        if (isSortByNone(by)) {
+            delete queryOptions.SortBy;
+            delete queryOptions.SortOrder;
+            return;
+        }
+
+        queryOptions.SortBy = by;
+        if (isSectionSortDirection(order)) queryOptions.SortOrder = order;
+        else delete queryOptions.SortOrder;
     }
 
     function resolvePremiereAgeFields(section) {
@@ -513,19 +576,14 @@
             }
         }
 
-        const sortByEl = dialog.querySelector('#hsae-advanced-sortBy');
-        if (isProfileFieldActive(root, sortByEl)) {
-            const sortVal = sortByEl?.value;
-            delete section.sortBy;
-            if (sortVal && sortVal !== 'Default') section.sortOrder = sortVal;
-            else delete section.sortOrder;
-        }
+        normalizeSectionSortFields(section);
 
+        const sortByEl = dialog.querySelector('#hsae-advanced-sortBy');
         const sortDirEl = dialog.querySelector('#hsae-advanced-sortOrder');
-        if (isProfileFieldActive(root, sortDirEl)) {
-            const dirVal = sortDirEl?.value;
-            if (dirVal && dirVal !== 'Default') section.sortOrderDirection = dirVal;
-            else delete section.sortOrderDirection;
+        if (isProfileFieldActive(root, sortByEl)) {
+            applySectionLevelSort(section, sortByEl?.value, sortDirEl?.value);
+        } else {
+            delete section.sortOrderDirection;
         }
     }
 
@@ -545,10 +603,12 @@
 
         const sortByEl = dialog.querySelector('#hsae-advanced-sortBy');
         const sortOrderEl = dialog.querySelector('#hsae-advanced-sortOrder');
+        normalizeSectionSortFields(section);
         if (isProfileFieldActive(root, sortByEl) && !isDiscoverySection(section)) {
             if (section.useRandomQuery) {
                 delete section.sortBy;
                 delete section.sortOrder;
+                delete section.sortOrderDirection;
             } else {
                 applySectionLevelSort(section, sortByEl?.value, sortOrderEl?.value);
             }
@@ -991,9 +1051,13 @@
         const renderMode = section.renderMode || (section.spotlight ? 'Spotlight' : 'Normal');
         const ttlMatch = matchTtlPreset(section.ttl);
         const groupSelection = resolveGroupSelection(section, context);
-        const isDiscovery = isDiscoverySection(section);
-        const sectionSortBy = section.sortBy || (isDiscovery ? section.sortOrder : '') || '';
-        const sectionSortOrder = isDiscovery ? (section.sortOrderDirection || '') : (section.sortOrder || '');
+        const normalizedSort = normalizeSectionSortFields({
+            sortBy: section.sortBy,
+            sortOrder: section.sortOrder,
+            sortOrderDirection: section.sortOrderDirection
+        });
+        const sectionSortBy = normalizedSort.sortBy || '';
+        const sectionSortOrder = isSectionSortDirection(normalizedSort.sortOrder) ? normalizedSort.sortOrder : '';
 
         return {
             section,
@@ -1540,7 +1604,7 @@
 
                     <div class="hsae-field-grid hsae-query-row-sort">
                         <div class="hsae-query-sort-by" data-hsae-profiles="full normal dateCutoffs">
-                            ${buildSelect(`query-${index}-SortBy`, toSortBySelectOptions(SORT_ORDERS), queryOptions.SortBy || '', 'Sort By')}
+                            ${buildSelect(`query-${index}-SortBy`, toSortBySelectOptions(SORT_ORDERS), sortBySelectValue(queryOptions.SortBy), 'Sort By')}
                         </div>
                         <div class="hsae-query-sort-order" data-hsae-profiles="full normal dateCutoffs">
                             ${buildSelect(`query-${index}-SortOrder`, SORT_ORDER_DIRECTIONS, queryOptions.SortOrder || '', 'Sort Order')}
@@ -2310,7 +2374,7 @@
 
                     <div class="hsae-advanced-section-sort hsae-field-grid hsae-field-grid-2 hsae-advanced-sort-row" data-hsae-profiles="full postProcessing normal dateCutoffs">
                         <div class="hsae-field-with-hint">
-                            ${buildSelect('hsae-advanced-sortBy', toSortBySelectOptions(SORT_ORDERS), state.sortBy || '', 'Sort By')}
+                            ${buildSelect('hsae-advanced-sortBy', toSortBySelectOptions(SORT_ORDERS), sortBySelectValue(state.sortBy), 'Sort By')}
                             <div class="listItemBodyText secondary hsae-field-hint">Items will be sorted in this order after they are returned from Jellyfin.</div>
                         </div>
                         <div class="hsae-field-with-hint">
@@ -2442,12 +2506,11 @@
                 }
             }
             if (isProfileFieldActive(root, sortByEl)) {
-                const sortBy = sortByEl?.value;
-                const sortOrder = editor.querySelector(`#query-${queryIndex}-SortOrder`)?.value;
-                if (sortBy) query.queryOptions.SortBy = sortBy;
-                else delete query.queryOptions.SortBy;
-                if (sortOrder) query.queryOptions.SortOrder = sortOrder;
-                else delete query.queryOptions.SortOrder;
+                applyCollectedQuerySort(
+                    query.queryOptions,
+                    sortByEl?.value,
+                    editor.querySelector(`#query-${queryIndex}-SortOrder`)?.value
+                );
             }
             if (hideWatched) query.queryOptions.IsUnplayed = true;
             else if (query.queryOptions) delete query.queryOptions.IsUnplayed;
@@ -2467,10 +2530,11 @@
             if (staticItems.length) {
                 query.queryOptions.Ids = staticItems.map(item => item.id);
             }
-            ['SortBy', 'SortOrder'].forEach(key => {
-                const value = editor.querySelector(`#query-${queryIndex}-${key}`)?.value;
-                if (value) query.queryOptions[key] = value;
-            });
+            applyCollectedQuerySort(
+                query.queryOptions,
+                editor.querySelector(`#query-${queryIndex}-SortBy`)?.value,
+                editor.querySelector(`#query-${queryIndex}-SortOrder`)?.value
+            );
             return query;
         }
 
@@ -2479,10 +2543,11 @@
                 || CACHE_SOURCE_OPTIONS[0]?.value;
             if (dataSource) query.dataSource = dataSource;
             query.queryOptions = {};
-            ['SortBy', 'SortOrder'].forEach(key => {
-                const value = editor.querySelector(`#query-${queryIndex}-${key}`)?.value;
-                if (value) query.queryOptions[key] = value;
-            });
+            applyCollectedQuerySort(
+                query.queryOptions,
+                editor.querySelector(`#query-${queryIndex}-SortBy`)?.value,
+                editor.querySelector(`#query-${queryIndex}-SortOrder`)?.value
+            );
             const limit = editor.querySelector(`#query-${queryIndex}-Limit`)?.value;
             if (limit !== '' && limit != null) {
                 const limitN = parseInt(limit, 10);
@@ -2550,7 +2615,12 @@
         delete query.queryOptions.PlaylistIds;
         delete query.queryOptions._parentItemType;
 
-        ['SortBy', 'SortOrder', 'Filters', 'SearchTerm'].forEach(key => {
+        applyCollectedQuerySort(
+            query.queryOptions,
+            editor.querySelector(`#query-${queryIndex}-SortBy`)?.value,
+            editor.querySelector(`#query-${queryIndex}-SortOrder`)?.value
+        );
+        ['Filters', 'SearchTerm'].forEach(key => {
             const value = editor.querySelector(`#query-${queryIndex}-${key}`)?.value;
             if (value) query.queryOptions[key] = value;
         });
@@ -3651,7 +3721,7 @@
         'name', 'caption', 'description', 'enabled', 'order', 'cardFormat', 'renderMode', 'ttl',
         'queries', 'items', 'externalListUrls', 'spotlightConfig', 'hideName', 'userConfigurable',
         'useRandomQuery', 'useMultiQueryPicker', 'multiQueryPickerLabel', 'useQueryNamesForSection',
-        'sortBy', 'sortOrder', 'sortOrderDirection', 'itemLimit', 'minimumItems', 'flattenSeries',
+        'sortBy', 'sortOrder', 'itemLimit', 'minimumItems', 'flattenSeries',
         'limitBeforeSort', 'sectionCssClass', 'borderStyle', 'borderColor', 'cardTitleColor',
         'itemsLayout', 'useGaplessCards', 'cardTitleVisibility', 'useParentCard', 'cardTitlePosition',
         'cardTitleCapitalization', 'cardTitleFontFamily', 'cardTitleFontSize', 'startDate', 'endDate',
@@ -3959,6 +4029,8 @@
     function diffSectionAgainstDefault(current, canonical) {
         const diffs = [];
         if (!current || !canonical) return diffs;
+        current = normalizeSectionSortFields({ ...current });
+        canonical = normalizeSectionSortFields({ ...canonical });
         for (const key of HSAE_SECTION_DIFF_KEYS) {
             const hasCurrent = Object.prototype.hasOwnProperty.call(current, key);
             const hasCanonical = Object.prototype.hasOwnProperty.call(canonical, key);

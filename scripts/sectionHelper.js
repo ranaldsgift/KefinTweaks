@@ -8,6 +8,24 @@
     const ERR = (...args) => console.error('[KefinTweaks SectionHelper]', ...args);
 
     const ApiHelper = window.apiHelper || window.ApiHelper;
+
+    function isSortDirectionValue(value) {
+        const v = value == null ? '' : String(value).trim();
+        return v === 'Ascending' || v === 'Descending';
+    }
+
+    /** Legacy sortOrder was the field; sortOrder is now Ascending/Descending only. */
+    function normalizeInstanceSort(instanceConfig) {
+        const sortBy = instanceConfig?.sortBy == null ? '' : String(instanceConfig.sortBy).trim();
+        const order = instanceConfig?.sortOrder == null ? '' : String(instanceConfig.sortOrder).trim();
+        const legacyDirection = instanceConfig?.sortOrderDirection == null
+            ? ''
+            : String(instanceConfig.sortOrderDirection).trim();
+        const out = { sortBy, sortOrder: isSortDirectionValue(order) ? order : '' };
+        if (order && !isSortDirectionValue(order) && !out.sortBy) out.sortBy = order;
+        if (isSortDirectionValue(legacyDirection)) out.sortOrder = legacyDirection;
+        return out;
+    }
     const Config = () => window.KefinHomeConfig2 || window.KefinHomeScreen?.getConfig?.() || {};
 
     const discoveryState = {
@@ -1213,8 +1231,9 @@
             };
 
         if (!hasTemplateQueries) {
-            if (instanceConfig.sortOrder) queryOptions.SortBy = instanceConfig.sortOrder;
-            if (instanceConfig.sortOrderDirection) queryOptions.SortOrder = instanceConfig.sortOrderDirection;
+            const sort = normalizeInstanceSort(instanceConfig);
+            if (sort.sortBy) queryOptions.SortBy = sort.sortBy;
+            if (sort.sortOrder) queryOptions.SortOrder = sort.sortOrder;
         } else if (!queryOptions.IncludeItemTypes?.length) {
             queryOptions.IncludeItemTypes = contentTypes;
         }
