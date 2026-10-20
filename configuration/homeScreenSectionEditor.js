@@ -1730,6 +1730,7 @@
             queryOptions.IsUnplayed = true;
         }
 
+        const query = { queryOptions };
         if (parentType && parents.length > 0) {
             const meta = PARENT_TYPES.find(t => t.type === parentType);
             const field = meta?.queryField;
@@ -1748,6 +1749,7 @@
                     break;
                 case 'ParentId':
                     queryOptions.ParentId = parents[0].id;
+                    query._parentItemType = parentType;
                     break;
                 default:
                     break;
@@ -1762,7 +1764,7 @@
             isCustom: true,
             renderMode: renderMode || 'Normal',
             cardFormat: renderMode === 'Spotlight' ? undefined : (cardFormat || 'Poster'),
-            queries: [{ queryOptions }]
+            queries: [query]
         };
 
         applySectionVisibilityToSection(section, wizardState, baseSection);
