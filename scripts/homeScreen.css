@@ -700,3 +700,18 @@ html[data-active-page="home"] body[data-seasonal-background="true"] .backdropCon
 		pointer-events: auto;
 	}
 }
+
+/* Compatibility Fix for the Jellyfin Featured Plugin https://github.com/spkesDE/jellyfin-featured-plugin/ */
+section.featured-root.featured-hero {
+    --featured-content-clearance: 0px !important;  
+}
+
+section.featured-root.featured-hero .featured-overview {
+    display: -webkit-box !important;
+}
+
+@media (max-width: 1000px) {
+  section.featured-root.featured-hero {
+    --featured-content-clearance: -50px !important;
+  }
+}
