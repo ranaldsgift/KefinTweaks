@@ -751,10 +751,7 @@
 
         // Use apiHelper to get seasons
         const response = await window.apiHelper.getQuery(`${ApiClient.serverAddress()}/Shows/${seriesId}/Seasons`);
-        if (!response.data) {
-            response.data = await response.dataPromise;
-        }
-        const seasonsData = response.data;
+        const seasonsData = response.Items;
 
         // Extract seasons from DOM
         const seasons = seasonsData.Items || seasonsData || [];
