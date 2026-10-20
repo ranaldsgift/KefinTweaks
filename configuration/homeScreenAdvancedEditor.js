@@ -2526,9 +2526,6 @@
             if (parentItems.length && parentType) {
                 query.queryOptions.ParentId = parentItems[0].id;
                 query._parentItemType = parentType;
-                if (parentType === 'Library') {
-                    query.queryOptions.Recursive = false;
-                }
             }
         }
 
