@@ -6129,8 +6129,6 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             return { items: [], limit: 0, section: previewSection };
         }
 
-            || withPreviewQueryOptions(queriesToLoad[0]).queryOptions.Limit
-            || PREVIEW_DEFAULT_LIMIT;
         allItems = window.cardBuilder.postProcessItems(previewSection, allItems);
 
         return { items: allItems, limit: 0, section: previewSection };
