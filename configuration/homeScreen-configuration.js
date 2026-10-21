@@ -816,6 +816,78 @@
         };
     }
 
+    const RECENTLY_ADDED_POSTER_TYPES = ['movies', 'tvshows'];
+
+    /**
+     * Canonical Recently Added section for one library. Same object created during library sync.
+     * @param {Object} library
+     * @param {boolean} isJellyfin12
+     * @returns {Object}
+     */
+    function buildRecentlyAddedSection(library, isJellyfin12) {
+        let viewMoreUrl = null;
+        if (library.CollectionType === 'movies') {
+            viewMoreUrl = `#/movies.html?topParentId=${library.Id}&collectionType=movies&tab=1`;
+        } else if (library.CollectionType === 'tvshows') {
+            viewMoreUrl = `#/tv.html?topParentId=${library.Id}&collectionType=tvshows&tab=1`;
+        } else if (library.CollectionType === 'music') {
+            viewMoreUrl = `#/music.html?topParentId=${library.Id}&collectionType=music&tab=1`;
+        } else if (isJellyfin12) {
+            if (library.CollectionType === 'homevideos') {
+                viewMoreUrl = `#/homevideos?topParentId=${library.Id}&collectionType=homevideos&tab=1`;
+            } else if (library.CollectionType === 'books') {
+                viewMoreUrl = `#/books?topParentId=${library.Id}&collectionType=books&tab=1`;
+            } else if (library.CollectionType === 'musicvideos') {
+                viewMoreUrl = `#/musicvideos?topParentId=${library.Id}&collectionType=musicvideos&tab=1`;
+            } else {
+                viewMoreUrl = `#/mixed?topParentId=${library.Id}&collectionType=mixed&tab=1`;
+            }
+        } else {
+            viewMoreUrl = `#/list.html?parentId=${library.Id}&collectionType=${library.CollectionType}&tab=1`;
+        }
+
+        return {
+            id: `recently-added-${library.Id}`,
+            name: `Recently Added ${library.Name}`,
+            viewMoreUrl: viewMoreUrl,
+            jellyfinId: 'latestmedia',
+            userConfigurable: true,
+            ttl: 0,
+            enabled: false,
+            order: 61,
+            cardFormat: RECENTLY_ADDED_POSTER_TYPES.includes(library.CollectionType) ? 'Poster' : 'Thumb',
+            type: 'home',
+            queries: [{
+                path: '/Items/Latest',
+                queryOptions: {
+                    ParentId: library.Id,
+                    Fields: 'PrimaryImageAspectRatio,Path',
+                    Limit: 16,
+                    ImageTypeLimit: 1,
+                    EnableImageTypes: 'Primary,Backdrop,Thumb',
+                }
+            }]
+        };
+    }
+
+    /**
+     * Resolve a saved recently-added-* id back to the library template.
+     * @param {string} sectionId
+     * @returns {Promise<Object|null>}
+     */
+    async function buildRecentlyAddedDefaultSection(sectionId) {
+        const prefix = 'recently-added-';
+        if (!sectionId || !String(sectionId).startsWith(prefix)) return null;
+        if (!window.dataHelper?.getLibraries) return null;
+        const libId = String(sectionId).slice(prefix.length);
+        if (!libId) return null;
+        const libraries = await window.dataHelper.getLibraries();
+        const library = (libraries || []).find(l => l?.Id === libId);
+        if (!library) return null;
+        const isJellyfin12 = await window.KefinTweaks?.getJellyfinMajorVersion?.();
+        return buildRecentlyAddedSection(library, isJellyfin12);
+    }
+
     /**
      * Verify and sync library-based section groups (Recently Added, Popular Genres, etc.) with actual Jellyfin libraries
      * @param {Object} config - Current configuration object
@@ -852,53 +924,7 @@
                     {
                         idPrefix: 'recently-added-',
                         groupId: 'home-recently-added',
-                        groupName: 'Recently Added',
-                        sectionTemplate: {
-                            enabled: false,
-                            order: 61,
-                            cardFormat: 'Poster',
-                            buildSection: function (library) {
-                                let viewMoreUrl = null;
-                                if (library.CollectionType === 'movies') {
-                                    viewMoreUrl = `#/movies.html?topParentId=${library.Id}&collectionType=movies&tab=1`;
-                                } else if (library.CollectionType === 'tvshows') {
-                                    viewMoreUrl = `#/tv.html?topParentId=${library.Id}&collectionType=tvshows&tab=1`;
-                                } else if (library.CollectionType === 'music') {
-                                    viewMoreUrl = `#/music.html?topParentId=${library.Id}&collectionType=music&tab=1`;
-                                } else if (isJellyfin12) {                                
-                                    if (library.CollectionType === 'homevideos') {
-                                        viewMoreUrl = `#/homevideos?topParentId=${library.Id}&collectionType=homevideos&tab=1`;
-                                    } else if (library.CollectionType === 'books') {
-                                        viewMoreUrl = `#/books?topParentId=${library.Id}&collectionType=books&tab=1`;
-                                    } else if (library.CollectionType === 'musicvideos') {
-                                        viewMoreUrl = `#/musicvideos?topParentId=${library.Id}&collectionType=musicvideos&tab=1`;
-                                    } else {
-                                        viewMoreUrl = `#/mixed?topParentId=${library.Id}&collectionType=mixed&tab=1`;
-                                    }
-                                } else {
-                                    viewMoreUrl = `#/list.html?parentId=${library.Id}&collectionType=${library.CollectionType}&tab=1`;
-                                }
-
-                                return {
-                                    id: `recently-added-${library.Id}`,
-                                    name: `Recently Added ${library.Name}`,
-                                    viewMoreUrl: viewMoreUrl,
-                                    jellyfinId: 'latestmedia',
-                                    userConfigurable: true,
-                                    ttl: 0,
-                                    queries: [{
-                                        path: '/Items/Latest',
-                                        queryOptions: {
-                                            ParentId: library.Id,
-                                            Fields: 'PrimaryImageAspectRatio,Path',
-                                            Limit: 16,
-                                            ImageTypeLimit: 1,
-                                            EnableImageTypes: 'Primary,Backdrop,Thumb',
-                                        }
-                                    }]
-                                };
-                            }
-                        }
+                        groupName: 'Recently Added'
                     },
                     {
                         idPrefix: 'popular-genres-',
@@ -971,6 +997,10 @@
                     group.sections = groupSections.filter(s => !sectionsToRemoveIds.has(s.id));
 
                     librariesToAdd.forEach(library => {
+                        if (template.idPrefix === 'recently-added-') {
+                            group.sections.push(buildRecentlyAddedSection(library, isJellyfin12));
+                            return;
+                        }
                         const base = template.sectionTemplate.buildSection(library);
                         const newSection = {
                             ...template.sectionTemplate,
@@ -991,7 +1021,7 @@
                             const library = librariesById.get(libId);
                             if (!library) continue;
 
-                            const expectedUrl = template.sectionTemplate.buildSection(library)?.viewMoreUrl;
+                            const expectedUrl = buildRecentlyAddedSection(library, isJellyfin12)?.viewMoreUrl;
                             const query = section.queries?.[0];
                             if (query) {
                                 if (!query.queryOptions) query.queryOptions = {};
@@ -6322,6 +6352,7 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
     window.KefinHomeScreen.findSectionInAllGroups = findSectionInAllGroups;
     window.KefinHomeScreen.ensureKefinTweaksDefaultSections = ensureKefinTweaksDefaultSections;
     window.KefinHomeScreen.collectCustomDiscoverySections = collectCustomDiscoverySections;
+    window.KefinHomeScreen.buildRecentlyAddedDefaultSection = buildRecentlyAddedDefaultSection;
 
 
     LOG('Home Screen Configuration UI loaded');

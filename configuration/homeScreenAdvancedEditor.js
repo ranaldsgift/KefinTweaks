@@ -3951,10 +3951,15 @@
         return null;
     }
 
+    function isRecentlyAddedDefaultSection(section) {
+        return String(section?.id || '').startsWith('recently-added-');
+    }
+
     function isKefinDefaultSection(section, context) {
         if (context?.isCustomSection === true) return false;
         const id = section?.id;
         if (!id) return false;
+        if (isRecentlyAddedDefaultSection(section)) return true;
         return getCanonicalDefaultSection(id) != null;
     }
 
@@ -4693,12 +4698,20 @@
         showSectionImportPasteModal(apply);
     }
 
-    function handleHeaderRestoreDefaults(modalInstance) {
+    async function handleHeaderRestoreDefaults(modalInstance) {
         const state = modalInstance?._hsaeState;
         const dialog = modalInstance?.dialogContainer || modalInstance?.dialogContent;
         if (!state || !dialog) return;
         const sectionId = state.section?.id;
-        const canonical = getCanonicalDefaultSection(sectionId);
+        let canonical = getCanonicalDefaultSection(sectionId);
+        if (!canonical && isRecentlyAddedDefaultSection(state.section)) {
+            try {
+                canonical = await window.KefinHomeScreen?.buildRecentlyAddedDefaultSection?.(sectionId);
+            } catch (error) {
+                console.warn('[KefinTweaks] Failed to build Recently Added default:', error);
+                canonical = null;
+            }
+        }
         if (!canonical) {
             showHsaeToast('No default found for this section');
             syncHeaderActions(modalInstance);
@@ -4789,7 +4802,7 @@
         if (exportBtn) exportBtn.hidden = isDefault;
         if (restoreBtn) {
             restoreBtn.hidden = !isDefault;
-            if (isDefault && !getCanonicalDefaultSection(section.id)) {
+            if (isDefault && !getCanonicalDefaultSection(section.id) && !isRecentlyAddedDefaultSection(section)) {
                 restoreBtn.hidden = true;
             }
         }
