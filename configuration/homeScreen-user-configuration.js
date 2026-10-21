@@ -554,9 +554,10 @@
             const serverLayout = normalizeItemsLayout(
                 serverDefaults.itemsLayout ?? (serverDefaults.gridExpanded === true ? 'grid' : 'row')
             );
-            // Empty = default row; persist 'grid' as 'true' for legacy readers
-            if (layout === serverLayout || layout === 'row') fields.push('');
+            // Empty inherits the server layout. 'true' is grid for legacy readers; 'row' is an explicit row override.
+            if (layout === serverLayout) fields.push('');
             else if (layout === 'grid') fields.push('true');
+            else if (layout === 'row') fields.push('row');
             else fields.push('');
         }
         appendPrefField(fields, overrides.cardTitleCapitalization, serverDefaults.cardTitleCapitalization);
@@ -1423,7 +1424,7 @@
         const resolved = resolveSpotlightPresentationLocal(spotlight);
         const id = String(section.id || '');
         const isPinned = id.startsWith(PINNED_LIST_ID_PREFIX) || id.startsWith(PINNED_PARENT_ID_PREFIX);
-        return {
+        const defaults = {
             renderMode: resolveRenderMode(section),
             order: isPinned ? PINNED_DEFAULT_ORDER : (section.order ?? 0),
             ttl: section.ttl,
@@ -1438,13 +1439,14 @@
             spotlightLayout: resolved.layout,
             spotlightSize: resolved.size,
             spotlightTileCount: resolved.tileCount,
-            itemsLayout: 'row',
+            itemsLayout: (section.itemsLayout === 'grid' || section.gridExpanded === true) ? 'grid' : 'row',
             useGaplessCards: false,
             cardTitleCapitalization: section.cardTitleCapitalization || 'normal',
             cardTitleFontFamily: section.cardTitleFontFamily || 'default',
             cardTitleFontSize: section.cardTitleFontSize || 'normal',
             cardTitleColor: section.cardTitleColor || ''
         };
+        return defaults;
     }
 
     function applyUserSectionOverrides(sections, homeScreen, options = {}) {
@@ -1458,8 +1460,12 @@
             let next = { ...section };
 
             // UI pref: apply for all sections (not gated by userConfigurable)
-            if (pref?.itemsLayout && pref.itemsLayout !== 'row') next.itemsLayout = pref.itemsLayout;
-            else if (pref?.gridExpanded === true) next.itemsLayout = 'grid';
+            const serverItemsLayout = (section.itemsLayout === 'grid' || section.gridExpanded === true)
+                ? 'grid'
+                : (section.itemsLayout === 'row' ? 'row' : null);
+            if (pref?.itemsLayout === 'grid' || pref?.gridExpanded === true) next.itemsLayout = 'grid';
+            else if (pref?.itemsLayout === 'row') next.itemsLayout = 'row';
+            else if (serverItemsLayout) next.itemsLayout = serverItemsLayout;
             else delete next.itemsLayout;
             delete next.gridExpanded;
             if (pref?.useGaplessCards === true) next.useGaplessCards = true;
@@ -1748,8 +1754,8 @@
             parts[0] = storedId;
             if (parts[1] === '') parts[1] = 'true';
             const normalized = normalizeItemsLayout(layout);
-            // Empty = row; 'true' for grid (legacy)
-            parts[13] = normalized === 'grid' ? 'true' : '';
+            // 'true' is grid for legacy readers; 'row' is an explicit row override. Empty is not written here.
+            parts[13] = normalized === 'grid' ? 'true' : 'row';
             if (useHomeScreen) {
                 bucket = upsertSectionPref(bucket, parts.join(';'));
                 return await saveKefinTweaksHomeScreen(bucket, displayPrefs);
