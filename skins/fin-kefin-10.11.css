@@ -14,3 +14,6 @@
 .innerCardFooter {
 	--cardFooterGradient: linear-gradient(1deg, rgba(0, 0, 0, 0.8), 40%, transparent) !important;
 }
+.detailButton.btnPlay {min-width: unset !important;
+	min-width: unset !important;
+}

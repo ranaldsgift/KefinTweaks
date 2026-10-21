@@ -1,3 +1,7 @@
 :root{
-    --appBarHeight: 4.6em;
-  }
+  --appBarSeamlessBlur: none;
+  --appBarBlurStrength: var(--blurLargest);
+  --appBarColor: var(--headerColor);
+  --appBarBorder: var(--defaultBorder);
+  --appBarTabsPadding: 0;
+}

@@ -212,7 +212,7 @@
                     {
                         name: 'Media Bar Support',
                         url: 'https://cdn.jsdelivr.net/gh/lscambo13/ElegantFin@main/Theme/assets/add-ons/media-bar-plugin-support-latest-min.css',
-                        enabled: true
+                        enabled: false
                     },
                     {
                         name: 'Media Bar Support (Nightly Version)',
@@ -243,6 +243,16 @@
                         name: 'Solid App Bar',
                         url: `${getKefinTweaksRoot()}skins/optional/ElegantFin/solidAppBar.css`,
                         enabled: false
+                    },
+                    {
+                        name: 'Fully Transparent App Bar',
+                        url: `${getKefinTweaksRoot()}skins/optional/ElegantFin/transparentAppBar.css`,
+                        enabled: false
+                    },
+                    {
+                        name: 'ElegantFin Patch for Modern UI',
+                        url: 'https://cdn.jsdelivr.net/gh/mihaif7/elegantfin-jf12@main/Theme/ElegantFin-jf12-modern-latest.css',
+                        enabled: false
                     }
                 ]
             },
@@ -272,7 +282,7 @@
                     {
                         name: 'Media Bar Support',
                         url: 'https://cdn.jsdelivr.net/gh/lscambo13/ElegantFin@main/Theme/assets/add-ons/media-bar-plugin-support-latest-min.css',
-                        enabled: true
+                        enabled: false
                     },
                     {
                         name: 'Media Bar Support (Nightly Version)',
@@ -416,6 +426,7 @@
                         urls: [
                             'https://cdn.jsdelivr.net/gh/ya0903/NetFin@main/netfin.css',
                             `${getKefinTweaksRoot()}skins/netfin-kefin.css`,
+                            `${getKefinTweaksRoot()}skins/fin-kefin-10.11.css`
                         ]
                     },
                 ],

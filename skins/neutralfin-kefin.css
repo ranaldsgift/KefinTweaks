@@ -6,10 +6,6 @@
 	grid-column: 1 / 5;
 }
 
-#slides-container {
-	top: calc(var(--appBarHeight) * 2 + 1.25em) !important;
-}
-
 .skinHeader
 	.headerTabs.sectionTabs
 	.emby-tabs-slider
@@ -23,4 +19,21 @@
   background-color: transparent;
   border-radius: unset;
   backdrop-filter: none;
+}
+
+#slides-container .watchlist-button {
+	background: buttonface !important;
+	color: inherit !important;
+	margin: 0 !important;
+}
+
+@media only screen and (max-width: 767px) and (orientation: portrait) {
+	#slides-container.noautofocus .detailButton.trailer-button {
+		 background: buttonface !important;
+		 color: inherit !important;    
+		 margin: 0 !important;
+	}
+	#slides-container.noautofocus .detailButton.trailer-button .trailer-text {
+		display: none;
+	}
 }

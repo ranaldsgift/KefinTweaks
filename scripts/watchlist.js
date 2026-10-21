@@ -8116,7 +8116,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		// Create watchlist button (empty button, icon added via CSS ::before)
 		const watchlistButton = document.createElement('button');
 		watchlistButton.type = 'button';
-		watchlistButton.className = 'watchlist-button';
+		watchlistButton.className = 'detailButton watchlist-button';
 		watchlistButton.setAttribute('data-item-id', itemId);
 		watchlistButton.setAttribute('data-active', 'false');
 		watchlistButton.title = 'Add to Watchlist';
@@ -8159,8 +8159,13 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 			ERR('Error fetching item data for slide watchlist button:', err);
 		});
 
-		// Insert button after play button
-		playButton.parentNode.insertBefore(watchlistButton, playButton.nextSibling);
+		const favoriteButton = slide.querySelector('.favorite-button');
+		if (favoriteButton) {
+			favoriteButton.before(watchlistButton);
+		} else {
+			playButton.parentNode.insertBefore(watchlistButton, playButton.nextSibling);
+		}
+
 	}
 
 	// Function to monitor slides container for MediaBar Plugin

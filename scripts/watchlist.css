@@ -2214,7 +2214,7 @@ div[data-tab="watchlist"] .loading-message {
 		"GRAD" 0,
 		"opsz" 48;
 }
-.slide .watchlist-button::before {
+#slides-container .watchlist-button::before {
 	content: "bookmark_outline";
 	font-family: "Material Icons";
 	font-weight: 600;
@@ -2226,15 +2226,6 @@ div[data-tab="watchlist"] .loading-message {
 		"wght" 400,
 		"GRAD" 0,
 		"opsz" 48;
-}
-.slide .watchlist-button {
-	border-radius: 50%;
-	height: 50px;
-	width: 50px;
-	border: none;
-	cursor: pointer;
-	transition: color 0.2s;
-	-webkit-tap-highlight-color: #fff0;
 }
 
 .card:has(button[data-played="true"]) .watchlist-button,
@@ -2351,4 +2342,48 @@ div[data-tab="watchlist"] .loading-message {
 
 #customPage-watchlist > div {
 	padding: 0 !important;
+}
+
+
+#slides-container .watchlist-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 50%;
+	padding: 0;
+	border: 1px solid rgb(255 255 255 / 0.35);
+	background: rgb(0 0 0 / 0.45);
+	color: #fff;
+	cursor: pointer;
+	backdrop-filter: blur(6px);
+	transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+	-webkit-tap-highlight-color: #fff0;
+}
+
+#slides-container .watchlist-button {
+	height: 50px;
+	width: 50px;
+}
+
+#slides-container.layout-marquee .watchlist-button {
+	width: var(--mq-control);
+	height: var(--mq-control);
+}
+
+#slides-container.layout-plate .watchlist-button {
+	width: var(--plate-control);
+	height: var(--plate-control);
+}
+
+#slides-container.noautofocus .watchlist-button {
+	padding: 0;
+	font-size: 18px;
+	background-color: rgb(255, 255, 255);
+	color: black;
+	border-radius: 50%;
+	height: 50px;
+	width: 50px;
+	border: none;
+	cursor: pointer;
+	transition: all 0.3s ease;
 }

@@ -12,3 +12,15 @@
   border-radius: unset;
   backdrop-filter: none;
 }
+
+#slides-container .watchlist-button {
+	background-color: transparent !important;
+  	backdrop-filter: none !important;
+	color: inherit !important;
+}
+
+@media only screen and (max-width: 767px) and (orientation: portrait) {
+	#slides-container.noautofocus .detailButton.trailer-button .trailer-text {
+		display: none;
+	}
+}
