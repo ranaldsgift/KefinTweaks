@@ -6352,9 +6352,10 @@
             return itemDiv;
         }
 
-        // Initial render: create slides for window around currentIndex
+        // Initial render: create slides for window around currentIndex.
+        // Images stay on data-src until the deferred visibility pass (webOS tester branch).
         currentWindowIndices.forEach((idx) => {
-            createAndAppendSlide(items[idx], idx, idx === currentIndex);
+            createAndAppendSlide(items[idx], idx, false);
         });
 
         bannerContainer.appendChild(itemsContainer);
@@ -6941,7 +6942,58 @@
 
             // Only cycle when spotlight is in view: pause CSS pan + stop timers when off-screen.
             // First intersect also gates initial .animate (post one rAF so IO + animate don't stack).
+            // Backdrop decode + Ken Burns are delayed so they do not run during the first homepage layout.
             let initialPanScheduled = false;
+            let spotlightMediaStarted = false;
+            let visibleWorkTimer = null;
+            const SPOTLIGHT_VISIBLE_WORK_DELAY_MS = 2000;
+
+            function runVisibleSpotlightWork() {
+                if (!container.isConnected || !isVisible) return;
+                spotlightMediaStarted = true;
+                const currentSlide = getCurrentSpotlightSlide();
+                ensureSlideImagesLoaded(currentIndex);
+                if (items.length > 1) {
+                    ensureSlideImagesLoaded((currentIndex + 1) % items.length);
+                }
+
+                const needsInitialPan =
+                    isPanAnimationEnabled() &&
+                    currentSlide &&
+                    !initialPanScheduled &&
+                    !currentSlide.querySelector(
+                        '.spotlight-background-layer img.animate, .spotlight-background-single img.animate',
+                    );
+
+                if (needsInitialPan) {
+                    initialPanScheduled = true;
+                    requestAnimationFrame(() => {
+                        if (!container.isConnected || !isPanAnimationEnabled() || !isVisible) return;
+                        const slide = getCurrentSpotlightSlide();
+                        if (!slide) return;
+                        if (
+                            !slide.querySelector(
+                                '.spotlight-background-layer img.animate, .spotlight-background-single img.animate',
+                            )
+                        ) {
+                            applyPanAnimationToSlide(slide);
+                        }
+                        if (items[currentIndex]) {
+                            startCycleBackdropTimer(slide, items[currentIndex].Id);
+                        }
+                    });
+                } else {
+                    setSlideAnimationPlayState(currentSlide, 'running');
+                    if (currentSlide && items[currentIndex]) {
+                        startCycleBackdropTimer(currentSlide, items[currentIndex].Id);
+                    }
+                }
+
+                if (autoPlay && !isPaused) {
+                    startAutoPlay();
+                }
+            }
+
             const visibilityObserver = new IntersectionObserver(
                 (entries) => {
                     const entry = entries[0];
@@ -6949,6 +7001,10 @@
                     isVisible = entry.isIntersecting;
                     const currentSlide = getCurrentSpotlightSlide();
                     if (!isVisible) {
+                        if (visibleWorkTimer) {
+                            clearTimeout(visibleWorkTimer);
+                            visibleWorkTimer = null;
+                        }
                         if (autoPlayTimer) {
                             clearTimeout(autoPlayTimer);
                             autoPlayTimer = null;
@@ -6958,48 +7014,14 @@
                             cycleBackdropTimer = null;
                         }
                         setSlideAnimationPlayState(currentSlide, 'paused');
+                    } else if (!spotlightMediaStarted) {
+                        if (visibleWorkTimer) return;
+                        visibleWorkTimer = setTimeout(() => {
+                            visibleWorkTimer = null;
+                            runVisibleSpotlightWork();
+                        }, SPOTLIGHT_VISIBLE_WORK_DELAY_MS);
                     } else {
-                        ensureSlideImagesLoaded(currentIndex);
-                        if (items.length > 1) {
-                            ensureSlideImagesLoaded((currentIndex + 1) % items.length);
-                        }
-
-                        const needsInitialPan =
-                            isPanAnimationEnabled() &&
-                            currentSlide &&
-                            !initialPanScheduled &&
-                            !currentSlide.querySelector(
-                                '.spotlight-background-layer img.animate, .spotlight-background-single img.animate',
-                            );
-
-                        if (needsInitialPan) {
-                            initialPanScheduled = true;
-                            requestAnimationFrame(() => {
-                                if (!container.isConnected || !isPanAnimationEnabled() || !isVisible) return;
-                                const slide = getCurrentSpotlightSlide();
-                                if (!slide) return;
-                                if (
-                                    !slide.querySelector(
-                                        '.spotlight-background-layer img.animate, .spotlight-background-single img.animate',
-                                    )
-                                ) {
-                                    applyPanAnimationToSlide(slide);
-                                }
-                                if (items[currentIndex]) {
-                                    startCycleBackdropTimer(slide, items[currentIndex].Id);
-                                }
-                            });
-                        } else {
-                            // Re-entering viewport: resume pan, restart timers
-                            setSlideAnimationPlayState(currentSlide, 'running');
-                            if (currentSlide && items[currentIndex]) {
-                                startCycleBackdropTimer(currentSlide, items[currentIndex].Id);
-                            }
-                        }
-
-                        if (autoPlay && !isPaused) {
-                            startAutoPlay();
-                        }
+                        runVisibleSpotlightWork();
                     }
                 },
                 { root: null, rootMargin: '0px', threshold: 0 },
@@ -7024,15 +7046,7 @@
                 }
             });
 
-            // Start auto-play (will no-op if container not yet in DOM or not visible once observer runs)
-            if (autoPlay) {
-                startAutoPlay();
-            }
-
-            // Preload next slide soon after mount so transition has no pop
-            if (items.length > 1) {
-                requestAnimationFrame(() => ensureSlideImagesLoaded(1));
-            }
+            // Auto-play and backdrop decode start from the deferred visibility pass, not at mount.
 
             // TV D-pad: metadata drill-in, row-scoped seams (header L/R is native focuscontainer-x)
             if (isTvLayout()) {
