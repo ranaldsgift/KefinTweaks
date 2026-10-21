@@ -764,6 +764,24 @@
         return homeScreenConfigPromise;
     }
 
+
+    /** Add a sentinel to the home screen container to ensure there is at least one visible element since we hide the native sections */
+    async function addHomeScreenSentinel(container) {
+        // Wait for homeSectionsContainer to be added to the class
+        await waitForHomeSectionsContainer();
+
+        const sentinel = document.createElement('div');
+        sentinel.id = 'kefin-home-screen-sentinel';
+
+        // Prepend this specifically before the first .verticalSection / .section0
+        const firstSection = container.querySelector('.section0');
+        if (firstSection) {
+            firstSection.before(sentinel);
+        } else {
+            container.prepend(sentinel);
+        }
+    }
+
     /**
      * Main Entry Point
      */
@@ -785,6 +803,8 @@
         }
 
         disconnectHomeSectionsReadyObserver();
+
+        addHomeScreenSentinel(container);
 
         // If Home-category sections already exist, avoid re-running full init.
         // Discovery-only remounts (e.g. back to Discover) must not skip home render.
