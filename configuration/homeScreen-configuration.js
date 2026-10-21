@@ -6129,13 +6129,11 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             return { items: [], limit: 0, section: previewSection };
         }
 
-        const limit = previewSection.itemLimit
             || withPreviewQueryOptions(queriesToLoad[0]).queryOptions.Limit
             || PREVIEW_DEFAULT_LIMIT;
         allItems = window.cardBuilder.postProcessItems(previewSection, allItems);
-        const limitedItems = allItems.slice(0, parseInt(limit, 10));
 
-        return { items: limitedItems, limit: parseInt(limit, 10), section: previewSection };
+        return { items: allItems, limit: 0, section: previewSection };
     }
 
     const EDITOR_PREVIEW_SECTION_ID = 'hsae-editor-preview';

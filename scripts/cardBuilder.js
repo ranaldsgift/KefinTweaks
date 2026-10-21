@@ -1130,7 +1130,9 @@
             });
         }
 
-        const limit = sectionConfig.itemLimit || sectionConfig.queries?.[0]?.queryOptions?.Limit || 0;
+        // Sum of all query limits
+        const totalLimit = sectionConfig.queries?.reduce((acc, query) => acc + (query.queryOptions?.Limit || 0), 0);
+        const limit = sectionConfig.itemLimit || totalLimit || 0;
 
         if (sectionConfig.queries?.[0]?.queryOptions?.SortBy === 'Random' || sectionConfig.sortBy === 'Random') {
             if (limit > 0 && sectionConfig.limitBeforeSort === true) {
