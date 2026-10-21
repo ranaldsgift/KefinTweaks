@@ -702,3 +702,7 @@ html[data-active-page="home"] body[data-seasonal-background="true"] .backdropCon
 }
 
 /* Compatibility Fix for the Jellyfin Featured Plugin https://github.com/spkesDE/jellyfin-featured-plugin/ */
+
+.sections.homeSectionsContainer {
+	--slideshow-page-offset: 48px;
+}
