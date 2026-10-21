@@ -2344,20 +2344,32 @@ div[data-tab="watchlist"] .loading-message {
 	padding: 0 !important;
 }
 
-
 #slides-container .watchlist-button {
+	padding: 0 !important;
+	color: black;
+}
+
+#slides-container.layout-plate .btnPlay {
+	min-width: unset !important;
+}
+
+/* #slides-container .watchlist-button {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
 	border-radius: 50%;
 	padding: 0;
 	border: 1px solid rgb(255 255 255 / 0.35);
-	background: rgb(0 0 0 / 0.45);
-	color: #fff;
 	cursor: pointer;
 	backdrop-filter: blur(6px);
 	transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 	-webkit-tap-highlight-color: #fff0;
+}
+
+#slides-container .watchlist-button:not(:hover) {
+	background: rgb(0 0 0 / 0.45);
+	color: #fff;
+
 }
 
 #slides-container .watchlist-button {
@@ -2378,8 +2390,6 @@ div[data-tab="watchlist"] .loading-message {
 #slides-container.noautofocus .watchlist-button {
 	padding: 0;
 	font-size: 18px;
-	background-color: rgb(255, 255, 255);
-	color: black;
 	border-radius: 50%;
 	height: 50px;
 	width: 50px;
@@ -2387,3 +2397,8 @@ div[data-tab="watchlist"] .loading-message {
 	cursor: pointer;
 	transition: all 0.3s ease;
 }
+
+#slides-container.noautofocus .watchlist-button:not(:hover) {
+	background-color: rgb(255, 255, 255);
+	color: black;
+} */

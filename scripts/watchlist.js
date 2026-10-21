@@ -8116,7 +8116,7 @@ In the Custom Tabs plugin, add a new tab with the following HTML content:
 		// Create watchlist button (empty button, icon added via CSS ::before)
 		const watchlistButton = document.createElement('button');
 		watchlistButton.type = 'button';
-		watchlistButton.className = 'detailButton watchlist-button';
+		watchlistButton.className = 'detail-button favorite-button watchlist-button';
 		watchlistButton.setAttribute('data-item-id', itemId);
 		watchlistButton.setAttribute('data-active', 'false');
 		watchlistButton.title = 'Add to Watchlist';
