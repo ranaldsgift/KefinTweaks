@@ -5086,24 +5086,50 @@
             } else if (itemType === 'Series' && item.EndDate && item.ProductionYear && item.EndDate.substring(0, 4) !== String(item.ProductionYear)) {
                 secondaryTextContent = item.ProductionYear + ' - ' + item.EndDate.substring(0, 4);
             } else if (item.Type === 'Program') {
-                secondaryTextContent = new Date(item.StartDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
+                secondaryTextContent = String(item.EpisodeTitle || '').trim();
             }
 
-            const secondaryText = document.createElement('div');
-            secondaryText.className = 'cardText cardTextCentered cardText-secondary';
-            const yearBdi = document.createElement('bdi');
-            yearBdi.textContent = secondaryTextContent || item.CustomFooterText;
-            secondaryText.appendChild(yearBdi);
-            cardTextFragment.appendChild(secondaryText);
+            if (item.Type === 'Program') {
+                if (secondaryTextContent) {
+                    const secondaryText = document.createElement('div');
+                    secondaryText.className = 'cardText cardTextCentered cardText-secondary';
+                    const episodeLink = document.createElement('a');
+                    episodeLink.href = cardUrl;
+                    episodeLink.className = 'itemAction textActionButton';
+                    if (!isCustomCard) episodeLink.setAttribute('data-id', itemId);
+                    episodeLink.setAttribute('data-serverid', serverId);
+                    episodeLink.setAttribute('data-type', itemType);
+                    episodeLink.setAttribute('data-mediatype', 'undefined');
+                    episodeLink.setAttribute('data-channelid', 'undefined');
+                    episodeLink.setAttribute(
+                        'data-isfolder',
+                        itemType === 'MusicAlbum' || itemType === 'Artist' || itemType === 'MusicArtist' || item.IsFolder ? 'true' : 'false',
+                    );
+                    episodeLink.setAttribute('data-action', 'link');
+                    episodeLink.title = secondaryTextContent;
+                    episodeLink.textContent = secondaryTextContent;
+                    const episodeBdi = document.createElement('bdi');
+                    episodeBdi.appendChild(episodeLink);
+                    secondaryText.appendChild(episodeBdi);
+                    cardTextFragment.appendChild(secondaryText);
+                }
+            } else {
+                const secondaryText = document.createElement('div');
+                secondaryText.className = 'cardText cardTextCentered cardText-secondary';
+                const yearBdi = document.createElement('bdi');
+                yearBdi.textContent = secondaryTextContent || item.CustomFooterText;
+                secondaryText.appendChild(yearBdi);
+                cardTextFragment.appendChild(secondaryText);
+            }
 
-            if (secondaryTextContent && item.CustomFooterText) {
+            if (secondaryTextContent && item.CustomFooterText && item.Type !== 'Program') {
                 const footerText = document.createElement('div');
                 footerText.className = 'cardText cardTextCentered cardText-secondary';
                 const footerBdi = document.createElement('bdi');
                 footerBdi.textContent = item.CustomFooterText;
                 footerText.appendChild(footerBdi);
                 cardTextFragment.appendChild(footerText);
-            } else if (item.Type === 'Program') {
+            } else if (item.Type === 'Program' && item.StartDate && item.EndDate) {
                 // Format the HH:mm - HH:mm based on local time
                 const timeOptions = { hour: '2-digit', minute: '2-digit', hour12: true };
                 let startTime = new Date(item.StartDate).toLocaleTimeString('en-US', timeOptions).replace('AM', 'a.m.').replace('PM', 'p.m.').toLowerCase();

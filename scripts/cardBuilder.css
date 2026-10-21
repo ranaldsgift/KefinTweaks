@@ -4351,9 +4351,6 @@ html.sleekfin-main-ui .emby-scroller-container[data-section-id="liveTv-channels"
 .card[data-type="Program"] .cardTextStack .cardText-secondary:nth-child(3) {
     display: none;
 }
-[data-section-id="liveTv-on-now"] .card[data-type="Program"] .cardTextStack .cardText-secondary:nth-child(2) {
-    display: none;
-}
 [data-section-id="liveTv-on-now"] .card[data-type="Program"] .cardTextStack .cardText-secondary:nth-child(3) {
     display: block;
 }
