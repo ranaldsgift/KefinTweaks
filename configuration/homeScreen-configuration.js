@@ -570,6 +570,17 @@
         if (presentation.borderColor) section.borderColor = presentation.borderColor;
         else section.borderColor = '';
 
+        if (presentation.renderMode) {
+            section.renderMode = presentation.renderMode;
+            section.spotlight = presentation.renderMode === 'Spotlight' ? true : '';
+        }
+
+        if (presentation.itemsLayout === 'grid') section.itemsLayout = 'grid';
+        else if (presentation.itemsLayout === 'row') section.itemsLayout = '';
+
+        if (presentation.useGaplessCards === true) section.useGaplessCards = true;
+        else if (presentation.useGaplessCards === false) section.useGaplessCards = false;
+
         const isSpotlight = section.renderMode === 'Spotlight' || section.spotlight === true;
         if (isSpotlight) {
             section.spotlightConfig = section.spotlightConfig || {};

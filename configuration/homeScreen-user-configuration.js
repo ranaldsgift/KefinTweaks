@@ -295,20 +295,34 @@
         return 'row';
     }
 
-    function appendBoolPrefField(fields, value, serverValue) {
-        // Persist defined bools even when equal to server default so user choice survives reload.
+    function appendBoolPrefField(fields, value, serverValue, serverKnown) {
+        // Empty inherits the server value. A bool is stored only when it differs, or when
+        // this is a re-serialize without server context and the pref already has an explicit value.
         if (value === undefined) {
             fields.push('');
             return;
         }
-        fields.push(value === true ? 'true' : 'false');
+        const bool = value === true;
+        if (serverKnown && bool === (serverValue === true)) {
+            fields.push('');
+            return;
+        }
+        fields.push(bool ? 'true' : 'false');
     }
 
-    function appendPrefField(fields, value, serverValue) {
-        // Persist defined overrides even when equal to server default so user choice survives reload.
+    function appendPrefField(fields, value, serverValue, serverKnown) {
+        // Empty inherits the server value. Store a value when it differs from the server,
+        // or when re-serializing an existing explicit pref without server context.
         if (value == null || value === '') {
             fields.push('');
             return;
+        }
+        if (serverKnown) {
+            const serverNorm = serverValue == null || serverValue === '' ? '' : String(serverValue);
+            if (String(value) === serverNorm) {
+                fields.push('');
+                return;
+            }
         }
         fields.push(String(value));
     }
@@ -532,44 +546,52 @@
     let sanitizePersistInFlight = false;
 
     function serializeSectionPref(sectionId, enabled, overrides = {}, serverDefaults = {}) {
+        const known = (key) => Object.prototype.hasOwnProperty.call(serverDefaults, key);
         const fields = [sectionId, enabled === false ? 'false' : 'true'];
-        appendPrefField(fields, overrides.order, serverDefaults.order);
-        appendPrefField(fields, overrides.ttl, serverDefaults.ttl);
-        appendPrefField(fields, overrides.cardFormat, serverDefaults.cardFormat);
+        appendPrefField(fields, overrides.order, serverDefaults.order, known('order'));
+        appendPrefField(fields, overrides.ttl, serverDefaults.ttl, known('ttl'));
+        appendPrefField(fields, overrides.cardFormat, serverDefaults.cardFormat, known('cardFormat'));
         let anim = overrides.animationEnabled;
         if (anim === undefined && overrides.panAnimation !== undefined) anim = overrides.panAnimation;
         const serverAnim = serverDefaults.animationEnabled ?? serverDefaults.panAnimation;
-        appendBoolPrefField(fields, anim, serverAnim);
-        appendBoolPrefField(fields, overrides.hideName, serverDefaults.hideName);
-        appendBoolPrefField(fields, overrides.hideCardTitles, serverDefaults.hideCardTitles);
-        appendPrefField(fields, overrides.cardTitlePosition, serverDefaults.cardTitlePosition);
-        appendPrefField(fields, overrides.borderStyle, serverDefaults.borderStyle);
-        appendPrefField(fields, overrides.spotlightLayout, serverDefaults.spotlightLayout);
-        appendPrefField(fields, overrides.spotlightSize, serverDefaults.spotlightSize);
-        appendPrefField(fields, overrides.spotlightTileCount, serverDefaults.spotlightTileCount);
+        appendBoolPrefField(fields, anim, serverAnim, known('animationEnabled') || known('panAnimation'));
+        appendBoolPrefField(fields, overrides.hideName, serverDefaults.hideName, known('hideName'));
+        appendBoolPrefField(fields, overrides.hideCardTitles, serverDefaults.hideCardTitles, known('hideCardTitles'));
+        appendPrefField(fields, overrides.cardTitlePosition, serverDefaults.cardTitlePosition, known('cardTitlePosition'));
+        appendPrefField(fields, overrides.borderStyle, serverDefaults.borderStyle, known('borderStyle'));
+        appendPrefField(fields, overrides.spotlightLayout, serverDefaults.spotlightLayout, known('spotlightLayout'));
+        appendPrefField(fields, overrides.spotlightSize, serverDefaults.spotlightSize, known('spotlightSize'));
+        appendPrefField(fields, overrides.spotlightTileCount, serverDefaults.spotlightTileCount, known('spotlightTileCount'));
         {
-            const layout = normalizeItemsLayout(
-                overrides.itemsLayout ?? (overrides.gridExpanded === true ? 'grid' : 'row')
-            );
-            const serverLayout = normalizeItemsLayout(
-                serverDefaults.itemsLayout ?? (serverDefaults.gridExpanded === true ? 'grid' : 'row')
-            );
+            const layoutKnown = known('itemsLayout') || known('gridExpanded');
+            const hasLayoutOverride = overrides.itemsLayout === 'grid' || overrides.itemsLayout === 'row'
+                || overrides.gridExpanded === true;
+            const layout = hasLayoutOverride
+                ? normalizeItemsLayout(overrides.itemsLayout ?? overrides.gridExpanded)
+                : null;
             // Empty inherits the server layout. 'true' is grid for legacy readers; 'row' is an explicit row override.
-            if (layout === serverLayout) fields.push('');
-            else if (layout === 'grid') fields.push('true');
-            else if (layout === 'row') fields.push('row');
-            else fields.push('');
+            if (!hasLayoutOverride) fields.push('');
+            else if (!layoutKnown) {
+                fields.push(layout === 'grid' ? 'true' : 'row');
+            } else {
+                const serverLayout = normalizeItemsLayout(
+                    serverDefaults.itemsLayout ?? (serverDefaults.gridExpanded === true ? 'grid' : 'row')
+                );
+                if (layout === serverLayout) fields.push('');
+                else fields.push(layout === 'grid' ? 'true' : 'row');
+            }
         }
-        appendPrefField(fields, overrides.cardTitleCapitalization, serverDefaults.cardTitleCapitalization);
-        appendPrefField(fields, overrides.cardTitleFontFamily, serverDefaults.cardTitleFontFamily);
-        appendPrefField(fields, overrides.cardTitleFontSize, serverDefaults.cardTitleFontSize);
-        appendPrefField(fields, overrides.borderColor, serverDefaults.borderColor);
-        appendPrefField(fields, overrides.cardTitleColor, serverDefaults.cardTitleColor);
-        appendBoolPrefField(fields, overrides.useGaplessCards, serverDefaults.useGaplessCards);
+        appendPrefField(fields, overrides.cardTitleCapitalization, serverDefaults.cardTitleCapitalization, known('cardTitleCapitalization'));
+        appendPrefField(fields, overrides.cardTitleFontFamily, serverDefaults.cardTitleFontFamily, known('cardTitleFontFamily'));
+        appendPrefField(fields, overrides.cardTitleFontSize, serverDefaults.cardTitleFontSize, known('cardTitleFontSize'));
+        appendPrefField(fields, overrides.borderColor, serverDefaults.borderColor, known('borderColor'));
+        appendPrefField(fields, overrides.cardTitleColor, serverDefaults.cardTitleColor, known('cardTitleColor'));
+        appendBoolPrefField(fields, overrides.useGaplessCards, serverDefaults.useGaplessCards, known('useGaplessCards'));
         appendPrefField(
             fields,
             normalizeRenderMode(overrides.renderMode),
-            normalizeRenderMode(serverDefaults.renderMode) || 'Normal'
+            normalizeRenderMode(serverDefaults.renderMode) || 'Normal',
+            known('renderMode')
         );
         return fields.join(';');
     }
@@ -1440,7 +1462,7 @@
             spotlightSize: resolved.size,
             spotlightTileCount: resolved.tileCount,
             itemsLayout: (section.itemsLayout === 'grid' || section.gridExpanded === true) ? 'grid' : 'row',
-            useGaplessCards: false,
+            useGaplessCards: section.useGaplessCards === true,
             cardTitleCapitalization: section.cardTitleCapitalization || 'normal',
             cardTitleFontFamily: section.cardTitleFontFamily || 'default',
             cardTitleFontSize: section.cardTitleFontSize || 'normal',
@@ -1469,6 +1491,9 @@
             else delete next.itemsLayout;
             delete next.gridExpanded;
             if (pref?.useGaplessCards === true) next.useGaplessCards = true;
+            else if (pref?.useGaplessCards === false) next.useGaplessCards = false;
+            else if (section.useGaplessCards === true) next.useGaplessCards = true;
+            else if (section.useGaplessCards === false) next.useGaplessCards = false;
             else delete next.useGaplessCards;
 
             if (section.userConfigurable === false) return next;
