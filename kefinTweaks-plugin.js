@@ -298,6 +298,9 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
     }
 
     function loadKefinTweaksLoaderFromRoot(root) {
+        if (rootPredatesKefinLoader(root)) {
+            return Promise.reject(new Error('Pin predates kefinTweaks-loader.js'));
+        }
         const normalized = root.endsWith('/') ? root : root + '/';
         const url = `${normalized}scripts/kefinTweaks-loader.js`;
         if (window.KefinTweaksLoader) return Promise.resolve(window.KefinTweaksLoader);
@@ -632,6 +635,18 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         return null;
     }
 
+    /** GitHub release tags before v0.5.0 do not ship scripts/kefinTweaks-loader.js. */
+    function rootPredatesKefinLoader(root) {
+        if (!isGithubJsdelivrKefinRoot(root)) return false;
+        const ref = parseGithubRootRef(root);
+        if (!ref || ref.kind !== 'semver') return false;
+        const parts = String(ref.value).replace(/^v/i, '').split('.').map((n) => parseInt(n, 10));
+        if (parts.length < 3 || parts.some((n) => Number.isNaN(n))) return false;
+        const major = parts[0];
+        const minor = parts[1];
+        return major === 0 && minor < 5;
+    }
+
     function parseShaFromRoot(root) {
         const m = String(root || '').match(/@([0-9a-f]{40})(\/|$)/i);
         return m ? m[1].toLowerCase() : null;
@@ -751,13 +766,156 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         return `${JSDELIVR_BASE}@${tag}/`;
     }
 
-    async function showPinnedVersionUpdateToast(config, latestTag) {
-        const toastFn = await waitForGlobal(() => window.KefinTweaksToaster?.toast, 20000);
-        if (!toastFn) {
-            console.warn('[KefinTweaks Installer] Toaster unavailable; skipping update toast');
-            return;
+    function ensureInstallerToastStyles() {
+        if (document.getElementById('kefin-installer-toast-styles')) return;
+        const style = document.createElement('style');
+        style.id = 'kefin-installer-toast-styles';
+        style.textContent = `
+            .toast.kefin-toast-rich {
+                display: flex;
+                align-items: center;
+                gap: 0.75em;
+                max-width: min(28rem, calc(100vw - 2rem));
+            }
+            .toast.kefin-toast-rich .kefin-toast-message {
+                flex: 1 1 auto;
+                min-width: 0;
+                line-height: 1.35;
+            }
+            .toast.kefin-toast-rich .kefin-toast-link {
+                color: inherit;
+                text-decoration: underline;
+                cursor: pointer;
+            }
+            .toast.kefin-toast-rich.kefin-toast-with-buttons {
+                flex-wrap: wrap;
+                align-items: flex-start;
+            }
+            .toast.kefin-toast-rich .kefin-toast-buttons {
+                flex: 1 1 100%;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 0.5em;
+                margin-top: 0.15em;
+            }
+            .toast.kefin-toast-rich .kefin-toast-text-btn {
+                flex: 0 0 auto;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                padding: 0.35em 0.9em;
+                margin: 0;
+                border: 1px solid rgba(255, 255, 255, 0.28);
+                border-radius: 4px;
+                background: rgba(255, 255, 255, 0.08);
+                color: inherit;
+                font: inherit;
+                font-weight: 500;
+                cursor: pointer;
+            }
+            .toast.kefin-toast-rich .kefin-toast-text-btn:hover {
+                background: rgba(255, 255, 255, 0.16);
+            }
+        `;
+        (document.head || document.documentElement).appendChild(style);
+    }
+
+    /**
+     * Update prompt toast. Drawn here so every pin gets Update and Dismiss,
+     * including releases whose toaster.js ignores the button argument.
+     */
+    function showInstallerToast(message, options) {
+        if (!message) return null;
+        const buttons = Array.isArray(options?.buttons)
+            ? options.buttons.filter((b) => b && typeof b.label === 'string' && typeof b.onClick === 'function')
+            : [];
+        const link = options?.link;
+        ensureInstallerToastStyles();
+
+        let container = document.querySelector('body > .toastContainer:last-child')
+            || document.querySelector('.toastContainer');
+        let customContainer = false;
+        if (!container) {
+            container = document.createElement('div');
+            container.className = 'toastContainer';
+            (document.body || document.documentElement).appendChild(container);
+            customContainer = true;
         }
 
+        const existing = container.querySelector('.toast');
+        if (existing) existing.remove();
+
+        const toastElement = document.createElement('div');
+        toastElement.className = 'toast kefin-toast-rich' + (buttons.length ? ' kefin-toast-with-buttons' : '');
+
+        const messageEl = document.createElement('span');
+        messageEl.className = 'kefin-toast-message';
+        if (link && typeof link.onClick === 'function') {
+            const anchor = document.createElement('a');
+            anchor.className = 'kefin-toast-link';
+            anchor.href = link.href || '#';
+            anchor.textContent = message;
+            anchor.addEventListener('click', (ev) => {
+                ev.preventDefault();
+                ev.stopPropagation();
+                try {
+                    link.onClick();
+                } catch (e) {
+                    console.error('[KefinTweaks Installer] Toast link failed:', e);
+                }
+            });
+            messageEl.appendChild(anchor);
+        } else {
+            messageEl.textContent = message;
+        }
+        toastElement.appendChild(messageEl);
+
+        if (buttons.length) {
+            const row = document.createElement('div');
+            row.className = 'kefin-toast-buttons';
+            buttons.forEach((spec) => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'kefin-toast-text-btn';
+                btn.textContent = spec.label;
+                btn.addEventListener('click', (ev) => {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    try {
+                        spec.onClick();
+                    } catch (e) {
+                        console.error('[KefinTweaks Installer] Toast button failed:', e);
+                    }
+                });
+                row.appendChild(btn);
+            });
+            toastElement.appendChild(row);
+        }
+
+        container.appendChild(toastElement);
+        void toastElement.offsetHeight;
+        toastElement.classList.add('toastVisible');
+
+        const dismiss = () => {
+            if (!toastElement.parentNode) return;
+            toastElement.classList.add('toastHide');
+            setTimeout(() => {
+                if (toastElement.parentNode) toastElement.parentNode.removeChild(toastElement);
+                if (customContainer && container && !container.querySelector('.toast')) {
+                    container.remove();
+                }
+            }, 3000);
+        };
+
+        if (options?.autoHide) {
+            const seconds = parseFloat(String(options.duration || '8').replace('s', ''));
+            setTimeout(dismiss, Number.isNaN(seconds) ? 8000 : seconds * 1000);
+        }
+
+        return { dismiss, element: toastElement };
+    }
+
+    async function showPinnedVersionUpdateToast(config, latestTag) {
         const tag = normalizeReleaseTag(latestTag);
         const githubInstall = isGithubJsdelivrKefinRoot(config?.kefinTweaksRoot);
 
@@ -777,60 +935,55 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                 window.open(releaseNotesUrl, '_blank', 'noopener');
             } catch (_) { /* ignore */ }
         };
-        
-        const updateMessage = `KefinTweaks ${versionLabel} is available!`;
-        const handle = toastFn(
-            updateMessage,
-            '0',
-            false,
-            {
-                link: {
-                    label: updateMessage,
-                    onClick: openReleaseNotes
-                },
-                buttons: [
-                    {
-                        label: 'Update',
-                        onClick: async () => {
-                            try {
-                                normalizeUpdateState(config);
-                                config.updateState.dismissed = true;
-                                if (tag) config.updateState.latestVersion = tag;
 
-                                if (githubInstall && tag) {
-                                    const nextRoot = buildConcreteLatestRoot(tag);
-                                    config.kefinTweaksRoot = nextRoot;
-                                    config.kefinTweaksRootResolved = nextRoot;
-                                    await persistConfigFromUpdateCheck(config);
-                                    handle?.dismiss?.();
-                                    toastFn(
-                                        'KefinTweaks updated. Please refresh the page for the changes to take effect.',
-                                        '8'
-                                    );
-                                } else {
-                                    await persistConfigFromUpdateCheck(config);
-                                    handle?.dismiss?.();
-                                    openReleaseNotes();
-                                }
-                            } catch (e) {
-                                console.error('[KefinTweaks Installer] Update action failed:', e);
-                            }
-                        }
-                    },
-                    {
-                        label: 'Dismiss',
-                        onClick: async () => {
-                            try {
-                                await dismissAndSave();
+        const updateMessage = `KefinTweaks ${versionLabel} is available!`;
+        const handle = showInstallerToast(updateMessage, {
+            link: {
+                href: releaseNotesUrl,
+                onClick: openReleaseNotes
+            },
+            buttons: [
+                {
+                    label: 'Update',
+                    onClick: async () => {
+                        try {
+                            normalizeUpdateState(config);
+                            config.updateState.dismissed = true;
+                            if (tag) config.updateState.latestVersion = tag;
+
+                            if (githubInstall && tag) {
+                                const nextRoot = buildConcreteLatestRoot(tag);
+                                config.kefinTweaksRoot = nextRoot;
+                                config.kefinTweaksRootResolved = nextRoot;
+                                await persistConfigFromUpdateCheck(config);
                                 handle?.dismiss?.();
-                            } catch (e) {
-                                console.error('[KefinTweaks Installer] Dismiss action failed:', e);
+                                showInstallerToast(
+                                    'KefinTweaks updated. Please refresh the page for the changes to take effect.',
+                                    { autoHide: true, duration: '8' }
+                                );
+                            } else {
+                                await persistConfigFromUpdateCheck(config);
+                                handle?.dismiss?.();
+                                openReleaseNotes();
                             }
+                        } catch (e) {
+                            console.error('[KefinTweaks Installer] Update action failed:', e);
                         }
                     }
-                ]
-            }
-        );
+                },
+                {
+                    label: 'Dismiss',
+                    onClick: async () => {
+                        try {
+                            await dismissAndSave();
+                            handle?.dismiss?.();
+                        } catch (e) {
+                            console.error('[KefinTweaks Installer] Dismiss action failed:', e);
+                        }
+                    }
+                }
+            ]
+        });
     }
 
     async function checkPinnedVersionUpdate(config) {
@@ -2695,11 +2848,120 @@ main.MuiBox-root .customPage.libraryPage:not(.noSecondaryNavPage)[data-kefin-cus
         style.textContent = css;
     }
 
+    function escapeVersionLabel(text) {
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function ensureConfigVersionClusterStyles() {
+        if (document.getElementById('kefin-config-version-cluster-styles')) return;
+        const style = document.createElement('style');
+        style.id = 'kefin-config-version-cluster-styles';
+        style.textContent = `
+            .kefin-config-version-cluster {
+                margin-left: auto;
+                display: inline-flex;
+                align-items: center;
+                gap: 0.6em;
+                flex-wrap: wrap;
+            }
+            .kefin-config-version-label {
+                margin: 0;
+                opacity: 0.75;
+                font-size: 0.95em;
+                white-space: nowrap;
+            }
+            .kefin-config-update-badge {
+                display: none;
+                padding: 0.35em 0.85em;
+                font-size: 0.85em;
+                font-weight: 600;
+                line-height: 1.2;
+                border-radius: 999px;
+                border: 1px solid rgba(82, 196, 26, 0.55);
+                background: rgba(82, 196, 26, 0.18);
+                color: inherit;
+                cursor: pointer;
+                white-space: nowrap;
+            }
+            .kefin-config-update-badge.is-visible {
+                display: inline-flex;
+                align-items: center;
+            }
+            .kefin-config-update-badge:hover {
+                background: rgba(82, 196, 26, 0.28);
+            }
+        `;
+        (document.head || document.documentElement).appendChild(style);
+    }
+
+    function wireUpdateAvailableBadge(updateBadge) {
+        if (!updateBadge || updateBadge.dataset.kefinUpdateWired === 'true') return;
+        updateBadge.dataset.kefinUpdateWired = 'true';
+        updateBadge.addEventListener('click', async () => {
+            try {
+                updateBadge.disabled = true;
+                await showUpdateAvailablePrompt(window.KefinTweaksConfig, updateBadge.dataset.latestTag || '');
+            } catch (error) {
+                console.error('[KefinTweaks Installer] Failed to open update prompt:', error);
+            } finally {
+                updateBadge.disabled = false;
+            }
+        });
+
+        (async () => {
+            try {
+                const result = await isUpdateAvailable(window.KefinTweaksConfig);
+                if (!result?.available || !updateBadge.isConnected) return;
+                if (result.latestTag) updateBadge.dataset.latestTag = result.latestTag;
+                updateBadge.hidden = false;
+                updateBadge.classList.add('is-visible');
+            } catch (error) {
+                console.warn('[KefinTweaks Installer] Update availability check failed:', error);
+            }
+        })();
+    }
+
+    /**
+     * Older configuration.js builds the modal without the version cluster.
+     * This plugin script is loaded from @latest, so insert the cluster when it is missing.
+     */
+    function injectConfigModalVersionCluster() {
+        if (document.getElementById('kefinTweaksInstalledVersion')) return;
+        const sourceBtn = document.getElementById('changeKefinTweaksSourceBtn');
+        const host = sourceBtn?.parentElement;
+        if (!host) return;
+
+        ensureConfigVersionClusterStyles();
+        const label = getInstalledVersionLabel(window.KefinTweaksConfig) || 'Unknown';
+        const cluster = document.createElement('div');
+        cluster.className = 'kefin-config-version-cluster';
+        cluster.dataset.kefinVersionInjected = 'true';
+        cluster.innerHTML = `
+            <span id="kefinTweaksInstalledVersion" class="listItemBodyText secondary kefin-config-version-label" title="Installed KefinTweaks version">${escapeVersionLabel(label)}</span>
+            <button type="button" id="kefinTweaksUpdateAvailableBadge" class="kefin-config-update-badge" title="A newer KefinTweaks release is available" aria-label="Update available" hidden>
+                Update Available!
+            </button>
+        `;
+        host.appendChild(cluster);
+        wireUpdateAvailableBadge(cluster.querySelector('#kefinTweaksUpdateAvailableBadge'));
+    }
+
+    function watchConfigModalForVersionCluster() {
+        injectConfigModalVersionCluster();
+        const observer = new MutationObserver(() => injectConfigModalVersionCluster());
+        observer.observe(document.documentElement, { childList: true, subtree: true });
+    }
+
     // Initialize the installer (no login/admin gate — admin is checked when rendering the card)
     function initialize() {
         checkAndLoadInjector();
         injectPluginCardCss();
         setupOnViewShow();
+        watchConfigModalForVersionCluster();
     }
 
     // Resolve @latest, @main, or @experimental to actual version/commit hash (same as injector.js)
@@ -2925,6 +3187,14 @@ main.MuiBox-root .customPage.libraryPage:not(.noSecondaryNavPage)[data-kefin-cus
             // Inert attached bake: skip ensure (would rebuild from possibly-bad user root) — live inject only
             if (attachedBakeInertFallthrough) {
                 await loadInjectorFromRoot(root);
+                return;
+            }
+
+            // Releases before v0.5.0 have no kefinTweaks-loader.js. Load that tag's injector.js directly.
+            if (rootPredatesKefinLoader(root)) {
+                console.log('[KefinTweaks Installer] Pin predates kefinTweaks-loader.js; loading injector.js');
+                await loadInjectorFromRoot(root);
+                await runPinnedVersionUpdateCheck(config);
                 return;
             }
 
