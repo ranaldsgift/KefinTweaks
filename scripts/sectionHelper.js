@@ -400,6 +400,17 @@
             return sortItemsByConfiguredIds(cfg, postProcessedItems);
         };
 
+        const itemsFromMerged = (raw) => {
+            if (Array.isArray(raw?.Items)) return raw.Items;
+            if (Array.isArray(raw)) return raw;
+            return [];
+        };
+
+        const finishMerged = (items) => {
+            const filtered = applyExcludeItemIdFilter(sectionConfig, items);
+            return sortItemsByConfiguredIds(sectionConfig, filtered);
+        };
+
         let mappedDataPromise = null;
         const result = {
             data: { Items: [] },
@@ -463,19 +474,19 @@
                             result.refreshPromise = Promise.all(
                                 results.map((r) => r._refreshPromise || Promise.resolve(r.data))
                             ).then((allData) => {
-                                const itemsByFreshQuery = [];
-                                allData.forEach((data) => {
-                                    if (data?.Items) itemsByFreshQuery.push(data.Items);
-                                    else if (Array.isArray(data)) itemsByFreshQuery.push(data);
+                                const itemsByFreshQuery = allData.map((data) => {
+                                    if (Array.isArray(data?.Items)) return data.Items;
+                                    if (Array.isArray(data)) return data;
+                                    return [];
                                 });
                                 const mergedFresh = window.cardBuilder?.postProcessItemsByQuery
                                     ? window.cardBuilder.postProcessItemsByQuery(sectionConfig, itemsByFreshQuery)
                                     : itemsByFreshQuery.flat();
-                                return postProcess(sectionConfig, mergedFresh);
+                                return finishMerged(mergedFresh);
                             });
                         }
 
-                        return postProcess(sectionConfig, raw);
+                        return finishMerged(itemsFromMerged(raw));
                     }
 
                     const queryResult = results[0];

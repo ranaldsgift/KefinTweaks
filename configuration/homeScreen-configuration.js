@@ -6089,49 +6089,29 @@ window.KefinTweaksConfig = ${JSON.stringify(configToBackup, null, 2)};`;
             throw new Error('Section has no queries to preview');
         }
 
-        // Match home-screen selection: picker / random load one query; otherwise merge all
-        const resolveQueries = window.cardBuilder.resolveQueriesToLoad;
-        const queriesToLoad = typeof resolveQueries === 'function'
-            ? resolveQueries(previewSection, { initialize: true })
-            : queries;
+        if (typeof window.cardBuilder.refreshSectionQueries !== 'function') {
+            throw new Error('Required dependencies not available for preview');
+        }
 
         const useSpotlightFields = options.useSpotlightFields === true
             || previewSection.renderMode === 'Spotlight';
+        const previewCopy = {
+            ...previewSection,
+            queries: queries.map(withPreviewQueryOptions),
+            renderMode: useSpotlightFields ? 'Spotlight' : previewSection.renderMode
+        };
 
-        let allItems = [];
-        for (const query of queriesToLoad) {
-            const previewQuery = withPreviewQueryOptions(query);
-            let queryUrl = null;
-
-            if (previewQuery.dataSource) {
-                queryUrl = null;
-            } else {
-                queryUrl = window.apiHelper.buildQueryFromSection(previewQuery, userId, serverUrl, useSpotlightFields, { sectionType: previewSection.type });
-            }
-
-            try {
-                let items = [];
-                if (previewQuery.dataSource) {
-                    const response = await window.apiHelper.fetchFromDataSource(previewQuery.dataSource, previewQuery.queryOptions, false);
-                    items = response.Items || response || [];
-                } else if (queryUrl && typeof queryUrl === 'string') {
-                    const result = await apiHelper.getQuery(queryUrl, { useCache: false });
-                    items = result.Items || result || [];
-                }
-                allItems = allItems.concat(items);
-            } catch (error) {
-                console.error('[Preview] Error fetching query:', error);
-                throw new Error(`Error fetching query: ${error.message}`);
-            }
+        let items;
+        try {
+            items = await window.cardBuilder.refreshSectionQueries(previewCopy);
+        } catch (error) {
+            console.error('[Preview] Error fetching query:', error);
+            throw new Error(`Error fetching query: ${error.message}`);
         }
 
-        if (allItems.length === 0) {
-            return { items: [], limit: 0, section: previewSection };
-        }
+        if (!Array.isArray(items)) items = [];
 
-        allItems = window.cardBuilder.postProcessItems(previewSection, allItems);
-
-        return { items: allItems, limit: 0, section: previewSection };
+        return { items, limit: items.length, section: previewSection };
     }
 
     const EDITOR_PREVIEW_SECTION_ID = 'hsae-editor-preview';

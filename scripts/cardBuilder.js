@@ -962,26 +962,106 @@
         return sortedContinueWatching;
     }
 
-    function postProcessItemsByQuery(sectionConfig, queryResults) {
-        let processed = [];
-        for (let i = 0; i < queryResults.length; i++) {
-            const queryConfig = sectionConfig.queries[i];
-            const queryResult = queryResults[i];
-            const items = queryResult?.Items || queryResult || [];
-            processed.push(...postProcessItems(queryConfig, items));
+    function itemsFromQueryPayload(queryResult) {
+        if (!queryResult) return [];
+        if (Array.isArray(queryResult)) return queryResult;
+        if (Array.isArray(queryResult.Items)) return queryResult.Items;
+        return [];
+    }
+
+    function mergedSectionItemLimit(sectionConfig) {
+        const itemLimit = Number(sectionConfig?.itemLimit);
+        if (itemLimit > 0) return itemLimit;
+        const total = (sectionConfig?.queries || []).reduce((acc, query) => {
+            const limit = Number(query?.queryOptions?.Limit);
+            return acc + (limit > 0 ? limit : 0);
+        }, 0);
+        return total > 0 ? total : 0;
+    }
+
+    function applyMergedSectionRules(sectionConfig, items) {
+        let processed = Array.isArray(items) ? items : [];
+
+        if (sectionConfig.flattenSeries === true) {
+            processed = flattenSeriesEpisodes(processed);
+        }
+
+        if (sectionConfig.type === 'series-episodes' && Array.isArray(processed)) {
+            processed = [...processed].sort((a, b) => (a.IndexNumber || 0) - (b.IndexNumber || 0));
         }
 
         if (sectionConfig.id === 'continueWatchingAndNextUp') {
-            // Get the movies from the items, and the rest as the episodes, then use mergeNextUpAndContinueWatching to merge them
             const movies = processed.filter((item) => item.Type === 'Movie');
             const episodes = processed.filter((item) => item.Type !== 'Movie');
             processed = mergeNextUpAndContinueWatching(episodes, movies);
         }
 
-        return processed;
+        if (sectionConfig.id === 'upcoming') {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            processed = processed.filter((item) => {
+                if (!item.PremiereDate || item.LocationType !== 'Virtual') return false;
+                const premiereDate = new Date(item.PremiereDate);
+                premiereDate.setHours(0, 0, 0, 0);
+                return premiereDate >= today;
+            });
+        }
+
+        if (
+            sectionConfig.id === 'recentlyReleased.movies' ||
+            sectionConfig.id === 'upcoming' ||
+            sectionConfig.id === 'recentlyReleased.episodes'
+        ) {
+            processed.forEach((item) => {
+                if (item.PremiereDate) {
+                    item.CustomFooterText = formatAirDate(item.PremiereDate);
+                }
+            });
+        }
+
+        const sortBy = sectionConfig.sortBy != null ? String(sectionConfig.sortBy).trim() : '';
+        const limit = mergedSectionItemLimit(sectionConfig);
+        if (sortBy) {
+            if (sortBy.toLowerCase() === 'random' && limit > 0 && sectionConfig.limitBeforeSort === true) {
+                processed = processed.slice(0, limit);
+            }
+            processed = sortItems(processed, sortBy, sectionConfig.sortOrder || 'Ascending');
+        }
+
+        if (limit > 0) {
+            processed = processed.slice(0, limit);
+        }
+
+        return deduplicateItems(processed);
     }
 
-    function postProcessItems(sectionConfig, itemsData) {
+    function postProcessItemsByQuery(sectionConfig, queryResults) {
+        let processed = [];
+        const queries = sectionConfig?.queries || [];
+        const lists = Array.isArray(queryResults) ? queryResults : [];
+        for (let i = 0; i < lists.length; i++) {
+            const query = queries[i];
+            const items = itemsFromQueryPayload(lists[i]);
+            if (!query) {
+                processed.push(...items);
+                continue;
+            }
+            processed.push(...postProcessItems({ queries: [query] }, items, { scope: 'query' }));
+        }
+
+        const sortAndLimitOptions = {
+            sortBy: sectionConfig.sortBy,
+            sortOrder: sectionConfig.sortOrder,
+            limit: mergedSectionItemLimit(sectionConfig),
+            limitBeforeSort: sectionConfig.limitBeforeSort,
+            handleAllSortingOptions: true
+        };
+
+        return postProcessItems(sectionConfig, processed, sortAndLimitOptions);
+    }
+
+    function postProcessItems(sectionConfig, itemsData, options = {}) {
+        const { sortBy, sortOrder, limit, limitBeforeSort, handleAllSortingOptions } = options;
         let processed = itemsData?.Items || itemsData || [];
 
         //Check if imageTypes is used in the query to ensure only items with these image types are included
@@ -1051,20 +1131,7 @@
             processed = [...processed].sort((a, b) => (a.IndexNumber || 0) - (b.IndexNumber || 0));
         }
 
-        /*         if (sectionConfig.id === 'popularTVNetworks') {
-            // Sort items randomly
-            processed = shuffle(processed);
-        } */
-
-        if (sectionConfig.id === 'continueWatchingAndNextUp') {
-            // Get the movies from the items, and the rest as the episodes, then use mergeNextUpAndContinueWatching to merge them
-            const movies = processed.filter((item) => item.Type === 'Movie');
-            const episodes = processed.filter((item) => item.Type !== 'Movie');
-            processed = mergeNextUpAndContinueWatching(episodes, movies);
-        }
-
         if (sectionConfig.id === 'upcoming') {
-            // Remove items which aired before today
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             processed = processed.filter((item) => {
@@ -1075,7 +1142,6 @@
             });
         }
 
-        // Add Custom Secondary Text for Recently Released Movies
         if (
             sectionConfig.id === 'recentlyReleased.movies' ||
             sectionConfig.id === 'upcoming' ||
@@ -1088,56 +1154,138 @@
             });
         }
 
-        // Sort items by UserData.PlayedPercentage if PlayedPercentage is set as the SortBy
-        if (sectionConfig.queries?.[0]?.queryOptions?.SortBy === 'PlayedPercentage') {
+        if (sectionConfig.id === 'continueWatchingAndNextUp') {
+            const movies = processed.filter((item) => item.Type === 'Movie');
+            const episodes = processed.filter((item) => item.Type !== 'Movie');
+            processed = mergeNextUpAndContinueWatching(episodes, movies);
+        } else {
+            const sortAndLimitOptions = {
+                sortBy: sortBy || sectionConfig.queries?.[0]?.queryOptions?.SortBy,
+                sortOrder: sortOrder || sectionConfig.queries?.[0]?.queryOptions?.SortOrder,
+                limit: limit || Number(sectionConfig.queries?.[0]?.queryOptions?.Limit || 0),
+                handleAllSortingOptions: handleAllSortingOptions,
+                limitBeforeSort: limitBeforeSort
+            };
+    
+            processed = sortAndLimitItems(processed, sortAndLimitOptions);
+        }
+
+        // Deduplicate items based on ProviderIds. Look for match imdb, tmdb or tvdb ids
+        processed = deduplicateItems(processed);
+
+        return processed;
+    }
+
+    function childCountSortValue(item) {
+        return (item?.ChildCount || 0)
+            + (item?.SeriesCount || 0)
+            + (item?.EpisodeCount || 0)
+            + (item?.AlbumCount || 0)
+            + (item?.ArtistCount || 0)
+            + (item?.ProgramCount || 0)
+            + (item?.MovieCount || 0)
+            + (item?.SongCount || 0);
+    }
+
+    const SORT_FIELD_GETTERS = {
+        Name: { get: (item) => item?.Name, type: 'string' },
+        SortName: { get: (item) => item?.SortName || item?.Name, type: 'string' },
+        DateCreated: { get: (item) => item?.DateCreated, type: 'date' },
+        PremiereDate: { get: (item) => item?.PremiereDate, type: 'date' },
+        StartDate: { get: (item) => item?.StartDate, type: 'date' },
+        DateLastContentAdded: { get: (item) => item?.DateLastContentAdded, type: 'date' },
+        DatePlayed: { get: (item) => item?.UserData?.LastPlayedDate, type: 'date' },
+        SeriesDatePlayed: { get: (item) => item?.UserData?.LastPlayedDate, type: 'date' },
+        CommunityRating: { get: (item) => item?.CommunityRating, type: 'number' },
+        CriticRating: { get: (item) => item?.CriticRating, type: 'number' },
+        ProductionYear: { get: (item) => item?.ProductionYear, type: 'number' },
+        Runtime: { get: (item) => item?.RunTimeTicks, type: 'number' },
+        PlayCount: { get: (item) => item?.UserData?.PlayCount, type: 'number' },
+        PlayedPercentage: { get: (item) => item?.UserData?.PlayedPercentage, type: 'number' },
+        ParentIndexNumber: { get: (item) => item?.ParentIndexNumber, type: 'number' },
+        IndexNumber: { get: (item) => item?.IndexNumber, type: 'number' },
+        SimilarityScore: { get: (item) => item?.SimilarityScore, type: 'number' },
+        SearchScore: { get: (item) => item?.SearchScore, type: 'number' },
+        ChildCount: { get: childCountSortValue, type: 'number' },
+        IsPlayed: { get: (item) => item?.UserData?.Played === true, type: 'boolean' },
+        IsUnplayed: { get: (item) => item?.UserData?.Played !== true, type: 'boolean' },
+        IsFolder: { get: (item) => item?.IsFolder === true, type: 'boolean' }
+    };
+
+    function isMissingSortValue(value, type) {
+        if (value == null || value === '') return true;
+        if (type === 'number' && !Number.isFinite(Number(value))) return true;
+        if (type === 'date' && Number.isNaN(new Date(value).getTime())) return true;
+        return false;
+    }
+
+    function compareSortValues(aVal, bVal, type, descending) {
+        const aMissing = isMissingSortValue(aVal, type);
+        const bMissing = isMissingSortValue(bVal, type);
+        if (aMissing && bMissing) return 0;
+        if (aMissing) return 1;
+        if (bMissing) return -1;
+        let cmp = 0;
+        if (type === 'string') {
+            cmp = String(aVal).localeCompare(String(bVal), undefined, { sensitivity: 'base' });
+        } else if (type === 'boolean') {
+            cmp = (aVal ? 1 : 0) - (bVal ? 1 : 0);
+        } else if (type === 'date') {
+            cmp = new Date(aVal).getTime() - new Date(bVal).getTime();
+        } else {
+            cmp = Number(aVal) - Number(bVal);
+        }
+        return descending ? -cmp : cmp;
+    }
+
+    function sortByFieldGetter(items, sortBy, order) {
+        const field = SORT_FIELD_GETTERS[sortBy];
+        if (!field) return items;
+        const descending = order === 'Descending';
+        return [...items].sort((a, b) => compareSortValues(field.get(a), field.get(b), field.type, descending));
+    }
+
+    function sortAndLimitItems(items, options = { handleAllSortingOptions: false }) {
+        const { sortBy, sortOrder, limit, limitBeforeSort, handleAllSortingOptions } = options;
+        const order = sortOrder || 'Ascending';
+        let processed = items;
+
+        if (limit > 0 && limitBeforeSort === true) {
+            processed = processed.slice(0, limit);
+        }
+
+        if (handleAllSortingOptions === true) {
+            const field = sortBy != null ? String(sortBy).trim() : '';
+            if (!field || field === 'Default') {
+                // Leave concatenated order.
+            } else if (field === 'Random') {
+                processed = shuffle(processed);
+            } else if (field === 'PlayedPercentage') {
+                processed = processed.filter((item) => item.UserData?.PlayedPercentage && item.UserData?.PlayedPercentage > 0);
+                processed = sortByFieldGetter(processed, field, order);
+            } else {
+                processed = sortByFieldGetter(processed, field, order);
+            }
+        } else if (sortBy === 'PlayedPercentage') {
             processed = processed.sort((a, b) => {
                 const playedPercentageA = a.UserData?.PlayedPercentage || 0;
                 const playedPercentageB = b.UserData?.PlayedPercentage || 0;
-                return playedPercentageB - playedPercentageA;
+                if (order === 'Descending') {
+                    return playedPercentageB - playedPercentageA;
+                }
+                return playedPercentageA - playedPercentageB;
             });
-
-            // Remove any items which have no UserData.PlayedPercentage
             processed = processed.filter((item) => item.UserData?.PlayedPercentage && item.UserData?.PlayedPercentage > 0);
-        }
-
-        // Check for SortBy ChildCount and use ChildCount to sort the items
-        // ChildCount = ChildCount + SeriesCount + EpisodeCount + AlbumCount + ArtistCount + ProgramCount + MovieCount + SongCount
-        if (sectionConfig.queries?.[0]?.queryOptions?.SortBy === 'ChildCount') {
+        } else if (sortBy === 'ChildCount') {
             processed = processed.sort((a, b) => {
-                const childCountA =
-                    (a.ChildCount || 0) +
-                    (a.SeriesCount || 0) +
-                    (a.EpisodeCount || 0) +
-                    (a.AlbumCount || 0) +
-                    (a.ArtistCount || 0) +
-                    (a.ProgramCount || 0) +
-                    (a.MovieCount || 0) +
-                    (a.SongCount || 0);
-                const childCountB =
-                    (b.ChildCount || 0) +
-                    (b.SeriesCount || 0) +
-                    (b.EpisodeCount || 0) +
-                    (b.AlbumCount || 0) +
-                    (b.ArtistCount || 0) +
-                    (b.ProgramCount || 0) +
-                    (b.MovieCount || 0) +
-                    (b.SongCount || 0);
-
-                if (sectionConfig.queries?.[0]?.queryOptions?.SortOrder === 'Descending') {
+                const childCountA = childCountSortValue(a);
+                const childCountB = childCountSortValue(b);
+                if (order === 'Descending') {
                     return childCountB - childCountA;
                 }
                 return childCountA - childCountB;
             });
-        }
-
-        // Sum of all query limits
-        const totalLimit = sectionConfig.queries?.reduce((acc, query) => acc + (query.queryOptions?.Limit || 0), 0);
-        const limit = sectionConfig.itemLimit || totalLimit || 0;
-
-        if (sectionConfig.queries?.[0]?.queryOptions?.SortBy === 'Random' || sectionConfig.sortBy === 'Random') {
-            if (limit > 0 && sectionConfig.limitBeforeSort === true) {
-                processed = processed.slice(0, limit);
-            }
+        } else if (sortBy === 'Random') {
             processed = shuffle(processed);
         }
 
@@ -1145,9 +1293,6 @@
         if (limit > 0) {
             processed = processed.slice(0, limit);
         }
-
-        // Deduplicate items based on ProviderIds. Look for match imdb, tmdb or tvdb ids
-        processed = deduplicateItems(processed);
 
         return processed;
     }
@@ -1387,11 +1532,7 @@
                     const allData = await Promise.all(
                         results.map((r) => r._refreshPromise || Promise.resolve(r.data)),
                     );
-                    const itemsByFreshQuery = [];
-                    allData.forEach((data) => {
-                        if (data?.Items) itemsByFreshQuery.push(data.Items);
-                        else if (Array.isArray(data)) itemsByFreshQuery.push(data);
-                    });
+                    const itemsByFreshQuery = allData.map((data) => itemsFromQueryPayload(data));
                     return postProcessItemsByQuery(sectionConfig, itemsByFreshQuery);
                 }
 
@@ -1506,9 +1647,10 @@
         let finalResult;
         if (results.length > 1) {
             finalResult = ApiHelper.mergeMultiQueryResults(results, sectionConfig);
-            // Extract items from merged result
-            const items = finalResult.result?.data?.Items || finalResult.result?.data || [];
-            return items;
+            const settled = typeof finalResult.result?.ensureData === 'function'
+                ? await finalResult.result.ensureData()
+                : finalResult.result?.data;
+            return settled?.Items || [];
         } else if (results.length === 1) {
             // Single query result
             const data = results[0].data || results[0];

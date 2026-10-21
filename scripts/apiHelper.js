@@ -1264,58 +1264,44 @@
          * @returns {Object} - Merged result object with config, result.data, result.dataPromise, result.isStalePromise
          */
         mergeMultiQueryResults: function(results, sectionConfig) {
-            // Combine all items from all queries
-            const allItems = [];
-            const itemsByQuery = [];
-            
-            results.forEach(result => {
-                if (result.data?.Items) {
-                    allItems.push(...result.data.Items);
-                    itemsByQuery.push(result.data.Items);
-                }
-            });
-            
-            // Sort merged items if sortBy specified
-            /* if (sectionConfig.sortBy) {
-                allItems.sort((a, b) => {
-                    const aVal = a[sectionConfig.sortBy] || (a.UserData?.[sectionConfig.sortBy] ? new Date(a.UserData[sectionConfig.sortBy]).getTime() : 0);
-                    const bVal = b[sectionConfig.sortBy] || (b.UserData?.[sectionConfig.sortBy] ? new Date(b.UserData[sectionConfig.sortBy]).getTime() : 0);
-                    
-                    // Handle DatePlayed specifically for merged Continue/NextUp
-                    if (sectionConfig.sortBy === 'DatePlayed') {
-                        const aDate = a.UserData?.LastPlayedDate ? new Date(a.UserData.LastPlayedDate).getTime() : 0;
-                        const bDate = b.UserData?.LastPlayedDate ? new Date(b.UserData.LastPlayedDate).getTime() : 0;
-                        const comparison = aDate > bDate ? 1 : aDate < bDate ? -1 : 0;
-                        return sectionConfig.sortOrder === 'Descending' ? -comparison : comparison;
-                    }
-                    
-                    const comparison = aVal > bVal ? 1 : aVal < bVal ? -1 : 0;
-                    return sectionConfig.sortOrder === 'Descending' ? -comparison : comparison;
-                });
-            } */
-            
+            const queryPayloadItems = (data) => {
+                if (!data) return [];
+                if (Array.isArray(data)) return data;
+                if (Array.isArray(data.Items)) return data.Items;
+                if (Array.isArray(data.data?.Items)) return data.data.Items;
+                return [];
+            };
+            // Skip the getQuery stub `{ Items: [] }` (empty arrays are truthy). Keep one slot per query.
+            const syncQueryItems = (result) => {
+                if (!result) return [];
+                if (Array.isArray(result.Items) && result.Items.length > 0) return result.Items;
+                const items = result.data?.Items;
+                if (Array.isArray(items) && items.length > 0) return items;
+                return [];
+            };
+            const itemsByQuery = (results || []).map((result) => syncQueryItems(result));
+            const processLists = (lists) => window.cardBuilder.postProcessItemsByQuery(sectionConfig, lists);
+
             let dataPromise = null;
             const ensureData = function() {
                 if (!dataPromise) {
-                    dataPromise = Promise.all(results.map((r) => (
-                        typeof r.ensureData === 'function' ? r.ensureData() : r.dataPromise
-                    ))).then((allData) => {
-                        const itemsByFreshQuery = [];
-                        allData.forEach((data) => {
-                            if (data?.Items) {
-                                itemsByFreshQuery.push(data.Items);
-                            }
-                        });
-                        return window.cardBuilder.postProcessItemsByQuery(sectionConfig, itemsByFreshQuery);
+                    dataPromise = Promise.all((results || []).map((r) => {
+                        if (!r) return Promise.resolve([]);
+                        if (typeof r.ensureData === 'function') return r.ensureData();
+                        if (r.dataPromise) return r.dataPromise;
+                        return Promise.resolve(r.data != null ? r.data : r);
+                    })).then((allData) => {
+                        const itemsByFreshQuery = allData.map((data) => queryPayloadItems(data));
+                        return { Items: processLists(itemsByFreshQuery) };
                     });
                 }
                 return dataPromise;
             };
 
             const mergedResult = {
-                data: { Items: window.cardBuilder.postProcessItemsByQuery(sectionConfig, itemsByQuery) },
-                isStale: results.some((r) => r.isStale),
-                isStalePromise: Promise.all(results.map(r => r.isStalePromise || Promise.resolve(false)))
+                data: { Items: processLists(itemsByQuery) },
+                isStale: (results || []).some((r) => r && r.isStale),
+                isStalePromise: Promise.all((results || []).map(r => r?.isStalePromise || Promise.resolve(false)))
                     .then(staleFlags => staleFlags.some(s => s)),
                 ensureData
             };
