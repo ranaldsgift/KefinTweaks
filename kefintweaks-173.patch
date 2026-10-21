@@ -1,0 +1,22 @@
+--- a/scripts/seriesEpisodes.js
++++ b/scripts/seriesEpisodes.js
+@@ -697,9 +697,12 @@
+-        // Use apiHelper to get seasons
+-        const response = await window.apiHelper.getQuery(`${ApiClient.serverAddress()}/Shows/${seriesId}/Seasons`);
+-        if (!response.data) {
+-            response.data = await response.dataPromise;
++        // getQuery without useCache returns parsed JSON directly, not a progressive wrapper.
++        let seasonsData;
++        try {
++            seasonsData = await window.apiHelper.getQuery(`${ApiClient.serverAddress()}/Shows/${seriesId}/Seasons`);
++        } catch (error) {
++            ERR('Failed to load seasons for series', seriesId, error);
++            return;
+         }
+-        const seasonsData = response.data;
+ 
+-        // Extract seasons from DOM
+-        const seasons = seasonsData.Items || seasonsData || [];
++        const seasons = Array.isArray(seasonsData?.Items)
++            ? seasonsData.Items
++            : (Array.isArray(seasonsData) ? seasonsData : []);
