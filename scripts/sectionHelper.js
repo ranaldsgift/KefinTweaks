@@ -598,10 +598,21 @@
             return `#/tv.html?collectionType=tvshows&tab=4&serverId=${ApiClient.serverId()}`;
         }
 
-        // Check for Jellyfin 12, as this universal Upcoming tab is currently broken in Jellyfin 12
-        const isJellyfin12 = await window.KefinTweaks.getJellyfinMajorVersion();
 
-        if (id === 'upcoming' || (id === 'recentlyReleased.episodes' && !isJellyfin12)) {
+
+        if (id === 'upcoming' || id === 'recentlyReleased.episodes') {
+            const isJellyfin12 = await window.KefinTweaks.getJellyfinMajorVersion();
+
+            if (isJellyfin12) {
+                const libraries = await window.dataHelper.getLibraries();
+                const tvLibraries = libraries.filter(library => library.CollectionType === 'tvshows');
+                if (tvLibraries.length > 1) {
+                    return null;
+                }
+                const parentId = tvLibraries[0].Id;
+                return `#/tv?topParentId=${parentId}&collectionType=tvshows&tab=2&serverId=${ApiClient.serverId()}`;
+            }
+
             return `#/tv.html?collectionType=tvshows&tab=2&serverId=${ApiClient.serverId()}`;
         }
 
