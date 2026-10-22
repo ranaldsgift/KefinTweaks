@@ -22,5 +22,5 @@
 }
 
 #slides-container .watchlist-button {
-	color: white;
+	color: white !important;
 }

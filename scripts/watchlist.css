@@ -2346,11 +2346,14 @@ div[data-tab="watchlist"] .loading-message {
 
 #slides-container .watchlist-button {
 	padding: 0 !important;
-	color: black;
 }
 
 #slides-container.layout-plate .btnPlay {
 	min-width: unset !important;
+}
+
+#slides-container.noautofocus .watchlist-button {
+	color: black;
 }
 
 /* #slides-container .watchlist-button {
