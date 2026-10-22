@@ -534,7 +534,7 @@
         popoverContainer.className = 'kefinTweaks-popover-container';
         popoverContainer.style.cssText = `
             position: absolute;
-            top: calc(100% - 15px);
+            top: 100%;
             left: 0;
             z-index: 1001;
         `;
@@ -696,7 +696,7 @@
                 popoverContainer.style.top = '';
                 popoverContainer.style.bottom = '100%';
             } else {
-                popoverContainer.style.top = 'calc(100% - 15px)';
+                popoverContainer.style.top = '100%';
                 popoverContainer.style.bottom = '';
             }
             
