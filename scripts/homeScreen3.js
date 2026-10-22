@@ -770,6 +770,11 @@
         // Wait for homeSectionsContainer to be added to the class
         await waitForHomeSectionsContainer();
 
+        const existingSentinel = container.querySelector('#kefin-home-screen-sentinel');
+        if (existingSentinel) {
+            return;
+        }
+
         const sentinel = document.createElement('div');
         sentinel.id = 'kefin-home-screen-sentinel';
 
