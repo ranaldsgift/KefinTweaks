@@ -51,6 +51,7 @@
 
     const DEFAULT_SECTION_QUERY_LIMIT = window.KefinHomeScreenEditorConstants?.DEFAULT_SECTION_QUERY_LIMIT ?? 16;
     const LIMIT_ZERO_MODAL_ID = 'kefin-hsae-limit-zero';
+    const ADD_QUERY_MODAL_ID = 'kefin-hsae-add-query';
     const LIMIT_ZERO_MESSAGE = 'Setting the limit to 0 can result in queries requesting a lot of items from the server and may result in slow response times. This is fine to use if you know there are only a few hundred results at maximum. If you expect thousands of results, this is probably not a good idea unless you use a fairly long cache time.';
 
     /** Live editor state for collectData (which only receives a dialog element). */
@@ -113,6 +114,79 @@
                 modal.dialogFooter?.querySelector('#kefin-hsae-limit-zero-cancel')?.addEventListener('click', () => {
                     finish(false);
                     window.ModalSystem.close(modalId);
+                });
+            }
+        });
+    }
+
+    function queryCopyLabel(query, index) {
+        const name = query?.name != null ? String(query.name).trim() : '';
+        return name || `Query ${index + 1}`;
+    }
+
+    /**
+     * Choose whether the next query is a copy of an existing one or a blank query.
+     * Cancel, backdrop, and Escape add nothing.
+     * @param {{ queries?: Array, onAdd?: (choice: string) => void }} opts
+     */
+    function openAddQueryModal({ queries, onAdd } = {}) {
+        if (!window.ModalSystem?.create) return;
+
+        let settled = false;
+        const finish = (choice) => {
+            if (settled) return;
+            settled = true;
+            if (choice == null) return;
+            onAdd?.(choice);
+        };
+
+        if (window.ModalSystem.isOpen?.(ADD_QUERY_MODAL_ID)) {
+            window.ModalSystem.close(ADD_QUERY_MODAL_ID);
+        }
+
+        const list = Array.isArray(queries) ? queries : [];
+        const nextNumber = list.length + 1;
+        const choices = list.map((query, index) => ({
+            value: String(index),
+            label: `Copy from ${queryCopyLabel(query, index)}`
+        }));
+        choices.push({ value: 'new', label: 'New Query' });
+        const selected = list.length ? '0' : 'new';
+        const optionsHtml = choices.map((opt) => {
+            const selectedAttr = opt.value === selected ? ' selected' : '';
+            return `<option value="${escapeHtml(opt.value)}"${selectedAttr}>${escapeHtml(opt.label)}</option>`;
+        }).join('');
+        const content = `
+            <div class="hsae-field-wrap">
+                <label class="listItemBodyText" for="hsae-add-query-source" style="display: block; margin-bottom: 0.25em;">Query ${nextNumber}</label>
+                <select id="hsae-add-query-source" class="fld emby-select emby-select-withcolor">
+                    ${optionsHtml}
+                </select>
+            </div>
+        `;
+        const footer = `
+            <button type="button" class="emby-button raised" id="kefin-hsae-add-query-cancel">Cancel</button>
+            <button type="button" class="emby-button raised button-submit" id="kefin-hsae-add-query-confirm">Add</button>
+        `;
+
+        window.ModalSystem.create({
+            id: ADD_QUERY_MODAL_ID,
+            title: 'Add Query',
+            content,
+            footer,
+            closeOnBackdrop: true,
+            closeOnEscape: true,
+            showCloseButton: true,
+            onClose: () => finish(null),
+            onOpen: (modal) => {
+                modal.dialogFooter?.querySelector('#kefin-hsae-add-query-confirm')?.addEventListener('click', () => {
+                    const choice = modal.dialogContent?.querySelector('#hsae-add-query-source')?.value || 'new';
+                    finish(choice);
+                    window.ModalSystem.close(ADD_QUERY_MODAL_ID);
+                });
+                modal.dialogFooter?.querySelector('#kefin-hsae-add-query-cancel')?.addEventListener('click', () => {
+                    finish(null);
+                    window.ModalSystem.close(ADD_QUERY_MODAL_ID);
                 });
             }
         });
@@ -1127,7 +1201,13 @@
         if (nameEl) state.sectionName = nameEl.value;
         if (captionEl) state.caption = captionEl.value;
         const descriptionEl = root.querySelector('#section-description');
-        if (descriptionEl) state.description = descriptionEl.value;
+        if (descriptionEl) {
+            state.description = descriptionEl.value;
+            state.section = state.section || {};
+            const description = descriptionEl.value.trim();
+            if (description) state.section.description = description;
+            else delete state.section.description;
+        }
         if (groupEl) state.groupSelect = groupEl.value;
         if (groupNewEl) state.groupNew = groupNewEl.value;
         if (visibilityEl) state.sectionVisibility = visibilityEl.value;
@@ -1320,6 +1400,45 @@
             const fontSize = cardTitleFontSizeEl.value;
             if (fontSize && fontSize !== 'normal') state.section.cardTitleFontSize = fontSize;
             else delete state.section.cardTitleFontSize;
+        }
+
+        state.section = state.section || {};
+        if (randomQueryEl) {
+            state.section.useRandomQuery = state.useRandomQuery === true;
+        }
+        collectAdvancedOptionsFields(root, state.section, root);
+        state.sortBy = state.section.sortBy || '';
+        state.sortOrder = isSectionSortDirection(state.section.sortOrder) ? state.section.sortOrder : '';
+        state.itemLimit = state.section.itemLimit != null && state.section.itemLimit !== ''
+            ? String(state.section.itemLimit)
+            : '';
+
+        const liveQuery = state.queries?.[0];
+        const minAgeEl = root.querySelector('#hsae-query-minAge');
+        const maxAgeEl = root.querySelector('#hsae-query-maxAge');
+        if (liveQuery && isProfileFieldActive(root, minAgeEl)) {
+            const minAgeRaw = minAgeEl?.value?.trim();
+            const maxAgeRaw = maxAgeEl?.value?.trim();
+            if (minAgeRaw) {
+                const minAge = parseInt(minAgeRaw, 10);
+                if (!Number.isNaN(minAge)) liveQuery.minAge = minAge;
+                else delete liveQuery.minAge;
+            } else {
+                delete liveQuery.minAge;
+            }
+            if (maxAgeRaw) {
+                const maxAge = parseInt(maxAgeRaw, 10);
+                if (!Number.isNaN(maxAge)) liveQuery.maxAge = maxAge;
+                else delete liveQuery.maxAge;
+            } else {
+                delete liveQuery.maxAge;
+            }
+        } else if (liveQuery && state.section.queries?.[0] && state.section.queries[0] !== liveQuery) {
+            const storedAgeQuery = state.section.queries[0];
+            if (storedAgeQuery.minAge !== undefined) liveQuery.minAge = storedAgeQuery.minAge;
+            else delete liveQuery.minAge;
+            if (storedAgeQuery.maxAge !== undefined) liveQuery.maxAge = storedAgeQuery.maxAge;
+            else delete liveQuery.maxAge;
         }
     }
 
@@ -2347,7 +2466,9 @@
         const presets = getCachePresets();
         const ttlPreset = state.ttlPreset || 'DEFAULT';
         const isCustomTtl = ttlPreset === 'CUSTOM';
-        const premiereAge = resolvePremiereAgeFields(section);
+        const premiereAge = resolvePremiereAgeFields(
+            state.queries?.length ? { queries: state.queries } : section
+        );
 
         return `
             <details class="hsae-group hsae-advanced-options">
@@ -3654,16 +3775,30 @@
         });
 
         const addQueryBtn = root.querySelector('.hsae-add-query-btn');
-        addQueryBtn?.addEventListener('click', async () => {
+        addQueryBtn?.addEventListener('click', () => {
             if (!state) return;
             collectStateFromForm(root, state);
             state.queries = state.queries || [];
-            state.queries.push(createDefaultQuery());
-            if (!state.queryExpandedStates) {
-                state.queryExpandedStates = state.queries.slice(0, -1).map(() => true);
-            }
-            state.queryExpandedStates.push(true);
-            refreshEditorBody(modalInstance, { skipCollect: true });
+            openAddQueryModal({
+                queries: state.queries,
+                onAdd: (choice) => {
+                    let query;
+                    const index = parseInt(choice, 10);
+                    const source = choice !== 'new' && Number.isInteger(index) ? state.queries[index] : null;
+                    if (source) {
+                        query = JSON.parse(JSON.stringify(source));
+                        delete query.name;
+                    } else {
+                        query = createDefaultQuery();
+                    }
+                    state.queries.push(query);
+                    if (!state.queryExpandedStates) {
+                        state.queryExpandedStates = state.queries.slice(0, -1).map(() => true);
+                    }
+                    state.queryExpandedStates.push(true);
+                    refreshEditorBody(modalInstance, { skipCollect: true });
+                }
+            });
         });
 
         if (state?.itemSource === 'jellyfin') {
