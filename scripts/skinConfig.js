@@ -201,8 +201,7 @@
                         majorServerVersions: [11, 12],
                         urls: [
                             'https://cdn.jsdelivr.net/gh/lscambo13/ElegantFin@main/Theme/ElegantFin-jellyfin-theme-build-latest-minified.css',
-                            `${getKefinTweaksRoot()}skins/elegant-kefin.css`,,
-                            `${getKefinTweaksRoot()}skins/elegant-kefin-10.11.css`,
+                            `${getKefinTweaksRoot()}skins/elegant-kefin.css`,
                             `${getKefinTweaksRoot()}skins/fin-kefin-10.11.css`
                         ]
                     }
