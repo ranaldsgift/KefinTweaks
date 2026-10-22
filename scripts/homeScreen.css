@@ -710,3 +710,9 @@ html[data-active-page="home"] body[data-seasonal-background="true"] .backdropCon
 [data-active-page="home"] #homeTab {
 	margin-top: 1em;
 }
+
+/* Compatibility Fix for the MediaBar Enhanced Plugin */
+
+body:has(.MuiAppBar-root):has(#slides-container):not(:has(#slides-container .slide-content)):not(.media-bar-mobile-16-9, .media-bar-mobile-4-3) .homePage #homeTab .homeSectionsContainer {
+	top: 0 !important;
+}
