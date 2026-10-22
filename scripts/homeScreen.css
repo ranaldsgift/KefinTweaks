@@ -706,3 +706,7 @@ html[data-active-page="home"] body[data-seasonal-background="true"] .backdropCon
 .sections.homeSectionsContainer {
 	--slideshow-page-offset: 48px;
 }
+
+[data-active-page="home"] #homeTab {
+	margin-top: 1em;
+}
