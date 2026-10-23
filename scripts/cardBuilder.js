@@ -2639,12 +2639,14 @@
         return Array.from(variants);
     }
 
-    function findVisibleCardsForItemId(itemId) {
+    function findVisibleCardsForItemId(itemId, kefinOnly = false) {
         if (!itemId) return [];
         const found = new Set();
+        // User-data enhancements include native cards; metadata rebuilds must not.
+        const ownershipSelector = kefinOnly ? '[data-kefin-card="true"]' : '';
         itemIdDomVariants(itemId).forEach((variant) => {
             const escapedId = escapeCssIdentForCardSync(variant);
-            document.querySelectorAll(`.card[data-id="${escapedId}"]:not(.skeleton-card)`).forEach((card) => {
+            document.querySelectorAll(`.card${ownershipSelector}[data-id="${escapedId}"]:not(.skeleton-card)`).forEach((card) => {
                 found.add(card);
             });
         });
@@ -2841,7 +2843,7 @@
         try {
             const matchCounts = {};
             const idsToFetch = ids.filter((id) => {
-                const count = findVisibleCardsForItemId(id).length;
+                const count = findVisibleCardsForItemId(id, true).length;
                 matchCounts[id] = count;
                 return count > 0;
             });
@@ -2888,7 +2890,7 @@
                     liveSyncWarn('Item missing from getItems response', id);
                     return;
                 }
-                const cards = findVisibleCardsForItemId(id);
+                const cards = findVisibleCardsForItemId(id, true);
                 liveSyncLog('Replacing cards for item', { id, cardCount: cards.length });
                 cards.forEach((card) => {
                     work.push({ card, freshItem });
@@ -4523,6 +4525,7 @@
         // Create the main card container
         const card = document.createElement('div');
         card.className = `card ${cardClass}${!isMobileLayout() ? " card-hoverable" : ""} card-withuserdata`;
+        card.setAttribute('data-kefin-card', 'true');
         card.setAttribute('data-index', '0');
         card.setAttribute('data-isfolder', itemType === 'MusicAlbum' || itemType === 'Artist' || item.IsFolder ? 'true' : 'false');
         card.setAttribute('data-serverid', serverId);
