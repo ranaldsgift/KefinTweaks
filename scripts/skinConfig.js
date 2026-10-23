@@ -596,7 +596,29 @@
                         name: 'Streamberry logo',
                         url: 'https://cdn.jsdelivr.net/gh/n00bcodr/Jellyfish/streamberry_logo.css',
                         enabled: false
-                    }
+                    },
+                    {
+                        name: 'Show Scrollbars',
+                        url: 'https://cdn.jsdelivr.net/gh/n00bcodr/Jellyfish/scrollbar.css',
+                        enabled: false
+                    },
+                    {
+                        name: 'Watched / Favorite Buttons on Card Hover',
+                        url: 'https://cdn.jsdelivr.net/gh/n00bcodr/Jellyfish/card_buttons.css',
+                        enabled: false
+                    },
+                    {
+                        name: 'Lite mode',
+                        description: 'For TVs, old tablets and Raspberry-Pi-class clients. Turns off the costly effects: smaller blur radius, no backdrop blur on large panels, small fixed-size badges, no entrance animations or hover lifts and no smooth scrolling. Import it after theme.css and your palette.',
+                        url: 'https://cdn.jsdelivr.net/gh/n00bcodr/Jellyfish/lite.css',
+                        enabled: false
+                    },
+                    {
+                        name: 'Jellyfin Enhanced add-on',
+                        description: 'Optional, if you use the Jellyfin Enhanced plugin. Styles the plugin\'s header "More" menu, the active-streams panel, form-control fonts and the plugin\'s own CSS variables - none of which go through its Themer - and fixes the icon tray collapsing into "..." when KefinTweaks breadcrumbs are on. Import it after theme.css (and your palette).',
+                        url: 'https://cdn.jsdelivr.net/gh/n00bcodr/Jellyfish/jellyfin-enhanced.css',
+                        enabled: false
+                    }                      
                 ],
                 colorSchemes: [
                     {
