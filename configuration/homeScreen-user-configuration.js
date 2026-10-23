@@ -1440,33 +1440,44 @@
         return { layout, size, tileCount };
     }
 
+    function isPinnedSectionId(id) {
+        const value = String(id || '');
+        return value.startsWith(PINNED_LIST_ID_PREFIX) || value.startsWith(PINNED_PARENT_ID_PREFIX);
+    }
+
     function getServerSectionDefaults(section) {
         if (!section) return {};
-        const spotlight = section.spotlightConfig || {};
-        const resolved = resolveSpotlightPresentationLocal(spotlight);
         const id = String(section.id || '');
-        const isPinned = id.startsWith(PINNED_LIST_ID_PREFIX) || id.startsWith(PINNED_PARENT_ID_PREFIX);
+        const isPinned = isPinnedSectionId(id);
+        // Pins are rebuilt as Normal/Poster on every load and are absent from the server catalog.
+        // An already-overridden copy must not become the baseline, or a later full-pref save
+        // (reorder) treats Spotlight as "unchanged" and drops the only stored mode.
+        const source = isPinned
+            ? { id: section.id, renderMode: 'Normal', cardFormat: 'Poster' }
+            : section;
+        const spotlight = source.spotlightConfig || {};
+        const resolved = resolveSpotlightPresentationLocal(spotlight);
         const defaults = {
-            renderMode: resolveRenderMode(section),
-            order: isPinned ? PINNED_DEFAULT_ORDER : (section.order ?? 0),
-            ttl: section.ttl,
-            cardFormat: section.cardFormat,
+            renderMode: resolveRenderMode(source),
+            order: isPinned ? PINNED_DEFAULT_ORDER : (source.order ?? 0),
+            ttl: source.ttl,
+            cardFormat: source.cardFormat,
             animationEnabled: spotlight.panAnimation !== false,
             panAnimation: spotlight.panAnimation !== false,
-            hideName: section.hideName === true,
-            hideCardTitles: section.cardTitleVisibility === 'hidden' || section.hideCardTitles === true,
-            cardTitlePosition: section.cardTitlePosition || '',
-            borderStyle: section.borderStyle || '',
-            borderColor: section.borderColor || '',
+            hideName: source.hideName === true,
+            hideCardTitles: source.cardTitleVisibility === 'hidden' || source.hideCardTitles === true,
+            cardTitlePosition: source.cardTitlePosition || '',
+            borderStyle: source.borderStyle || '',
+            borderColor: source.borderColor || '',
             spotlightLayout: resolved.layout,
             spotlightSize: resolved.size,
             spotlightTileCount: resolved.tileCount,
-            itemsLayout: (section.itemsLayout === 'grid' || section.gridExpanded === true) ? 'grid' : 'row',
-            useGaplessCards: section.useGaplessCards === true,
-            cardTitleCapitalization: section.cardTitleCapitalization || 'normal',
-            cardTitleFontFamily: section.cardTitleFontFamily || 'default',
-            cardTitleFontSize: section.cardTitleFontSize || 'normal',
-            cardTitleColor: section.cardTitleColor || ''
+            itemsLayout: (source.itemsLayout === 'grid' || source.gridExpanded === true) ? 'grid' : 'row',
+            useGaplessCards: source.useGaplessCards === true,
+            cardTitleCapitalization: source.cardTitleCapitalization || 'normal',
+            cardTitleFontFamily: source.cardTitleFontFamily || 'default',
+            cardTitleFontSize: source.cardTitleFontSize || 'normal',
+            cardTitleColor: source.cardTitleColor || ''
         };
         return defaults;
     }
@@ -1498,9 +1509,13 @@
 
             if (section.userConfigurable === false) return next;
             if (!pref) return next;
-            const serverDefaults = getServerSectionDefaults(
-                serverById.get(section.id) || serverById.get(storedId) || section
-            );
+            // Catalog sections resolve to the original server row. Anything already overridden
+            // keeps the defaults from the first pass. Recomputing from `section` would record
+            // the user's own values as the baseline (pins are not in serverById).
+            const serverSection = serverById.get(section.id) || serverById.get(storedId);
+            const serverDefaults = serverSection
+                ? getServerSectionDefaults(serverSection)
+                : (section._userPrefDefaults || getServerSectionDefaults(section));
             if (pref.enabled !== undefined) next.enabled = pref.enabled;
             if (pref.renderMode !== undefined) {
                 next.renderMode = pref.renderMode;

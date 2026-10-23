@@ -632,8 +632,11 @@
         );
         homeScreen = api.upsertSectionPref(homeScreen, prefStr);
         pendingHomeScreen = homeScreen;
-        await saveHomeScreenPreferNativeSync(api, homeScreen);
+        const saved = await saveHomeScreenPreferNativeSync(api, homeScreen);
         pendingHomeScreen = null;
+        if (saved) {
+            window.homeScreen3?.notifyUserHomePreferencesChanged?.('inlineSectionConfigure');
+        }
 
         applyPresentationToElement(entry);
         rerenderSection(entry);
@@ -659,8 +662,11 @@
                     homeScreen = api.upsertSectionPref(homeScreen, prefStr);
                 });
                 pendingHomeScreen = homeScreen;
-                await saveHomeScreenPreferNativeSync(api, homeScreen);
+                const saved = await saveHomeScreenPreferNativeSync(api, homeScreen);
                 pendingHomeScreen = null;
+                if (saved) {
+                    window.homeScreen3?.notifyUserHomePreferencesChanged?.('inlineSectionConfigure');
+                }
             } catch (e) {
                 WARN('Failed to save section preferences:', e);
             }
