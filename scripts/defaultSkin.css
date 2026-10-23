@@ -28,3 +28,8 @@ div#seriesScheduleSection {
 .itemBackdrop {
 	pointer-events: none;
 }
+
+/* Safe fix to prevent showing an outline at the top of the video player with certain skins */
+.videoPlayerContainer + #reactRoot .MuiBox-root > header.MuiPaper-root.MuiAppBar-root {
+  	border-bottom: none !important;
+}
