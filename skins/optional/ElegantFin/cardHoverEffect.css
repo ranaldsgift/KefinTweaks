@@ -1,3 +1,12 @@
 :root{
     --cardHoverEffect: none;
   }
+
+html .cardOverlayContainer::after,
+html .card-hoverable:hover .cardOverlayContainer::after,
+html .backdropCard.card-hoverable .cardOverlayContainer::after,
+html .overflowBackdropCard.card-hoverable .cardOverlayContainer::after,
+html .backdropCard.card-hoverable:hover .cardOverlayContainer::after,
+html .overflowBackdropCard.card-hoverable:hover .cardOverlayContainer::after {
+  content: none !important;
+}
