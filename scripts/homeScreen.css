@@ -707,10 +707,6 @@ html[data-active-page="home"] body[data-seasonal-background="true"] .backdropCon
 	--slideshow-page-offset: 48px;
 }
 
-[data-active-page="home"] #homeTab {
-	margin-top: 1em;
-}
-
 /* Compatibility Fix for the MediaBar Enhanced Plugin https://github.com/spkesDE/jellyfin-featured-plugin/ */
 
 body:has(.MuiAppBar-root):has(#slides-container):not(:has(#slides-container .slide-content)):not(.media-bar-mobile-16-9, .media-bar-mobile-4-3) .homePage #homeTab .homeSectionsContainer.sections:not([data-category="none"]) {
