@@ -1,0 +1,11 @@
+.actionSheetScroller [data-id="record"] {
+  display: none !important;
+}
+
+.actionsheetDivider:has(+ button[data-id="record"]) {
+  display: none !important;
+}
+
+.recordingFields .recordingButton {
+  display: none !important;
+}

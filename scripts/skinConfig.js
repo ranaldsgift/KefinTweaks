@@ -165,6 +165,11 @@
                 name: 'Unhide Native User Home Controls on User > Home settings page',
                 url: `${getKefinTweaksRoot()}skins/optional/global/unhideNativeUserHomeControls.css`,
                 enabled: false
+            },
+            {
+                name: 'Hide Recording Controls',
+                url: `${getKefinTweaksRoot()}skins/optional/global/hideRecordingControls.css`,
+                enabled: false
             }
         ],
         
