@@ -628,10 +628,17 @@
             description: 'Shows trickplay thumbnail preview when hovering in the bottom 20px of a video card for 2+ seconds'
         },
         {
+            name: 'infiniteScroll-configuration',
+            script: '../configuration/infiniteScroll-configuration.js',
+            css: null,
+            dependencies: ['modal', 'toaster', 'utils'],
+            description: 'Infinite scroll configuration for KefinTweaks'
+        },
+        {
             name: 'infiniteScroll',
             script: 'infiniteScroll.js',
             css: null,
-            dependencies: ['cardBuilder'],
+            dependencies: ['cardBuilder', 'infiniteScroll-configuration'],
             description: 'Adds infinite scroll functionality to media library pages'
         },
         {
@@ -1198,7 +1205,7 @@
     }
 
     async function loadConfigurationJS() {
-        const configDependencyNames = ['modal', 'toaster', 'utils', 'homeScreenConfig2', 'ui', 'homeScreen-migration', 'homeScreen-configuration', 'search-configuration', 'seriesEpisodes-configuration', 'seriesInfo-configuration', 'versionPreferences-configuration', 'skinManager-configuration', 'customMenuLinks-configuration', 'thumbnailScrubber-configuration', 'watchTogether-configuration', 'watchlist-configuration', 'userManager-configuration', 'apiHelper', 'sectionHelper'];
+        const configDependencyNames = ['modal', 'toaster', 'utils', 'homeScreenConfig2', 'ui', 'homeScreen-migration', 'homeScreen-configuration', 'search-configuration', 'seriesEpisodes-configuration', 'seriesInfo-configuration', 'versionPreferences-configuration', 'skinManager-configuration', 'customMenuLinks-configuration', 'thumbnailScrubber-configuration', 'watchTogether-configuration', 'watchlist-configuration', 'userManager-configuration', 'infiniteScroll-configuration', 'apiHelper', 'sectionHelper'];
         for (const depName of configDependencyNames) {
             const depScript = SCRIPT_DEFINITIONS.find(script => script.name === depName);
             if (depScript) {
@@ -1255,23 +1262,22 @@
             });
 
             if (bakeAlreadyAttached) {
-                // Belt-and-suspenders: never dual-inject when bake already ran.
-                // Tip re-pin / bake rewrite is owned by kefinTweaks-plugin tip-sync path.
-                console.log('[KefinTweaks Injector] Bake already attached; skipping applyAssetsToDocument (stamp=', plan.stamp, ')');
-                return;
+                console.log('[KefinTweaks Injector] Bake already attached; gap-filling missing assets (stamp=', plan.stamp, ')');
+            } else {
+                console.log('[KefinTweaks Injector] Applying ordered assets:', plan.assets.length, 'stamp=', plan.stamp);
             }
-
-            console.log('[KefinTweaks Injector] Applying ordered assets:', plan.assets.length, 'stamp=', plan.stamp);
             Loader.applyAssetsToDocument(plan.assets);
-            document.dispatchEvent(new CustomEvent('kefinTweaksLoaded', {
-                detail: {
-                    loadedScripts: plan.scriptNames,
-                    stamp: plan.stamp,
-                    timestamp: new Date().toISOString(),
-                    live: true
-                }
-            }));
-            console.log('[KefinTweaks Injector] Live ordered inject complete');
+            if (!bakeAlreadyAttached) {
+                document.dispatchEvent(new CustomEvent('kefinTweaksLoaded', {
+                    detail: {
+                        loadedScripts: plan.scriptNames,
+                        stamp: plan.stamp,
+                        timestamp: new Date().toISOString(),
+                        live: true
+                    }
+                }));
+                console.log('[KefinTweaks Injector] Live ordered inject complete');
+            }
 
             if (typeof Loader.syncKefinTweaksInjector === 'function') {
                 const syncResult = await Loader.syncKefinTweaksInjector(plan);

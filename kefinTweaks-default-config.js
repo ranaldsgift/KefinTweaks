@@ -41,6 +41,10 @@ window.KefinTweaksDefaultConfig = {
     "editions": ["Theatrical", "Director's Cut", "Extended Edition", "Fan Edit", "__none__"],
     "showVersionBeforeEdition": false
   },
+  "infiniteScroll": {
+    "hidePageControls": false,
+    "onlyShowTotalItemCount": false
+  },
   "thumbnailScrubber": {
     "PreviewOnHover": false,
     "UseVideoStream": true,

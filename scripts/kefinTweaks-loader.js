@@ -467,10 +467,17 @@
             description: 'Shows trickplay thumbnail preview when hovering in the bottom 20px of a video card for 2+ seconds'
         },
         {
+            name: 'infiniteScroll-configuration',
+            script: '../configuration/infiniteScroll-configuration.js',
+            css: null,
+            dependencies: ['modal', 'toaster', 'utils'],
+            description: 'Infinite scroll configuration for KefinTweaks'
+        },
+        {
             name: 'infiniteScroll',
             script: 'infiniteScroll.js',
             css: null,
-            dependencies: ['cardBuilder'],
+            dependencies: ['cardBuilder', 'infiniteScroll-configuration'],
             description: 'Adds infinite scroll functionality to media library pages'
         },
         {
@@ -544,7 +551,8 @@
         'homeScreen-configuration', 'search-configuration', 'seriesEpisodes-configuration',
         'seriesInfo-configuration', 'versionPreferences-configuration', 'skinManager-configuration',
         'customMenuLinks-configuration', 'thumbnailScrubber-configuration',
-        'watchTogether-configuration', 'watchlist-configuration', 'userManager-configuration', 'apiHelper',
+        'watchTogether-configuration', 'watchlist-configuration', 'userManager-configuration',
+        'infiniteScroll-configuration', 'apiHelper',
         'sectionHelper'
     ];
 
@@ -920,18 +928,62 @@
         return window.KefinTweaks;
     }
 
+    function stripUrlQuery(value) {
+        return String(value || '').split('#')[0].split('?')[0];
+    }
+
+    /**
+     * Identity for a Kefin asset across roots. scripts/foo.js and
+     * configuration/foo.js match whether the tag came from experimental or dev.
+     * Bare names live under scripts/. Absolute third-party URLs are not rewritten.
+     */
+    function kefinAssetPathKey(value) {
+        const raw = stripUrlQuery(value).replace(/\\/g, '/');
+        if (!raw || /^https?:\/\//i.test(raw)) {
+            if (!raw) return '';
+            let path = raw;
+            try { path = new URL(raw).pathname; } catch (e) { return ''; }
+            return kefinAssetPathKey(path);
+        }
+        const configAt = raw.lastIndexOf('/configuration/');
+        const scriptsAt = raw.lastIndexOf('/scripts/');
+        if (configAt >= 0 && configAt >= scriptsAt) return raw.slice(configAt + 1);
+        if (scriptsAt >= 0) return raw.slice(scriptsAt + 1);
+        const configRel = raw.lastIndexOf('configuration/');
+        if (configRel >= 0) return raw.slice(configRel);
+        const base = raw.split('/').filter(Boolean).pop();
+        if (!base || base.indexOf('.') < 0) return '';
+        return 'scripts/' + base;
+    }
+
+    function assetAlreadyOnPage(asset) {
+        if (!asset || !asset.url) return false;
+        const attr = asset.kind === 'css' ? 'href' : 'src';
+        const selector = asset.kind === 'css' ? 'link[href]' : 'script[src]';
+        const exact = stripUrlQuery(asset.url);
+        const hasRelativePath = asset.path && !/^https?:\/\//i.test(asset.path);
+        const wantedKey = hasRelativePath ? kefinAssetPathKey(asset.path) : '';
+        const nodes = document.querySelectorAll(selector);
+        for (let i = 0; i < nodes.length; i++) {
+            const current = nodes[i].getAttribute(attr);
+            if (!current) continue;
+            if (current === asset.url || stripUrlQuery(current) === exact) return true;
+            if (wantedKey && kefinAssetPathKey(current) === wantedKey) return true;
+        }
+        return false;
+    }
+
     function applyAssetsToDocument(assets) {
         (assets || []).forEach((a) => {
             if (!a || !a.url) return;
+            if (assetAlreadyOnPage(a)) return;
             if (a.kind === 'css') {
-                if (document.querySelector('link[href="' + a.url + '"]')) return;
                 const l = document.createElement('link');
                 l.rel = 'stylesheet';
                 l.type = 'text/css';
                 l.href = a.url;
                 document.head.appendChild(l);
             } else {
-                if (document.querySelector('script[src="' + a.url + '"]')) return;
                 const s = document.createElement('script');
                 s.src = a.url;
                 s.async = false;
