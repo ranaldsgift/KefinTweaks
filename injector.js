@@ -167,7 +167,7 @@
         search: true,             // Enhanced search functionality
         headerTabs: true,         // Header tab enhancements
         customMenuLinks: true,    // Custom menu links functionality
-        hamburgerMenu: false,      // Desktop v12 hamburger / left drawer
+        hamburgerMenu: false,      // Desktop hamburger / left drawer on the modern UI
         updoot: false,             // Upvote functionality
         backdropLeakFix: true,    // Memory leak fixes
         dashboardButtonFix: true, // Dashboard button fix
@@ -580,8 +580,7 @@
             script: 'hamburgerMenu.js',
             css: null,
             dependencies: ['utils'],
-            versions: [12],
-            description: 'Desktop hamburger button that opens a v12-style left navigation drawer'
+            description: 'Desktop hamburger button that opens a left navigation drawer on the modern UI'
         },
         {
             name: 'games',

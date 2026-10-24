@@ -419,8 +419,7 @@
             script: 'hamburgerMenu.js',
             css: null,
             dependencies: ['utils'],
-            versions: [12],
-            description: 'Desktop hamburger button that opens a v12-style left navigation drawer'
+            description: 'Desktop hamburger button that opens a left navigation drawer on the modern UI'
         },
         {
             name: 'games',

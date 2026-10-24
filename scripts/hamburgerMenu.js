@@ -1,6 +1,6 @@
-// KefinTweaks Desktop Hamburger Menu (Jellyfin v12)
+// KefinTweaks Desktop Hamburger Menu
 // Exposes a desktop Open Menu button + left drawer matching the native mobile nav.
-// Requires: utils.js
+// Runs when the modern UI shell is present. Requires: utils.js
 
 (function () {
     'use strict';
@@ -60,10 +60,12 @@
 	}
 }
 .MuiDrawer-root[${DRAWER_ATTR}] {
-	z-index: 1300;
 	position: fixed;
-	inset: 0px;
-	z-index: var(--jf-zIndex-drawer);
+	top: 0;
+	right: 0;
+	bottom: 0;
+	left: 0;
+	z-index: var(--jf-zIndex-drawer, 1300);
 }
 .MuiDrawer-root[${DRAWER_ATTR}] .MuiBackdrop-root {
 	opacity: 0;
@@ -78,11 +80,14 @@
 	align-items: center;
 	-moz-box-pack: center;
 	justify-content: center;
-	inset: 0px;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	left: 0;
 	background-color: rgba(0, 0, 0, 0.5);
 	z-index: -1;
 }
-:where(.MuiDrawer-root[${DRAWER_ATTR}]) .MuiDrawer-paper {
+.MuiDrawer-root[${DRAWER_ATTR}] .MuiDrawer-paper {
 	transform: translateX(-100%);
 	transition: transform 225ms cubic-bezier(0, 0, 0.2, 1);
 	outline: 0px;
@@ -97,7 +102,7 @@
 	width: 280px;
 	max-width: 100%;
 	flex: 1 0 auto;
-	z-index: var(--jf-zIndex-drawer);
+	z-index: var(--jf-zIndex-drawer, 1300);
 	position: fixed;
 	top: 0px;
 	left: 0px;
@@ -666,39 +671,17 @@
         }
     }
 
-    function parseVersionParts(version) {
-        return String(version || '')
-            .split(/[.+-]/)
-            .filter(Boolean)
-            .map((p) => {
-                const n = parseInt(p, 10);
-                return Number.isFinite(n) ? n : 0;
-            });
+    function isModernUI() {
+        return window.KefinTweaksUtils?.isModernUI?.() === true;
     }
 
-    /** @returns {boolean|null} true if >= 12.0.0, false if older, null if unknown */
-    function isAppVersionAtLeast12() {
-        const version = window.ApiClient?._appVersion;
-        if (!version) return null;
-        const parts = parseVersionParts(version);
-        const major = parts[0] ?? 0;
-        const minor = parts[1] ?? 0;
-        const patch = parts[2] ?? 0;
-        if (major > 12) return true;
-        if (major < 12) return false;
-        if (minor > 0) return true;
-        if (minor < 0) return false;
-        return patch >= 0;
-    }
-
-    async function waitForAppVersion(timeoutMs = 10000) {
+    async function waitForModernUI(timeoutMs = 10000) {
         const start = Date.now();
         while (Date.now() - start < timeoutMs) {
-            const ready = isAppVersionAtLeast12();
-            if (ready !== null) return ready;
+            if (isModernUI()) return true;
             await new Promise((r) => setTimeout(r, 250));
         }
-        return isAppVersionAtLeast12();
+        return isModernUI();
     }
 
     function armToolbarPoll() {
@@ -736,13 +719,9 @@
     }
 
     async function boot() {
-        const ok = await waitForAppVersion();
-        // v12+ modern desktop UI only
-        if (ok !== true) {
-            LOG(
-                'Skipping desktop hamburger menu; requires ApiClient._appVersion >= 12.0.0',
-                window.ApiClient?._appVersion || '(unavailable)'
-            );
+        const ok = await waitForModernUI();
+        if (!ok) {
+            LOG('Skipping desktop hamburger menu; modern UI not detected');
             return;
         }
         start();
