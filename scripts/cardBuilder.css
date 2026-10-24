@@ -1816,7 +1816,7 @@ html.layout-tv .emby-scroller-container[data-card-format="Button"] .itemsContain
 }
 
 .spotlight-section[data-layout="Borderless"] .spotlight-dots {
-	bottom: calc(var(--spotlight-fullscreen-vertical) * 4.5);
+	bottom: calc(var(--spotlight-fullscreen-vertical) * 2.5);
 }
 
 .spotlight-section .spotlight-background-layer img,
@@ -1857,7 +1857,12 @@ html.layout-tv .emby-scroller-container[data-card-format="Button"] .itemsContain
 	-webkit-box-orient: vertical;
 	cursor: default;
 	height: unset;
-	line-height: 1.5;
+	line-height: 1.5;  
+	overflow: hidden;
+	padding: 0 !important;
+}
+.spotlight-section:not(.hide) > .spotlight-banner-container .spotlight-tagline {
+	padding: 0.5em 1em !important;
 }
 
 /* Normal and large: tagline above dots (dots at bottom: 20px) */
@@ -1866,7 +1871,13 @@ html.layout-tv .emby-scroller-container[data-card-format="Button"] .itemsContain
 }
 
 .spotlight-section[data-layout="Borderless"] .spotlight-tagline {
-	bottom: calc(var(--spotlight-fullscreen-vertical) * 4.5 + 40px);
+	bottom: calc(var(--spotlight-fullscreen-vertical) * 2.5 + 40px);
+}
+
+.spotlight-section[data-size="normal"][data-layout="Border"] .spotlight-tagline {
+	bottom: unset;
+	top: calc(100% - 40px);
+	transform: translateY(-50%) translateX(-50%) !important;
 }
 
 /* Size full: modern stream-site metadata styles */
