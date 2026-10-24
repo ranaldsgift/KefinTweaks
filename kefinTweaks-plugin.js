@@ -513,8 +513,42 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
     }
 
     /**
+     * Inject plan assets the attached bake did not include. Path matching in
+     * applyAssetsToDocument skips files already loaded from another root.
+     * Does not write the injector entry.
+     */
+    async function fillMissingBakedAssets(config) {
+        const rootRaw = (config && (config.kefinTweaksRootResolved || config.kefinTweaksRoot)) || '';
+        const root = normalizeKefinRootUrl(rootRaw);
+        if (!root || root === '/' || rootPredatesKefinLoader(root)) return null;
+        await loadKefinTweaksLoaderFromRootForced(root);
+        const Loader = window.KefinTweaksLoader;
+        if (!Loader || typeof Loader.buildLoadPlan !== 'function' || typeof Loader.applyAssetsToDocument !== 'function') {
+            return null;
+        }
+        if (typeof Loader.ensureKefinTweaksApi === 'function') {
+            Loader.ensureKefinTweaksApi(Loader.SCRIPT_DEFINITIONS);
+        }
+        let major = null;
+        try {
+            major = await window.KefinTweaks.getJellyfinMajorVersion();
+        } catch (e) { /* ignore */ }
+        const planRoot = Loader.getResolvedKefinRoot
+            ? Loader.getResolvedKefinRoot(config)
+            : root;
+        const plan = Loader.buildLoadPlan(config, major, {
+            root: planRoot,
+            configOnly: config.enabled === false
+        });
+        Loader.applyAssetsToDocument(plan.assets);
+        console.log('[KefinTweaks Installer] Gap-filled baked assets from', planRoot);
+        return plan;
+    }
+
+    /**
      * Admin + bake already on page: tip resolve/persist/sync without loading live injector.js.
-     * Tip advanced → persist Config+bake then forced reload. Tip unchanged → stamp sync only.
+     * Tip advanced → gap-fill, persist Config+bake, then forced reload.
+     * Tip unchanged → gap-fill and stamp sync.
      */
     async function handleAdminAttachedBakeTipSync(config) {
         const symbolic = config?.kefinTweaksRoot || '';
@@ -538,6 +572,12 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             }
 
             try {
+                await fillMissingBakedAssets(config);
+            } catch (e) {
+                console.warn('[KefinTweaks Installer] Gap fill before tip reload failed:', e);
+            }
+
+            try {
                 const persisted = await saveConfigToJavaScriptInjector(config);
                 if (persisted) {
                     scheduleForcedTipReloadCountdown({ symbolicRoot: symbolic, nextResolved: tip });
@@ -551,7 +591,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             return;
         }
 
-        // Tip unchanged — stamp sync only (no live inject, no reload)
+        // Tip unchanged — gap-fill missing assets, then stamp sync (no reload)
         try {
             const loadRoot = current || tip;
             if (!loadRoot) return;
@@ -573,6 +613,10 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
                 root: planRoot,
                 configOnly: config.enabled === false
             });
+            if (typeof Loader.applyAssetsToDocument === 'function') {
+                Loader.applyAssetsToDocument(plan.assets);
+                console.log('[KefinTweaks Installer] Gap-filled baked assets from', planRoot);
+            }
             const syncResult = await Loader.syncKefinTweaksInjector(plan);
             console.log(
                 '[KefinTweaks Installer] Attached bake stamp sync:',
@@ -3175,6 +3219,11 @@ main.MuiBox-root .customPage.libraryPage:not(.noSecondaryNavPage)[data-kefin-cus
                     attachedBakeInertFallthrough = true;
                 } else if (window.KefinTweaksScriptsPreloaded) {
                     console.log('[KefinTweaks Installer] KefinTweaks-injector attached; non-admin skipping live injector.js');
+                    try {
+                        await fillMissingBakedAssets(config);
+                    } catch (e) {
+                        console.warn('[KefinTweaks Installer] Non-admin bake gap fill failed:', e);
+                    }
                     return;
                 } else {
                     console.warn(
