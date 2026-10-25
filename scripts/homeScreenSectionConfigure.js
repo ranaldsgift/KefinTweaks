@@ -2939,19 +2939,6 @@
     function getConfigureSectionControl(sectionConfig, sectionElement, cachedItems) {
         if (!isEnabled() || sectionConfig.userConfigurable === false) return null;
 
-        const api = getConfigApi();
-        const serverDefaults = sectionConfig._userPrefDefaults
-            || api.getServerSectionDefaults(sectionConfig);
-
-        registerRuntime({
-            sectionId: sectionConfig.id,
-            element: sectionElement,
-            serverConfig: { ...sectionConfig },
-            effectiveConfig: { ...sectionConfig },
-            cachedItems: cachedItems || null,
-            serverDefaults
-        });
-
         return {
             id: 'configure',
             icon: 'settings',

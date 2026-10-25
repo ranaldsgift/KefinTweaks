@@ -1603,7 +1603,6 @@
         const ApiHelper = window.apiHelper;
         const results = [];
         const queriesToLoad = resolveQueriesToLoad(sectionConfig, { initialize: false });
-        console.log('[KefinTweaks CardBuilder][NextUpRefresh] queriesToLoad', sectionConfig.id, queriesToLoad.length);
 
         // Process each query in the active set
         for (const query of queriesToLoad) {
@@ -2263,6 +2262,15 @@
     }
 
     function attachSectionControlButtons(sectionConfig, sectionElement, cachedItems) {
+        if (sectionConfig?.id) {
+            window.KefinHomeScreenSectionRuntime?.register?.({
+                sectionId: sectionConfig.id,
+                element: sectionElement,
+                effectiveConfig: sectionConfig,
+                cachedItems: cachedItems || null,
+            });
+        }
+
         const titleContainer =
             sectionElement.querySelector('.sectionTitleContainer') || sectionElement.querySelector('.spotlight-section-title-container');
         if (!titleContainer) return null;
@@ -2442,10 +2450,6 @@
                         sectionCards.forEach((card) => {
                             if (card.isConnected) card.remove();
                         });
-                        console.log('[KefinTweaks CardBuilder][NextUpRefresh] removed card', {
-                            sectionId: sectionElement.getAttribute('data-section-id'),
-                            pending,
-                        });
                         itemsContainer.classList.remove('cardbuilder-row-animating');
                         reindexSectionCards(itemsContainer);
                         maybeDismissEmptyResumeSection(sectionElement);
@@ -2464,18 +2468,11 @@
         const ids = Array.isArray(sectionIds) ? sectionIds.filter(Boolean) : [];
         for (const sectionId of ids) {
             const sectionElement = findMountedHomeSectionElement(sectionId);
-            if (!sectionElement?.isConnected) {
-                console.log('[KefinTweaks CardBuilder][NextUpRefresh] skip, section not mounted', sectionId, !!sectionElement);
-                continue;
-            }
+            if (!sectionElement?.isConnected) continue;
 
             const runtime = window.KefinHomeScreenSectionRuntime?.get?.(sectionId);
             const cfg = runtime?.effectiveConfig || null;
-            if (!cfg) {
-                console.log('[KefinTweaks CardBuilder][NextUpRefresh] skip, no effectiveConfig', sectionId, runtime);
-                continue;
-            }
-            console.log('[KefinTweaks CardBuilder][NextUpRefresh] fetching', sectionId, cfg.queries?.length);
+            if (!cfg) continue;
 
             let items = [];
             try {
@@ -2502,11 +2499,9 @@
     }
 
     function scheduleNextUpSectionsProgressiveRefresh() {
-        console.log('[KefinTweaks CardBuilder][NextUpRefresh] scheduled', NEXTUP_REFRESH_SECTION_IDS);
         if (nextUpProgressiveRefreshTimer) clearTimeout(nextUpProgressiveRefreshTimer);
         nextUpProgressiveRefreshTimer = setTimeout(() => {
             nextUpProgressiveRefreshTimer = null;
-            console.log('[KefinTweaks CardBuilder][NextUpRefresh] timer fired');
             void refreshMountedSectionsProgressive(NEXTUP_REFRESH_SECTION_IDS);
         }, NEXTUP_PROGRESSIVE_REFRESH_DEBOUNCE_MS);
     }
