@@ -3166,6 +3166,8 @@
         invalidateScrollerMetrics: invalidateScrollerMetrics,
         getItemMaterialIcon: getItemMaterialIcon,
         createLibraryButtonElement: createLibraryButtonElement,
+        createListItemCard: createListItemCard,
+        createListItemContainer: createListItemContainer,
         /**
          * Main entry point function to build a Jellyfin card
          * @param {Object} item - The Jellyfin item object
@@ -3183,8 +3185,9 @@
             customFooterText = null,
             useParentCard = false,
             borderStyle = null,
+            cardDisplay = null,
         ) {
-            return createCardElement(item, overflowCard, cardFormat, customFooterText, useParentCard, borderStyle);
+            return createCardElement(item, overflowCard, cardFormat, customFooterText, useParentCard, borderStyle, null, cardDisplay);
         },
 
         /** Push-register lazy images under an attached root (parallel native path). */
@@ -4443,7 +4446,8 @@
         customFooterText = null,
         useParentCard = false,
         borderStyle = null,
-        cardImageParams = null
+        cardImageParams = null,
+        cardDisplay = null
     ) {
         cardFormat = cardFormat?.toLowerCase() || null;
         if (cardFormat === 'button') {
@@ -4563,7 +4567,9 @@
 
         // Card box container
         const cardBox = document.createElement('div');
-        cardBox.className = `cardBox cardBox-bottompadded ${cardFormat === "button" ? "emby-button emby-button-foreground raised" : ""}`;
+        cardBox.className = cardDisplay && cardDisplay.visualCardBox === true
+            ? `cardBox visualCardBox ${cardFormat === "button" ? "emby-button emby-button-foreground raised" : ""}`
+            : `cardBox cardBox-bottompadded ${cardFormat === "button" ? "emby-button emby-button-foreground raised" : ""}`;
 
         // Card scalable container
         const cardScalable = document.createElement('div');
@@ -5193,6 +5199,44 @@
                 footerText.appendChild(footerBdi);
                 cardTextFragment.appendChild(footerText);
             }
+        } else if (cardDisplay && (cardDisplay.showTitle === false || cardDisplay.showYear === false)) {
+            const showTitle = cardDisplay.showTitle !== false;
+            const showYear = cardDisplay.showYear !== false;
+            const yearText = listItemYearText(item);
+            if (showTitle) {
+                const titleLink = document.createElement('a');
+                titleLink.href = cardUrl;
+                titleLink.className = 'itemAction textActionButton';
+                if (!isCustomCard) titleLink.setAttribute('data-id', itemId);
+                titleLink.setAttribute('data-serverid', serverId);
+                titleLink.setAttribute('data-type', itemType);
+                titleLink.setAttribute('data-mediatype', 'undefined');
+                titleLink.setAttribute('data-channelid', 'undefined');
+                titleLink.setAttribute('data-isfolder', itemType === 'Series' || itemType === 'MusicAlbum' || itemType === 'Folder' || itemType === 'CollectionFolder' ? 'true' : 'false');
+                titleLink.setAttribute('data-action', 'link');
+                titleLink.title = item.Name || 'Unknown';
+                titleLink.textContent = item.Name || 'Unknown';
+                const titleBdi = document.createElement('bdi');
+                titleBdi.appendChild(titleLink);
+                cardTextContainer.appendChild(titleBdi);
+                cardTextFragment.appendChild(cardTextContainer);
+            }
+            if (showYear && showTitle && yearText) {
+                const secondaryText = document.createElement('div');
+                secondaryText.className = 'cardText cardTextCentered cardText-secondary';
+                const secondaryBdi = document.createElement('bdi');
+                secondaryBdi.textContent = yearText;
+                secondaryText.appendChild(secondaryBdi);
+                cardTextFragment.appendChild(secondaryText);
+            } else if (showYear && !showTitle && yearText) {
+                const imageFooter = document.createElement('div');
+                imageFooter.className = 'innerCardFooter';
+                const yearNode = document.createElement('div');
+                yearNode.className = 'cardText cardTextCentered';
+                yearNode.textContent = yearText;
+                imageFooter.appendChild(yearNode);
+                cardImageContainer.appendChild(imageFooter);
+            }
         } else {
             // Default: Item name as primary, year as secondary
             const titleLink = document.createElement('a');
@@ -5327,6 +5371,243 @@
         return card;
     }
 
+    function isListModernUI() {
+        return window.KefinTweaksUtils?.isModernUI?.() === true;
+    }
+
+    function listItemIsFolder(item) {
+        if (item?.IsFolder === true) return true;
+        const itemType = item?.Type || '';
+        return itemType === 'Series' || itemType === 'Season' || itemType === 'MusicAlbum'
+            || itemType === 'CollectionFolder' || itemType === 'Folder' || itemType === 'BoxSet'
+            || itemType === 'Playlist' || itemType === 'Genre' || itemType === 'MusicArtist' || itemType === 'Person';
+    }
+
+    function listItemPrimaryImageUrl(item, modern) {
+        const id = item?.Id;
+        if (!id || typeof ApiClient === 'undefined' || !ApiClient.serverAddress) return '';
+        const tag = item.ImageTags?.Primary;
+        const size = modern ? 'fillWidth=80&fillHeight=80' : 'fillWidth=80&fillHeight=80&quality=90';
+        const params = tag ? `${size}&tag=${tag}` : size;
+        return `${ApiClient.serverAddress()}/Items/${id}/Images/Primary?${params}`;
+    }
+
+    function listItemYearText(item) {
+        const itemType = item?.Type || '';
+        if (itemType === 'Series' && item.Status === 'Continuing' && item.ProductionYear) {
+            return item.ProductionYear + ' - Present';
+        }
+        if (itemType === 'Series' && item.EndDate && item.ProductionYear && item.EndDate.substring(0, 4) !== String(item.ProductionYear)) {
+            return item.ProductionYear + ' - ' + item.EndDate.substring(0, 4);
+        }
+        return item?.ProductionYear || item?.PremiereDate?.substring(0, 4) || '';
+    }
+
+    function appendListSvg(parent, pathD, testId) {
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('class', 'MuiSvgIcon-root MuiSvgIcon-fontSizeMedium');
+        svg.setAttribute('focusable', 'false');
+        svg.setAttribute('aria-hidden', 'true');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        if (testId) svg.setAttribute('data-testid', testId);
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', pathD);
+        svg.appendChild(path);
+        parent.appendChild(svg);
+        return svg;
+    }
+
+    function createListItemContainer() {
+        const container = document.createElement('div');
+        container.className = isListModernUI()
+            ? 'itemsContainer padded-left padded-right vertical-list MuiBox-root'
+            : 'itemsContainer padded-left padded-right vertical-list';
+        if (!isListModernUI()) container.setAttribute('is', 'emby-itemscontainer');
+        return container;
+    }
+
+    function createListItemCard(item) {
+        const modern = isListModernUI();
+        const serverId = (typeof ApiClient !== 'undefined' && ApiClient.serverId) ? ApiClient.serverId() : (item?.ServerId || '');
+        const itemId = item?.Id || '';
+        const itemType = item?.Type || 'Folder';
+        const row = document.createElement('div');
+        row.className = modern ? 'listItem listItem-border MuiBox-root' : 'listItem listItem-border';
+        row.setAttribute('data-serverid', serverId);
+        row.setAttribute('data-id', itemId);
+        row.setAttribute('data-type', itemType);
+        row.setAttribute('data-mediatype', item?.MediaType || 'Unknown');
+        row.setAttribute('data-isfolder', listItemIsFolder(item) ? 'true' : 'false');
+        if (!modern) row.setAttribute('data-action', 'link');
+
+        const imageWrap = document.createElement('div');
+        imageWrap.className = modern ? 'listItemImage itemAction MuiBox-root' : 'listItemImage itemAction lazy';
+        imageWrap.setAttribute('data-action', 'link');
+        const imageUrl = listItemPrimaryImageUrl(item, modern);
+        if (modern) {
+            const frame = document.createElement('div');
+            if (imageUrl) {
+                const img = document.createElement('img');
+                img.src = imageUrl;
+                img.alt = '';
+                img.style.position = 'absolute';
+                img.style.top = '0';
+                img.style.right = '0';
+                img.style.bottom = '0';
+                img.style.left = '0';
+                img.style.width = '100%';
+                img.style.height = '100%';
+                img.style.zIndex = '0';
+                img.style.objectFit = 'cover';
+                frame.appendChild(img);
+            }
+            imageWrap.appendChild(frame);
+        } else if (imageUrl) {
+            imageWrap.style.backgroundImage = `url("${imageUrl}")`;
+        }
+
+        if (item?.UserData?.UnplayedItemCount > 0) {
+            const indicators = document.createElement('div');
+            indicators.className = modern ? 'indicators listItemIndicators MuiBox-root' : 'indicators listItemIndicators';
+            const count = document.createElement('div');
+            count.className = modern ? 'countIndicator indicator unplayedItemCount MuiBox-root' : 'countIndicator indicator';
+            count.textContent = String(item.UserData.UnplayedItemCount);
+            indicators.appendChild(count);
+            imageWrap.appendChild(indicators);
+        }
+        row.appendChild(imageWrap);
+
+        const body = document.createElement('div');
+        body.className = modern ? 'listItemBody itemAction MuiBox-root' : 'listItemBody itemAction';
+        body.setAttribute('data-action', 'link');
+        const name = item?.Name || 'Unknown';
+        if (modern) {
+            const nameWrap = document.createElement('div');
+            nameWrap.className = 'MuiBox-root';
+            const heading = document.createElement('h3');
+            heading.className = 'primary listItemBodyText';
+            heading.style.margin = '0';
+            heading.style.fontSize = 'inherit';
+            heading.style.fontWeight = '400';
+            heading.style.lineHeight = '1.2';
+            const bdi = document.createElement('bdi');
+            bdi.textContent = name;
+            heading.appendChild(bdi);
+            nameWrap.appendChild(heading);
+            body.appendChild(nameWrap);
+        } else {
+            const text = document.createElement('div');
+            text.className = 'listItemBodyText';
+            const bdi = document.createElement('bdi');
+            bdi.textContent = name;
+            text.appendChild(bdi);
+            body.appendChild(text);
+        }
+        row.appendChild(body);
+
+        const info = document.createElement('div');
+        info.className = modern ? 'secondary listItemMediaInfo MuiBox-root' : 'secondary listItemMediaInfo';
+        if (item?.OfficialRating) {
+            const rating = document.createElement('div');
+            rating.className = modern
+                ? 'mediaInfoItem mediaInfoText mediaInfoOfficialRating MuiBox-root'
+                : 'mediaInfoItem mediaInfoText mediaInfoOfficialRating';
+            rating.textContent = item.OfficialRating;
+            info.appendChild(rating);
+        }
+        if (item?.CommunityRating) {
+            const stars = document.createElement('div');
+            stars.className = modern
+                ? 'mediaInfoItem starRatingContainer mediaInfoText MuiBox-root'
+                : 'mediaInfoItem starRatingContainer mediaInfoText';
+            if (modern) {
+                const svg = appendListSvg(stars, 'M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z', 'StarIcon');
+                svg.setAttribute('class', 'MuiSvgIcon-root MuiSvgIcon-fontSizeSmall');
+            } else {
+                const icon = document.createElement('span');
+                icon.className = 'material-icons starIcon star';
+                icon.setAttribute('aria-hidden', 'true');
+                stars.appendChild(icon);
+            }
+            stars.appendChild(document.createTextNode(String(Math.round(Number(item.CommunityRating) * 10) / 10)));
+            info.appendChild(stars);
+        }
+        if (info.childNodes.length) row.appendChild(info);
+
+        const buttons = document.createElement('div');
+        buttons.className = modern ? 'listViewUserDataButtons MuiBox-root' : 'listViewUserDataButtons';
+        const played = item?.UserData?.Played === true;
+        const favorite = item?.UserData?.IsFavorite === true;
+        if (modern) {
+            const playedBtn = document.createElement('button');
+            playedBtn.type = 'button';
+            playedBtn.tabIndex = 0;
+            playedBtn.className = 'MuiButtonBase-root MuiIconButton-root MuiIconButton-sizeSmall listItemButton';
+            playedBtn.setAttribute('data-action', 'none');
+            playedBtn.title = played ? 'Mark unplayed' : 'Mark played';
+            appendListSvg(playedBtn, 'M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z', 'CheckIcon');
+            const favBtn = document.createElement('button');
+            favBtn.type = 'button';
+            favBtn.tabIndex = 0;
+            favBtn.className = 'MuiButtonBase-root MuiIconButton-root MuiIconButton-sizeSmall listItemButton';
+            favBtn.setAttribute('data-action', 'none');
+            favBtn.title = favorite ? 'Remove from favorites' : 'Add to favorites';
+            appendListSvg(favBtn, 'm12 21.35-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54z', 'FavoriteIcon');
+            const moreBtn = document.createElement('button');
+            moreBtn.type = 'button';
+            moreBtn.tabIndex = 0;
+            moreBtn.className = 'MuiButtonBase-root MuiIconButton-root MuiIconButton-sizeMedium paper-icon-button-light listItemButton itemAction';
+            moreBtn.setAttribute('data-action', 'menu');
+            moreBtn.title = 'More';
+            appendListSvg(moreBtn, 'M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2m0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2m0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2', 'MoreVertIcon');
+            buttons.appendChild(playedBtn);
+            buttons.appendChild(favBtn);
+            buttons.appendChild(moreBtn);
+        } else {
+            const playedBtn = document.createElement('button', { is: 'emby-playstatebutton' });
+            playedBtn.type = 'button';
+            playedBtn.className = 'listItemButton paper-icon-button-light emby-button';
+            playedBtn.setAttribute('data-id', itemId);
+            playedBtn.setAttribute('data-serverid', serverId);
+            playedBtn.setAttribute('data-itemtype', itemType);
+            playedBtn.setAttribute('data-played', played ? 'true' : 'false');
+            playedBtn.title = played ? 'Mark unplayed' : 'Mark played';
+            const playedIcon = document.createElement('span');
+            playedIcon.className = played ? 'material-icons check playstatebutton-icon-played' : 'material-icons check playstatebutton-icon-unplayed';
+            playedIcon.setAttribute('aria-hidden', 'true');
+            playedBtn.appendChild(playedIcon);
+
+            const favBtn = document.createElement('button', { is: 'emby-ratingbutton' });
+            favBtn.type = 'button';
+            favBtn.className = 'listItemButton paper-icon-button-light emby-button';
+            favBtn.setAttribute('data-id', itemId);
+            favBtn.setAttribute('data-serverid', serverId);
+            favBtn.setAttribute('data-itemtype', itemType);
+            favBtn.setAttribute('data-likes', '');
+            favBtn.setAttribute('data-isfavorite', favorite ? 'true' : 'false');
+            favBtn.title = favorite ? 'Remove from favorites' : 'Add to favorites';
+            const favIcon = document.createElement('span');
+            favIcon.className = 'material-icons favorite';
+            favIcon.setAttribute('aria-hidden', 'true');
+            favBtn.appendChild(favIcon);
+
+            const moreBtn = document.createElement('button', { is: 'paper-icon-button-light' });
+            moreBtn.className = 'listItemButton itemAction paper-icon-button-light';
+            moreBtn.setAttribute('data-action', 'menu');
+            moreBtn.title = 'More';
+            const moreIcon = document.createElement('span');
+            moreIcon.className = 'material-icons more_vert';
+            moreIcon.setAttribute('aria-hidden', 'true');
+            moreBtn.appendChild(moreIcon);
+
+            buttons.appendChild(playedBtn);
+            buttons.appendChild(favBtn);
+            buttons.appendChild(moreBtn);
+        }
+        row.appendChild(buttons);
+        return row;
+    }
+
     /**
      * TV layout detection (Jellyfin sets layout-tv on <html>).
      * Evaluated at call time so Display Mode changes are respected after re-render.
@@ -5444,9 +5725,10 @@
         useParentCard = false,
         borderStyle = null,
         cardImageParams = null,
+        cardDisplay = null,
     ) {
         if (isTvLayout()) {
-            return buildTvCardElement(item, overflowCard, cardFormat, customFooterText, useParentCard, borderStyle);
+            return buildTvCardElement(item, overflowCard, cardFormat, customFooterText, useParentCard, borderStyle, cardDisplay);
         }
         return createJellyfinCardElement(
             item,
@@ -5456,6 +5738,7 @@
             useParentCard,
             borderStyle,
             cardImageParams,
+            cardDisplay,
         );
     }
 
@@ -5553,6 +5836,7 @@
         customFooterText = null,
         useParentCard = false,
         borderStyle = null,
+        cardDisplay = null,
     ) {
         const normalizedFormat = (cardFormat || '').toLowerCase() || null;
         if (normalizedFormat === 'button') {
@@ -5571,6 +5855,8 @@
             customFooterText,
             useParentCard,
             borderStyle,
+            null,
+            cardDisplay,
         );
         return convertDesktopCardToTvButton(desktopCard, item);
     }

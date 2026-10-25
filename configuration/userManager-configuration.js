@@ -458,6 +458,14 @@
                 <button type="button" class="emby-button raised" id="um-tag-cancel">Cancel</button>
                 <button type="button" class="emby-button raised button-submit" id="um-tag-ok">Add</button>`;
 
+            let settled = false;
+            const finish = (val) => {
+                if (settled) return;
+                settled = true;
+                window.ModalSystem.close(TAG_MODAL_ID);
+                resolve(val);
+            };
+
             const modal = window.ModalSystem.create({
                 id: TAG_MODAL_ID,
                 title,
@@ -469,10 +477,6 @@
                 dialogStyle: { maxWidth: '420px', width: '90vw' },
                 onOpen: (m) => {
                     const input = m.dialogContent.querySelector('#um-tag-input');
-                    const finish = (val) => {
-                        window.ModalSystem.close(TAG_MODAL_ID);
-                        resolve(val);
-                    };
                     m.dialogFooter.querySelector('#um-tag-cancel')?.addEventListener('click', () => finish(null));
                     m.dialogFooter.querySelector('#um-tag-ok')?.addEventListener('click', () => {
                         finish(input?.value?.trim() || null);
@@ -485,7 +489,7 @@
                     });
                     setTimeout(() => input?.focus(), 50);
                 },
-                onClose: () => resolve(null)
+                onClose: () => finish(null)
             });
         });
     }

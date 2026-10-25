@@ -11,7 +11,8 @@
     function defaultOptions() {
         return {
             hidePageControls: false,
-            onlyShowTotalItemCount: false
+            onlyShowTotalItemCount: false,
+            showFollowingAlphaLetters: false
         };
     }
 
@@ -22,7 +23,8 @@
         }
         return {
             hidePageControls: config.hidePageControls === true,
-            onlyShowTotalItemCount: config.onlyShowTotalItemCount === true
+            onlyShowTotalItemCount: config.onlyShowTotalItemCount === true,
+            showFollowingAlphaLetters: config.showFollowingAlphaLetters === true
         };
     }
 
@@ -65,6 +67,10 @@
         infiniteScroll_onlyShowTotalItemCount: {
             on: 'The "1 of 100" text will be hidden in favor of just showing the total item count of the library',
             off: 'The paginated item count is unchanged.'
+        },
+        infiniteScroll_showFollowingAlphaLetters: {
+            on: 'The Alpha Picker loads items from the Letter chosen, and all following letters.',
+            off: 'The Alpha Picker filters to only show items whose name starts with the chosen letter.'
         }
     };
 
@@ -113,6 +119,11 @@
                     config.onlyShowTotalItemCount === true,
                     'Only Show Total Item Count'
                 )}
+                ${buildToggleCard(
+                    'infiniteScroll_showFollowingAlphaLetters',
+                    config.showFollowingAlphaLetters === true,
+                    'Show items from Letters following the one selected in the Alpha Picker'
+                )}
             </div>
         `;
     }
@@ -120,7 +131,8 @@
     function collectConfig() {
         return {
             hidePageControls: document.getElementById('infiniteScroll_hidePageControls')?.checked === true,
-            onlyShowTotalItemCount: document.getElementById('infiniteScroll_onlyShowTotalItemCount')?.checked === true
+            onlyShowTotalItemCount: document.getElementById('infiniteScroll_onlyShowTotalItemCount')?.checked === true,
+            showFollowingAlphaLetters: document.getElementById('infiniteScroll_showFollowingAlphaLetters')?.checked === true
         };
     }
 

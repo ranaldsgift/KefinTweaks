@@ -149,7 +149,7 @@
         if (!Number.isFinite(count)) return String(value);
         return count.toLocaleString();
     }
-    const MODERN_LIBRARY_PAGE_SELECTOR = '#moviesPage, #tvshowsPage, #musicPage, #mixed';
+    const MODERN_PAGING_PAGES = ['tv', 'movies', 'music', 'mixed'];
     let pagingObserver = null;
     let pagingApplyScheduled = false;
 
@@ -160,19 +160,32 @@
     function getInfiniteScrollOptions() {
         const options = window.KefinTweaksConfig?.infiniteScroll;
         if (!options || typeof options !== 'object' || Array.isArray(options)) {
-            return { hidePageControls: false, onlyShowTotalItemCount: false };
+            return { hidePageControls: false, onlyShowTotalItemCount: false, showFollowingAlphaLetters: false };
         }
         return {
             hidePageControls: options.hidePageControls === true,
-            onlyShowTotalItemCount: options.onlyShowTotalItemCount === true
+            onlyShowTotalItemCount: options.onlyShowTotalItemCount === true,
+            showFollowingAlphaLetters: options.showFollowingAlphaLetters === true
         };
+    }
+
+    function isMainLibraryPagingPage() {
+        const page = document.documentElement.dataset.activePage || '';
+        return MODERN_PAGING_PAGES.includes(page);
+    }
+
+    function modernPagingHeader() {
+        if (!isMainLibraryPagingPage()) return null;
+        return document.querySelector('header.MuiAppBar-root');
     }
 
     function pageControlHideCss() {
         if (!getInfiniteScrollOptions().hidePageControls) return '';
-        const modernButtons = MODERN_LIBRARY_PAGE_SELECTOR
-            .split(',')
-            .map((page) => `${page.trim()} button[title="Previous"], ${page.trim()} button[title="Next"]`)
+        const modernButtons = MODERN_PAGING_PAGES
+            .map((page) => [
+                `html[data-active-page="${page}"] header.MuiAppBar-root .MuiToolbar-root button[title="Previous"]`,
+                `html[data-active-page="${page}"] header.MuiAppBar-root .MuiToolbar-root button[title="Next"]`
+            ].join(',\n'))
             .join(',\n');
         return `
             .libraryPage:not(.hide) .paging .listPaging .btnPreviousPage,
@@ -246,6 +259,8 @@
         if (view) scopes.push(view);
         const libraryPage = document.querySelector('.libraryPage:not(.hide)');
         if (libraryPage && !scopes.includes(libraryPage)) scopes.push(libraryPage);
+        const header = modernPagingHeader();
+        if (header && !scopes.includes(header)) scopes.push(header);
         return scopes;
     }
 
@@ -294,7 +309,7 @@
 
     function applyTotalCountLabels() {
         if (!isInfiniteScrollEnabled() || !getInfiniteScrollOptions().onlyShowTotalItemCount) return;
-        if (!getLibraryViewRoot()) return;
+        if (!getLibraryViewRoot() && !modernPagingHeader()) return;
         forEachCountLabel((el) => {
             const total = totalFromLabel(el);
             if (!total) return;
@@ -323,12 +338,15 @@
         disconnectPagingObserver();
         if (!isInfiniteScrollEnabled() || !getInfiniteScrollOptions().onlyShowTotalItemCount) return;
         const root = getLibraryViewRoot() || document.querySelector('.libraryPage:not(.hide)');
-        if (!root) return;
+        const header = modernPagingHeader();
+        if (!root && !header) return;
         applyTotalCountLabels();
         pagingObserver = new MutationObserver(() => {
             scheduleApplyTotalCountLabels();
         });
-        pagingObserver.observe(root, { subtree: true, childList: true, characterData: true });
+        const observe = { subtree: true, childList: true, characterData: true };
+        if (root) pagingObserver.observe(root, observe);
+        if (header && header !== root) pagingObserver.observe(header, observe);
     }
 
     // Wait for ApiClient to be available
@@ -549,7 +567,7 @@
             hashBucketCount = null;
         }
 
-        if (!letter || !isSortNameSort(sortBy)) {
+        if (!letter || !isSortNameSort(sortBy) || !getInfiniteScrollOptions().showFollowingAlphaLetters) {
             return letter
                 ? { mode: 'exact', startIndex: displayedCount, nameStartsWith: letter }
                 : { mode: 'none', startIndex: displayedCount };
@@ -588,14 +606,22 @@
         apiParams.StartIndex = query.startIndex;
     }
 
+    // Grid cards are direct children. A modern list wraps every row, so count those rows.
+    function renderedItemCount(container) {
+        if (!container) return 0;
+        const listHost = listRowHost(container);
+        if (listHost) return listHost.querySelectorAll(':scope > .listItem').length;
+        return container.children.length;
+    }
+
     // Get current start index based on existing items count
     function getCurrentStartIndex() {
         const container = getContainer();
         if (!container) return 0;
-        
-        const existingItemsCount = container.children.length;
+
+        const existingItemsCount = renderedItemCount(container);
         LOG('Current start index based on existing items:', existingItemsCount);
-        
+
         return existingItemsCount;
     }
 
@@ -604,7 +630,7 @@
         const container = getContainer();
         if (!container) return;
 
-        const currentItemsCount = container.children.length;
+        const currentItemsCount = renderedItemCount(container);
         const totalCount = totalRecordCount || '?';
         const showTotalOnly = getInfiniteScrollOptions().onlyShowTotalItemCount;
 
@@ -654,6 +680,29 @@
             return 'portrait';
         }
         return null;
+    }
+
+    function listRowHost(container) {
+        if (!container) return null;
+        if (container.querySelector(':scope > .listItem')) return container;
+        const nested = container.querySelector('.listItem');
+        if (nested && nested.parentElement && container.contains(nested)) return nested.parentElement;
+        if (container.classList.contains('vertical-list')) return container;
+        return null;
+    }
+
+    function inferCardDisplayFromContainer(container) {
+        const card = container && container.querySelector('.card');
+        const cardBox = card && card.querySelector('.cardBox');
+        if (!card || !cardBox) return null;
+        const showTitle = Array.from(card.querySelectorAll('.cardText-first')).some((el) => !el.closest('.innerCardFooter'));
+        const showYear = !!card.querySelector('.cardText-secondary')
+            || Array.from(card.querySelectorAll('.innerCardFooter .cardText')).some((el) => !el.querySelector('.itemProgressBar'));
+        return {
+            showTitle: showTitle,
+            showYear: showYear,
+            visualCardBox: cardBox.classList.contains('visualCardBox')
+        };
     }
 
     async function loadMore() {
@@ -808,14 +857,28 @@
                             container: container
                         });
 
-                        const cardFormat = inferCardFormatFromContainer(container);
-                        const indexBase = container.children.length;
-                        LOG('Inferred card format from container:', cardFormat);
-                        items.forEach((item, index) => {
-                            const card = window.cardBuilder.buildCard(item, false, cardFormat);
-                            card.setAttribute('data-index', indexBase + index);
-                            container.appendChild(card);
-                        });
+                        const listHost = listRowHost(container);
+                        if (listHost && typeof window.cardBuilder.createListItemCard === 'function') {
+                            const indexBase = listHost.querySelectorAll(':scope > .listItem').length;
+                            LOG('Appending list rows:', { itemCount: items.length, indexBase: indexBase });
+                            items.forEach((item, index) => {
+                                const row = window.cardBuilder.createListItemCard(item);
+                                row.setAttribute('data-index', indexBase + index);
+                                listHost.appendChild(row);
+                            });
+                        } else {
+                            const cardFormat = inferCardFormatFromContainer(container);
+                            const cardDisplay = inferCardDisplayFromContainer(container);
+                            const indexBase = container.children.length;
+                            LOG('Inferred card format from container:', cardFormat, cardDisplay);
+                            items.forEach((item, index) => {
+                                const card = cardDisplay
+                                    ? window.cardBuilder.buildCard(item, false, cardFormat, null, false, null, cardDisplay)
+                                    : window.cardBuilder.buildCard(item, false, cardFormat);
+                                card.setAttribute('data-index', indexBase + index);
+                                container.appendChild(card);
+                            });
+                        }
                         if (typeof window.cardBuilder.registerLazyImagesIn === 'function') {
                             window.cardBuilder.registerLazyImagesIn(container);
                         }

@@ -43,7 +43,8 @@ window.KefinTweaksDefaultConfig = {
   },
   "infiniteScroll": {
     "hidePageControls": false,
-    "onlyShowTotalItemCount": false
+    "onlyShowTotalItemCount": false,
+    "showFollowingAlphaLetters": false
   },
   "thumbnailScrubber": {
     "PreviewOnHover": false,

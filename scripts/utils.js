@@ -3012,6 +3012,31 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         }, FALLBACK_READY_MS);
     }
 
+    const LIBRARY_TAB_SLUGS = {
+        tv: ['suggestions', 'upcoming', 'genres', 'networks', 'episodes', 'collections', 'playlists'],
+        movies: ['suggestions', 'favorites', 'collections', 'genres'],
+        music: ['suggestions', 'albumartists', 'artists', 'playlists', 'songs', 'genres'],
+        homevideos: ['suggestions', 'favorites', 'collections'],
+        books: ['suggestions', 'collections', 'genres'],
+        mixed: []
+    };
+
+    function libraryRoutePage(hash) {
+        const routes = ['homevideos', 'movies', 'music', 'books', 'mixed', 'tv'];
+        for (const route of routes) {
+            const pattern = new RegExp('#/' + route + '(?:\\.html)?(?:[?#]|$)');
+            if (pattern.test(hash)) return route;
+        }
+        return '';
+    }
+
+    function libraryPageName(route, tabIndex) {
+        const index = tabIndex == null ? 0 : parseInt(tabIndex, 10);
+        if (!Number.isFinite(index) || index <= 0) return route;
+        const slug = LIBRARY_TAB_SLUGS[route]?.[index - 1];
+        return slug ? route + '-' + slug : route + '-tab' + index;
+    }
+
     function updateActivePage() {
         const hash = String(window.location.hash || '');
         let watchlistUrl = activePageWatchlistUrl || window.KefinTweaksUtils?._watchlistUrl || null;
@@ -3019,6 +3044,7 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
         let page = '';
         const tabMatch = hash.match(/[?&]tab=(\d+)/);
         const tabIndex = tabMatch ? tabMatch[1] : null;
+        const libraryRoute = libraryRoutePage(hash);
 
         if (hash.includes('/home') && tabIndex === '1') {
             page = 'favorites';
@@ -3026,16 +3052,12 @@ window.KefinTweaksConfig = ${JSON.stringify(config, null, 2)};`;
             page = 'watchlist';
         } else if (hash === '#/' || hash === '#' || hash === '' || (hash.includes('#/home') && (tabIndex === '0' || tabIndex === null))) {
             page = 'home';
-        } else if (hash.includes('#/tv')) {
-            page = 'tv';
-        } else if (hash.includes('#/movies')) {
-            page = 'movies';
+        } else if (libraryRoute) {
+            page = libraryPageName(libraryRoute, tabIndex);
         } else if (hash.includes('#/playlists')) {
             page = 'playlists';
         } else if (hash.includes('#/collections')) {
             page = 'collections';
-        } else if (hash.includes('#/music')) {
-            page = 'music';
         } else if (hash.includes('#/games')) {
             page = 'games';
         }

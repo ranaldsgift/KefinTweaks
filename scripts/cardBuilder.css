@@ -4798,4 +4798,102 @@ html.layout-tv .spotlight-section .spotlight-tagline {
     bottom: 0;
 }
 
-  /* --- End Variant Row Layouts --- */
+/* Ranked Lists */
+
+.ranked-list .itemsContainer {
+	counter-reset: top-rank;
+	padding-left: 4rem; 
+}
+
+.ranked-list .itemsContainer > .card {
+	counter-increment: top-rank;
+	position: relative;
+	display: inline-block;
+	vertical-align: top;
+	padding-left: 5em;
+}
+
+.ranked-list .itemsContainer > .card .cardScalable::before {
+	content: counter(top-rank);
+	position: absolute;
+	left: -4rem;
+	top: 50%;
+	font-size: 9rem;
+	font-weight: 900;
+	line-height: 1;
+	font-family: sans-serif;
+	color: #141414;
+	-webkit-text-stroke: 3px rgba(255, 255, 255, 0.4);
+	text-stroke: 3px rgba(255, 255, 255, 0.4);
+	z-index: 0;
+	pointer-events: none;
+	transform: translateY(-50%);
+}
+
+.ranked-list .itemsContainer > .card .cardScalable {
+	position: relative;
+	z-index: 1;
+} 
+
+/* --- End Variant Row Layouts --- */
+
+/*
+ * Library list action buttons and the community-rating star. Jellyfin puts these
+ * rules on generated classes (css-1vwv0k3 for the small IconButton, css-iguwhy
+ * for the medium SvgIcon, and the small star SvgIcon). Those names change
+ * between builds, so keep the copies here and update them when Jellyfin changes.
+ */
+.itemsContainer.vertical-list .listViewUserDataButtons .listItemButton {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	position: relative;
+	box-sizing: border-box;
+	background-color: transparent;
+	outline: 0;
+	border: 0;
+	margin: 0;
+	cursor: pointer;
+	user-select: none;
+	vertical-align: middle;
+	appearance: none;
+	text-decoration: none;
+	text-align: center;
+	flex: 0 0 auto;
+	border-radius: 50%;
+	color: var(--jf-palette-action-active);
+	transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1);
+	--IconButton-hoverBg: rgba(var(--jf-palette-action-activeChannel) / var(--jf-palette-action-hoverOpacity));
+}
+
+.itemsContainer.vertical-list .listViewUserDataButtons .listItemButton.MuiIconButton-sizeSmall {
+	padding: 5px;
+	font-size: 1.125rem;
+}
+
+.itemsContainer.vertical-list .listViewUserDataButtons .listItemButton:hover {
+	background-color: var(--IconButton-hoverBg);
+}
+
+.itemsContainer.vertical-list .listViewUserDataButtons .listItemButton .MuiSvgIcon-fontSizeMedium {
+	user-select: none;
+	width: 1em;
+	height: 1em;
+	display: inline-block;
+	flex-shrink: 0;
+	transition: fill 300ms cubic-bezier(0.4, 0, 0.2, 1);
+	fill: currentcolor;
+	font-size: 1.5rem;
+}
+
+.itemsContainer.vertical-list .starRatingContainer .MuiSvgIcon-fontSizeSmall {
+	user-select: none;
+	width: 1em;
+	height: 1em;
+	display: inline-block;
+	flex-shrink: 0;
+	transition: fill 300ms cubic-bezier(0.4, 0, 0.2, 1);
+	fill: currentcolor;
+	font-size: 1.25rem;
+	color: var(--jf-palette-starIcon-main);
+}
