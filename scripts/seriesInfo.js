@@ -210,67 +210,27 @@
         }
     }
 
-    const seriesSeasonsCountCache = new Map();
-    const seriesSeasonEpisodeCountCache = new Map();
-
     async function getSeasonsCount(item, includeSpecials = false) {
-        if (!seriesSeasonsCountCache.has(item.Id)) {
-            // Get Seasons from apiHelper.getQuery
-            const response = await apiHelper.getQuery(`${ApiClient.serverAddress()}/Shows/${item.Id}/Seasons`, { useCache: true });
-            
-            if (!response.data) {
-                response.data = await response.dataPromise;
-            }
+        // Headers need current counts, rather than a stale progressive payload.
+        const data = await apiHelper.getQuery(`${ApiClient.serverAddress()}/Shows/${item.Id}/Seasons`, { useCache: false });
+        let seasons = data.Items || data || [];
 
-            const data = response.data;
-
-            let seasons = data.Items || data ||[];
-
-            if (!includeSpecials) {
-                seasons = seasons.filter(season => season.IndexNumber !== 0);
-            }
-
-            seriesSeasonsCountCache.set(item.Id, seasons.length);
+        if (!includeSpecials) {
+            seasons = seasons.filter(season => season.IndexNumber !== 0);
         }
 
-        return seriesSeasonsCountCache.get(item.Id);
+        return seasons.length;
     }
 
     async function getEpisodesCount(seriesId, seasonIndex = null, includeSpecials = false) {
+        const data = await apiHelper.getQuery(`${ApiClient.serverAddress()}/Shows/${seriesId}/Episodes`, { useCache: false });
+        const episodes = data.Items || data || [];
 
-        if (!seriesSeasonEpisodeCountCache.has(seriesId)) {
-            const response = await apiHelper.getQuery(`${ApiClient.serverAddress()}/Shows/${seriesId}/Episodes`, { useCache: true });
-            if (!response.data) {
-                response.data = await response.dataPromise;
-            }
-            const data = response.data;
-            let episodes = data.Items || data || [];
-
-            // Create a Season:EpisodesCount map
-            const seasonEpisodeCountMap = new Map();
-            episodes.forEach(episode => {
-                const seasonIndex = episode.ParentIndexNumber;
-                if (!seasonEpisodeCountMap.has(seasonIndex)) {
-                    seasonEpisodeCountMap.set(seasonIndex, 0);
-                }
-                seasonEpisodeCountMap.set(seasonIndex, seasonEpisodeCountMap.get(seasonIndex) + 1);
-            });
-
-            seriesSeasonEpisodeCountCache.set(seriesId, seasonEpisodeCountMap);
-        }
-
-        // Return the episodes count for the season index
         if (seasonIndex !== null && !isNaN(seasonIndex)) {
-            return seriesSeasonEpisodeCountCache.get(seriesId).get(seasonIndex) || 0;
+            return episodes.filter(episode => episode.ParentIndexNumber === seasonIndex).length;
         }
 
-        // Return the total episodes count for all seasons
-        if (!includeSpecials) {
-            // Ignore season 0
-            const specialsCount = seriesSeasonEpisodeCountCache.get(seriesId).get(0) || 0;
-            return seriesSeasonEpisodeCountCache.get(seriesId).values().reduce((a, b) => a + b, 0) - specialsCount;
-        }
-        return seriesSeasonEpisodeCountCache.get(seriesId).values().reduce((a, b) => a + b, 0);
+        return includeSpecials ? episodes.length : episodes.filter(episode => episode.ParentIndexNumber !== 0).length;
     }
 
     /**
@@ -279,23 +239,19 @@
      * @param {HTMLElement} miscInfoContainer - The .itemMiscInfo container
      */
     async function addSeriesInfo(item, miscInfoContainer) {
-        // Check if already added
-        if (miscInfoContainer.dataset.seriesInfo) {
-            LOG('Series info already added, skipping');
-            return;
-        }
-
-        miscInfoContainer.dataset.seriesInfo = 'true';
-
         const seasonsCount = await getSeasonsCount(item);
         const episodesCount = await getEpisodesCount(item.Id);
+
+        // Jellyfin can reuse the page on navigation; replace only our own labels.
+        miscInfoContainer.querySelectorAll('.kt-series-info').forEach(element => element.remove());
+        miscInfoContainer.dataset.seriesInfo = 'true';
 
         let childCount = item.ChildCount || 0;
 
         // Seasons count (only show if more than 1 season)
         if (childCount > 1) {
             const seasonsDiv = document.createElement('div');
-            seasonsDiv.className = 'mediaInfoItem';
+            seasonsDiv.className = 'mediaInfoItem kt-series-info';
             seasonsDiv.textContent = `${seasonsCount} Seasons`;
             miscInfoContainer.appendChild(seasonsDiv);
         }
@@ -304,7 +260,7 @@
         const RecursiveItemCount = item.RecursiveItemCount || 0;
         if (RecursiveItemCount > 0) {
             const episodesDiv = document.createElement('div');
-            episodesDiv.className = 'mediaInfoItem';
+            episodesDiv.className = 'mediaInfoItem kt-series-info';
             episodesDiv.textContent = `${episodesCount} ${episodesCount === 1 ? 'Episode' : 'Episodes'}`;
             miscInfoContainer.appendChild(episodesDiv);
         }
@@ -315,7 +271,7 @@
             const endTimeStr = formatEndTime(totalRuntimeTicks);
             if (endTimeStr) {
                 const endTimeDiv = document.createElement('div');
-                endTimeDiv.className = 'mediaInfoItem';
+                endTimeDiv.className = 'mediaInfoItem kt-series-info';
                 endTimeDiv.textContent = `Ends at ${endTimeStr}`;
                 miscInfoContainer.appendChild(endTimeDiv);
             }
@@ -336,14 +292,6 @@
             miscInfoContainer.classList.remove('hide');
             LOG('Removed hide class from itemMiscInfo container');
         }
-
-        // Check if already added
-        if (miscInfoContainer.dataset.seasonInfo) {
-            LOG('Season info already added, skipping');
-            return;
-        }
-
-        miscInfoContainer.dataset.seasonInfo = 'true';
 
         const infoContainer = document.createElement('div');
         infoContainer.className = 'kt-season-info';
@@ -369,6 +317,9 @@
                 infoContainer.appendChild(endTimeDiv);
             }
         }
+
+        miscInfoContainer.querySelectorAll('.kt-season-info').forEach(element => element.remove());
+        miscInfoContainer.dataset.seasonInfo = 'true';
 
         // Append to miscInfoContainer
         if (infoContainer.children.length > 0) {
