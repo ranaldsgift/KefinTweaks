@@ -21,6 +21,6 @@
 	}
 }
 
-#slides-container .watchlist-button {
+#slides-container .watchlist-button[data-active="false"] {
 	color: var(--textColor) !important;
 }
