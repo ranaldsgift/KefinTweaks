@@ -18,6 +18,7 @@
 @media only screen and (max-width: 767px) and (orientation: portrait) {
 	#slides-container .detailButton.btnPlay {
 		min-width: unset !important;
+		padding: .5em 1em !important;
 	}
 }
 
