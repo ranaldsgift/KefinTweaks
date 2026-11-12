@@ -8838,10 +8838,14 @@
                 }
 
                 if (dragState.hasMoved) {
-                    scroller.style.pointerEvents = 'none';
-                    requestAnimationFrame(() => {
-                        scroller.style.pointerEvents = '';
-                    });
+                    // The mouseup that ends a drag is followed by a click on the card under the pointer: cancel it
+                    // in the capture phase. It fires in the same turn as mouseup, so stop listening on the next one.
+                    const cancelClick = (clickEvent) => {
+                        clickEvent.stopImmediatePropagation();
+                        clickEvent.preventDefault();
+                    };
+                    scroller.addEventListener('click', cancelClick, true);
+                    setTimeout(() => scroller.removeEventListener('click', cancelClick, true), 0);
                 }
 
                 dragState.isDragging = false;
